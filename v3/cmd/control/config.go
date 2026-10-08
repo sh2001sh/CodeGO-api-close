@@ -4,9 +4,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/netip"
 	"os"
 	"strconv"
+	"strings"
 
+	"github.com/sh2001sh/new-api/v3/internal/adminops"
 	"github.com/sh2001sh/new-api/v3/internal/commerce"
 	"github.com/sh2001sh/new-api/v3/internal/identity"
 	"github.com/sh2001sh/new-api/v3/internal/identity/oidc"
@@ -18,6 +21,8 @@ type config struct {
 	InternalGatewayURL string
 	SMTP               *commerce.SMTPWalletConfig
 	OIDC               oidc.Config
+	AdminTools         adminops.Config
+	TrustedProxies     []netip.Prefix
 }
 
 func configFromEnv() (config, error) {
@@ -48,6 +53,17 @@ func configFromEnv() (config, error) {
 	}
 	cfg.CommunitySecret = os.Getenv("CODEGO_COMMUNITY_API_SECRET")
 	cfg.InternalGatewayURL = os.Getenv("V3_INTERNAL_GATEWAY_URL")
+	cfg.AdminTools.LogDir = os.Getenv("V3_LOG_DIR")
+	cfg.AdminTools.DiskCacheDir = os.Getenv("V3_TOOL_DISK_CACHE_DIR")
+	if raw := strings.TrimSpace(os.Getenv("V3_TRUSTED_PROXY_CIDRS")); raw != "" {
+		for _, value := range strings.Split(raw, ",") {
+			prefix, err := netip.ParsePrefix(strings.TrimSpace(value))
+			if err != nil {
+				return cfg, errors.New("V3_TRUSTED_PROXY_CIDRS must contain valid CIDRs")
+			}
+			cfg.TrustedProxies = append(cfg.TrustedProxies, prefix.Masked())
+		}
+	}
 	smtp := commerce.SMTPWalletConfig{Address: os.Getenv("V3_SMTP_ADDR"), Username: os.Getenv("V3_SMTP_USERNAME"), Password: os.Getenv("V3_SMTP_PASSWORD"), From: os.Getenv("V3_SMTP_FROM")}
 	tls := os.Getenv("V3_SMTP_IMPLICIT_TLS")
 	if smtp.Address != "" || smtp.Username != "" || smtp.Password != "" || smtp.From != "" || tls != "" {

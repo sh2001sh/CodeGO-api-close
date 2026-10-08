@@ -1,9 +1,11 @@
+import { useTranslation } from '../../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import type { Schema } from '../../lib/types'
 import { Button, ErrorMessage, Field } from '../../components/ui'
 import { decimalCredits, errorFrom, nonnegativeMicroCredits } from './amounts'
+import { subscriptionPolicy } from '../../lib/subscription-policy'
 
 function localDate(value: string) {
   const timestamp = new Date(value)
@@ -16,10 +18,12 @@ export function SubscriptionEdit(props: {
   subscription: Schema['Subscription']
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [error, setError] = useState<Error | null>(null)
   const [draft, setDraft] = useState<Schema['EditSubscriptionInput'] | null>(null)
   const client = useQueryClient()
   const sub = props.subscription
+  const fixed = subscriptionPolicy(sub) === 'standard_v2'
   const edit = useMutation({
     mutationFn: (body: Schema['EditSubscriptionInput']) =>
       api.PUT('/api/subscription/admin/user_subscriptions/{id}', {
@@ -33,9 +37,11 @@ export function SubscriptionEdit(props: {
   })
   return (
     <section className="section">
-      <h3>编辑订阅 {String(sub.id)}</h3>
+      <h3>
+        {t('编辑订阅')} {String(sub.id)}
+      </h3>
       <p className="muted">
-        修改额度和状态后，服务器会重新计算可用余额；存在未结算消费时会要求稍后重试。
+        {t('修改额度和状态后，服务器会重新计算可用余额；存在未结算消费时会要求稍后重试。')}
       </p>
       <ErrorMessage error={error ?? edit.error} />
       {!draft && (
@@ -57,8 +63,10 @@ export function SubscriptionEdit(props: {
                 throw new Error('到期时间必须晚于开始时间')
               const total = nonnegativeMicroCredits(text('subscription-total'))
               const used = nonnegativeMicroCredits(text('subscription-used'))
-              const period = nonnegativeMicroCredits(text('subscription-period'))
-              const periodUsed = nonnegativeMicroCredits(text('subscription-period-used'))
+              const period = fixed ? 0n : nonnegativeMicroCredits(text('subscription-period'))
+              const periodUsed = fixed
+                ? 0n
+                : nonnegativeMicroCredits(text('subscription-period-used'))
               if (total === 0n && period === 0n) throw new Error('总额度和周期额度不能同时为零')
               if ((total > 0n && used > total) || (period > 0n && periodUsed > period))
                 throw new Error('已使用额度不能超过对应额度')
@@ -92,7 +100,7 @@ export function SubscriptionEdit(props: {
             defaultValue={localDate(sub.expires_at)}
           />
           <label className="field" htmlFor="subscription-state">
-            <span>状态</span>
+            <span>{t('状态')}</span>
             <select
               name="subscription-state"
               id="subscription-state"
@@ -100,9 +108,9 @@ export function SubscriptionEdit(props: {
                 ['active', 'expired', 'canceled'].includes(sub.state) ? sub.state : 'canceled'
               }
             >
-              <option value="active">有效</option>
-              <option value="expired">已到期</option>
-              <option value="canceled">已取消</option>
+              <option value="active">{t('有效')}</option>
+              <option value="expired">{t('已到期')}</option>
+              <option value="canceled">{t('已取消')}</option>
             </select>
           </label>
           <Field
@@ -117,22 +125,26 @@ export function SubscriptionEdit(props: {
             required
             defaultValue={decimalCredits(sub.used_credits)}
           />
-          <Field
-            name="subscription-period"
-            label="周期额度 credits（0 为不限制）"
-            required
-            defaultValue={decimalCredits(sub.period_credits)}
-          />
-          <Field
-            name="subscription-period-used"
-            label="本周期已使用 credits"
-            required
-            defaultValue={decimalCredits(sub.period_used)}
-          />
+          {!fixed && (
+            <>
+              <Field
+                name="subscription-period"
+                label="周期额度 credits（0 为不限制）"
+                required
+                defaultValue={decimalCredits(sub.period_credits)}
+              />
+              <Field
+                name="subscription-period-used"
+                label="本周期已使用 credits"
+                required
+                defaultValue={decimalCredits(sub.period_used)}
+              />
+            </>
+          )}
           <div className="row-actions">
-            <Button type="submit">核对修改</Button>
+            <Button type="submit">{t('核对修改')}</Button>
             <Button type="button" variant="quiet" onClick={props.onClose}>
-              取消
+              {t('取消')}
             </Button>
           </div>
         </form>
@@ -140,14 +152,15 @@ export function SubscriptionEdit(props: {
       {draft && (
         <div className="form-panel">
           <p className="full-width">
-            确认保存订阅 {String(sub.id)} 的修改？失败重试将保持同一份修改内容和请求编号。
+            {t('确认保存订阅')} {String(sub.id)}{' '}
+            {t('的修改？失败重试将保持同一份修改内容和请求编号。')}
           </p>
           <Button disabled={edit.isPending} onClick={() => edit.mutate(draft)}>
-            {edit.isPending ? '保存中…' : edit.isError ? '重试同一份修改' : '确认保存'}
+            {edit.isPending ? t('保存中…') : edit.isError ? t('重试同一份修改') : t('确认保存')}
           </Button>
           {!edit.isError && (
             <Button variant="quiet" disabled={edit.isPending} onClick={() => setDraft(null)}>
-              返回修改
+              {t('返回修改')}
             </Button>
           )}
         </div>

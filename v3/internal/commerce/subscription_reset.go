@@ -97,6 +97,7 @@ type subscriptionResetRow struct {
 	rule                string
 	seconds             int64
 	renewable           credits.Micro
+	policyVersion       string
 }
 
 // lockSubscriptionForResetTx locks the subscription row and validates it is
@@ -105,14 +106,17 @@ type subscriptionResetRow struct {
 func (s *Service) lockSubscriptionForResetTx(ctx context.Context, tx pgx.Tx, id int64, manual bool) (*subscriptionResetRow, error) {
 	var row subscriptionResetRow
 	err := tx.QueryRow(ctx, `SELECT account_id,user_id,total_credits,used_credits,period_credits,legacy_periodic,
-	 expires_at,next_reset_at,reset_period,reset_custom_seconds,renewable_credits FROM v3_commerce.subscriptions
+	 expires_at,next_reset_at,reset_period,reset_custom_seconds,renewable_credits,policy_version FROM v3_commerce.subscriptions
 	 WHERE id=$1 AND state='active' AND starts_at<=$2 AND expires_at>$2 FOR UPDATE`, id, s.cfg.Now()).
-		Scan(&row.account, &row.user, &row.total, &row.used, &row.period, &row.legacy, &row.end, &row.due, &row.rule, &row.seconds, &row.renewable)
+		Scan(&row.account, &row.user, &row.total, &row.used, &row.period, &row.legacy, &row.end, &row.due, &row.rule, &row.seconds, &row.renewable, &row.policyVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	if row.policyVersion == PolicyStandardV2 {
+		return nil, ErrStateConflict
 	}
 	if !manual && (row.due == nil || row.due.After(s.cfg.Now())) {
 		return nil, nil

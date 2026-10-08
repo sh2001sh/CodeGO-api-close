@@ -28,8 +28,19 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	if err := run(ctx, log, *addr, *benchUpstream, *benchKey); err != nil {
+	log, closeLog, err := boot.ProcessLogger("gateway", os.Getenv("V3_LOG_DIR"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gateway logging:", err)
+		os.Exit(1)
+	}
+	err = run(ctx, log, *addr, *benchUpstream, *benchKey)
+	if closeErr := closeLog(); closeErr != nil {
+		fmt.Fprintln(os.Stderr, "gateway logging close:", closeErr)
+		if err == nil {
+			err = closeErr
+		}
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "gateway:", err)
 		os.Exit(1)
 	}

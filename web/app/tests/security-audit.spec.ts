@@ -50,6 +50,7 @@ test('owner reviews retained string IDs with notes, safe failure retry and serve
     })
   })
   await page.goto('/my-channels')
+  await page.getByRole('tab', { name: '议价与风控', exact: true }).click()
   const audit = page.getByRole('region', { name: '安全审计', exact: true })
   await expect(audit.getByText('MODEL_POLICY', { exact: true })).toBeVisible()
   await expect(audit.getByText('prompt_guard', { exact: true })).toBeVisible()

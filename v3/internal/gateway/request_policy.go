@@ -6,6 +6,11 @@ import (
 	"slices"
 )
 
+// ClientAddress resolves only forwarded addresses supplied by configured trusted peers.
+func ClientAddress(request *http.Request, trustedProxies []netip.Prefix) string {
+	return (&Gateway{cfg: Config{TrustedProxies: trustedProxies}}).clientAddress(request)
+}
+
 // ValidateRequestPolicy enforces API Key model and network permissions across
 // text, media, WebSocket and asynchronous APIs. Pass the requested public model,
 // before mapping or billing suffixes. Empty model is for non-generation file
@@ -27,7 +32,7 @@ func ValidateRequestPolicy(principal Principal, model string, request *http.Requ
 	if request == nil {
 		return networkDenied()
 	}
-	address := (&Gateway{cfg: Config{TrustedProxies: trustedProxies}}).clientAddress(request)
+	address := ClientAddress(request, trustedProxies)
 	ip, err := netip.ParseAddr(address)
 	if err != nil {
 		return networkDenied()

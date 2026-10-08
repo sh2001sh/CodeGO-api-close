@@ -30,7 +30,19 @@ func (s *Service) RegisterSessionRoutes(mux *http.ServeMux, authenticate func(*h
 	mux.HandleFunc("GET /api/community/sellers", protect(func(w http.ResponseWriter, r *http.Request, _ int64) {
 		s.sellersHTTP(w, r)
 	}))
-	mux.HandleFunc("POST /api/community/channels/{id}/rating", protect(func(w http.ResponseWriter, r *http.Request, uid int64) {
+	mux.HandleFunc("GET /api/marketplace/groups/{id}/rating", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		var uid int64
+		if authenticate != nil {
+			if user, err := authenticate(r); err == nil && user > 0 {
+				uid = user
+			}
+		}
+		result, err := s.GetMarketRating(r.Context(), r.PathValue("id"), uid)
+		bridgeResult(w, result, err)
+	})
+	rate := protect(func(w http.ResponseWriter, r *http.Request, uid int64) {
 		var body struct {
 			Stars int `json:"stars"`
 		}
@@ -50,7 +62,10 @@ func (s *Service) RegisterSessionRoutes(mux *http.ServeMux, authenticate func(*h
 			bridgeError(w, err)
 			return
 		}
-		result, err := s.RateChannel(r.Context(), r.PathValue("id"), RatingRequest{ViewerSubject: viewer, Stars: body.Stars})
+		result, err := s.RateMarketGroup(r.Context(), r.PathValue("id"), uid, viewer, body.Stars)
 		bridgeResult(w, result, err)
-	}))
+	})
+	mux.HandleFunc("POST /api/marketplace/groups/{id}/rating", rate)
+	// Existing main-site browser links retain session authentication.
+	mux.HandleFunc("POST /api/community/channels/{id}/rating", rate)
 }

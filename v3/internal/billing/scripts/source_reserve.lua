@@ -36,12 +36,15 @@ local function reserveSource()
   if existingCount ~= 0 then return redis.error_reply('billing partial source reservation') end
   local maximum='0'
   local preference=ARGV[8+count*4]
+  local stride=ARGV[1]=='source-v2' and 2 or 1
   for candidate=1,candidates do
-    local start=9+count*4+(candidate-1)*(count+3)
+    local start=9+count*4+(candidate-1)*(count*stride+3)
     local wallet,subscription,quantum=ARGV[start],ARGV[start+1],ARGV[start+2]
-    local allowed={}
-    for i=1,walletIndex-1 do allowed[i]=ARGV[start+2+i] end
-    local scenario,subTotal,walletCharge,affordable=allocateSource(wallet,subscription,quantum,preference,available,allowed,walletIndex,false)
+    local allowed,prices={},{}
+    for i=1,walletIndex-1 do allowed[i]=ARGV[start+3+(i-1)*stride];prices[i]=ARGV[start+4+(i-1)*stride] end
+    local scenario,subTotal,walletCharge,affordable
+    if stride==2 then scenario,subTotal,walletCharge,affordable=allocateBuckets(wallet,subscription,prices,quantum,preference,available,allowed,walletIndex,false)
+    else scenario,subTotal,walletCharge,affordable=allocateSource(wallet,subscription,quantum,preference,available,allowed,walletIndex,false) end
     if not affordable then return {-1} end
     local total=moneyAdd(subTotal,walletCharge)
     if not moneyFits(total) then return redis.error_reply('billing source aggregate overflow') end

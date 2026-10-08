@@ -95,6 +95,12 @@ func (s *Service) createPackageCheckoutOrderTx(ctx context.Context, tx pgx.Tx, i
 	if err != nil {
 		return o, false, err
 	}
+	if p.PolicyVersion == PolicyStandardV2 {
+		if in.PurchaseAction != "auto" || in.TargetSubscriptionID != 0 || isGroupPurchase(in.PurchaseType) {
+			return o, false, ErrInvalid
+		}
+		return o, true, nil
+	}
 	// Group settlement locks rooms before member subscriptions. Keep quotes
 	// in that order too so a renewal cannot invert the settlement locks.
 	groupQuote := Order{Kind: "subscription", UserID: in.UserID, PlanID: &p.ID, PurchaseType: in.PurchaseType,
@@ -126,7 +132,7 @@ func (s *Service) createPackageCheckoutOrderTx(ctx context.Context, tx pgx.Tx, i
 	if err != nil {
 		return o, false, err
 	}
-	o = Order{Selection: in.Selection, PurchaseType: in.PurchaseType, UserID: in.UserID, Provider: in.Provider, Kind: "subscription", PlanID: &p.ID, AmountMinor: p.PriceMinor, Credits: p.Credits, Currency: p.Currency, PeriodSeconds: p.PeriodSeconds,
+	o = Order{PolicyVersion: p.PolicyVersion, PlanSnapshot: p, Selection: in.Selection, PurchaseType: in.PurchaseType, UserID: in.UserID, Provider: in.Provider, Kind: "subscription", PlanID: &p.ID, AmountMinor: p.PriceMinor, Credits: p.Credits, Currency: p.Currency, PeriodSeconds: p.PeriodSeconds,
 		GroupBuyEnabled: p.GroupBuyEnabled, GroupBuyTarget: p.GroupBuyTarget, GroupBuyBonus: p.GroupBuyBonus, GroupBuyLifetimeSeconds: p.GroupBuyLifetimeSeconds,
 		PeriodCredits: p.PeriodCredits, ResetPeriod: p.ResetPeriod, ResetCustomSeconds: p.ResetCustomSeconds, LegacyPeriodic: p.PeriodCredits == 0 && p.ResetPeriod != "never",
 		DurationUnit: p.DurationUnit, DurationValue: p.DurationValue, CustomSeconds: p.CustomSeconds, TradeNo: trade, CreatedAt: s.cfg.Now(), ExpiresAt: s.cfg.Now().Add(s.cfg.OrderTTL)}
@@ -155,7 +161,7 @@ func (s *Service) findPackageRenewalTargetTx(ctx context.Context, tx pgx.Tx, p P
 	var target, account int64
 	err := tx.QueryRow(ctx, `SELECT s.id,s.account_id FROM v3_commerce.subscriptions s JOIN v3_commerce.plans p ON p.id=s.plan_id
 	 WHERE s.user_id=$1 AND s.state='active' AND s.starts_at<=$2 AND s.expires_at>$2 AND s.deleted_at IS NULL
-	 AND ($3::bigint=0 OR s.id=$3) AND NOT(p.duration_unit='day' AND p.duration_value<=2)
+	 AND ($3::bigint=0 OR s.id=$3) AND s.policy_version='legacy' AND NOT(p.duration_unit='day' AND p.duration_value<=2)
 	 ORDER BY p.price_minor DESC,p.credits DESC,p.period_credits DESC,p.id DESC,s.expires_at DESC,s.id DESC LIMIT 1 FOR UPDATE OF s`, in.UserID, s.cfg.Now(), in.TargetSubscriptionID).Scan(&target, &account)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return 0, 0, err

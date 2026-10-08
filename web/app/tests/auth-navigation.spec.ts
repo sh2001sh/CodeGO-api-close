@@ -46,12 +46,13 @@ for (const target of ['//evil.test', '/%2f/evil.test', '/%5cevil.test', 'https:/
 
 test('the pre-cut callback forwards only selected fields as a browser navigation', async ({
   page,
+  baseURL,
 }) => {
   await page.context().addCookies([
     {
       name: 'oauth-test-state',
       value: 'opaque-test-state',
-      domain: '127.0.0.1',
+      domain: new URL(baseURL ?? 'http://127.0.0.1:3100').hostname,
       path: '/api/oauth',
       httpOnly: true,
       sameSite: 'Lax',
@@ -73,7 +74,10 @@ test('the pre-cut callback forwards only selected fields as a browser navigation
   await expect(page.getByRole('heading', { name: '服务器处理回调', exact: true })).toBeVisible()
 })
 
-test('native browser passkey login resumes the same OIDC return path', async ({ page }) => {
+test('native browser passkey login resumes the same OIDC return path', async ({
+  page,
+  baseURL,
+}) => {
   const cdp = await page.context().newCDPSession(page)
   await cdp.send('WebAuthn.enable')
   const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
@@ -104,7 +108,10 @@ test('native browser passkey login resumes the same OIDC return path', async ({ 
   await page.route('**/api/oidc/authorize?**', (route) =>
     route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<h1>通行密钥授权继续</h1>' }),
   )
-  await page.goto(`http://localhost:3100/sign-in?returnTo=${encodeURIComponent(oidcReturn)}`)
+  const origin = new URL(baseURL ?? 'http://localhost:3100')
+  origin.hostname = 'localhost'
+  await page.goto(`${origin.origin}/sign-in?returnTo=${encodeURIComponent(oidcReturn)}`)
+  await expect(page.getByRole('heading', { name: '登录', exact: true })).toBeVisible()
   const privateKey = await page.evaluate(async () => {
     const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
       'sign',

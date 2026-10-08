@@ -33,13 +33,9 @@ func loadOptions(ctx context.Context, tx pgx.Tx, table string) (map[string]strin
 
 func (m *Importer) importOptions(ctx context.Context, tx pgx.Tx, options map[string]string, prices map[string]catalog.Price) error {
 	for key, value := range options {
-		encoded := []byte(value)
-		if !json.Valid(encoded) {
-			var err error
-			encoded, err = json.Marshal(value)
-			if err != nil {
-				return err
-			}
+		encoded, err := m.sourceOption(value)
+		if err != nil {
+			return err
 		}
 		lower := strings.ToLower(key)
 		sensitive := false
@@ -88,6 +84,13 @@ func (m *Importer) importOptions(ctx context.Context, tx pgx.Tx, options map[str
 		if err != nil {
 			return err
 		}
+	}
+	optionReport := Report{Counts: map[string]int64{}}
+	if err := m.checkOptions(ctx, tx, options, prices, &optionReport); err != nil {
+		return err
+	}
+	if len(optionReport.Issues) > 0 {
+		return fmt.Errorf("legacy: imported option conflicts with target")
 	}
 	return nil
 }

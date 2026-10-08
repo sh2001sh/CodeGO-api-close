@@ -30,6 +30,12 @@ func (s *Service) Logs(ctx context.Context, a Actor, before time.Time, limit int
 // LogsPage uses both ordering columns, so requests sharing a timestamp are
 // retained on the next page. A zero ID preserves the older strict time cursor.
 func (s *Service) LogsPage(ctx context.Context, a Actor, before time.Time, beforeID int64, limit int) ([]UsageLog, error) {
+	return s.LogsPageFiltered(ctx, a, before, beforeID, limit, OwnerAnalyticsFilter{})
+}
+
+// LogsPageFiltered preserves the complete legacy report when no filters are
+// provided; explicit dates use the same half-open bounds as owner analytics.
+func (s *Service) LogsPageFiltered(ctx context.Context, a Actor, before time.Time, beforeID int64, limit int, f OwnerAnalyticsFilter) ([]UsageLog, error) {
 	if s.pool == nil {
 		return nil, ErrUnavailable
 	}
@@ -42,7 +48,19 @@ func (s *Service) LogsPage(ctx context.Context, a Actor, before time.Time, befor
 	if before.IsZero() {
 		before = s.cfg.Now().Add(time.Minute)
 	}
-	rows, err := s.pool.Query(ctx, `SELECT l.id,l.request_id,l.created_at,l.channel_id,l.user_id,l.amount,l.prompt_tokens,l.completion_tokens,l.model,l.terminal FROM v3_billing.usage_logs l JOIN v3_catalog.channels c ON c.id=l.channel_id WHERE c.scope='marketplace' AND (c.owner_user_id=$1 OR $2) AND (l.created_at,l.id)<($3,$4) ORDER BY l.created_at DESC,l.id DESC LIMIT $5`, a.UserID, a.Admin, before, beforeID, limit)
+	if err := validateOwnerReportFilter(f); err != nil {
+		return nil, err
+	}
+	if err := s.checkOwnerSelection(ctx, s.pool, a, f.ChannelID); err != nil {
+		return nil, err
+	}
+	from, to := optionalOwnerBounds(f)
+	rows, err := s.pool.Query(ctx, `SELECT l.id,l.request_id,l.created_at,l.channel_id,l.user_id,l.amount,l.prompt_tokens,l.completion_tokens,l.model,l.terminal
+FROM v3_billing.usage_logs l JOIN v3_catalog.channels c ON c.id=l.channel_id LEFT JOIN v3_channelmarket.groups g ON g.channel_id=c.id
+WHERE c.scope='marketplace' AND (c.owner_user_id=$1 OR $2) AND (l.created_at,l.id)<($3,$4)
+AND ($6::timestamptz IS NULL OR l.created_at >= $6) AND ($7::timestamptz IS NULL OR l.created_at < $7)
+AND ($8='' OR g.public_channel_id=$8) AND ($9='' OR l.model=$9)
+ORDER BY l.created_at DESC,l.id DESC LIMIT $5`, a.UserID, a.Admin, before, beforeID, limit, from, to, f.ChannelID, f.Model)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +81,12 @@ func (s *Service) httpLogs(w http.ResponseWriter, r *http.Request, a Actor) {
 		s.result(w, nil, err)
 		return
 	}
-	result, err := s.LogsPage(r.Context(), a, before, beforeID, integer(r, "page_size", 100))
+	f, err := ownerReportFilter(r)
+	if err != nil {
+		s.result(w, nil, err)
+		return
+	}
+	result, err := s.LogsPageFiltered(r.Context(), a, before, beforeID, integer(r, "page_size", 100), f)
 	s.result(w, result, err)
 }
 
@@ -93,12 +116,22 @@ func csvText(v string) string {
 	return v
 }
 func (s *Service) httpExportLogs(w http.ResponseWriter, r *http.Request, a Actor) {
+	f, err := ownerReportFilter(r)
+	if err != nil {
+		s.result(w, nil, err)
+		return
+	}
 	s.exportCSV(w, r, "channel-usage.csv", func(writer *csv.Writer) error {
-		return s.ExportLogs(r.Context(), a, writer)
+		return s.ExportLogsFiltered(r.Context(), a, f, writer)
 	})
 }
 func (s *Service) httpUsage(w http.ResponseWriter, r *http.Request, a Actor) {
-	items, err := s.UserUsage(r.Context(), a)
+	f, err := ownerReportFilter(r)
+	if err != nil {
+		s.result(w, nil, err)
+		return
+	}
+	items, err := s.UserUsageFiltered(r.Context(), a, f)
 	s.result(w, items, err)
 }
 func (s *Service) httpTrends(w http.ResponseWriter, r *http.Request, _ Actor) {

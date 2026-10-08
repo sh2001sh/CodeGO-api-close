@@ -209,8 +209,10 @@ func (h *Handler) fileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = content.Close() }()
-	w.Header().Set("Content-Type", file.MIMEType)
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if err := fileContentHeaders(w, file, content); err != nil {
+		h.fileStoreError(w, err, "unable to read file content type")
+		return
+	}
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("ETag", `"`+file.SHA256+`"`)
 	http.ServeContent(w, r, file.Filename, file.CreatedAt, content)
@@ -235,9 +237,11 @@ func (h *Handler) deliverFile(w http.ResponseWriter, r *http.Request) {
 	expires, _ := strconv.ParseInt(r.URL.Query().Get("expires"), 10, 64)
 	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", max(int64(0), expires-now.Unix())))
 	w.Header().Set("ETag", `"`+file.SHA256+`"`)
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Type", file.MIMEType)
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": file.Filename}))
+	if err := fileContentHeaders(w, file, content); err != nil {
+		h.cfg.Logger.Error("file delivery content type failed", "err", err)
+		w.WriteHeader(404)
+		return
+	}
 	http.ServeContent(w, r, file.Filename, file.CreatedAt, content)
 }
 

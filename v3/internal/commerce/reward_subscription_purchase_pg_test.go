@@ -9,14 +9,16 @@ import (
 	"github.com/sh2001sh/new-api/v3/internal/commerce"
 )
 
-func TestRewardSubscriptionRenewalAndUpgradeUseFrozenBenefitRules(t *testing.T) {
+func TestRewardSubscriptionRetainedRenewalAndUpgradeUseFrozenBenefitRules(t *testing.T) {
 	for _, action := range []string{"renew", "upgrade"} {
 		t.Run(action, func(t *testing.T) {
 			s, pool, now := newService(t)
 			ctx := context.Background()
 			s.SetMonthlyBenefits(rewardMarket(s, pool, now))
 			current := rewardMonthlyPlan(t, s, pool, "standard", 1000, 1000, 0)
-			packageCallback(t, s, create(t, s, current.ID))
+			initial := create(t, s, current.ID)
+			retainMonthlySnapshot(t, pool, initial.ID, 1800, 0)
+			packageCallback(t, s, initial)
 			before := onlySubscription(t, s)
 			spendPackage(t, pool, before.AccountID, 400, "benefit:forty-percent")
 			target := current
@@ -29,12 +31,17 @@ func TestRewardSubscriptionRenewalAndUpgradeUseFrozenBenefitRules(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
+			seconds := int64(1800)
+			if action == "upgrade" {
+				seconds = 2700
+			}
+			retainMonthlySnapshot(t, pool, o.ID, seconds, 1800)
 			if _, err = pool.Exec(ctx, `UPDATE v3_commerce.plans SET membership_tier='ultra',price_minor=9000 WHERE id=$1 OR id=$2`, current.ID, target.ID); err != nil {
 				t.Fatal(err)
 			}
 			packageCallback(t, s, o)
 			packageCallback(t, s, o)
-			var seconds, receipts int64
+			var receipts int64
 			if err = pool.QueryRow(ctx, `SELECT remaining_seconds,(SELECT count(*) FROM v3_marketplace.operations WHERE user_id=1 AND kind='monthly_card')
 			 FROM v3_marketplace.blind_box_props WHERE user_id=1 AND prop_type='monthly_pass_multiplier'`).Scan(&seconds, &receipts); err != nil {
 				t.Fatal(err)
@@ -56,7 +63,9 @@ func TestRewardSubscriptionRestoredLatePaymentAndFuelGrantNoMonthlyCard(t *testi
 	if _, err := s.SavePlan(ctx, p); err != nil {
 		t.Fatal(err)
 	}
-	packageCallback(t, s, create(t, s, p.ID))
+	initial := create(t, s, p.ID)
+	retainMonthlySnapshot(t, pool, initial.ID, 1800, 0)
+	packageCallback(t, s, initial)
 	before := onlySubscription(t, s)
 	fuel, err := s.Create(ctx, commerce.CreateOrder{UserID: 1, Provider: "test", PurchaseType: "fuel", TargetSubscriptionID: before.ID, FuelCredits: 100,
 		SuccessURL: "https://site.test/success", CancelURL: "https://site.test/cancel"})

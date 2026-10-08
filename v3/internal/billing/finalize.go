@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
@@ -59,6 +60,7 @@ func (s *Settler) Finalize(ctx context.Context, req *gateway.Request, out gatewa
 		actual = credits.Micro(res[3])
 	}
 	if res[0] == 1 {
+		atomic.StoreInt64(&req.SettledAmount, int64(actual))
 		s.local.observe(h.account, credits.Micro(res[1]))
 		if res[2] == 1 {
 			s.log.Warn("billing: settlement beyond overdraft cap", "request_id", req.ID, "account", h.account,
@@ -75,7 +77,7 @@ func (s *Settler) runFinalize(ctx context.Context, rec walRecord) ([]int64, erro
 	for i, a := range rec.Args {
 		args[i] = a
 	}
-	if len(rec.Args) > 0 && (rec.Args[0] == "funding" || rec.Args[0] == "source-v1") {
+	if len(rec.Args) > 0 && (rec.Args[0] == "funding" || rec.Args[0] == "source-v1" || rec.Args[0] == "source-v2") {
 		result, err := fundingFinalizeScript.Run(ctx, s.rdb, rec.Keys, args...).Int64Slice()
 		if err == nil && len(result) > 4 && result[0] == 1 && result[4] > 0 {
 			s.log.Warn("billing: subscription-only settlement shortfall", "request_id", rec.Args[5],

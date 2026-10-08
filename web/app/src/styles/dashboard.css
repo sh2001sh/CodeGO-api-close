@@ -1,0 +1,367 @@
+.overview-page {
+  min-width: 0;
+}
+.overview-top-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+.overview-funds,
+.overview-usage {
+  min-width: 0;
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+.overview-funds {
+  background: var(--bg-subtle);
+}
+.overview-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.overview-section-heading h2 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+.overview-wallet-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.overview-wallet-value {
+  font-size: clamp(28px, 2.8vw, 38px);
+  line-height: 1.3;
+  letter-spacing: -0.045em;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  margin: var(--space-2) 0 var(--space-5);
+  overflow-wrap: anywhere;
+}
+.overview-funds-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.overview-plan-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+  margin-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+.overview-plan-balance > div {
+  display: grid;
+  gap: var(--space-1);
+}
+.overview-plan-balance > div > span {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.overview-plan-balance strong {
+  font-size: var(--text-base);
+  font-variant-numeric: tabular-nums;
+}
+.overview-plan-balance a,
+.overview-text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  min-height: 44px;
+}
+.overview-period {
+  display: flex;
+  padding: 3px;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  gap: 2px;
+}
+.overview-period button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.overview-period button[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.overview-usage-metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-6) var(--space-4);
+  margin: var(--space-6) 0 var(--space-4);
+}
+.overview-usage-metrics > div {
+  min-width: 0;
+}
+.overview-usage-metrics dt {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+.overview-usage-metrics dd {
+  margin: 0;
+  font-size: clamp(20px, 1.8vw, 28px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.overview-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+.overview-primary,
+.overview-secondary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  min-width: 0;
+}
+.overview-page .panel {
+  margin-bottom: 0;
+}
+.overview-page .panel-header {
+  align-items: start;
+}
+.overview-page .panel-header h2 {
+  font-size: var(--text-base);
+}
+.overview-page .panel-header p {
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+.overview-model-name {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.overview-model-mix {
+  display: grid;
+  gap: var(--space-5);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.overview-model-mix li {
+  min-width: 0;
+}
+.overview-model-mix li > div {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+}
+.overview-model-mix li > div > span {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+}
+.overview-model-mix strong {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.overview-model-mix strong span {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.overview-model-mix progress {
+  display: block;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border: 0;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--bg-subtle);
+  accent-color: var(--accent);
+}
+.overview-model-mix progress::-webkit-progress-bar {
+  background: var(--bg-subtle);
+}
+.overview-model-mix progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 3px;
+}
+.overview-model-mix progress::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 3px;
+}
+.overview-key-count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+.overview-key-count strong {
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+}
+.overview-key-count span {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.overview-key-count a {
+  margin-inline-start: auto;
+  font-size: var(--text-sm);
+}
+.overview-endpoint-label {
+  display: block;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+}
+.overview-code-disclosure {
+  margin-top: var(--space-3);
+  min-width: 0;
+}
+.overview-code-disclosure summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.overview-code-disclosure .code-block {
+  margin-top: var(--space-2);
+}
+.overview-code-disclosure pre {
+  overflow-x: auto;
+  margin: 0;
+  max-width: 100%;
+  padding-top: var(--space-6);
+}
+.overview-readiness {
+  display: grid;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  gap: var(--space-4);
+}
+.overview-readiness li {
+  display: flex;
+  align-items: start;
+  gap: var(--space-3);
+}
+.overview-readiness-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border-radius: 50%;
+}
+.overview-readiness-icon[data-done] {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.overview-readiness li > div {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.overview-readiness strong {
+  font-weight: 500;
+}
+.overview-readiness a {
+  min-height: 44px;
+  align-content: center;
+}
+.overview-market-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-5);
+  margin-top: var(--space-5);
+}
+.overview-market-link > span {
+  flex: 1;
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.overview-market-link strong {
+  font-weight: 600;
+}
+.overview-market-link > span > span {
+  color: var(--text-secondary);
+}
+.overview-page > .funding-report {
+  margin-top: var(--space-6);
+}
+@media (max-width: 1100px) {
+  .overview-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .overview-secondary {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@media (max-width: 800px) {
+  .overview-top-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .overview-secondary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .overview-wallet-value {
+    font-size: clamp(28px, 6vw, 38px);
+  }
+}
+@media (max-width: 640px) {
+  .overview-page .table-scroll td,
+  .overview-page .table-scroll th {
+    padding-inline: var(--space-2);
+    white-space: nowrap;
+  }
+  .overview-model-name {
+    max-width: 110px;
+  }
+  .overview-top-grid,
+  .overview-workspace-grid {
+    gap: var(--space-4);
+  }
+  .overview-funds,
+  .overview-usage {
+    padding: var(--space-4);
+  }
+  .overview-usage-metrics {
+    gap: var(--space-5) var(--space-3);
+  }
+  .overview-period button {
+    min-height: 44px;
+  }
+  .overview-section-heading {
+    align-items: start;
+  }
+}

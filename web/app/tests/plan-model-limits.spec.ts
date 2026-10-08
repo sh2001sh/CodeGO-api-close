@@ -15,6 +15,7 @@ test('editing preserves imported group, model caps, and other paid membership me
             ...plan,
             upgrade_group: 'vip',
             membership_tier: 'paid',
+            lucky_draw_enabled: true,
             model_limits: { 'gpt-4o': '9007199254740993', 'claude-sonnet': '1000001' },
           },
         ],
@@ -43,6 +44,23 @@ test('editing preserves imported group, model caps, and other paid membership me
   expect(request.postData()).toContain('"claude-sonnet":1000001')
   expect(request.postData()).toContain('"upgrade_group":"vip"')
   expect(request.postData()).toContain('"membership_tier":"paid"')
+  expect(request.postDataJSON().lucky_draw_enabled).toBe(false)
+})
+
+test('retired lucky draw controls are absent while legacy benefit tier remains editable', async ({
+  page,
+}) => {
+  await page.goto('/subscriptions')
+  await page.getByRole('button', { name: '编辑', exact: true }).click()
+  await expect(page.getByLabel('月卡参与幸运抽奖', { exact: true })).toHaveCount(0)
+  await page.getByRole('combobox', { name: '旧套餐权益等级', exact: true }).selectOption('pro')
+  const sent = page.waitForRequest('**/api/subscription/admin/plans/1')
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  expect((await sent).postDataJSON()).toMatchObject({
+    plan_type: 'monthly',
+    lucky_draw_enabled: false,
+    membership_tier: 'pro',
+  })
 })
 
 test('new model cap input rejects duplicates, excess precision, overflow and byte-length boundaries', async ({

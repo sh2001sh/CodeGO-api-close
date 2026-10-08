@@ -1,3 +1,4 @@
+import { useTranslation } from '../../lib/i18n'
 import { useState } from 'react'
 import type { Schema } from '../../lib/types'
 import { Button, ErrorMessage, Field } from '../../components/ui'
@@ -9,6 +10,7 @@ export function InvoiceForm(props: {
   pending: boolean
   onSave: (body: Schema['CreateInvoiceRequestInput']) => void
 }) {
+  const { t } = useTranslation()
   const [selected, setSelected] = useState<string[]>([])
   const [kind, setKind] = useState('personal')
   const [error, setError] = useState<Error | null>(null)
@@ -48,8 +50,8 @@ export function InvoiceForm(props: {
         }
       }}
     >
-      <h2>申请发票</h2>
-      <p className="muted">选择同一币种的已支付订单，合并申请发票。</p>
+      <h2>{t('申请发票')}</h2>
+      <p className="muted">{t('选择同一币种的已支付订单，合并申请发票。')}</p>
       <DataTable
         rows={available}
         rowKey={(row) => row.trade_no}
@@ -84,10 +86,10 @@ export function InvoiceForm(props: {
       />
       <div className="form-panel">
         <label className="field" htmlFor="invoice-type">
-          <span>发票类型</span>
+          <span>{t('发票类型')}</span>
           <select id="invoice-type" value={kind} onChange={(event) => setKind(event.target.value)}>
-            <option value="personal">个人</option>
-            <option value="enterprise">企业</option>
+            <option value="personal">{t('个人')}</option>
+            <option value="enterprise">{t('企业')}</option>
           </select>
         </label>
         <Field name="invoice-title" label="发票抬头" required maxLength={255} />
@@ -101,7 +103,7 @@ export function InvoiceForm(props: {
           disabled={props.pending || available.length === 0 || selected.length === 0}
           type="submit"
         >
-          {props.pending ? '提交中…' : `提交申请（${selected.length} 笔）`}
+          {props.pending ? t('提交中…') : t('提交申请（') + String(selected.length) + t(' 笔）')}
         </Button>
       </div>
     </form>
@@ -114,6 +116,7 @@ export function InvoiceReview(props: {
   onSave: (body: Schema['UpdateInvoiceRequestInput']) => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation()
   const [status, setStatus] = useState('issued')
   return (
     <form
@@ -130,18 +133,18 @@ export function InvoiceReview(props: {
       }}
     >
       <p className="full-width">
-        处理 {props.invoice.title} 的发票申请：
+        {t('处理')} {props.invoice.title} {t('的发票申请：')}
         {invoicePayment(props.invoice.order_amount_minor, props.invoice.currency)}
       </p>
       <label className="field" htmlFor="invoice-status">
-        <span>处理结果</span>
+        <span>{t('处理结果')}</span>
         <select
           id="invoice-status"
           value={status}
           onChange={(event) => setStatus(event.target.value)}
         >
-          <option value="issued">已开票</option>
-          <option value="rejected">拒绝申请</option>
+          <option value="issued">{t('已开票')}</option>
+          <option value="rejected">{t('拒绝申请')}</option>
         </select>
       </label>
       {status === 'issued' && (
@@ -155,10 +158,10 @@ export function InvoiceReview(props: {
       />
       <div className="row-actions">
         <Button type="submit" disabled={props.pending}>
-          {props.pending ? '保存中…' : '保存处理结果'}
+          {props.pending ? t('保存中…') : t('保存处理结果')}
         </Button>
         <Button type="button" variant="quiet" disabled={props.pending} onClick={props.onCancel}>
-          取消
+          {t('取消')}
         </Button>
       </div>
     </form>

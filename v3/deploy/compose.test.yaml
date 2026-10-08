@@ -11,11 +11,13 @@ x-backend: &backend
     V3_SESSION_SECRET: ${V3_SESSION_SECRET:?set a separate base64 session signing key}
     V3_BILLING_WAL_DIR: /data/wal
     V3_FILES_DIR: /data/files
+    V3_LOG_DIR: /data/logs
     V3_PUBLIC_URL: http://localhost:${V3_TEST_PORT:-18083}
     V3_INTERNAL_GATEWAY_URL: http://gateway:3001
     V3_TRUSTED_PROXY_CIDRS: ${V3_TRUSTED_PROXY_CIDRS:-}
     REQUEST_ABUSE_GUARD_ENABLED: ${REQUEST_ABUSE_GUARD_ENABLED:-false}
   restart: unless-stopped
+  stop_grace_period: 60s
   extra_hosts:
     - host.docker.internal:host-gateway
   depends_on:
@@ -27,6 +29,7 @@ x-backend: &backend
 services:
   postgres:
     image: postgres:15-alpine
+    shm_size: 1gb
     environment:
       POSTGRES_USER: codego
       POSTGRES_PASSWORD: ${V3_TEST_PG_PASSWORD:?set a test database password}
@@ -42,7 +45,9 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: [redis-server, --maxmemory-policy, noeviction, --appendonly, 'yes']
+    command: [redis-server, --maxmemory, '${V3_TEST_REDIS_MAXMEMORY_BYTES:-1073741824}', --maxmemory-policy, noeviction, --appendonly, 'yes', --appendfsync, everysec]
+    # Leave space beyond the data budget for AOF buffers and fork/COW.
+    mem_limit: ${V3_TEST_REDIS_CONTAINER_MEMORY:-3g}
     volumes:
       - redis:/data
     healthcheck:
@@ -64,6 +69,13 @@ services:
 
   worker:
     <<: *backend
+    environment:
+      <<: *environment
+      V3_PG_MAX_CONNS: ${V3_WORKER_PG_MAX_CONNS:-16}
+      V3_LEDGER_CONSUMERS: ${V3_LEDGER_CONSUMERS:-1}
+      V3_LEDGER_BATCH_SIZE: ${V3_LEDGER_BATCH_SIZE:-500}
+      CODEGO_COMMUNITY_RATING_EVENTS_URL: ${CODEGO_COMMUNITY_RATING_EVENTS_URL:-}
+      CODEGO_COMMUNITY_API_SECRET: ${CODEGO_COMMUNITY_API_SECRET:-}
     build:
       context: ../..
       dockerfile: v3/Dockerfile
@@ -72,6 +84,7 @@ services:
     volumes:
       - worker-wal:/data/wal
       - gateway-files:/data/files
+      - service-logs:/data/logs
     healthcheck:
       test: [CMD-SHELL, wget -q -O /dev/null http://127.0.0.1:9102/metrics]
       interval: 5s
@@ -83,6 +96,9 @@ services:
 
   gateway:
     <<: *backend
+    environment:
+      <<: *environment
+      V3_PG_MAX_CONNS: ${V3_GATEWAY_PG_MAX_CONNS:-32}
     build:
       context: ../..
       dockerfile: v3/Dockerfile
@@ -92,6 +108,7 @@ services:
     volumes:
       - gateway-wal:/data/wal
       - gateway-files:/data/files
+      - service-logs:/data/logs
     healthcheck:
       test: [CMD-SHELL, wget -q -O /dev/null http://127.0.0.1:3001/readyz]
       interval: 5s
@@ -100,6 +117,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      worker:
+        condition: service_healthy
 
   control:
     <<: *backend
@@ -109,8 +128,11 @@ services:
       args:
         SERVICE: control
     command: [-addr, '0.0.0.0:3000']
+    volumes:
+      - service-logs:/data/logs
     environment:
       <<: *environment
+      V3_PG_MAX_CONNS: ${V3_CONTROL_PG_MAX_CONNS:-32}
       V3_PUBLIC_URL: http://localhost:${V3_TEST_PORT:-18083}
       CODEGO_COMMUNITY_API_SECRET: ${CODEGO_COMMUNITY_API_SECRET:-}
       OIDC_ISSUER: ${OIDC_ISSUER:-}
@@ -146,6 +168,7 @@ services:
       timeout: 3s
       retries: 30
     restart: unless-stopped
+    stop_grace_period: 60s
 
 volumes:
   postgres:
@@ -153,4 +176,5 @@ volumes:
   worker-wal:
   gateway-wal:
   gateway-files:
+  service-logs:
 

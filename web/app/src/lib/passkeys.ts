@@ -212,9 +212,8 @@ function nativeCreation(
       : undefined,
   }
 }
-export async function passkeyLogin(): Promise<void> {
+async function assertPasskey(options: PublicKeyCredentialRequestOptionsJSON) {
   supported()
-  const options = requestOptions(unwrap(await api.POST('/api/passkey/login/begin')))
   const publicKey =
     typeof PublicKeyCredential.parseRequestOptionsFromJSON === 'function'
       ? PublicKeyCredential.parseRequestOptionsFromJSON(options)
@@ -225,9 +224,29 @@ export async function passkeyLogin(): Promise<void> {
           userVerification: verification(options.userVerification),
           allowCredentials: nativeDescriptors(options.allowCredentials),
         }
-  const value = await navigator.credentials.get({ publicKey })
+  const value = await navigator.credentials.get({ publicKey }).catch((cause: unknown) => {
+    if (
+      cause instanceof DOMException &&
+      (cause.name === 'NotAllowedError' || cause.name === 'AbortError')
+    )
+      throw new Error('通行密钥验证已取消')
+    throw cause
+  })
   if (!(value instanceof PublicKeyCredential)) throw new Error('通行密钥验证已取消')
-  await api.POST('/api/passkey/login/finish', { body: serialize(value) })
+  return serialize(value)
+}
+export async function passkeyLogin(): Promise<void> {
+  supported()
+  const options = requestOptions(unwrap(await api.POST('/api/passkey/login/begin')))
+  await api.POST('/api/passkey/login/finish', { body: await assertPasskey(options) })
+}
+export async function passkeyRemove(): Promise<void> {
+  supported()
+  const options = requestOptions(unwrap(await api.POST('/api/user/passkey/verify/begin')))
+  await api.POST('/api/user/passkey/verify/finish', { body: await assertPasskey(options) })
+  // The server binds a short-lived proof cookie to this account and session.
+  // DELETE still enforces proof expiry and the presence of an alternative login.
+  await api.DELETE('/api/user/passkey')
 }
 export async function passkeyRegister(): Promise<void> {
   supported()

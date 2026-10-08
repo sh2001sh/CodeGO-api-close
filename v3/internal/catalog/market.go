@@ -38,12 +38,13 @@ type MarketMultiplierWindow struct {
 	MultiplierPPM    int64
 }
 type MarketPoolPolicy struct {
-	OwnerUserID      int64
-	GroupIDs         []string
-	MaxMultiplierPPM int64
-	MaxAttempts      int
-	Strategy         string
-	Members          []MarketPoolMember
+	OwnerUserID            int64
+	GroupIDs               []string
+	MaxMultiplierPPM       int64
+	MaxAttempts            int
+	FailureCooldownSeconds int
+	Strategy               string
+	Members                []MarketPoolMember
 }
 
 type MarketPoolMember struct {

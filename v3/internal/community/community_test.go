@@ -45,9 +45,6 @@ func TestInvalidInputsFailBeforeDatabaseAccess(t *testing.T) {
 		{"GET", "/api/community/v1/members/ABC234/channels?page=0", ""},
 		{"GET", "/api/community/v1/sellers?page_size=51", ""},
 		{"GET", "/api/community/v1/sellers?sort=DROP", ""},
-		{"PUT", "/api/community/v1/channels/channel-1/rating", `{"viewer_sub":"ABC234","stars":0}`},
-		{"PUT", "/api/community/v1/channels/channel-1/rating", `{"viewer_sub":"ABC234","stars":2.5}`},
-		{"PUT", "/api/community/v1/channels/channel-1/rating", `{"viewer_sub":"ABC234","stars":5} {}`},
 	} {
 		r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
 		r.Header.Set("Authorization", "Bearer "+testServiceSecret)
@@ -56,6 +53,16 @@ func TestInvalidInputsFailBeforeDatabaseAccess(t *testing.T) {
 		if w.Code != 400 {
 			t.Fatalf("%s: status %d body %s", tc.path, w.Code, w.Body.String())
 		}
+	}
+}
+
+func TestCommunityRatingWriteHasMoved(t *testing.T) {
+	r := httptest.NewRequest("PUT", "/api/community/v1/channels/channel-1/rating", strings.NewReader(`{"viewer_sub":"ABC234","stars":5}`))
+	r.Header.Set("Authorization", "Bearer "+testServiceSecret)
+	w := httptest.NewRecorder()
+	New(nil, Config{ServiceSecret: testServiceSecret}).Handler().ServeHTTP(w, r)
+	if w.Code != 410 || !strings.Contains(w.Body.String(), "RATING_MOVED") {
+		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 }
 

@@ -167,3 +167,26 @@ func TestScriptErrorIsNotClassifiedAsOutage(t *testing.T) {
 		t.Fatalf("script error classified as outage: %v", err)
 	}
 }
+
+func TestLeaseCoversLongSessionAndReleasesPromptly(t *testing.T) {
+	c, req, target, now := setup(t)
+	c.cfg.LeaseTTL = 31 * time.Minute
+	req.Principal.RequestsPerMinute = 0
+	session, cancel := context.WithTimeout(context.Background(), time.Hour)
+	defer cancel()
+	if err := c.Acquire(session, req, target); err != nil {
+		t.Fatal(err)
+	}
+	*now = now.Add(32 * time.Minute)
+	other := *req
+	other.ID = "second-session"
+	if err := c.Acquire(context.Background(), &other, target); !errors.Is(err, gateway.ErrRateLimited) {
+		t.Fatalf("live session lost concurrency lease: %v", err)
+	}
+	if err := c.Release(context.Background(), req, target); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Acquire(context.Background(), &other, target); err != nil {
+		t.Fatalf("closed session retained concurrency lease: %v", err)
+	}
+}

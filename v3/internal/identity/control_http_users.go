@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -19,6 +20,10 @@ func (c *Control) registerHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var in RegisterInput
 	if err := decodeControl(w, r, &in); err != nil {
+		c.reply(w, nil, err)
+		return
+	}
+	if err := validateRegistrationPolicies(in, true); err != nil {
 		c.reply(w, nil, err)
 		return
 	}
@@ -51,6 +56,10 @@ func (c *Control) loginHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, err := c.Login(r.Context(), in.Username, in.Password)
+	if errors.Is(err, ErrSecondFactorRequired) {
+		c.beginTwoFactorLoginHTTP(w, r, u)
+		return
+	}
 	if err != nil {
 		c.reply(w, nil, err)
 		return
@@ -90,10 +99,14 @@ func (c *Control) logoutHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := c.Logout(r.Context(), requestToken(r))
+	c.clearSessionCookies(w)
+	c.reply(w, nil, err)
+}
+
+func (c *Control) clearSessionCookies(w http.ResponseWriter) {
 	for _, cookie := range []struct{ name, path string }{{"codego_session", "/"}, {"codego_refresh", "/api/user"}} {
 		http.SetCookie(w, &http.Cookie{Name: cookie.name, Value: "", Path: cookie.path, HttpOnly: true, MaxAge: -1, Expires: time.Unix(1, 0)})
 	}
-	c.reply(w, nil, err)
 }
 
 func (c *Control) selfHTTP(w http.ResponseWriter, r *http.Request) {

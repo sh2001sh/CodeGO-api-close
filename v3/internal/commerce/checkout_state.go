@@ -11,6 +11,11 @@ func (s *Service) releaseCheckoutTx(ctx context.Context, tx pgx.Tx, o Order) err
 	if err := s.ReleaseCheckoutDiscountTx(ctx, tx, o); err != nil {
 		return err
 	}
+	if s.cfg.OrderReleased != nil {
+		if err := s.cfg.OrderReleased(ctx, tx, o); err != nil {
+			return err
+		}
+	}
 	if o.Kind == "blind_box" {
 		return expireCashBoxTx(ctx, tx, o.TradeNo)
 	}

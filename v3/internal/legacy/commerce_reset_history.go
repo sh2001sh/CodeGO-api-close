@@ -6,8 +6,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// The old reward game stays in the source backup. Its lifetime usage guard is
-// still required by current conversion, renewal pricing and refund policies.
+// Retain the lifetime usage guard independently of the restored reset account;
+// conversion, renewal pricing and refund policies require the original use fact.
 func (d *commerceData) loadResetUsage(ctx context.Context, source pgx.Tx, sources map[string]string) error {
 	rows, err := commerceRenewableRows(ctx, source, sources["subscription_reset_opportunity_ledgers"])
 	if err != nil {

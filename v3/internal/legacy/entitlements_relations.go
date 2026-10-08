@@ -83,6 +83,8 @@ func (d *entitlementsData) validateResetBalances(report *Report) {
 			return a < b
 		})
 		balance, earned, used := new(big.Int), new(big.Int), new(big.Int)
+		lastUsedMonth := ""
+		usedMonths := map[string]bool{}
 		for _, ledger := range ledgers {
 			delta, _ := ledger.integer("delta")
 			balance.Add(balance, big.NewInt(delta))
@@ -90,12 +92,22 @@ func (d *entitlementsData) validateResetBalances(report *Report) {
 				earned.Add(earned, big.NewInt(delta))
 			} else {
 				used.Sub(used, big.NewInt(delta))
+				month, _ := ledger.text("used_month")
+				if usedMonths[month] {
+					d.issue(report, "subscription_reset_opportunity_accounts", id, "multiple reset uses in the same month")
+				}
+				usedMonths[month] = true
+				lastUsedMonth = month
 			}
 			stored, _ := ledger.integer("balance_after")
 			if balance.Sign() < 0 || balance.Cmp(big.NewInt(stored)) != 0 {
 				d.issue(report, "subscription_reset_opportunity_accounts", id, "reset ledger sequence has inconsistent balance")
 				break
 			}
+		}
+		storedMonth, _ := account.text("last_used_month")
+		if storedMonth != lastUsedMonth {
+			d.issue(report, "subscription_reset_opportunity_accounts", id, "reset last used month differs from ledger")
 		}
 		for field, computed := range map[string]*big.Int{"earned_total": earned, "used_total": used, "available_total": balance} {
 			stored, _ := account.integer(field)

@@ -28,6 +28,7 @@ func (m *Importer) Check(ctx context.Context) (Report, error) {
 	if err != nil {
 		return r, err
 	}
+	m.validateRestoredSecrets(data, &r)
 	if len(r.Issues) > 0 {
 		return r, errors.New("legacy: source validation failed")
 	}
@@ -51,6 +52,8 @@ func (m *Importer) Check(ctx context.Context) (Report, error) {
 		func() error { return m.checkEntitlements(ctx, target, data.entitlements, &r) },
 		func() error { return m.checkOIDCData(ctx, target, data.oidc, &r) },
 		func() error { return m.checkSecurityData(ctx, target, data.security, &r) },
+		func() error { return m.checkRestoredState(ctx, target, data.restored, &r) },
+		func() error { return m.checkTaskHistory(ctx, target, data.tasks, &r) },
 	}
 	for _, check := range checks {
 		if err = check(); err != nil {

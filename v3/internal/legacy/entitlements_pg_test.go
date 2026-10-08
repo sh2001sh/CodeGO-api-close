@@ -66,7 +66,7 @@ func TestEntitlementsIndependentReadonlyImportReplayAndCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !hasConfirmedRuntime {
-		t.Skip("lucky/referral/reset runtime scope awaits user confirmation; native table proposal is withdrawn")
+		t.Fatal("restored lucky/referral/reset migration is missing")
 	}
 	seedCommerceFixture(t, source)
 	seedMarketplaceFixture(t, source)

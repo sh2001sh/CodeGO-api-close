@@ -13,10 +13,15 @@ import (
 )
 
 type RegisterInput struct {
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	DisplayName string `json:"display_name"`
-	Email       string `json:"email"`
+	Username               string `json:"username"`
+	Password               string `json:"password"`
+	DisplayName            string `json:"display_name"`
+	Email                  string `json:"email"`
+	VerificationCode       string `json:"verification_code,omitempty"`
+	AffiliateCode          string `json:"aff_code,omitempty"`
+	AcceptedTermsVersion   string `json:"accepted_terms_version,omitempty"`
+	AcceptedPrivacyVersion string `json:"accepted_privacy_version,omitempty"`
+	AgreementLocale        string `json:"agreement_locale,omitempty"`
 }
 
 func validUsername(v string) bool { return regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`).MatchString(v) }
@@ -41,15 +46,14 @@ func (c *Control) Register(ctx context.Context, in RegisterInput) (User, error) 
 	if err := validateRegistration(in); err != nil {
 		return User{}, err
 	}
+	if err := validateRegistrationPolicies(in, false); err != nil {
+		return User{}, err
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return User{}, err
 	}
-	var u User
-	err = c.pool.QueryRow(ctx, `INSERT INTO v3_identity.users(username,display_name,email,password_hash)
-		VALUES ($1,$2,NULLIF($3,''),$4) RETURNING id,username,display_name,coalesce(email,''),role,status,group_name,0::bigint`,
-		in.Username, in.DisplayName, in.Email, string(hash)).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role, &u.Status, &u.Group, &u.AffiliateMicroCredits)
-	return u, controlDBError(err)
+	return c.registerWithEmailProof(ctx, in, string(hash))
 }
 
 const userColumns = `id,username,display_name,coalesce(email,''),role,status,group_name,
@@ -80,6 +84,14 @@ func (c *Control) Login(ctx context.Context, username, password string) (User, e
 	check := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	if err != nil || check != nil || u.Status != "active" {
 		return User{}, ErrCredentials
+	}
+	var enabled bool
+	err = c.pool.QueryRow(ctx, `SELECT coalesce((SELECT enabled FROM v3_identity.two_factor WHERE user_id=$1),false)`, u.ID).Scan(&enabled)
+	if err != nil {
+		return User{}, err
+	}
+	if enabled {
+		return u, ErrSecondFactorRequired
 	}
 	_, err = c.pool.Exec(ctx, `UPDATE v3_identity.users SET last_login_at=now() WHERE id=$1`, u.ID)
 	return u, err

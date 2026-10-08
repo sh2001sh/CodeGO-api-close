@@ -14,7 +14,7 @@ import (
 )
 
 // ErrHoldLost is logged when a reservation hash expired before the sweeper
-// read it; its held amount stays counted until the balance is reloaded.
+// read it; its held amount stays counted until reserved reconciliation.
 var ErrHoldLost = errors.New("billing: reservation hash lost before sweep")
 
 // SweepExpired releases up to limit reservations past their expiry and
@@ -73,7 +73,7 @@ func (s *Settler) sweepOne(ctx context.Context, member string, now int64) (int, 
 		s.log.Warn("billing: released expired reservation", "account", account, "request_id", requestID)
 		return 1, nil
 	case -1:
-		s.log.Error("billing: reservation lost before sweep; reserved total may be inflated until reload",
+		s.log.Error("billing: reservation lost before sweep; reserved counters may be inflated until reconciliation",
 			"account", account, "request_id", requestID, "err", ErrHoldLost)
 	}
 	return 0, nil

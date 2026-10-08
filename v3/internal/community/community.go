@@ -24,6 +24,7 @@ var (
 	ErrInactive          = errors.New("community: member inactive")
 	ErrChannelNotFound   = errors.New("community: channel not found")
 	ErrSelfRating        = errors.New("community: self-rating prohibited")
+	ErrUsageRequired     = errors.New("community: real usage required")
 	ErrUnavailable       = errors.New("community: unavailable")
 )
 
@@ -143,7 +144,7 @@ func publicIdentity(subject, username, display string) (string, string) {
 const eligibleChannels = `FROM v3_catalog.channels c
  JOIN v3_identity.users owner ON owner.id=c.owner_user_id
  WHERE c.scope='marketplace' AND c.status='enabled'
- AND owner.status='active' AND owner.deleted_at IS NULL AND COALESCE(owner.external_id,'')<>''
+ AND owner.status='active' AND owner.deleted_at IS NULL
  AND c.settings->'community'->>'visibility'='public'
  AND c.settings->'community'->>'verification_status'='passed'
  AND c.settings->'community'->>'lifecycle_status' IN ('active','degraded')
@@ -192,6 +193,12 @@ func (s *Service) GetMember(ctx context.Context, subject string) (Member, error)
 	if err != nil {
 		return Member{}, err
 	}
+	if m.VerifiedChannelOwner {
+		err = s.pool.QueryRow(ctx, `SELECT COALESCE(NULLIF(name,''),'渠道店铺 #'||id::text) FROM v3_channelmarket.shops WHERE owner_user_id=$1`, u.ID).Scan(&m.DisplayName)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return Member{}, err
+		}
+	}
 	summary, err := ownerSummary(ctx, s.pool, u.ID)
 	m.AverageScore, m.RatingCount = summary.AverageScore, summary.RatingCount
 	return m, err
@@ -199,8 +206,9 @@ func (s *Service) GetMember(ctx context.Context, subject string) (Member, error)
 
 func ownerSummary(ctx context.Context, db rowQueryer, ownerID int64) (RatingSummary, error) {
 	var result RatingSummary
-	err := db.QueryRow(ctx, `SELECT COALESCE(avg(r.stars)*2,0)::float8, count(r.user_id)
+	err := db.QueryRow(ctx, `SELECT COALESCE(avg(v.stars)*2,0)::float8, count(*) FROM (
+ SELECT r.user_id,avg(r.stars) AS stars
  FROM v3_community.channel_ratings r JOIN (SELECT c.settings->'community'->>'id' AS public_id `+
-		eligibleChannels+` AND c.owner_user_id=$1) channels ON channels.public_id=r.channel_id`, ownerID).Scan(&result.AverageScore, &result.RatingCount)
+		eligibleChannels+` AND c.owner_user_id=$1) channels ON channels.public_id=r.channel_id GROUP BY r.user_id) v`, ownerID).Scan(&result.AverageScore, &result.RatingCount)
 	return result, err
 }

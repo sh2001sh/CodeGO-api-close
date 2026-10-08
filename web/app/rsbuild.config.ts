@@ -14,6 +14,11 @@ export default defineConfig({
         target: process.env.V3_CONTROL_URL ?? 'http://127.0.0.1:3002',
         changeOrigin: false,
       },
+      // Gateway shares the public origin in production (see v3/deploy/nginx.test.conf).
+      '/v1': {
+        target: process.env.V3_GATEWAY_URL ?? 'http://127.0.0.1:3001',
+        changeOrigin: false,
+      },
     },
   },
   output: {

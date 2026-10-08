@@ -63,6 +63,8 @@ type Target struct {
 	MultiplierPPM             int64
 	RoutePoolID               int64
 	ProcurementCostMultiplier string // frozen exact decimal, empty means unattributed
+	PersonalPoolGroup         string // internal personal-pool identity, separate from the priced member group
+	PoolFailureCooldown       time.Duration
 }
 
 type CredentialFingerprint struct {
@@ -103,12 +105,14 @@ type Request struct {
 	Stream         bool
 	ClientHeaders  map[string]string // explicit protocol allowlist, never auth headers
 
-	Principal Principal
-	Targets   []Target // ordered RoutePlan; retries walk it, never re-plan
-	Reserve   any      // opaque reservation handle owned by the Settler
+	Principal     Principal
+	Targets       []Target // ordered RoutePlan; retries walk it, never re-plan
+	Reserve       any      // opaque reservation handle owned by the Settler
+	SettledAmount int64    // atomic access only; confirmed microcredits, zero while WAL pending
 
-	Attempts []Attempt
-	sample   *ResponseSample
+	Attempts          []Attempt
+	PersistedAttempts int64 // durable async submissions; zero uses live Attempts
+	sample            *ResponseSample
 }
 
 // Attempt records one upstream try, for audit and scheduler feedback.

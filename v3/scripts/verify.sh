@@ -75,23 +75,36 @@ step_integration() {
   docker network create "$net" >/dev/null
   NETWORKS+=("$net")
   docker run -d --rm --name "$pg" --network "$net" \
-    -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=v3test postgres:15-alpine >/dev/null
+    -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=v3test postgres:15-alpine postgres -p 55497 >/dev/null
   CONTAINERS+=("$pg")
   docker run -d --rm --name "$rd" --network "$net" redis:7-alpine \
     redis-server --maxmemory-policy noeviction --appendonly yes >/dev/null
   CONTAINERS+=("$rd")
   for ((i=0; i<60; i++)); do
-    if docker exec "$pg" pg_isready -U postgres -d v3test >/dev/null 2>&1; then ready=1; break; fi
+    if docker exec "$pg" pg_isready -p 55497 -U postgres -d v3test >/dev/null 2>&1; then ready=1; break; fi
     sleep 1
   done
   [ "$ready" = 1 ] || { echo 'integration PostgreSQL did not become ready' >&2; return 1; }
   sleep 2
-  docker run --rm --network "$net" -v "$SRC:/src/v3" -v "$MODCACHE:/go/pkg/mod:ro" -w /src/v3 \
+  # Dedicated suites refuse arbitrary storage, and some require loopback or
+  # port 55497. Share this disposable PG's network namespace to satisfy their
+  # safety fences without publishing ports or weakening the test guards.
+  for database in notifications_test adminops_tests audit_sampler_test community_sync_test codego_policy_verify; do
+    docker exec "$pg" createdb -p 55497 -U postgres "$database"
+  done
+  docker run --rm --network "container:$pg" -v "$SRC:/src/v3" -v "$MODCACHE:/go/pkg/mod:ro" -w /src/v3 \
     -e GOPROXY=off -e GOSUMDB=off -e 'GOFLAGS=-mod=mod -p=1' -e GOTOOLCHAIN=local -e "GOMAXPROCS=$GOMAXPROCS" \
-    -e "V3_TEST_PG_DSN=postgres://postgres:$PG_PASS@$pg:5432/v3test?sslmode=disable" \
-    -e "V3_MIGRATION_TEST_PG_DSN=postgres://postgres:$PG_PASS@$pg:5432/v3test?sslmode=disable" \
+    -e "V3_TEST_PG_DSN=postgres://postgres:$PG_PASS@127.0.0.1:55497/v3test?sslmode=disable" \
+    -e "V3_NOTIFICATIONS_TEST_PG_DSN=postgres://postgres:$PG_PASS@127.0.0.1:55497/notifications_test?sslmode=disable" \
+    -e "V3_ADMINOPS_TEST_PG_DSN=postgres://postgres:$PG_PASS@127.0.0.1:55497/adminops_tests?sslmode=disable" \
+    -e "V3_AUDIT_TEST_PG_DSN=postgres://postgres:$PG_PASS@127.0.0.1:55497/audit_sampler_test?sslmode=disable" \
+    -e "CODEGO_RATING_RELAY_TEST_DSN=postgres://postgres:$PG_PASS@127.0.0.1:55497/community_sync_test?sslmode=disable" \
+    -e "V3_POLICY_TEST_PG_DSN=postgres://postgres:$PG_PASS@127.0.0.1:55497/codego_policy_verify?sslmode=disable" \
+    -e "V3_MIGRATION_TEST_PG_DSN=postgres://postgres:$PG_PASS@127.0.0.1:55497/v3test?sslmode=disable" \
     -e "V3_MIGRATION_TEST_REDIS_ADDR=$rd:6379" \
-    -e "V3_TEST_REDIS_ADDR=$rd:6379" "$LINT_IMG" \
+    -e "V3_TEST_REDIS_ADDR=$rd:6379" \
+    -e "CODEGO_TEST_REDIS_ADDR=$rd:6379" \
+    -e "V3_TEST_COMMERCE_REDIS_ADDR=$rd:6379" "$LINT_IMG" \
     go test -race -tags=pgintegration -count=1 -p 1 -timeout=10m ./...
 }
 
@@ -107,11 +120,22 @@ step_pgtest() {
 }
 
 step_atlas() {
-  start_pg v3-atlasdev 55499 15
-  local dev="postgres://postgres:$PG_PASS@host.docker.internal:55499/v3test?sslmode=disable"
+  local net="v3-atlas-$$" pg="v3-atlasdev-$$" ready=0
+  docker network create "$net" >/dev/null
+  NETWORKS+=("$net")
+  docker run -d --rm --name "$pg" --network "$net" \
+    -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=v3test postgres:15-alpine >/dev/null
+  CONTAINERS+=("$pg")
+  for ((i=0; i<60; i++)); do
+    if docker exec "$pg" pg_isready -U postgres -d v3test >/dev/null 2>&1; then ready=1; break; fi
+    sleep 1
+  done
+  [ "$ready" = 1 ] || { echo 'Atlas PostgreSQL did not become ready' >&2; return 1; }
+  sleep 2
+  local dev="postgres://postgres:$PG_PASS@$pg:5432/v3test?sslmode=disable"
   local mount="$SRC/migrations:/migrations"
-  docker run --rm -v "$mount:ro" "$ATLAS_IMG" migrate validate --dir file:///migrations --dev-url "$dev"
-  docker run --rm -v "$mount" "$ATLAS_LINT_IMG" migrate lint --dir file:///migrations \
+  docker run --rm --network "$net" -v "$mount:ro" "$ATLAS_IMG" migrate validate --dir file:///migrations --dev-url "$dev"
+  docker run --rm --network "$net" -v "$mount" "$ATLAS_LINT_IMG" migrate lint --dir file:///migrations \
     --dev-url "$dev" --latest 100
   if ! git diff --quiet -- migrations/atlas.sum 2>/dev/null; then
     echo "note: atlas.sum changed; commit it with the migration" >&2

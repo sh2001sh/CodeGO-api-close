@@ -35,14 +35,17 @@ type MultiplierCard struct {
 }
 
 type SubscriptionBucket struct {
-	AccountID      int64            `json:"account_id"`
-	SubscriptionID int64            `json:"subscription_id"`
-	Paid           bool             `json:"paid"`
-	Models         []string         `json:"models,omitempty"`
-	ModelLimits    map[string]int64 `json:"model_limits,omitempty"`
-	ModelUsage     map[string]int64 `json:"model_usage,omitempty"`
-	StartsAt       time.Time        `json:"starts_at"`
-	ExpiresAt      time.Time        `json:"expires_at"`
+	PolicyVersion        string           `json:"policy_version,omitempty"`
+	OrderID              int64            `json:"order_id,omitempty"`
+	RevenueMultiplierPPM *int64           `json:"revenue_multiplier_ppm,omitempty"`
+	AccountID            int64            `json:"account_id"`
+	SubscriptionID       int64            `json:"subscription_id"`
+	Paid                 bool             `json:"paid"`
+	Models               []string         `json:"models,omitempty"`
+	ModelLimits          map[string]int64 `json:"model_limits,omitempty"`
+	ModelUsage           map[string]int64 `json:"model_usage,omitempty"`
+	StartsAt             time.Time        `json:"starts_at"`
+	ExpiresAt            time.Time        `json:"expires_at"`
 }
 
 // CardMultiplier returns the precomputed active discount. Expiry must be
@@ -136,7 +139,9 @@ func applyKeyBudgetAccounts(ctx context.Context, tx pgx.Tx, profiles map[int64]A
 // matching user's profile, ordered by expiry then id.
 func applySubscriptionBuckets(ctx context.Context, tx pgx.Tx, profiles map[int64]AccountProfile) error {
 	rows, err := tx.Query(ctx, `SELECT s.user_id,s.account_id,s.starts_at,LEAST(s.expires_at,COALESCE(s.next_reset_at,s.expires_at)),s.id,
-	 (EXISTS(SELECT 1 FROM v3_commerce.orders o WHERE o.id=s.order_id AND o.state='paid') OR s.source='order'),s.model_limits,s.model_usage
+	 (EXISTS(SELECT 1 FROM v3_commerce.orders o WHERE o.id=s.order_id AND o.state='paid') OR s.source='order'),s.model_limits,s.model_usage,
+	 s.policy_version,coalesce(s.order_id,0),CASE WHEN s.recognized_revenue_credits IS NOT NULL AND s.total_credits>0
+	 THEN floor(s.recognized_revenue_credits::numeric*1000000/s.total_credits)::bigint END
 	 FROM v3_commerce.subscriptions s WHERE s.state='active' AND s.account_id IS NOT NULL AND s.deleted_at IS NULL
 	 AND NOT EXISTS(SELECT 1 FROM v3_commerce.package_checkouts pc WHERE pc.target_subscription_id=s.id AND pc.state IN ('preparing','checkout'))
 	 AND NOT EXISTS(SELECT 1 FROM v3_commerce.subscription_operations op WHERE op.subscription_id=s.id AND op.kind IN ('conversion','invalidate','delete') AND op.state='pending')
@@ -148,7 +153,7 @@ func applySubscriptionBuckets(ctx context.Context, tx pgx.Tx, profiles map[int64
 	for rows.Next() {
 		var userID int64
 		var b SubscriptionBucket
-		if err := rows.Scan(&userID, &b.AccountID, &b.StartsAt, &b.ExpiresAt, &b.SubscriptionID, &b.Paid, &b.ModelLimits, &b.ModelUsage); err != nil {
+		if err := rows.Scan(&userID, &b.AccountID, &b.StartsAt, &b.ExpiresAt, &b.SubscriptionID, &b.Paid, &b.ModelLimits, &b.ModelUsage, &b.PolicyVersion, &b.OrderID, &b.RevenueMultiplierPPM); err != nil {
 			return err
 		}
 		p, ok := profiles[userID]

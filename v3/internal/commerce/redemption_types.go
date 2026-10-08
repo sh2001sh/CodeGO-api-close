@@ -11,6 +11,7 @@ import (
 )
 
 type IssueRedemptionInput struct {
+	PlanSnapshot     Plan          `json:"-"`
 	Name             string        `json:"name"`
 	Credits          credits.Micro `json:"credits"`
 	ExpiresAt        *time.Time    `json:"expires_at"`
@@ -46,7 +47,8 @@ func (s *Service) validateRedemptionInput(ctx context.Context, in *IssueRedempti
 		if in.PlanID <= 0 || in.Credits != 0 || in.BlindBoxQuantity != 0 {
 			return ErrInvalid
 		}
-		err := s.pool.QueryRow(ctx, `SELECT name FROM v3_commerce.plans WHERE id=$1`, in.PlanID).Scan(&in.PlanTitle)
+		p, err := scanPlan(s.pool.QueryRow(ctx, `SELECT `+planColumns+` FROM v3_commerce.plans WHERE id=$1`, in.PlanID))
+		in.PlanSnapshot, in.PlanTitle = p, p.Name
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}

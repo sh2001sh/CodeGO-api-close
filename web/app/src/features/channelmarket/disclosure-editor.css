@@ -1,0 +1,51 @@
+.disclosure-editor {
+  border-block-start: 1px solid var(--border);
+  padding-block-start: var(--space-5);
+}
+.disclosure-editor h3 {
+  margin-block: 0 var(--space-3);
+}
+.disclosure-editor .form-panel {
+  align-items: start;
+}
+.disclosure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-4);
+  flex-basis: 100%;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  margin: var(--space-4) 0;
+}
+.disclosure-grid legend {
+  padding: 0;
+  margin-block-end: var(--space-4);
+  font-weight: 600;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.disclosure-grid .field {
+  min-width: 0;
+}
+.disclosure-models {
+  width: 100%;
+  flex-basis: 100%;
+  min-width: 0;
+}
+.disclosure-models h4 {
+  margin-block: var(--space-4) var(--space-2);
+}
+.disclosure-model {
+  border-block-start: 1px solid var(--border);
+  padding-block-start: var(--space-4);
+}
+.disclosure-model code {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .disclosure-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

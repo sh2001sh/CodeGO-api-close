@@ -58,6 +58,7 @@ type Deps struct {
 	Transports   *httpx.Pool
 	Clients      ClientProvider
 	Samples      SampleRecorder
+	Requests     RequestRecorder
 	TargetPolicy TargetPolicy
 	RequestGuard RequestGuard
 	Metrics      *metrics.Recorder
@@ -76,6 +77,7 @@ type Gateway struct {
 	transports   *httpx.Pool
 	clients      ClientProvider
 	samples      SampleRecorder
+	requests     RequestRecorder
 	targetPolicy TargetPolicy
 	requestGuard RequestGuard
 	metrics      *metrics.Recorder
@@ -98,7 +100,7 @@ func New(d Deps) (*Gateway, error) {
 	}
 	return &Gateway{cfg: d.Config.withDefaults(), auth: d.Authorizer, planner: d.Planner, settler: d.Settler,
 		limits: d.Limits, authFailures: d.AuthFailures,
-		providers: d.Providers, transports: d.Transports, clients: d.Clients, samples: d.Samples, targetPolicy: d.TargetPolicy, requestGuard: d.RequestGuard, metrics: d.Metrics, log: d.Logger}, nil
+		providers: d.Providers, transports: d.Transports, clients: d.Clients, samples: d.Samples, requests: d.Requests, targetPolicy: d.TargetPolicy, requestGuard: d.RequestGuard, metrics: d.Metrics, log: d.Logger}, nil
 }
 
 // Register mounts the relay routes on mux.
@@ -124,18 +126,21 @@ func (g *Gateway) serveChat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-Id", req.ID)
 
 	if e := g.admit(w, r, req); e != nil {
+		g.recordRejected(req, e.status, e.code)
 		writeProtocolError(w, req.Protocol, e.status, e.typ, e.code, e.message)
 		return
 	}
 	if err := g.settler.Reserve(r.Context(), req); err != nil {
 		switch {
 		case errors.Is(err, ErrInsufficientCredits):
+			g.recordRejected(req, http.StatusPaymentRequired, "insufficient_credits")
 			writeProtocolError(w, req.Protocol, http.StatusPaymentRequired, "insufficient_quota", "insufficient_credits", "not enough credits")
 			return
 		case !errors.Is(err, ErrBillingUnavailable):
 			g.log.Error("reserve failed", "request_id", req.ID, "err", err)
 		}
 		writeProtocolError(w, req.Protocol, http.StatusServiceUnavailable, "api_error", "billing_unavailable", "billing is temporarily unavailable")
+		g.recordRejected(req, http.StatusServiceUnavailable, "billing_unavailable")
 		return
 	}
 	req.Timeline.Mark(metrics.StageReserve, time.Now())
@@ -205,6 +210,14 @@ func (g *Gateway) authenticate(r *http.Request, req *Request) *clientError {
 		}
 		return errInvalidKey
 	}
+	principal, err = requestedPrincipal(principal, r)
+	if err != nil {
+		var refusal *UpstreamError
+		if errors.As(err, &refusal) {
+			return &clientError{refusal.Status, refusal.Type, refusal.Code, refusal.Message}
+		}
+		return &clientError{http.StatusForbidden, "permission_error", "group_not_allowed", "API key does not allow this group"}
+	}
 	req.Principal = principal
 	if policyErr := ValidateRequestPolicy(principal, req.Model, r, g.cfg.TrustedProxies); policyErr != nil {
 		var upstreamErr *UpstreamError
@@ -221,6 +234,10 @@ func (g *Gateway) authenticate(r *http.Request, req *Request) *clientError {
 func (g *Gateway) plan(r *http.Request, req *Request) *clientError {
 	targets, err := g.planner.Plan(r.Context(), req)
 	if err != nil || len(targets) == 0 {
+		var refusal *UpstreamError
+		if errors.As(err, &refusal) {
+			return &clientError{refusal.Status, refusal.Type, refusal.Code, refusal.Message}
+		}
 		return errNoRoute
 	}
 	req.Targets = targets
@@ -277,9 +294,11 @@ func (g *Gateway) execute(ctx context.Context, req *Request, cs *clientStream) O
 func (g *Gateway) finalize(req *Request, out Outcome) {
 	ctx, cancel := context.WithTimeout(context.Background(), g.cfg.FinalizeTimeout)
 	defer cancel()
-	if err := g.settler.Finalize(ctx, req, out); err != nil {
+	err := g.settler.Finalize(ctx, req, out)
+	if err != nil {
 		g.log.Error("finalize failed", "request_id", req.ID, "terminal", out.Terminal.String(), "err", err)
 	}
+	RecordRequest(g.requests, req, out, err == nil)
 	req.Timeline.Mark(metrics.StageFinalize, time.Now())
 	if req.sample != nil {
 		g.samples.Record(req, out, req.sample.JSON())

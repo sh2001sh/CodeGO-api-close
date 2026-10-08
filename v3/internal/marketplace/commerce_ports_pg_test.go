@@ -90,12 +90,10 @@ func TestCommercePortsRewardSubscriptionAndGroupBonus(t *testing.T) {
 		if err := pool.QueryRow(ctx, `SELECT count(*),COALESCE(sum(remaining_seconds),0) FROM v3_marketplace.blind_box_props WHERE user_id=$1 AND prop_type='monthly_pass_multiplier'`, user).Scan(&count, &remaining); err != nil {
 			t.Fatal(err)
 		}
-		want := int64(2700)
-		if user == 1 {
-			want *= 2
-		}
-		if count != 1 || remaining != want {
-			t.Fatalf("monthly purchase/reward benefit was not merged exactly once user%d: count%d remaining%d", user, count, remaining)
+		// New purchases and plan rewards no longer issue multiplier cards.
+		// Retained cards and frozen checkout promises have separate regressions.
+		if count != 0 || remaining != 0 {
+			t.Fatalf("new monthly purchase/reward issued a retired multiplier card user%d: count%d remaining%d", user, count, remaining)
 		}
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/sh2001sh/new-api/v3/cmd/internal/boot"
+	"github.com/sh2001sh/new-api/v3/internal/audit"
 	"github.com/sh2001sh/new-api/v3/internal/billing"
 	"github.com/sh2001sh/new-api/v3/internal/billing/ledger"
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
@@ -65,6 +66,7 @@ type prodBuild struct {
 	requestGuard   gateway.RequestGuard
 	registry       map[string]gateway.Provider
 	native         nativeHandlers
+	requests       *audit.RequestRecorder
 }
 
 func buildProd(ctx context.Context, deps *boot.Deps, log *slog.Logger) (handler http.Handler, runtime *prodRuntime, err error) {
@@ -84,6 +86,8 @@ func buildProd(ctx context.Context, deps *boot.Deps, log *slog.Logger) (handler 
 	if err = b.buildBilling(); err != nil {
 		return nil, runtime, err
 	}
+	b.requests = audit.NewRequestRecorder(runtime.ctx, deps.PG.Pool, log)
+	runtime.close = append(runtime.close, b.requests.Close)
 	if err = b.buildNative(); err != nil {
 		return nil, runtime, err
 	}
@@ -160,7 +164,7 @@ func (b *prodBuild) buildNative() error {
 	}
 	b.registry = providers.Registry(b.clients)
 	native, err := assembleNative(deps, b.auth, b.planner, b.settler, b.leases, b.authFailures, b.registry,
-		b.transports, b.clients, b.targetPolicy, b.requestGuard, b.trustedProxies, log)
+		b.transports, b.clients, b.targetPolicy, b.requestGuard, b.trustedProxies, log, b.requests)
 	if err != nil {
 		return err
 	}
@@ -181,6 +185,7 @@ func (b *prodBuild) buildGatewayMux(ctx context.Context) (http.Handler, *prodRun
 	runtime.close = append(runtime.close, closeSamples)
 
 	rec := metrics.New()
+	b.requests.Register(rec.Registry())
 	registerPoolMetrics(rec, deps)
 	registerOutageMetrics(rec, b.settler)
 	marketBatchKey := deps.Crypto.DeriveKey("market-batch")
@@ -197,6 +202,7 @@ func (b *prodBuild) buildGatewayMux(ctx context.Context) (http.Handler, *prodRun
 		Transports:   b.transports,
 		Clients:      b.clients,
 		Samples:      samples,
+		Requests:     b.requests,
 		TargetPolicy: b.targetPolicy,
 		RequestGuard: b.requestGuard,
 		Metrics:      rec,

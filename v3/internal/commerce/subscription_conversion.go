@@ -158,7 +158,7 @@ func resolveConversionOperation(ctx context.Context, tx pgx.Tx, key string, resu
 }
 
 func checkConversionEligibility(ctx context.Context, tx pgx.Tx, id int64, now time.Time) (eligible, reset bool, err error) {
-	if err = tx.QueryRow(ctx, `SELECT expires_at>$2 AND state='active' AND deleted_at IS NULL FROM v3_commerce.subscriptions WHERE id=$1`, id, now).Scan(&eligible); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT expires_at>$2 AND state='active' AND deleted_at IS NULL AND policy_version='legacy' AND converted_at IS NULL FROM v3_commerce.subscriptions WHERE id=$1`, id, now).Scan(&eligible); err != nil {
 		return
 	}
 	var pending bool

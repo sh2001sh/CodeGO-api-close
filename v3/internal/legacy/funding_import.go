@@ -87,7 +87,13 @@ func (m *Importer) checkFunding(ctx context.Context, target pgx.Tx, d *fundingDa
 		report.Counts["verified_billing_"+name] = expected
 		if activeSourceCount > 0 {
 			var targetCount int64
-			if err := target.QueryRow(ctx, "SELECT count(*) FROM "+pgx.Identifier{"v3_billing", name}.Sanitize()).Scan(&targetCount); err != nil {
+			query := "SELECT count(*) FROM " + pgx.Identifier{"v3_billing", name}.Sanitize()
+			if name == "funding_source_policies" {
+				// Migration 78 owns these new policies. They have no old source
+				// counterpart and do not change any imported legacy valuation.
+				query += " WHERE source NOT IN ('referral_reward','subscription_conversion')"
+			}
+			if err := target.QueryRow(ctx, query).Scan(&targetCount); err != nil {
 				return err
 			}
 			report.Counts["target_billing_"+name] = targetCount

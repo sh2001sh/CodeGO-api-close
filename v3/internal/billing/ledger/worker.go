@@ -16,13 +16,14 @@ import (
 
 // WorkerConfig tunes the ledger worker. Zero values select defaults.
 type WorkerConfig struct {
-	Consumer    string        // unique per process, e.g. hostname-pid (required)
-	Batch       int64         // entries per transaction, default 500
-	Block       time.Duration // XREADGROUP block, default 1 s
-	ClaimIdle   time.Duration // reclaim entries a dead consumer left unacked this long, default 60 s
-	TrimEvery   time.Duration // default 30 s
-	Marketplace UsageRecorder
-	UsageHook   UsageHook
+	Consumer       string        // unique per process, e.g. hostname-pid (required)
+	Batch          int64         // entries per transaction, default 500
+	Block          time.Duration // XREADGROUP block, default 1 s
+	ClaimIdle      time.Duration // reclaim entries a dead consumer left unacked this long, default 60 s
+	TrimEvery      time.Duration // default 30 s
+	Marketplace    UsageRecorder
+	UsageHook      UsageHook
+	UsageBatchHook UsageBatchHook
 }
 
 func (c WorkerConfig) withDefaults() WorkerConfig {
@@ -148,7 +149,7 @@ func (w *Worker) process(ctx context.Context, msgs []redis.XMessage) (int, error
 		}
 		batch = append(batch, e)
 	}
-	res, err := postWithMarketplace(ctx, w.pool, batch, bad, w.cfg.Marketplace, w.cfg.UsageHook)
+	res, err := postWithMarketplaceBatch(ctx, w.pool, batch, bad, w.cfg.Marketplace, w.cfg.UsageBatchHook, w.cfg.UsageHook)
 	if err != nil {
 		return 0, err // not acknowledged: redelivered and deduplicated later
 	}

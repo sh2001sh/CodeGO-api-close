@@ -113,6 +113,12 @@ func (p *Planner) Plan(_ context.Context, req *gateway.Request) ([]gateway.Targe
 		}
 	}
 	if len(b.targets) == 0 {
+		if !configuredModel(snap, req.Model) {
+			return nil, errors.Join(ErrNoRoute, &gateway.UpstreamError{
+				Status: http.StatusNotFound, Type: "invalid_request_error", Code: "model_not_found",
+				Message: "model does not exist or is not available to this API key",
+			})
+		}
 		return nil, ErrNoRoute
 	}
 	if hasSession && len(b.targets) > 0 {
@@ -121,6 +127,25 @@ func (p *Planner) Plan(_ context.Context, req *gateway.Request) ([]gateway.Targe
 		p.aff.put(sessionKey, b.targets[0].CredentialID, b.now)
 	}
 	return b.targets, nil
+}
+
+// No targets for a configured model can be transient; an unknown name cannot
+// become routable by repeating the same request. Inspect the immutable catalog.
+func configuredModel(snap *catalog.Snapshot, model string) bool {
+	if _, ok := snap.Prices[model]; ok {
+		return true
+	}
+	for _, routes := range snap.Routes {
+		if _, ok := routes[model]; ok {
+			return true
+		}
+	}
+	for _, policy := range snap.Market.Channels {
+		if _, ok := policy.ModelPrices[model]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // planGroup fills b with candidates for one requested group: it resolves the
@@ -207,6 +232,8 @@ func (p *Planner) Report(target gateway.Target, res gateway.AttemptResult) {
 	if res.OK {
 		p.cool.success(credKey)
 		p.cool.success(modelKey)
+		p.cool.success(coolKey{cred: target.CredentialID, hard: true})
+		p.cool.success(coolKey{cred: target.CredentialID, model: target.UpstreamModel, hard: true})
 		return
 	}
 	now := p.cfg.Now().UnixNano()
@@ -214,9 +241,25 @@ func (p *Planner) Report(target gateway.Target, res gateway.AttemptResult) {
 	switch res.Scope {
 	case gateway.ScopeCredential:
 		p.cool.fail(credKey, now, duration)
+		if authFailure(res.Status) {
+			p.cool.fail(coolKey{cred: target.CredentialID, hard: true}, now, duration)
+		}
 	case gateway.ScopeModel:
 		p.cool.fail(modelKey, now, duration)
+		if authFailure(res.Status) || res.Status == http.StatusNotFound {
+			p.cool.fail(coolKey{cred: target.CredentialID, model: target.UpstreamModel, hard: true}, now, duration)
+		}
+	default:
+		return // request errors must not poison a user's other requests
 	}
+	if res.Retryable && target.PersonalPoolGroup != "" && target.PoolFailureCooldown > 0 {
+		key := coolKey{cred: target.ChannelID, model: target.UpstreamModel, pool: target.PersonalPoolGroup}
+		p.cool.fail(key, now, func(int) time.Duration { return target.PoolFailureCooldown })
+	}
+}
+
+func authFailure(status int) bool {
+	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusPaymentRequired
 }
 
 func (p *Planner) cooldownFor(res gateway.AttemptResult, streak int) time.Duration {

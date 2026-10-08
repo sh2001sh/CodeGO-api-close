@@ -1,0 +1,62 @@
+/* 邀请奖励页面样式 */
+.policy-box {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-block: 1.5rem;
+}
+
+.policy-box h3 {
+  margin: 0 0 1rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.policy-box ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  line-height: 1.75;
+}
+
+.policy-box li {
+  margin-block: 0.5rem;
+}
+
+.policy-box strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 3rem 1rem;
+  font-size: 0.9375rem;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+  margin-block: 1.5rem;
+}
+
+.metrics > div {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.metrics dt {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.metrics dd {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+}

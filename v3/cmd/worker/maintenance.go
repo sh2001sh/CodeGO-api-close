@@ -13,13 +13,15 @@ import (
 // sample_cleanup is scheduled only when an audit retention is configured.
 func maintenance(deps *boot.Deps, s *services, cfg workerConfig) (map[string]func(context.Context) error, map[string]time.Duration) {
 	periods := map[string]time.Duration{
-		"reservation_sweep":  30 * time.Second,
-		"reconcile":          cfg.reconcileEvery,
-		"usage_partitions":   24 * time.Hour,
-		"commerce_expire":    time.Minute,
-		"marketplace_expire": time.Minute,
-		"channel_market":     time.Minute,
-		"workflow":           10 * time.Second,
+		"reservation_sweep":     30 * time.Second,
+		"reconcile":             cfg.reconcileEvery,
+		"usage_partitions":      24 * time.Hour,
+		"commerce_expire":       time.Minute,
+		"marketplace_expire":    time.Minute,
+		"channel_market":        time.Minute,
+		"workflow":              10 * time.Second,
+		"lucky_reward_recovery": time.Minute,
+		"referral_rewards":      time.Minute,
 	}
 	if cfg.retentionDays > 0 {
 		periods["sample_cleanup"] = 24 * time.Hour
@@ -34,7 +36,12 @@ func maintenance(deps *boot.Deps, s *services, cfg workerConfig) (map[string]fun
 		"usage_partitions": func(ctx context.Context) error {
 			return ledger.EnsureUsagePartitions(ctx, deps.PG.Pool, time.Now().UTC())
 		},
-		"commerce_expire":    s.commerceMaintenance,
+		"commerce_expire":       s.commerceMaintenance,
+		"lucky_reward_recovery": s.rewards.RecoverLuckyRewards,
+		"referral_rewards": func(ctx context.Context) error {
+			_, err := s.rewards.SettleReferrals(ctx, 100)
+			return err
+		},
 		"marketplace_expire": s.marketplaceMaintenance,
 		"channel_market": func(ctx context.Context) error {
 			return channelMarketMaintenance(ctx, s.channelMarket)

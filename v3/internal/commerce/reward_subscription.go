@@ -11,8 +11,8 @@ import (
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
 )
 
-// MonthlyBenefits grants the current monthly package's routing card in the
-// same transaction as its payment or blind-box reward.
+// MonthlyBenefits fulfills retained checkout snapshots in the same transaction
+// as payment. New purchases and subscription rewards grant no multiplier cards.
 type MonthlyBenefits interface {
 	GrantMonthlyCardTx(context.Context, pgx.Tx, int64, int64, string) error
 }
@@ -42,12 +42,16 @@ func (s *Service) grantRewardSubscriptionTx(ctx context.Context, tx pgx.Tx, user
 	if err != nil {
 		return err
 	}
-	id, err = s.primaryRewardSubscriptionTx(ctx, tx, userID)
+	if p.PolicyVersion == PolicyStandardV2 {
+		id = 0
+	} else {
+		id, err = s.primaryRewardSubscriptionTx(ctx, tx, userID)
+	}
 	if err != nil {
 		return err
 	}
 	if id == 0 {
-		err = s.grantSubscription(ctx, tx, Order{UserID: userID, PlanID: &p.ID, Credits: p.Credits, PeriodCredits: p.PeriodCredits,
+		err = s.grantSubscription(ctx, tx, Order{PolicyVersion: p.PolicyVersion, PlanSnapshot: p, UserID: userID, PlanID: &p.ID, Credits: p.Credits, PeriodCredits: p.PeriodCredits,
 			PeriodSeconds: p.PeriodSeconds, ResetPeriod: p.ResetPeriod, ResetCustomSeconds: p.ResetCustomSeconds, TradeNo: operationID,
 			DurationUnit: p.DurationUnit, DurationValue: p.DurationValue, CustomSeconds: p.CustomSeconds,
 			LegacyPeriodic: p.PeriodCredits == 0 && p.ResetPeriod != "never"})
@@ -61,17 +65,8 @@ func (s *Service) grantRewardSubscriptionTx(ctx context.Context, tx pgx.Tx, user
 	if err != nil {
 		return err
 	}
-	seconds, err := monthlyPlanSecondsTx(ctx, tx, planID)
-	if err != nil {
-		return err
-	}
-	if s.cfg.MonthlyBenefits != nil && seconds > 0 {
-		if err = s.cfg.MonthlyBenefits.GrantMonthlyCardTx(ctx, tx, userID, seconds, "subscription:reward:"+operationID); err != nil {
-			return err
-		}
-	}
 	_, err = tx.Exec(ctx, `INSERT INTO v3_commerce.subscription_reward_receipts(operation_id,user_id,plan_id,subscription_id,credits,monthly_seconds)
-	 VALUES($1,$2,$3,$4,$5,$6)`, operationID, userID, planID, id, int64(p.Credits), seconds)
+	 VALUES($1,$2,$3,$4,$5,0)`, operationID, userID, planID, id, int64(p.Credits))
 	return err
 }
 
@@ -103,7 +98,7 @@ func (s *Service) primaryRewardSubscriptionTx(ctx context.Context, tx pgx.Tx, us
 	// and expiry. One- and two-day passes do not receive monthly rewards.
 	err := tx.QueryRow(ctx, `SELECT sub.id FROM v3_commerce.subscriptions sub JOIN v3_commerce.plans p ON p.id=sub.plan_id
 	 WHERE sub.user_id=$1 AND sub.state='active' AND sub.deleted_at IS NULL AND sub.starts_at<=$2 AND sub.expires_at>$2
-	 AND NOT(p.duration_unit='day' AND p.duration_value BETWEEN 1 AND 2)
+	 AND sub.policy_version='legacy' AND NOT(p.duration_unit='day' AND p.duration_value BETWEEN 1 AND 2)
 	 ORDER BY p.price_minor DESC,p.credits DESC,p.period_credits DESC,p.id DESC,sub.expires_at DESC,sub.id DESC
 	 LIMIT 1 FOR UPDATE OF sub`, user, s.cfg.Now()).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {

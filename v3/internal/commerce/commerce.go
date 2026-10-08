@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -91,6 +92,10 @@ type Config struct {
 	CashBoxes                      CashBoxMarket
 	MonthlyBenefits                MonthlyBenefits
 	GroupCheckouts                 GroupCheckoutMarket
+	OrderReleased                  func(context.Context, pgx.Tx, Order) error
+	BeforeOrder                    func(context.Context, pgx.Tx, Order) error
+	PaidPurchase                   func(context.Context, pgx.Tx, Order) error
+	SubscriptionGranted            func(context.Context, pgx.Tx, int64) error
 }
 
 type TopupPrice struct {
@@ -130,45 +135,51 @@ func New(pool *pgxpool.Pool, poster TransactionPoster, providers []PaymentProvid
 }
 
 type Order struct {
-	Selection               CheckoutSelection `json:"checkout_selection,omitempty"`
-	ID                      int64             `json:"id"`
-	UserID                  int64             `json:"user_id"`
-	PlanID                  *int64            `json:"plan_id,omitempty"`
-	AmountMinor             int64             `json:"amount_minor"`
-	Credits                 credits.Micro     `json:"credits"`
-	PeriodSeconds           int64             `json:"period_seconds"`
-	Currency                string            `json:"currency"`
-	Kind                    string            `json:"kind"`
-	Provider                string            `json:"provider"`
-	TradeNo                 string            `json:"trade_no"`
-	State                   string            `json:"state"`
-	ProviderReference       *string           `json:"provider_reference,omitempty"`
-	PaymentURL              string            `json:"payment_url"`
-	CreatedAt               time.Time         `json:"created_at"`
-	ExpiresAt               time.Time         `json:"expires_at"`
-	PaidAt                  *time.Time        `json:"paid_at,omitempty"`
-	GroupBuyEnabled         bool              `json:"group_buy_enabled"`
-	GroupBuyTarget          int               `json:"group_buy_target"`
-	GroupBuyBonus           credits.Micro     `json:"group_buy_bonus"`
-	GroupBuyLifetimeSeconds int64             `json:"group_buy_lifetime_seconds"`
-	ProductID               string            `json:"product_id,omitempty"`
-	PeriodCredits           credits.Micro     `json:"period_credits"`
-	ResetPeriod             string            `json:"reset_period"`
-	ResetCustomSeconds      int64             `json:"reset_custom_seconds"`
-	LegacyPeriodic          bool              `json:"legacy_periodic"`
-	DurationUnit            string            `json:"duration_unit"`
-	DurationValue           int               `json:"duration_value"`
-	CustomSeconds           int64             `json:"custom_seconds"`
-	FulfillmentState        string            `json:"fulfillment_state"`
-	GroupBuyBonus2          credits.Micro     `json:"group_buy_bonus2_micro"`
-	GroupBuyBonus3          credits.Micro     `json:"group_buy_bonus3_micro"`
-	GroupBuyBonus5          credits.Micro     `json:"group_buy_bonus5_micro"`
-	PurchaseType            string            `json:"purchase_type"`
-	TargetSubscriptionID    int64             `json:"target_subscription_id"`
-	FuelExpiresAt           *time.Time        `json:"fuel_expires_at,omitempty"`
+	ReferralTerms            json.RawMessage   `json:"referral_terms"`
+	RecognizedRevenueCredits *credits.Micro    `json:"recognized_revenue_credits,omitempty"`
+	PolicyVersion            string            `json:"policy_version"`
+	PlanSnapshot             Plan              `json:"plan_snapshot"`
+	Selection                CheckoutSelection `json:"checkout_selection,omitempty"`
+	ID                       int64             `json:"id"`
+	UserID                   int64             `json:"user_id"`
+	PlanID                   *int64            `json:"plan_id,omitempty"`
+	AmountMinor              int64             `json:"amount_minor"`
+	Credits                  credits.Micro     `json:"credits"`
+	PeriodSeconds            int64             `json:"period_seconds"`
+	Currency                 string            `json:"currency"`
+	Kind                     string            `json:"kind"`
+	Provider                 string            `json:"provider"`
+	TradeNo                  string            `json:"trade_no"`
+	State                    string            `json:"state"`
+	ProviderReference        *string           `json:"provider_reference,omitempty"`
+	PaymentURL               string            `json:"payment_url"`
+	CreatedAt                time.Time         `json:"created_at"`
+	ExpiresAt                time.Time         `json:"expires_at"`
+	PaidAt                   *time.Time        `json:"paid_at,omitempty"`
+	GroupBuyEnabled          bool              `json:"group_buy_enabled"`
+	GroupBuyTarget           int               `json:"group_buy_target"`
+	GroupBuyBonus            credits.Micro     `json:"group_buy_bonus"`
+	GroupBuyLifetimeSeconds  int64             `json:"group_buy_lifetime_seconds"`
+	ProductID                string            `json:"product_id,omitempty"`
+	PeriodCredits            credits.Micro     `json:"period_credits"`
+	ResetPeriod              string            `json:"reset_period"`
+	ResetCustomSeconds       int64             `json:"reset_custom_seconds"`
+	LegacyPeriodic           bool              `json:"legacy_periodic"`
+	DurationUnit             string            `json:"duration_unit"`
+	DurationValue            int               `json:"duration_value"`
+	CustomSeconds            int64             `json:"custom_seconds"`
+	FulfillmentState         string            `json:"fulfillment_state"`
+	GroupBuyBonus2           credits.Micro     `json:"group_buy_bonus2_micro"`
+	GroupBuyBonus3           credits.Micro     `json:"group_buy_bonus3_micro"`
+	GroupBuyBonus5           credits.Micro     `json:"group_buy_bonus5_micro"`
+	PurchaseType             string            `json:"purchase_type"`
+	TargetSubscriptionID     int64             `json:"target_subscription_id"`
+	FuelExpiresAt            *time.Time        `json:"fuel_expires_at,omitempty"`
 }
 
 type Plan struct {
+	PolicyVersion           string           `json:"policy_version"`
+	LuckyDrawEnabled        bool             `json:"lucky_draw_enabled"`
 	UpgradeGroup            string           `json:"upgrade_group,omitempty"`
 	ModelLimits             map[string]int64 `json:"model_limits,omitempty"`
 	MembershipTier          string           `json:"membership_tier,omitempty"`
@@ -202,6 +213,10 @@ type Plan struct {
 }
 
 type Subscription struct {
+	PlanSnapshot       Plan          `json:"plan_snapshot"`
+	PolicyVersion      string        `json:"policy_version"`
+	ConvertedAt        *time.Time    `json:"converted_at,omitempty"`
+	BenefitsUntil      *time.Time    `json:"benefits_until,omitempty"`
 	ID                 int64         `json:"id"`
 	UserID             int64         `json:"user_id"`
 	PlanID             int64         `json:"plan_id"`
@@ -232,7 +247,7 @@ func tradeNumber() (string, error) {
 const orderColumns = `id,user_id,plan_id,amount_minor,credits,period_seconds,currency,kind,provider,trade_no,state,
 provider_reference,payment_url,created_at,expires_at,paid_at,group_buy_enabled,group_buy_target,group_buy_bonus,group_buy_lifetime_seconds,product_id,
 period_credits,reset_period,reset_custom_seconds,legacy_periodic,duration_unit,duration_value,custom_seconds,fulfillment_state,
-group_buy_bonus2_micro,group_buy_bonus3_micro,group_buy_bonus5_micro,purchase_type,target_subscription_id,fuel_expires_at,checkout_selection`
+group_buy_bonus2_micro,group_buy_bonus3_micro,group_buy_bonus5_micro,purchase_type,target_subscription_id,fuel_expires_at,checkout_selection,policy_version,plan_snapshot,recognized_revenue_credits,referral_terms`
 
 type scanner interface{ Scan(...any) error }
 
@@ -242,7 +257,7 @@ func scanOrder(row scanner) (Order, error) {
 		&o.Provider, &o.TradeNo, &o.State, &o.ProviderReference, &o.PaymentURL, &o.CreatedAt, &o.ExpiresAt, &o.PaidAt,
 		&o.GroupBuyEnabled, &o.GroupBuyTarget, &o.GroupBuyBonus, &o.GroupBuyLifetimeSeconds, &o.ProductID,
 		&o.PeriodCredits, &o.ResetPeriod, &o.ResetCustomSeconds, &o.LegacyPeriodic, &o.DurationUnit, &o.DurationValue, &o.CustomSeconds, &o.FulfillmentState,
-		&o.GroupBuyBonus2, &o.GroupBuyBonus3, &o.GroupBuyBonus5, &o.PurchaseType, &o.TargetSubscriptionID, &o.FuelExpiresAt, &o.Selection)
+		&o.GroupBuyBonus2, &o.GroupBuyBonus3, &o.GroupBuyBonus5, &o.PurchaseType, &o.TargetSubscriptionID, &o.FuelExpiresAt, &o.Selection, &o.PolicyVersion, &o.PlanSnapshot, &o.RecognizedRevenueCredits, &o.ReferralTerms)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
 	}

@@ -36,14 +36,18 @@ func (s *Service) UpdateSubscription(ctx context.Context, id, actor int64, in Ed
 			return err
 		}
 		var account, user int64
-		var rule string
+		var rule, version string
+		var converted *time.Time
 		var seconds int64
-		err := tx.QueryRow(ctx, `SELECT account_id,user_id,reset_period,reset_custom_seconds FROM v3_commerce.subscriptions WHERE id=$1 FOR UPDATE`, id).Scan(&account, &user, &rule, &seconds)
+		err := tx.QueryRow(ctx, `SELECT account_id,user_id,reset_period,reset_custom_seconds,policy_version,converted_at FROM v3_commerce.subscriptions WHERE id=$1 FOR UPDATE`, id).Scan(&account, &user, &rule, &seconds, &version, &converted)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
 		if err != nil {
 			return err
+		}
+		if converted != nil || version == PolicyStandardV2 {
+			return ErrStateConflict
 		}
 		if err = s.checkPackagePending(ctx, tx, id); err != nil {
 			return err

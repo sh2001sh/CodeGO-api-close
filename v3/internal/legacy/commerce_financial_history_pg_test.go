@@ -26,9 +26,10 @@ func TestCommerceFinancialHistoryImportedResetUseCannotRegainConversion(t *testi
 	 id bigint PRIMARY KEY,user_id bigint,related_user_id bigint,change_type text,delta bigint,balance_after bigint,
 	 used_month text,source_type text,source_ref text,event_key text,note text,created_at bigint,updated_at bigint);
 	 INSERT INTO migration_source.subscription_reset_opportunity_ledgers VALUES
-	 (1,7,9,'use',-1,0,'2022-01','','','past-use','','1640995200','1640995200'),
-	 (2,7,12,'earn',1,1,'','','','unrelated-earn','','1700000000','1700000000'),
-	 (3,7,999,'use',-1,0,'2022-01','','','unrelated-use','','1640995200','1640995200');
+	 (1,7,8,'earn',1,1,'','subscription_order','legacy-sub-2','original-earn','','1609459200','1609459200'),
+	 (2,7,9,'use',-1,0,'2022-01','user_subscription','9','past-use','','1640995200','1640995200');
+	 CREATE TABLE migration_source.subscription_reset_opportunity_accounts(id bigint PRIMARY KEY,user_id bigint,earned_total bigint,used_total bigint,available_total bigint,last_used_month text,created_at bigint,updated_at bigint);
+	 INSERT INTO migration_source.subscription_reset_opportunity_accounts VALUES(1,7,1,1,0,'2022-01',1609459200,1640995200);
 	 INSERT INTO migration_source.user_subscriptions SELECT 12,user_id,plan_id,amount_total,0,period_amount,0,status,start_time,end_time,last_reset_time,next_reset_time,
 	 '{}','{}','admin',membership_tier,created_at,updated_at FROM migration_source.user_subscriptions WHERE id=9`)
 	if err != nil {
@@ -37,7 +38,7 @@ func TestCommerceFinancialHistoryImportedResetUseCannotRegainConversion(t *testi
 	reader := readonlySource(t, source)
 	importer := NewImporter(reader, target, crypto)
 	for i := 0; i < 2; i++ {
-		if report, err := importer.Import(ctx, true); err != nil || !report.Applied || report.Counts["deferred_game_history.subscription_reset_opportunity_ledgers"] != 3 {
+		if report, err := importer.Import(ctx, true); err != nil || !report.Applied || report.Counts["subscription_reset_opportunity_ledgers"] != 2 {
 			t.Fatalf("history import%d=%+v err=%v", i, report, err)
 		}
 	}
@@ -75,8 +76,8 @@ func TestCommerceFinancialHistoryImportedResetUseCannotRegainConversion(t *testi
 	if err = source.QueryRow(ctx, `SELECT amount_used FROM migration_source.user_subscriptions WHERE id=12`).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("source subscription history changed=%d err=%v", count, err)
 	}
-	if err = source.QueryRow(ctx, `SELECT count(*) FROM migration_source.subscription_reset_opportunity_ledgers`).Scan(&count); err != nil || count != 3 {
-		t.Fatalf("source deferred history changed=%d err=%v", count, err)
+	if err = source.QueryRow(ctx, `SELECT count(*) FROM migration_source.subscription_reset_opportunity_ledgers`).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("source reset history changed=%d err=%v", count, err)
 	}
 }
 
@@ -163,6 +164,20 @@ func TestCommerceFinancialHistoryImportedProviderTransactionSupportsRefundAndSig
 	}
 	if !found {
 		t.Fatalf("original provider payment not refundable=%+v", eligible)
+	}
+	// An audited opening quote does not authorize taking another payment's
+	// actual funding lot. Reservation failure must roll back before dispatch.
+	if _, err = target.Exec(ctx, `UPDATE v3_billing.funding_lots SET reference_id='unrelated-payment' WHERE lot_id='old-paid-lot'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = refunds.Create(ctx, 7, commerce.UserRefundRequest{OrderType: "balance", TradeNo: "legacy-topup-1"}); !errors.Is(err, commerce.ErrRefundUnavailable) {
+		t.Fatalf("unverified historical lot was refundable: %v", err)
+	}
+	if err = target.QueryRow(ctx, `SELECT balance FROM v3_billing.accounts WHERE owner_type='user' AND owner_id=7 AND kind='wallet'`).Scan(&after); err != nil || after != before || provider.calls != 0 {
+		t.Fatalf("rejected provenance mutated funds or dispatched provider: balance=%d calls=%d err=%v", after, provider.calls, err)
+	}
+	if _, err = target.Exec(ctx, `UPDATE v3_billing.funding_lots SET reference_id='legacy-topup-1' WHERE lot_id='old-paid-lot'`); err != nil {
+		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
 		result, err := refunds.Create(ctx, 7, commerce.UserRefundRequest{OrderType: "balance", TradeNo: "legacy-topup-1"})

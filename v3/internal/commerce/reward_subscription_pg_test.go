@@ -89,10 +89,10 @@ func TestRewardSubscriptionMergesPreservingTierExpiryUsageAndConcurrentReceipt(t
 	var receipts, grants, seconds int64
 	if err = pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM v3_commerce.subscription_reward_receipts),
 	 (SELECT count(*) FROM v3_billing.ledger_entries WHERE operation_id='subscription:reward:blind-box:prop:11'),
-	 (SELECT remaining_seconds FROM v3_marketplace.blind_box_props WHERE user_id=1 AND prop_type='monthly_pass_multiplier')`).Scan(&receipts, &grants, &seconds); err != nil {
+	 COALESCE((SELECT remaining_seconds FROM v3_marketplace.blind_box_props WHERE user_id=1 AND prop_type='monthly_pass_multiplier'),0)`).Scan(&receipts, &grants, &seconds); err != nil {
 		t.Fatal(err)
 	}
-	if receipts != 1 || grants != 1 || seconds != 4500 {
+	if receipts != 1 || grants != 1 || seconds != 0 {
 		t.Fatalf("receipts=%d grants=%d card seconds=%d", receipts, grants, seconds)
 	}
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error { return s.GrantRewardTx(ctx, tx, 2, reward.ID, "blind-box:prop:11") })
@@ -113,7 +113,7 @@ func (f failedMonthlyBenefit) GrantMonthlyCardTx(ctx context.Context, tx pgx.Tx,
 	return f.err
 }
 
-func TestRewardSubscriptionMonthlyFailureRollsBackPaymentAndMergedReward(t *testing.T) {
+func TestRewardSubscriptionRetainedMonthlyFailureRollsBackPaymentAndNewRewardsSkipCards(t *testing.T) {
 	s, pool, now := newService(t)
 	ctx := context.Background()
 	market := rewardMarket(s, pool, now)
@@ -121,6 +121,7 @@ func TestRewardSubscriptionMonthlyFailureRollsBackPaymentAndMergedReward(t *test
 	s.SetMonthlyBenefits(failedMonthlyBenefit{market, sentinel})
 	p := rewardMonthlyPlan(t, s, pool, "standard", 1000, 1000, 0)
 	o := create(t, s, p.ID)
+	retainMonthlySnapshot(t, pool, o.ID, 1800, 0)
 	if err := s.Fulfill(ctx, "test", payment(o)); !errors.Is(err, sentinel) {
 		t.Fatalf("payment callback error=%v", err)
 	}
@@ -138,7 +139,7 @@ func TestRewardSubscriptionMonthlyFailureRollsBackPaymentAndMergedReward(t *test
 	}
 	s.SetMonthlyBenefits(failedMonthlyBenefit{market, sentinel})
 	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error { return s.GrantRewardTx(ctx, tx, 1, p.ID, "failure-reward") })
-	if !errors.Is(err, sentinel) {
+	if err != nil {
 		t.Fatalf("reward callback error=%v", err)
 	}
 	var total, balance, rewards, seconds int64
@@ -147,7 +148,7 @@ func TestRewardSubscriptionMonthlyFailureRollsBackPaymentAndMergedReward(t *test
 	 FROM v3_commerce.subscriptions s JOIN v3_billing.accounts a ON a.id=s.account_id WHERE s.user_id=1`).Scan(&total, &balance, &rewards, &seconds); err != nil {
 		t.Fatal(err)
 	}
-	if total != 1000 || balance != 1000 || rewards != 0 || seconds != 1800 {
+	if total != 2000 || balance != 2000 || rewards != 1 || seconds != 1800 {
 		t.Fatalf("partial reward committed: %d %d %d %d", total, balance, rewards, seconds)
 	}
 }

@@ -69,3 +69,24 @@ func TestWalletSMTPConfigAndCancellation(t *testing.T) {
 		t.Fatalf("header injection accepted %v", err)
 	}
 }
+
+func TestAccountSMTPRejectsInjectedHeadersAndCancellation(t *testing.T) {
+	sender, err := NewSMTPWalletSender(SMTPWalletConfig{Address: "127.0.0.1:1", From: "sender@example.test", ImplicitTLS: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, in := range []struct{ email, subject string }{
+		{"receiver@example.test\r\nBcc: attacker@test", "CodeGo"},
+		{"receiver@example.test", "CodeGo\r\nBcc: attacker@test"},
+		{"receiver@example.test", ""},
+	} {
+		if err = sender.SendAccountEmail(context.Background(), in.email, in.subject, "body"); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("invalid account mail accepted: %v", err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err = sender.SendAccountEmail(ctx, "receiver@example.test", "CodeGo", "body"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("account SMTP ignored cancellation: %v", err)
+	}
+}

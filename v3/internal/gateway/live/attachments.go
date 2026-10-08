@@ -21,6 +21,7 @@ type attachment struct {
 	dataURL   string
 	signedURL string
 	base64    string
+	imageMIME string
 }
 
 type attachmentPreparation struct {
@@ -63,7 +64,7 @@ func (h *Handler) PrepareFileReferences(ctx context.Context, req *gateway.Reques
 		return nil, errors.New("live: trailing file-bearing JSON")
 	}
 	p := &attachmentPreparation{h: h, req: req, target: target, files: make(map[string]*attachment), limit: limit}
-	if err := p.collect(ctx, root, 0); err != nil {
+	if err := p.collect(ctx, root, "", 0); err != nil {
 		return nil, err
 	}
 	if len(p.files) == 0 {
@@ -85,7 +86,7 @@ func (h *Handler) PrepareFileReferences(ctx context.Context, req *gateway.Reques
 	return body, nil
 }
 
-func (p *attachmentPreparation) collect(ctx context.Context, value any, depth int) error {
+func (p *attachmentPreparation) collect(ctx context.Context, value any, parent string, depth int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -95,7 +96,7 @@ func (p *attachmentPreparation) collect(ctx context.Context, value any, depth in
 	switch current := value.(type) {
 	case []any:
 		for _, child := range current {
-			if err := p.collect(ctx, child, depth+1); err != nil {
+			if err := p.collect(ctx, child, parent, depth+1); err != nil {
 				return err
 			}
 		}
@@ -120,9 +121,16 @@ func (p *attachmentPreparation) collect(ctx context.Context, value any, depth in
 				}
 				p.files[id] = &attachment{file: file}
 			}
+			typ, _ := current["type"].(string)
+			if (p.req.Protocol == gateway.ProtocolOpenAIChat || p.req.Protocol == gateway.ProtocolResponses) &&
+				(typ == "input_image" || typ == "image_url" || parent == "image_url") {
+				if err := p.validateImageReference(ctx, p.files[id]); err != nil {
+					return err
+				}
+			}
 		}
-		for _, child := range current {
-			if err := p.collect(ctx, child, depth+1); err != nil {
+		for key, child := range current {
+			if err := p.collect(ctx, child, key, depth+1); err != nil {
 				return err
 			}
 		}

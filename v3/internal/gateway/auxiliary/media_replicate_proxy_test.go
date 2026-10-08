@@ -39,10 +39,10 @@ func TestMediaReplicateUploadCreatePollDownloadShareSelectedProxy(t *testing.T) 
 			if r.Header.Get("Authorization") != "Bearer native-secret" {
 				t.Error("poll lost native credential")
 			}
-			_, _ = io.WriteString(w, `{"id":"job1","status":"succeeded","output":"http://cdn.invalid/image"}`)
+			_, _ = io.WriteString(w, `{"id":"job1","status":"succeeded","output":"http://provider.invalid/image"}`)
 		case "/image":
-			if r.URL.Host != "cdn.invalid" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
-				t.Error("CDN download bypassed proxy or leaked credential")
+			if r.URL.Host != "provider.invalid" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+				t.Error("same-origin download bypassed proxy or leaked credential")
 			}
 			_, _ = w.Write([]byte{0, 1, 2})
 		default:

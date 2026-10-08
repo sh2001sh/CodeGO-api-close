@@ -36,7 +36,7 @@ func (s *Service) rotateSubscriptionBucket(ctx context.Context, tx pgx.Tx, id, u
 	if _, err := tx.Exec(ctx, `UPDATE v3_commerce.subscription_buckets SET ended_at=$2 WHERE account_id=$1`, account, s.cfg.Now()); err != nil {
 		return 0, err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO v3_commerce.subscription_buckets(account_id,subscription_id,starts_at) VALUES($1,$2,$3)`, newAccount, id, last); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO v3_commerce.subscription_buckets(account_id,subscription_id,starts_at,policy_version) SELECT $1,id,$3,policy_version FROM v3_commerce.subscriptions WHERE id=$2`, newAccount, id, last); err != nil {
 		return 0, err
 	}
 	if grant > 0 {

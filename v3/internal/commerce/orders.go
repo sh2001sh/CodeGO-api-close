@@ -93,6 +93,7 @@ func (s *Service) priceOrder(ctx context.Context, o *Order, provider PaymentProv
 		if err != nil {
 			return err
 		}
+		o.PolicyVersion, o.PlanSnapshot = p.PolicyVersion, p
 		o.Kind, o.PlanID, o.AmountMinor, o.Credits, o.Currency, o.PeriodSeconds = "subscription", &p.ID, p.PriceMinor, p.Credits, p.Currency, p.PeriodSeconds
 		o.GroupBuyEnabled, o.GroupBuyTarget, o.GroupBuyBonus, o.GroupBuyLifetimeSeconds = p.GroupBuyEnabled, p.GroupBuyTarget, p.GroupBuyBonus, p.GroupBuyLifetimeSeconds
 		o.PeriodCredits, o.ResetPeriod, o.ResetCustomSeconds, o.LegacyPeriodic = p.PeriodCredits, p.ResetPeriod, p.ResetCustomSeconds, p.PeriodCredits == 0 && p.ResetPeriod != "never"

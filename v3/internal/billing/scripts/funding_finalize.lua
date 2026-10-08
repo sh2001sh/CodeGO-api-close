@@ -2,7 +2,7 @@
 -- then account,reserved pairs; then common event field/value pairs.
 -- WAL replay uses precisely this script; all source balances and events settle
 -- atomically. Actual beyond the estimate is charged to the final wallet.
-if ARGV[1] == 'source-v1' then return finalizeSource() end
+if ARGV[1] == 'source-v1' or ARGV[1] == 'source-v2' then return finalizeSource() end
 if redis.call('EXISTS', KEYS[1]) == 1 then return {0,0,0} end
 local count = tonumber(ARGV[6])
 local actual=ARGV[2]

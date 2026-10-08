@@ -106,7 +106,7 @@ func TestComposedControlAPI(t *testing.T) {
 	call("GET", "/readyz", "", "", 200)
 	call("GET", "/api/status", "", "", 200)
 	call("GET", "/api/catalog/channels", "", "", 401)
-	w := call("POST", "/api/user/register", "", `{"username":"control_alice","password":"strong-password"}`, 200)
+	w := call("POST", "/api/user/register", "", `{"username":"control_alice","password":"strong-password","accepted_terms_version":"2026-10-07","accepted_privacy_version":"2026-10-07","agreement_locale":"en"}`, 200)
 	var registration struct {
 		Data identity.Session `json:"data"`
 	}
@@ -145,6 +145,8 @@ func TestComposedControlAPI(t *testing.T) {
 	call("GET", "/api/marketplace/channels/mine", "", "", 401)
 	call("GET", "/api/marketplace/channels/mine", token, "", 200)
 	call("GET", "/api/marketplace/admin/channels", token, "", 403)
+	call("POST", "/api/marketplace/channels", token, `{}`, 428)
+	call("POST", "/api/user/policy-acceptance", token, `{"document":"supplier","version":"2026-10-07","locale":"en"}`, 200)
 	call("POST", "/api/marketplace/channels", token, `{}`, 400)
 	call("PUT", "/api/catalog/prices/model", token, `{}`, 403)
 	call("GET", "/api/group-buy/list", token, "", 200)

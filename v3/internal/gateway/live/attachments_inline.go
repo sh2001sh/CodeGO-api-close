@@ -157,6 +157,9 @@ func (p *attachmentPreparation) open(ctx context.Context, file *attachment) (*os
 		return nil, ErrNotFound
 	}
 	file.file = metadata
+	if file.imageMIME != "" {
+		file.file.MIMEType = file.imageMIME
+	}
 	return content, nil
 }
 

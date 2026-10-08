@@ -29,7 +29,7 @@ func (s *Service) insertOrderTx(ctx context.Context, tx pgx.Tx, o Order, groupID
 		if err := s.PrepareGroupCheckoutTx(ctx, tx, &o, groupID); err != nil {
 			return err
 		}
-		if o.Kind == "subscription" && o.PurchaseType != "fuel" && len(ignoreLimit) == 0 && o.Credits > 0 {
+		if policyVersion(o.PolicyVersion) == PolicyLegacy && o.Kind == "subscription" && o.PurchaseType != "fuel" && len(ignoreLimit) == 0 && o.Credits > 0 {
 			bonus, err := s.starterPurchaseBonus(ctx, tx, o)
 			if err != nil {
 				return err
@@ -45,15 +45,18 @@ func (s *Service) insertOrderTx(ctx context.Context, tx pgx.Tx, o Order, groupID
 				}
 			}
 		}
+		if err := s.freezeOrderRevenue(&o); err != nil {
+			return err
+		}
 		var err error
 		o, err = scanOrder(tx.QueryRow(ctx, `INSERT INTO v3_commerce.orders
 		 (user_id,plan_id,amount_minor,credits,period_seconds,currency,kind,provider,trade_no,created_at,expires_at,
 		 group_buy_enabled,group_buy_target,group_buy_bonus,group_buy_lifetime_seconds,product_id,period_credits,reset_period,reset_custom_seconds,legacy_periodic,duration_unit,duration_value,custom_seconds,
-		 group_buy_bonus2_micro,group_buy_bonus3_micro,group_buy_bonus5_micro,purchase_type,target_subscription_id,fuel_expires_at,checkout_selection)
-		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30) RETURNING `+orderColumns,
+		 group_buy_bonus2_micro,group_buy_bonus3_micro,group_buy_bonus5_micro,purchase_type,target_subscription_id,fuel_expires_at,checkout_selection,policy_version,plan_snapshot,recognized_revenue_credits)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33) RETURNING `+orderColumns,
 			o.UserID, o.PlanID, o.AmountMinor, int64(o.Credits), o.PeriodSeconds, o.Currency, o.Kind, o.Provider, o.TradeNo, o.CreatedAt, o.ExpiresAt,
 			o.GroupBuyEnabled, o.GroupBuyTarget, int64(o.GroupBuyBonus), o.GroupBuyLifetimeSeconds, o.ProductID, int64(o.PeriodCredits), o.ResetPeriod, o.ResetCustomSeconds, o.LegacyPeriodic, o.DurationUnit, o.DurationValue, o.CustomSeconds,
-			int64(o.GroupBuyBonus2), int64(o.GroupBuyBonus3), int64(o.GroupBuyBonus5), o.PurchaseType, o.TargetSubscriptionID, o.FuelExpiresAt, o.Selection))
+			int64(o.GroupBuyBonus2), int64(o.GroupBuyBonus3), int64(o.GroupBuyBonus5), o.PurchaseType, o.TargetSubscriptionID, o.FuelExpiresAt, o.Selection, policyVersion(o.PolicyVersion), o.PlanSnapshot, o.RecognizedRevenueCredits))
 		if err != nil {
 			return err
 		}
@@ -64,7 +67,12 @@ func (s *Service) insertOrderTx(ctx context.Context, tx pgx.Tx, o Order, groupID
 			return err
 		}
 		if len(ignoreLimit) == 0 {
-			return s.ApplyCheckoutDiscountTx(ctx, tx, &o)
+			if o.PolicyVersion != PolicyStandardV2 {
+				if err := s.ApplyCheckoutDiscountTx(ctx, tx, &o); err != nil {
+					return err
+				}
+			}
+			return s.preparePaidOrderTx(ctx, tx, &o)
 		}
 		return nil
 	}()

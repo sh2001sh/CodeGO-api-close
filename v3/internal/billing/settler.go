@@ -282,16 +282,27 @@ func (s *Settler) reserveViaRedis(ctx context.Context, req *gateway.Request, acc
 }
 
 func (s *Settler) runReserve(ctx context.Context, k keys, amount credits.Micro) (code, balance int64, err error) {
+	lifetime := s.reservationLifetime(ctx)
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.RedisTimeout)
 	defer cancel()
-	expires := s.cfg.Now().Add(s.cfg.ReservationExpiry).UnixMilli()
-	ttl := (s.cfg.ReservationExpiry + reservationGrace).Milliseconds()
+	expires := s.cfg.Now().Add(lifetime).UnixMilli()
+	ttl := (lifetime + reservationGrace).Milliseconds()
 	res, err := reserveScript.Run(ctx, s.rdb, []string{k.balance, k.reservation, k.done, redisx.KeyReservationOpen, k.holds},
 		int64(amount), int64(s.cfg.OverdraftAllowance), expires, ttl, k.member).Int64Slice()
 	if err != nil {
 		return 0, 0, err
 	}
 	return res[0], res[2], nil
+}
+
+// Persistent live requests must not lose their hold while still admitted.
+// The extra minute permits bounded finalization after the relay deadline.
+func (s *Settler) reservationLifetime(ctx context.Context) time.Duration {
+	lifetime := s.cfg.ReservationExpiry
+	if deadline, ok := ctx.Deadline(); ok {
+		lifetime = max(lifetime, deadline.Sub(s.cfg.Now())+time.Minute)
+	}
+	return lifetime
 }
 
 // requestPrice freezes pricing at reservation time. Invalid or missing prices

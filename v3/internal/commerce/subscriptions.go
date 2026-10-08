@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/sh2001sh/new-api/v3/internal/billing"
@@ -27,73 +26,6 @@ func (s *Service) ListPlans(ctx context.Context, includeDisabled bool) ([]Plan, 
 		plans = append(plans, p)
 	}
 	return plans, rows.Err()
-}
-
-func (s *Service) SavePlan(ctx context.Context, p Plan) (Plan, error) {
-	if err := s.normalizePlanMetadata(ctx, &p); err != nil {
-		return p, err
-	}
-	if err := normalizePlanDuration(&p); err != nil {
-		return p, err
-	}
-	if p.ResetPeriod == "" {
-		p.ResetPeriod = "never"
-	}
-	if p.GroupBuyTarget == 0 {
-		p.GroupBuyTarget = 5
-	}
-	if p.GroupBuyLifetimeSeconds == 0 {
-		p.GroupBuyLifetimeSeconds = 172800
-	}
-	if strings.TrimSpace(p.Name) == "" || len(p.Name) > 200 || p.PriceMinor <= 0 || p.Credits < 0 || (p.Credits == 0 && p.PeriodCredits == 0) ||
-		p.PeriodSeconds < 60 || p.PeriodSeconds > 31622400 || !validCurrency(p.Currency) ||
-		p.GroupBuyTarget < 2 || p.GroupBuyTarget > 1000 || p.GroupBuyBonus < 0 || p.GroupBuyLifetimeSeconds < 60 || p.GroupBuyLifetimeSeconds > 31622400 ||
-		p.PeriodCredits < 0 || p.MaxPurchasePerUser < 0 || !validReset(p.ResetPeriod, p.ResetCustomSeconds) ||
-		p.GroupBuyBonus2 < 0 || p.GroupBuyBonus3 < 0 || p.GroupBuyBonus5 < 0 || p.FuelUnitPriceMicro < 0 || p.FuelMinCredits < 0 || p.FuelCreditStep < 0 ||
-		(p.FuelEnabled && (p.FuelUnitPriceMicro == 0 || p.FuelMinCredits == 0 || p.FuelCreditStep == 0)) {
-		return p, ErrInvalid
-	}
-	if p.MembershipTier != "" && p.MembershipTier != "none" && monthlyTierSeconds(p.MembershipTier) == 0 {
-		return p, ErrInvalid
-	}
-	var row pgx.Row
-	if p.ID == 0 {
-		row = s.pool.QueryRow(ctx, `INSERT INTO v3_commerce.plans(name,price_minor,currency,credits,period_seconds,enabled,
-		    group_buy_enabled,group_buy_target,group_buy_bonus,group_buy_lifetime_seconds,
-		    period_credits,reset_period,reset_custom_seconds,internal_only,max_purchase_per_user,duration_unit,duration_value,custom_seconds,
-		    group_buy_bonus2_micro,group_buy_bonus3_micro,group_buy_bonus5_micro,plan_type,fuel_enabled,fuel_unit_price_micro,fuel_min_credits,fuel_credit_step,membership_tier,upgrade_group,model_limits)
-		    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29) RETURNING id`, p.Name, p.PriceMinor, p.Currency, int64(p.Credits), p.PeriodSeconds, p.Enabled,
-			p.GroupBuyEnabled, p.GroupBuyTarget, int64(p.GroupBuyBonus), p.GroupBuyLifetimeSeconds,
-			int64(p.PeriodCredits), p.ResetPeriod, p.ResetCustomSeconds, p.InternalOnly, p.MaxPurchasePerUser, p.DurationUnit, p.DurationValue, p.CustomSeconds,
-			int64(p.GroupBuyBonus2), int64(p.GroupBuyBonus3), int64(p.GroupBuyBonus5), p.PlanType, p.FuelEnabled, p.FuelUnitPriceMicro, int64(p.FuelMinCredits), int64(p.FuelCreditStep), p.MembershipTier, p.UpgradeGroup, p.ModelLimits)
-	} else {
-		row = s.pool.QueryRow(ctx, `UPDATE v3_commerce.plans SET name=$2,price_minor=$3,currency=$4,credits=$5,period_seconds=$6,enabled=$7,
-		    group_buy_enabled=$8,group_buy_target=$9,group_buy_bonus=$10,group_buy_lifetime_seconds=$11,
-		    period_credits=$12,reset_period=$13,reset_custom_seconds=$14,internal_only=$15,max_purchase_per_user=$16,
-		    duration_unit=$17,duration_value=$18,custom_seconds=$19,
-		    group_buy_bonus2_micro=$20,group_buy_bonus3_micro=$21,group_buy_bonus5_micro=$22,plan_type=$23,fuel_enabled=$24,fuel_unit_price_micro=$25,fuel_min_credits=$26,fuel_credit_step=$27,membership_tier=$28,upgrade_group=$29,model_limits=$30
-		    WHERE id=$1 RETURNING id`, p.ID, p.Name, p.PriceMinor, p.Currency, int64(p.Credits), p.PeriodSeconds, p.Enabled,
-			p.GroupBuyEnabled, p.GroupBuyTarget, int64(p.GroupBuyBonus), p.GroupBuyLifetimeSeconds,
-			int64(p.PeriodCredits), p.ResetPeriod, p.ResetCustomSeconds, p.InternalOnly, p.MaxPurchasePerUser, p.DurationUnit, p.DurationValue, p.CustomSeconds,
-			int64(p.GroupBuyBonus2), int64(p.GroupBuyBonus3), int64(p.GroupBuyBonus5), p.PlanType, p.FuelEnabled, p.FuelUnitPriceMicro, int64(p.FuelMinCredits), int64(p.FuelCreditStep), p.MembershipTier, p.UpgradeGroup, p.ModelLimits)
-	}
-	err := row.Scan(&p.ID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		err = ErrNotFound
-	}
-	return p, err
-}
-
-func validCurrency(currency string) bool {
-	if len(currency) < 3 || len(currency) > 12 || currency[0] < 'a' || currency[0] > 'z' {
-		return false
-	}
-	for _, r := range currency {
-		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *Service) grantSubscription(ctx context.Context, tx pgx.Tx, o Order) error {
@@ -123,6 +55,17 @@ func (s *Service) grantSubscription(ctx context.Context, tx pgx.Tx, o Order) err
 // account and bucket, applies any upgrade-group transition, and posts the
 // initial credit grant.
 func (s *Service) insertNewSubscriptionTx(ctx context.Context, tx pgx.Tx, o Order) error {
+	if o.PlanSnapshot.ID == 0 {
+		p, err := scanPlan(tx.QueryRow(ctx, `SELECT `+planColumns+` FROM v3_commerce.plans WHERE id=$1`, *o.PlanID))
+		if err != nil {
+			return err
+		}
+		o.PlanSnapshot = p
+	}
+	if o.ID == 0 && o.RecognizedRevenueCredits == nil {
+		zero := credits.Micro(0)
+		o.RecognizedRevenueCredits = &zero
+	}
 	start := s.cfg.Now()
 	var id, account int64
 	end := durationEnd(start, o.DurationUnit, o.DurationValue, o.CustomSeconds, o.PeriodSeconds)
@@ -132,9 +75,9 @@ func (s *Service) insertNewSubscriptionTx(ctx context.Context, tx pgx.Tx, o Orde
 	}
 	next := nextReset(start, resetPeriod, o.ResetCustomSeconds, end)
 	err := tx.QueryRow(ctx, `INSERT INTO v3_commerce.subscriptions(user_id,plan_id,order_id,starts_at,expires_at,
-	    total_credits,renewable_credits,period_credits,legacy_periodic,last_reset_at,next_reset_at,reset_period,reset_custom_seconds)
-	    VALUES($1,$2,NULLIF($3,0),$4,$5,$6,$6,$7,$8,$4,$9,$10,$11) RETURNING id`, o.UserID, *o.PlanID, o.ID, start, end,
-		int64(o.Credits), int64(o.PeriodCredits), o.LegacyPeriodic, next, resetPeriod, o.ResetCustomSeconds).Scan(&id)
+	    total_credits,renewable_credits,period_credits,legacy_periodic,last_reset_at,next_reset_at,reset_period,reset_custom_seconds,policy_version,plan_snapshot,recognized_revenue_credits)
+	    VALUES($1,$2,NULLIF($3,0),$4,$5,$6,$6,$7,$8,$4,$9,$10,$11,$12,$13,$14) RETURNING id`, o.UserID, *o.PlanID, o.ID, start, end,
+		int64(o.Credits), int64(o.PeriodCredits), o.LegacyPeriodic, next, resetPeriod, o.ResetCustomSeconds, policyVersion(o.PolicyVersion), o.PlanSnapshot, o.RecognizedRevenueCredits).Scan(&id)
 	if err != nil {
 		return err
 	}
@@ -146,7 +89,10 @@ func (s *Service) insertNewSubscriptionTx(ctx context.Context, tx pgx.Tx, o Orde
 	 source=CASE WHEN s.order_id IS NULL THEN '' ELSE 'order' END FROM v3_commerce.plans p WHERE s.id=$1 AND p.id=s.plan_id`, id, account); err != nil {
 		return err
 	}
-	if err = s.ApplySubscriptionUpgradeGroupTx(ctx, tx, id, *o.PlanID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE v3_commerce.subscriptions SET model_limits=COALESCE($2::jsonb,'{}'::jsonb) WHERE id=$1`, id, o.PlanSnapshot.ModelLimits); err != nil {
+		return err
+	}
+	if err = applySubscriptionGroupTx(ctx, tx, id, o.PlanSnapshot.UpgradeGroup, o.PlanID, s.cfg.Now()); err != nil {
 		return err
 	}
 	if o.ID == 0 {
@@ -154,7 +100,7 @@ func (s *Service) insertNewSubscriptionTx(ctx context.Context, tx pgx.Tx, o Orde
 			return err
 		}
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO v3_commerce.subscription_buckets(account_id,subscription_id,starts_at) VALUES($1,$2,$3)`, account, id, start); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO v3_commerce.subscription_buckets(account_id,subscription_id,starts_at,policy_version) VALUES($1,$2,$3,$4)`, account, id, start, policyVersion(o.PolicyVersion)); err != nil {
 		return err
 	}
 	grant := o.Credits
@@ -165,13 +111,16 @@ func (s *Service) insertNewSubscriptionTx(ctx context.Context, tx pgx.Tx, o Orde
 	}
 	_, err = s.poster.PostTx(ctx, tx, billing.Entry{AccountID: account, Amount: grant, Kind: "subscription_grant",
 		OperationID: "subscription:grant:" + o.TradeNo, Metadata: map[string]any{"user_id": o.UserID, "subscription_id": id}})
-	return err
+	if err != nil {
+		return err
+	}
+	return s.applySubscriptionGrantedTx(ctx, tx, o.UserID)
 }
 
 func (s *Service) ListSubscriptions(ctx context.Context, userID int64) ([]Subscription, error) {
 	rows, err := s.pool.Query(ctx, `SELECT s.id,s.user_id,s.plan_id,s.account_id,s.state,s.starts_at,s.expires_at,a.balance,
 	    s.total_credits,s.used_credits+COALESCE(u.spent,0),s.period_credits,s.period_used+COALESCE(u.spent,0),
-	    s.legacy_periodic,s.last_reset_at,s.next_reset_at,s.reset_period,s.reset_custom_seconds
+	    s.legacy_periodic,s.last_reset_at,s.next_reset_at,s.reset_period,s.reset_custom_seconds,s.policy_version,s.converted_at,s.benefits_until,s.plan_snapshot
 	    FROM v3_commerce.subscriptions s JOIN v3_billing.accounts a ON a.id=s.account_id
 	    LEFT JOIN LATERAL (SELECT GREATEST(-SUM(amount),0)::bigint spent FROM v3_billing.ledger_entries
 	    WHERE account_id=s.account_id AND kind IN ('usage','refund')) u ON true
@@ -184,7 +133,7 @@ func (s *Service) ListSubscriptions(ctx context.Context, userID int64) ([]Subscr
 	for rows.Next() {
 		var sub Subscription
 		if err = rows.Scan(&sub.ID, &sub.UserID, &sub.PlanID, &sub.AccountID, &sub.State, &sub.StartsAt, &sub.ExpiresAt, &sub.Balance,
-			&sub.TotalCredits, &sub.UsedCredits, &sub.PeriodCredits, &sub.PeriodUsed, &sub.LegacyPeriodic, &sub.LastResetAt, &sub.NextResetAt, &sub.ResetPeriod, &sub.ResetCustomSeconds); err != nil {
+			&sub.TotalCredits, &sub.UsedCredits, &sub.PeriodCredits, &sub.PeriodUsed, &sub.LegacyPeriodic, &sub.LastResetAt, &sub.NextResetAt, &sub.ResetPeriod, &sub.ResetCustomSeconds, &sub.PolicyVersion, &sub.ConvertedAt, &sub.BenefitsUntil, &sub.PlanSnapshot); err != nil {
 			return nil, err
 		}
 		result = append(result, sub)
@@ -198,8 +147,11 @@ func (s *Service) ExpireSubscriptions(ctx context.Context, limit int) (int, erro
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
-	count := 0
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	count, err := s.expireConvertedBenefits(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		users, err := lockExpiredSubscriptionUsersTx(ctx, tx, s.cfg.Now(), limit)
 		if err != nil || len(users) == 0 {
 			return err
@@ -252,6 +204,9 @@ func (s *Service) cancelSubscriptionOrder(ctx context.Context, tx pgx.Tx, orderI
 	var user int64
 	if err = tx.QueryRow(ctx, `SELECT id FROM v3_identity.users WHERE id=$1 FOR UPDATE`, o.UserID).Scan(&user); err != nil {
 		return err
+	}
+	if handled, e := s.refundConvertedSubscriptionTx(ctx, tx, o); handled || e != nil {
+		return e
 	}
 	var id, account int64
 	err = tx.QueryRow(ctx, `SELECT id,account_id FROM v3_commerce.subscriptions WHERE order_id=$1 AND state='active' FOR UPDATE`, orderID).Scan(&id, &account)

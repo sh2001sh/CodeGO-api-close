@@ -60,6 +60,7 @@ type Task struct {
 	CreatedAt      time.Time         `json:"created_at"`
 	UpdatedAt      time.Time         `json:"-"`
 	LeaseID        string            `json:"-"`
+	Historical     bool              `json:"-"`
 }
 
 type TaskRepository interface {

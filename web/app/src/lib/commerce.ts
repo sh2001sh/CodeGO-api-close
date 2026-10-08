@@ -1,4 +1,5 @@
 import type { Schema } from './types'
+import type { Translate } from './i18n'
 export type Plan = Schema['Plan']
 export type Order = Schema['Order']
 export type Subscription = Schema['Subscription']
@@ -43,10 +44,12 @@ export function followPayment(value: string): void {
   window.location.assign(target.href)
 }
 
-export function minorAmount(value: string, currency = 'usd'): number {
+export function minorAmount(value: string, currency = 'usd', t?: Translate): number {
   const digits = currencyDigits(currency)
   if (!(digits ? new RegExp(`^\\d+(\\.\\d{1,${digits}})?$`) : /^\d+$/).test(value))
-    throw new Error(`支付金额最多支持 ${digits} 位小数`)
+    throw new Error(
+      t ? t('支付金额最多支持 {digits} 位小数', { digits }) : `支付金额最多支持 ${digits} 位小数`,
+    )
   const [whole, fraction = ''] = value.split('.')
   const minor = BigInt(whole) * 10n ** BigInt(digits) + BigInt(fraction.padEnd(digits, '0') || '0')
   if (minor <= 0n || minor > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('金额超出允许范围')

@@ -57,7 +57,7 @@ func TestProcurementFrozenThroughTargetMutationAndWorkflowRestore(t *testing.T) 
 	}
 	for _, admitted := range []*hold{h, restored} {
 		rec, err := appendEconomicsCall(walRecord{}, admitted, gateway.Outcome{Charge: true, Target: &req.Targets[0]})
-		if err != nil || len(rec.Args) != 4 || rec.Args[1] != "17" || rec.Args[3] != "200001" {
+		if err != nil || len(rec.Args) != 8 || rec.Args[1] != "17" || rec.Args[3] != "200001" || rec.Args[5] != "180" || rec.Args[7] != "90" {
 			t.Fatalf("frozen cost=%v %v", rec.Args, err)
 		}
 		rec, err = appendEconomicsCall(walRecord{}, admitted, gateway.Outcome{Target: &req.Targets[0]})

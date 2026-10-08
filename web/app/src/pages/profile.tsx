@@ -3,10 +3,11 @@ import { useNavigate } from '@tanstack/react-router'
 import { api, unwrap } from '../lib/api'
 import type { Schema } from '../lib/types'
 import { resourceOptions, sessionOptions } from '../lib/queries'
-import { passkeyRegister } from '../lib/passkeys'
+import { passkeyRegister, passkeyRemove } from '../lib/passkeys'
 import { useTranslation } from '../lib/i18n'
-import { Button, ErrorMessage, Field, PageHeader } from '../components/ui'
+import { Button, ErrorMessage, Field, PageHeader, confirmAction } from '../components/ui'
 import { OAuthLinks } from '../features/oauth-links'
+import { AccountSecurity, EmailVerification } from '../features/account-security'
 
 export default function ProfilePage() {
   const { t } = useTranslation()
@@ -31,10 +32,14 @@ export default function ProfilePage() {
     mutationFn: passkeyRegister,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['passkeys'] }),
   })
+  const remove = useMutation({
+    mutationFn: passkeyRemove,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['passkeys'] }),
+  })
   return (
-    <>
+    <div className="profile-content">
       <PageHeader title="个人资料" />
-      <ErrorMessage error={save.error ?? register.error} />
+      <ErrorMessage error={save.error ?? register.error ?? remove.error} />
       <form
         className="form-panel"
         onSubmit={(event) => {
@@ -42,7 +47,7 @@ export default function ProfilePage() {
           const fields = new FormData(event.currentTarget)
           save.mutate({
             display_name: String(fields.get('display_name')),
-            email: String(fields.get('email')),
+            email: user.email,
             original_password: String(fields.get('original_password')),
             password: String(fields.get('password')),
           })
@@ -54,7 +59,6 @@ export default function ProfilePage() {
           defaultValue={user.display_name}
           maxLength={100}
         />
-        <Field name="email" label="邮箱" type="email" defaultValue={user.email} />
         <Field name="original_password" label="当前密码" type="password" maxLength={72} />
         <label className="field" htmlFor="new-password">
           <span>{t('新密码')}</span>
@@ -71,19 +75,39 @@ export default function ProfilePage() {
           {t('保存')}
         </Button>
       </form>
+      <EmailVerification email={user.email} />
+      <AccountSecurity />
       <section className="section">
         <h2>{t('通行密钥')}</h2>
         <p className="notice">
           {t('已绑定')} · {passkey.count}
         </p>
-        <Button disabled={register.isPending} onClick={() => register.mutate()}>
+        <Button disabled={register.isPending || remove.isPending} onClick={() => register.mutate()}>
           {t('添加通行密钥')}
         </Button>
+        {passkey.count > 0 && (
+          <Button
+            variant="danger"
+            disabled={register.isPending || remove.isPending}
+            onClick={async () => {
+              const ok = await confirmAction({
+                title: '移除通行密钥',
+                description:
+                  '将移除此账号的全部通行密钥。需要验证当前通行密钥，并保留密码或外部账号作为其他登录方式。',
+                confirmLabel: '确认移除',
+                danger: true,
+              })
+              if (ok) remove.mutate()
+            }}
+          >
+            {t(remove.isPending ? '验证并移除中…' : '移除通行密钥')}
+          </Button>
+        )}
       </section>
       <section className="section">
         <h2>{t('外部账号绑定')}</h2>
         <OAuthLinks bind />
       </section>
-    </>
+    </div>
   )
 }

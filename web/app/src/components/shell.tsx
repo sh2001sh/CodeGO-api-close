@@ -1,58 +1,40 @@
-import { useState } from 'react'
-import { useMutation, useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
-import {
-  Activity,
-  Box,
-  CreditCard,
-  KeyRound,
-  LayoutDashboard,
-  ListOrdered,
-  LogOut,
-  Settings,
-  Users,
-  Waypoints,
-} from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
+import { Dialog as BaseDialog } from '@base-ui/react/dialog'
+import { KeyRound, Languages, LogOut, Moon, Sun, X } from 'lucide-react'
 import { api } from '../lib/api'
 import { sessionOptions } from '../lib/queries'
 import { useTranslation } from '../lib/i18n'
-import { Button, ErrorMessage } from './ui'
+import { languages } from '../lib/locales'
+import { useTheme } from '../lib/preferences'
+import { ErrorMessage, IconButton } from './ui'
+import { SidebarNav } from './app/sidebar-nav'
+import { UserMenu } from './app/user-menu'
+import { CommandPalette, type PaletteAction } from './app/command-palette'
+import {
+  BalanceChip,
+  Brand,
+  CompanyIdentity,
+  GlobalTopbar,
+  usePaletteHotkey,
+} from './app/global-topbar'
 
-const browse = [
-  { to: '/channel-market', label: '渠道市场', icon: Waypoints },
-  { to: '/wallet', label: '钱包', icon: CreditCard },
-  { to: '/group-buy', label: '拼团', icon: Users },
-  { to: '/blind-box', label: '盲盒', icon: Box },
-  { to: '/community', label: '社区', icon: Users },
-] as const
-const manage = [
-  { to: '/dashboard', label: '仪表板', icon: LayoutDashboard },
-  { to: '/keys', label: 'API Key', icon: KeyRound },
-  { to: '/usage-logs', label: '使用日志', icon: Activity },
-  { to: '/orders', label: '订单', icon: ListOrdered },
-  { to: '/my-channels', label: '我的渠道', icon: Waypoints },
-  { to: '/transfers', label: '钱包转账', icon: CreditCard },
-  { to: '/invoices', label: '发票', icon: ListOrdered },
-  { to: '/profile', label: '个人资料', icon: Users },
-] as const
-const adminLinks = [
-  { to: '/channels', label: '渠道', icon: Waypoints },
-  { to: '/users', label: '用户', icon: Users },
-  { to: '/settings', label: '系统设置', icon: Settings },
-  { to: '/market-admin', label: '市场审核', icon: Waypoints },
-  { to: '/subscriptions', label: '套餐管理', icon: CreditCard },
-  { to: '/redemptions', label: '兑换码管理', icon: KeyRound },
-] as const
+export { Brand } from './app/global-topbar'
 
+/** Signed-in frame: the shared top bar, the grouped sidebar beneath it, and the page. */
 export function Shell() {
   const { t, locale, change } = useTranslation()
+  const { theme, setTheme } = useTheme()
   const user = useSuspenseQuery(sessionOptions()).data
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const [zone, setZone] = useState<'browse' | 'manage'>(
-    browse.some((link) => link.to === pathname) ? 'browse' : 'manage',
-  )
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  usePaletteHotkey(() => setPaletteOpen(true))
+  useEffect(() => setDrawerOpen(false), [pathname])
+
   const logout = useMutation({
     mutationFn: () => api.POST('/api/user/logout'),
     onSuccess: () => {
@@ -60,71 +42,99 @@ export function Shell() {
       void navigate({ to: '/sign-in' })
     },
   })
-  const links =
-    zone === 'browse'
-      ? browse
-      : [...manage, ...(user.role === 'admin' || user.role === 'root' ? adminLinks : [])]
+  const dark = theme === 'dark'
+  const actions = useMemo<PaletteAction[]>(
+    () => [
+      {
+        id: 'new-key',
+        label: '创建 API Key',
+        icon: KeyRound,
+        keywords: 'create key new token',
+        run: () => void navigate({ to: '/keys' }),
+      },
+      {
+        id: 'theme',
+        label: dark ? '切换到浅色模式' : '切换到深色模式',
+        icon: dark ? Sun : Moon,
+        keywords: 'theme dark light 主题 深色 浅色',
+        run: () => setTheme(dark ? 'light' : 'dark'),
+      },
+      ...languages
+        .filter((language) => language.code !== locale)
+        .map((language) => ({
+          id: `locale-${language.code}`,
+          label: language.name,
+          icon: Languages,
+          keywords: `language 语言 ${language.code}`,
+          run: () => void change(language.code),
+        })),
+      {
+        id: 'logout',
+        label: '退出登录',
+        icon: LogOut,
+        keywords: 'logout sign out',
+        run: () => logout.mutate(),
+      },
+    ],
+    // Rebuilt only when labels change; navigate/setTheme/mutate are stable references.
+    [dark, locale],
+  )
+
   return (
-    <>
-      <a className="sr-only focus:not-sr-only" href="#main-content">
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">
         {t('跳转到内容')}
       </a>
-      <header className="topbar">
-        <Link className="brand" to="/dashboard">
-          CodeGo <span>new-api</span>
-        </Link>
-        <div className="zone-switch" aria-label={t('工作区域')}>
-          <button
-            aria-pressed={zone === 'browse'}
-            onClick={() => {
-              setZone('browse')
-              void navigate({ to: '/wallet' })
-            }}
-          >
-            {t('逛')}
-          </button>
-          <button
-            aria-pressed={zone === 'manage'}
-            onClick={() => {
-              setZone('manage')
-              void navigate({ to: '/dashboard' })
-            }}
-          >
-            {t('管')}
-          </button>
+      <GlobalTopbar
+        brandTo="/"
+        onSearch={() => setPaletteOpen(true)}
+        onOpenNav={() => setDrawerOpen(true)}
+        account={
+          <>
+            <BalanceChip />
+            <UserMenu
+              name={user.display_name || user.username}
+              email={user.email}
+              role={user.role}
+              loggingOut={logout.isPending}
+              onLogout={() => logout.mutate()}
+            />
+          </>
+        }
+      />
+      <aside className="sidebar">
+        <SidebarNav role={user.role} />
+        <div className="sidebar-footer">
+          <CompanyIdentity />
         </div>
-        <div className="topbar-actions">
-          <span className="user-name">{user.display_name || user.username}</span>
-          <Button variant="quiet" onClick={() => void change(locale === 'zh-CN' ? 'en' : 'zh-CN')}>
-            {locale === 'zh-CN' ? 'EN' : '中文'}
-          </Button>
-          <Button
-            variant="quiet"
-            disabled={logout.isPending}
-            aria-label={t('退出登录')}
-            onClick={() => logout.mutate()}
-          >
-            <LogOut size={16} aria-hidden />
-          </Button>
-        </div>
-      </header>
-      <div className="workspace">
-        <aside className="sidebar">
-          <nav aria-label={t('主导航')}>
-            {links.map((link) => (
-              <Link key={link.to} to={link.to}>
-                <link.icon size={18} strokeWidth={1.8} aria-hidden />
-                <span>{t(link.label)}</span>
-              </Link>
-            ))}
-          </nav>
-        </aside>
-        <main className="page" id="main-content">
-          <ErrorMessage error={logout.error} />
-          <Outlet />
-          <footer>new-api · QuantumNous</footer>
-        </main>
-      </div>
-    </>
+      </aside>
+      <main className="page" id="main-content" tabIndex={-1}>
+        <ErrorMessage error={logout.error} />
+        <Outlet />
+      </main>
+      <BaseDialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <BaseDialog.Portal>
+          <BaseDialog.Backdrop className="overlay-backdrop" />
+          <BaseDialog.Popup className="drawer-popup" data-side="left">
+            <div className="drawer-header">
+              <BaseDialog.Title className="sr-only">{t('主导航')}</BaseDialog.Title>
+              <Brand to="/" />
+              <BaseDialog.Close render={<IconButton label={t('关闭导航')} />}>
+                <X size={18} aria-hidden />
+              </BaseDialog.Close>
+            </div>
+            <div className="sidebar">
+              <SidebarNav role={user.role} onNavigate={() => setDrawerOpen(false)} />
+            </div>
+          </BaseDialog.Popup>
+        </BaseDialog.Portal>
+      </BaseDialog.Root>
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        role={user.role}
+        actions={actions}
+      />
+    </div>
   )
 }

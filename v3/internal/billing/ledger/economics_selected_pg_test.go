@@ -65,6 +65,9 @@ func TestSelectedProcurementReachesEconomicsWithoutRepricingOrDoubleDebit(t *tes
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM v3_billing.request_economics`).Scan(&rows); err != nil || rows != 0 {
 		t.Fatalf("rollback retained economics=%d %v", rows, err)
 	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM v3_billing.funding_source_usage`).Scan(&rows); err != nil || rows != 0 {
+		t.Fatalf("rejected source facts=%d %v", rows, err)
+	}
 	for range 2 {
 		if _, err := post(ctx, pool, []event{e}, nil); err != nil {
 			t.Fatal(err)
@@ -77,6 +80,10 @@ func TestSelectedProcurementReachesEconomicsWithoutRepricingOrDoubleDebit(t *tes
 	}
 	if channel != 3 || poolID != 17 || actual != 400 || cost != 200000 || source != "wallet" {
 		t.Fatalf("frozen economics=%d/%d/%d/%d/%s", channel, poolID, actual, cost, source)
+	}
+	var factAmount, walletEquivalent, exactCost int64
+	if err := pool.QueryRow(ctx, `SELECT amount,wallet_equivalent_amount,procurement_cost_amount FROM v3_billing.funding_source_usage WHERE request_id=$1`, request.ID).Scan(&factAmount, &walletEquivalent, &exactCost); err != nil || factAmount != 400 || walletEquivalent != 400 || exactCost != 200 {
+		t.Fatalf("exact service economics=%d/%d/%d %v", factAmount, walletEquivalent, exactCost, err)
 	}
 	if balance, version := pgBalance(t, pool, account); balance != 1600 || version != 1 {
 		t.Fatalf("economic metadata charged extra=%d/%d", balance, version)

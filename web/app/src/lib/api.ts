@@ -72,6 +72,7 @@ async function transport(request: Request): Promise<Response> {
   if (
     response.status === 401 &&
     !/\/(login|register|logout|refresh)$/.test(url.pathname) &&
+    url.pathname !== '/api/user/login/2fa' &&
     (await refreshSession(url.origin))
   ) {
     response = await globalThis.fetch(retry)

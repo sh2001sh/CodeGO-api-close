@@ -3,6 +3,7 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  defaultParseSearch,
   lazyRouteComponent,
   Outlet,
   redirect,
@@ -15,10 +16,15 @@ import { Button, ErrorMessage, Loading } from './components/ui'
 import { useTranslation } from './lib/i18n'
 import { boxHistoryOptions } from './features/box-history'
 import { safeLocalReturn } from './lib/auth-navigation'
+import { PageMetadata } from './components/page-metadata'
 
-type AuthSearch = { returnTo?: string }
+type AuthSearch = { returnTo?: string; ref?: string }
 const authSearch = (search: AuthSearch): AuthSearch => ({
   returnTo: safeLocalReturn(search.returnTo),
+  ref:
+    typeof search.ref === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(search.ref)
+      ? search.ref
+      : undefined,
 })
 
 export const queryClient = new QueryClient({
@@ -39,7 +45,12 @@ function RouteError(props: { error: unknown }) {
 }
 
 const root = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  component: Outlet,
+  component: () => (
+    <>
+      <PageMetadata />
+      <Outlet />
+    </>
+  ),
   errorComponent: RouteError,
   notFoundComponent: () => (
     <section className="page">
@@ -47,13 +58,70 @@ const root = createRootRouteWithContext<{ queryClient: QueryClient }>()({
     </section>
   ),
 })
-const index = createRoute({
+const site = createRoute({
   getParentRoute: () => root,
+  id: '_site',
+  component: lazyRouteComponent(() => import('./components/site-layout'), 'SiteLayout'),
+})
+const index = createRoute({
+  getParentRoute: () => site,
   path: '/',
+  component: lazyRouteComponent(() => import('./pages/home')),
+})
+type ModelsSearch = { q?: string; vendor?: string }
+const models = createRoute({
+  getParentRoute: () => site,
+  path: '/models',
+  validateSearch: (search: ModelsSearch): ModelsSearch => ({
+    q: typeof search.q === 'string' && search.q ? search.q.slice(0, 100) : undefined,
+    vendor:
+      typeof search.vendor === 'string' && search.vendor ? search.vendor.slice(0, 40) : undefined,
+  }),
+  component: lazyRouteComponent(() => import('./pages/models')),
+})
+const docs = createRoute({
+  getParentRoute: () => site,
+  path: '/docs',
+  validateSearch: (search: { article?: string }): { article?: string } => ({
+    article:
+      typeof search.article === 'string' && /^[a-z0-9-]{1,80}$/.test(search.article)
+        ? search.article
+        : undefined,
+  }),
+  component: lazyRouteComponent(() => import('./pages/docs')),
+})
+const publicResource = <TPath extends string>(
+  path: TPath,
+  exportName:
+    | 'HelpPage'
+    | 'SupportPage'
+    | 'AboutPage'
+    | 'PrivacyPage'
+    | 'TermsPage'
+    | 'RefundPolicyPage'
+    | 'SupplierPolicyPage'
+    | 'MarketRulesPage',
+) =>
+  createRoute({
+    getParentRoute: () => site,
+    path,
+    component: lazyRouteComponent(() => import('./pages/resources'), exportName),
+  })
+const help = publicResource('/help', 'HelpPage')
+const support = publicResource('/support', 'SupportPage')
+const about = publicResource('/about', 'AboutPage')
+const privacy = publicResource('/privacy', 'PrivacyPage')
+const terms = publicResource('/terms', 'TermsPage')
+const refundPolicy = publicResource('/refund-policy', 'RefundPolicyPage')
+const supplierAgreement = publicResource('/supplier-agreement', 'SupplierPolicyPage')
+const supplierTerms = createRoute({
+  getParentRoute: () => site,
+  path: '/supplier-terms',
   beforeLoad: () => {
-    throw redirect({ to: '/dashboard' })
+    throw redirect({ to: '/supplier-agreement' })
   },
 })
+const marketRules = publicResource('/market-rules', 'MarketRulesPage')
 const signIn = createRoute({
   getParentRoute: () => root,
   path: '/sign-in',
@@ -70,6 +138,29 @@ const oauthCallback = createRoute({
   getParentRoute: () => root,
   path: '/oauth/$provider',
   component: lazyRouteComponent(() => import('./pages/oauth-callback')),
+})
+const forgotPassword = createRoute({
+  getParentRoute: () => root,
+  path: '/forgot-password',
+  component: lazyRouteComponent(() => import('./pages/password-recovery')),
+})
+const resetPassword = createRoute({
+  getParentRoute: () => root,
+  path: '/reset',
+  validateSearch: (search: { email?: string; token?: string }) => ({
+    email: search.email ?? '',
+    token: search.token ?? '',
+  }),
+  component: lazyRouteComponent(() => import('./pages/password-recovery'), 'ResetPasswordPage'),
+})
+const legacyResetPassword = createRoute({
+  getParentRoute: () => root,
+  path: '/user/reset',
+  validateSearch: (search: { email?: string; token?: string }) => ({
+    email: search.email ?? '',
+    token: search.token ?? '',
+  }),
+  component: lazyRouteComponent(() => import('./pages/password-recovery'), 'ResetPasswordPage'),
 })
 const authenticated = createRoute({
   getParentRoute: () => root,
@@ -98,6 +189,10 @@ const dashboard = createRoute({
 const keys = createRoute({
   getParentRoute: () => authenticated,
   path: '/keys',
+  validateSearch: (search: { group?: string }): { group?: string } => ({
+    group:
+      typeof search.group === 'string' && search.group ? search.group.slice(0, 255) : undefined,
+  }),
   loader: ({ context }) => context.queryClient.ensureQueryData(keysOptions()),
   component: lazyRouteComponent(() => import('./pages/keys')),
 })
@@ -169,27 +264,9 @@ const orders = createRoute({
 const groupBuy = createRoute({
   getParentRoute: () => authenticated,
   path: '/group-buy',
-  loader: ({ context }) =>
-    Promise.all([
-      context.queryClient.ensureQueryData(
-        resourceOptions(
-          'groups',
-          (signal) => api.GET('/api/group-buy/list', { signal }).then((result) => unwrap(result)),
-          ['', false],
-        ),
-      ),
-      context.queryClient.ensureQueryData(
-        resourceOptions('orders', (signal) =>
-          api.GET('/api/commerce/orders', { signal }).then((result) => unwrap(result)),
-        ),
-      ),
-      context.queryClient.ensureQueryData(
-        resourceOptions('plans', (signal) =>
-          api.GET('/api/subscription/plans', { signal }).then((result) => unwrap(result)),
-        ),
-      ),
-    ]),
-  component: lazyRouteComponent(() => import('./pages/group-buy')),
+  beforeLoad: () => {
+    throw redirect({ to: '/dashboard' })
+  },
 })
 const blindBox = createRoute({
   getParentRoute: () => authenticated,
@@ -206,23 +283,11 @@ const blindBox = createRoute({
   component: lazyRouteComponent(() => import('./pages/blind-box')),
 })
 const community = createRoute({
-  getParentRoute: () => authenticated,
+  getParentRoute: () => root,
   path: '/community',
-  loader: ({ context }) =>
-    context.queryClient.ensureQueryData(
-      resourceOptions(
-        'community',
-        (signal) =>
-          api
-            .GET('/api/community/sellers', {
-              signal,
-              params: { query: { page: 1, page_size: 20 } },
-            })
-            .then((result) => unwrap(result)),
-        [1],
-      ),
-    ),
-  component: lazyRouteComponent(() => import('./pages/community')),
+  beforeLoad: () => {
+    throw redirect({ href: 'https://community.codegoai.com' })
+  },
 })
 const profile = createRoute({
   getParentRoute: () => authenticated,
@@ -234,6 +299,30 @@ const profile = createRoute({
       ),
     ),
   component: lazyRouteComponent(() => import('./pages/profile')),
+})
+const desktopAuthorize = createRoute({
+  getParentRoute: () => authenticated,
+  path: '/desktop/authorize',
+  beforeLoad: () => {
+    throw redirect({ to: '/profile' })
+  },
+})
+const desktopDevices = createRoute({
+  getParentRoute: () => authenticated,
+  path: '/desktop/devices',
+  beforeLoad: () => {
+    throw redirect({ to: '/profile' })
+  },
+})
+const modelFavorites = createRoute({
+  getParentRoute: () => authenticated,
+  path: '/model-favorites',
+  component: lazyRouteComponent(() => import('./pages/model-favorites')),
+})
+const referralRewards = createRoute({
+  getParentRoute: () => authenticated,
+  path: '/referral-rewards',
+  component: lazyRouteComponent(() => import('./pages/referral-rewards')),
 })
 const admin = createRoute({
   getParentRoute: () => authenticated,
@@ -262,6 +351,28 @@ const channels = createRoute({
     ),
   component: lazyRouteComponent(() => import('./pages/channels')),
 })
+const deployments = createRoute({
+  getParentRoute: () => admin,
+  path: '/deployments',
+  component: lazyRouteComponent(() => import('./pages/deployments')),
+})
+const rootAdmin = createRoute({
+  getParentRoute: () => admin,
+  id: '_root-admin',
+  beforeLoad: ({ context }) => {
+    if (context.user.role !== 'root') throw new APIError('无权执行此操作', 403)
+  },
+})
+const ratioSync = createRoute({
+  getParentRoute: () => rootAdmin,
+  path: '/ratio-sync',
+  component: lazyRouteComponent(() => import('./pages/ratio-sync')),
+})
+const performance = createRoute({
+  getParentRoute: () => rootAdmin,
+  path: '/performance',
+  component: lazyRouteComponent(() => import('./pages/performance-tools')),
+})
 const users = createRoute({
   getParentRoute: () => admin,
   path: '/users',
@@ -289,38 +400,41 @@ const settings = createRoute({
     ),
   component: lazyRouteComponent(() => import('./pages/settings')),
 })
+const marketFrame = createRoute({
+  getParentRoute: () => root,
+  id: '_market',
+  component: lazyRouteComponent(() => import('./components/market-layout'), 'MarketLayout'),
+})
+type MarketSearch = { group?: string; model?: string; shop?: string; view?: 'groups' | 'shops' }
 const channelMarket = createRoute({
-  getParentRoute: () => authenticated,
+  getParentRoute: () => marketFrame,
   path: '/channel-market',
-  loader: async ({ context }) => {
-    const [page, pool] = await Promise.all([
-      import('./pages/market'),
-      import('./features/channelmarket/route-pools'),
-    ])
-    return Promise.all([
-      context.queryClient.ensureQueryData(page.marketOptions()),
-      context.queryClient.ensureQueryData(page.noticeOptions()),
-      context.queryClient.ensureQueryData(keysOptions()),
-      context.queryClient.ensureQueryData(pool.poolOptions()),
-    ])
-  },
+  validateSearch: (search: MarketSearch): MarketSearch => ({
+    view: search.view === 'groups' || search.view === 'shops' ? search.view : undefined,
+    group:
+      typeof search.group === 'string' && /^[A-Za-z0-9_-]{1,120}$/.test(search.group)
+        ? search.group
+        : undefined,
+    model:
+      typeof search.model === 'string' && search.model ? search.model.slice(0, 120) : undefined,
+    shop:
+      typeof search.shop === 'string' && /^[A-Za-z0-9_-]{1,120}$/.test(search.shop)
+        ? search.shop
+        : undefined,
+  }),
   component: lazyRouteComponent(() => import('./pages/market')),
+})
+const notifications = createRoute({
+  getParentRoute: () => authenticated,
+  path: '/notifications',
+  component: lazyRouteComponent(() => import('./pages/notifications')),
 })
 const myChannels = createRoute({
   getParentRoute: () => authenticated,
   path: '/my-channels',
   loader: async ({ context }) => {
-    const [page, reports] = await Promise.all([
-      import('./pages/market-owner'),
-      import('./features/channelmarket/reports'),
-    ])
-    return Promise.all([
-      context.queryClient.ensureQueryData(page.myChannelsOptions()),
-      context.queryClient.ensureQueryData(reports.incomeOptions()),
-      context.queryClient.ensureQueryData(reports.ownerLogsOptions()),
-      context.queryClient.ensureQueryData(reports.ownerUsageOptions()),
-      context.queryClient.ensureQueryData(reports.securityOptions()),
-    ])
+    const page = await import('./pages/market-owner')
+    return context.queryClient.ensureQueryData(page.myChannelsOptions())
   },
   component: lazyRouteComponent(() => import('./pages/market-owner')),
 })
@@ -350,14 +464,9 @@ const transfers = createRoute({
 const invoices = createRoute({
   getParentRoute: () => authenticated,
   path: '/invoices',
-  loader: async ({ context }) => {
-    const page = await import('./pages/invoices')
-    return Promise.all([
-      context.queryClient.ensureQueryData(page.eligibleInvoicesOptions()),
-      context.queryClient.ensureQueryData(page.invoicesOptions()),
-    ])
+  beforeLoad: () => {
+    throw redirect({ to: '/billing', hash: 'invoices' })
   },
-  component: lazyRouteComponent(() => import('./pages/invoices')),
 })
 const redemptions = createRoute({
   getParentRoute: () => admin,
@@ -375,30 +484,119 @@ const subscriptions = createRoute({
     ),
   component: lazyRouteComponent(() => import('./pages/subscriptions')),
 })
+// Pages that own their data fetching (no route loader). Each file default-exports its page.
+// Generic over parent and path so the literal path survives into the typed route tree.
+const lazyPage = <
+  TParent extends typeof site | typeof authenticated | typeof admin,
+  TPath extends string,
+>(
+  parent: TParent,
+  path: TPath,
+  load: () => Promise<{ default: () => React.JSX.Element }>,
+) => createRoute({ getParentRoute: () => parent, path, component: lazyRouteComponent(load) })
+const status = lazyPage(site, '/status', () => import('./pages/status'))
+const download = createRoute({
+  getParentRoute: () => site,
+  path: '/download',
+  beforeLoad: () => {
+    throw redirect({ to: '/docs' })
+  },
+})
+const playground = createRoute({
+  getParentRoute: () => authenticated,
+  path: '/playground',
+  validateSearch: (search: {
+    group?: string
+    model?: string
+  }): { group?: string; model?: string } => ({
+    group:
+      typeof search.group === 'string' && search.group ? search.group.slice(0, 255) : undefined,
+    model:
+      typeof search.model === 'string' && search.model ? search.model.slice(0, 255) : undefined,
+  }),
+  component: lazyRouteComponent(() => import('./pages/playground')),
+})
+const billingHistory = lazyPage(authenticated, '/billing', () => import('./pages/billing-history'))
+const audit = lazyPage(authenticated, '/audit', () => import('./pages/audit'))
+const packages = lazyPage(authenticated, '/packages', () => import('./pages/packages'))
+const adminLogs = lazyPage(admin, '/admin/logs', () => import('./pages/admin-logs'))
+const modelCatalog = lazyPage(admin, '/admin/models', () => import('./pages/model-catalog'))
+const adminOrders = lazyPage(admin, '/admin/orders', () => import('./pages/admin-orders'))
+const blindBoxAdmin = lazyPage(admin, '/admin/blind-box', () => import('./pages/blind-box-admin'))
+
 const routeTree = root.addChildren([
-  index,
+  site.addChildren([
+    index,
+    models,
+    docs,
+    status,
+    download,
+    help,
+    support,
+    about,
+    privacy,
+    terms,
+    refundPolicy,
+    supplierAgreement,
+    supplierTerms,
+    marketRules,
+  ]),
   signIn,
   signUp,
   oauthCallback,
+  forgotPassword,
+  resetPassword,
+  legacyResetPassword,
+  community,
+  marketFrame.addChildren([channelMarket]),
   authenticated.addChildren([
     dashboard,
+    notifications,
     keys,
     wallet,
     logs,
     orders,
     groupBuy,
     blindBox,
-    community,
     profile,
-    channelMarket,
+    desktopAuthorize,
+    desktopDevices,
+    modelFavorites,
+    referralRewards,
     myChannels,
     transfers,
     invoices,
-    admin.addChildren([channels, users, settings, marketAdmin, redemptions, subscriptions]),
+    playground,
+    billingHistory,
+    audit,
+    packages,
+    admin.addChildren([
+      adminLogs,
+      modelCatalog,
+      adminOrders,
+      blindBoxAdmin,
+      channels,
+      users,
+      settings,
+      marketAdmin,
+      redemptions,
+      subscriptions,
+      deployments,
+      rootAdmin.addChildren([ratioSync, performance]),
+    ]),
   ]),
 ])
 export const router = createRouter({
   routeTree,
+  parseSearch: (search) => {
+    const parsed = defaultParseSearch(search) as Record<string, unknown>
+    // Marketplace IDs are identifiers, including decimal IDs above JS's safe integer range.
+    for (const field of ['group', 'shop']) {
+      const id = new URLSearchParams(search).get(field)
+      if (id !== null && typeof parsed[field] !== 'string') parsed[field] = id
+    }
+    return parsed
+  },
   context: { queryClient },
   defaultPendingComponent: Loading,
   defaultPendingMs: 150,

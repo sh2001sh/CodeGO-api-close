@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
@@ -50,6 +51,9 @@ func TestFundingPreferenceOnlyActualExtendsOrSettlesVisibleShortfall(t *testing.
 				if err := s.Finalize(ctx, req, gateway.Outcome{Charge: true, Target: &req.Targets[0], Usage: gateway.Usage{ImageCount: 2}}); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if got := atomic.LoadInt64(&req.SettledAmount); got != tc.accepted {
+				t.Fatalf("metadata charge=%d want confirmed amount %d", got, tc.accepted)
 			}
 			if b, held := balance(t, rdb); b != 1000 || held != 0 {
 				t.Fatalf("excluded wallet=%d/%d", b, held)
@@ -154,6 +158,9 @@ func TestFundingPreferenceFrozenWorkflowWALAndShortfallWarningOnce(t *testing.T)
 	}
 	if len(events(t, rdb)) != 0 {
 		t.Fatal("WAL path settled before replay")
+	}
+	if atomic.LoadInt64(&req.SettledAmount) != 0 {
+		t.Fatal("pending WAL fabricated a confirmed settlement amount")
 	}
 	s.snapshot = func() *catalog.Snapshot { return nil }
 	for range 2 {

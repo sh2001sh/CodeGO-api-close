@@ -1,0 +1,188 @@
+/*
+ * CodeGo neutral interface with a copper brand mark.
+ * Light is the default; dark applies via [data-theme='dark'] or system preference
+ * when the user has not chosen explicitly ([data-theme='system']).
+ */
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #ffffff;
+  --bg-subtle: #f7f7f8;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f0f0f2;
+  --overlay: rgb(24 24 27 / 0.42);
+
+  /* Text */
+  --text: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #666670;
+  --text-inverse: #ffffff;
+
+  /* Lines */
+  --border: #e4e4e7;
+  --border-strong: #c4c4ca;
+  --divider: #ededf0;
+
+  /* Brand */
+  --brand-color: #a94825;
+  --accent: #202023;
+  --accent-hover: #3f3f46;
+  --accent-soft: #ededf0;
+  --accent-soft-text: #27272a;
+  --accent-ring: rgb(39 39 42 / 0.22);
+  --code-bg: #18181b;
+  --code-text: #f4f4f5;
+  --code-muted: #b5b5c0;
+  --code-border: rgb(255 255 255 / 0.12);
+  --code-hover: rgb(255 255 255 / 0.08);
+  --code-selected: rgb(255 255 255 / 0.16);
+
+  /* Semantic */
+  --success: #23704c;
+  --success-soft: #e3f2ea;
+  --warning: #9a6200;
+  --warning-soft: #fbf0d9;
+  --danger: #b4302a;
+  --danger-soft: #fbe8e5;
+  --info: #2f5f9e;
+  --info-soft: #e5eef9;
+
+  /* Typography */
+  --font-sans:
+    'Public Sans Variable', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', Consolas, 'Liberation Mono', monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-md: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-display: clamp(36px, 5.2vw, 64px);
+
+  /* Spacing (4px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Shape & depth */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgb(24 24 27 / 0.06);
+  --shadow: 0 1px 2px rgb(24 24 27 / 0.05), 0 4px 12px rgb(24 24 27 / 0.06);
+  --shadow-lg: 0 12px 32px rgb(24 24 27 / 0.14), 0 2px 6px rgb(24 24 27 / 0.06);
+
+  /* Layout */
+  --topbar-h: 64px;
+  --sidebar-w: 224px;
+  --content-max: 1280px;
+  --control-h: 40px;
+  --control-h-lg: 44px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration: 180ms;
+  --duration-slow: 260ms;
+
+  /* Legacy aliases kept so older markup keeps rendering correctly */
+  --paper: var(--bg);
+  --ink: var(--text);
+  --muted: var(--text-secondary);
+  --copper: var(--accent);
+  --line: var(--border);
+  --soft: var(--surface-sunken);
+  --surface-2: var(--bg-subtle);
+}
+
+/* Dark palette: neutral charcoal; copper remains confined to the brand mark */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #141416;
+  --bg-subtle: #1a1a1d;
+  --surface: #1e1e22;
+  --surface-raised: #27272c;
+  --surface-sunken: #101012;
+  --overlay: rgb(0 0 0 / 0.6);
+  --text: #f5f5f6;
+  --text-secondary: #c4c4cb;
+  --text-muted: #a1a1ab;
+  --text-inverse: #18181b;
+  --border: #34343b;
+  --border-strong: #52525b;
+  --divider: #2c2c32;
+  --brand-color: #e08a52;
+  --accent: #f0f0f2;
+  --accent-hover: #d4d4db;
+  --accent-soft: #303036;
+  --accent-soft-text: #f4f4f6;
+  --accent-ring: rgb(212 212 219 / 0.35);
+  --success: #5cc392;
+  --success-soft: #16301f;
+  --warning: #e4b04f;
+  --warning-soft: #33280f;
+  --danger: #f07a70;
+  --danger-soft: #3a1714;
+  --info: #7fb0ee;
+  --info-soft: #152438;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 4px 14px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='system'] {
+    color-scheme: dark;
+    --bg: #141416;
+    --bg-subtle: #1a1a1d;
+    --surface: #1e1e22;
+    --surface-raised: #27272c;
+    --surface-sunken: #101012;
+    --overlay: rgb(0 0 0 / 0.6);
+    --text: #f5f5f6;
+    --text-secondary: #c4c4cb;
+    --text-muted: #a1a1ab;
+    --text-inverse: #18181b;
+    --border: #34343b;
+    --border-strong: #52525b;
+    --divider: #2c2c32;
+    --brand-color: #e08a52;
+    --accent: #f0f0f2;
+    --accent-hover: #d4d4db;
+    --accent-soft: #303036;
+    --accent-soft-text: #f4f4f6;
+    --accent-ring: rgb(212 212 219 / 0.35);
+    --success: #5cc392;
+    --success-soft: #16301f;
+    --warning: #e4b04f;
+    --warning-soft: #33280f;
+    --danger: #f07a70;
+    --danger-soft: #3a1714;
+    --info: #7fb0ee;
+    --info-soft: #152438;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 4px 14px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.5);
+  }
+}
+
+@theme inline {
+  --color-primary: var(--accent);
+  --color-surface: var(--surface);
+  --color-muted: var(--text-secondary);
+  --color-border: var(--border);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}

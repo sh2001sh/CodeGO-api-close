@@ -1,17 +1,10 @@
-name: Publish Docker image (Multi-arch)
+name: Legacy v2 Docker image (manual)
 
 concurrency:
   group: docker-image-publish
   cancel-in-progress: true
 
 on:
-  push:
-    branches:
-      - main
-      - v2-refactor-20260711
-    tags:
-      - '*'
-      - '!nightly*'
   workflow_dispatch:
     inputs:
       tag:

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
 	"github.com/sh2001sh/new-api/v3/internal/gateway/live"
@@ -87,7 +88,10 @@ func (b *BackgroundSettler) Finalize(ctx context.Context, req *gateway.Request, 
 	if !out.Charge {
 		status = "failed"
 	}
-	if _, found, err := b.workflow.committedActual(ctx, h, status); found {
+	if actual, found, err := b.workflow.committedActual(ctx, h, status); found {
+		if err == nil {
+			atomic.StoreInt64(&req.SettledAmount, int64(actual))
+		}
 		return err
 	}
 	if out.Target == nil {
@@ -104,7 +108,10 @@ func (b *BackgroundSettler) Finalize(ctx context.Context, req *gateway.Request, 
 	if err := b.workflow.taskSettler(false).Finalize(ctx, copyReq, out); err != nil {
 		return err
 	}
-	if _, found, err := b.workflow.committedActual(ctx, h, status); found || err != nil {
+	if actual, found, err := b.workflow.committedActual(ctx, h, status); found || err != nil {
+		if err == nil && found {
+			atomic.StoreInt64(&req.SettledAmount, int64(actual))
+		}
 		return err
 	}
 	return fmt.Errorf("%w: background settlement pending WAL replay", gateway.ErrBillingUnavailable)

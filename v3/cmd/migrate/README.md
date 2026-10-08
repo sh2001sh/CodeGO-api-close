@@ -44,6 +44,19 @@ is validated before writes, each job and its events publish atomically, and
 unchanged retries are safe. Main database import and check refuse missing,
 changed or corrupt copied results. Pending or unsettled jobs still block migration.
 
+Completed or failed video/music tasks retain their original public task ID,
+owner, model, provider result, dates and exact historical credits in the native
+read-only task history. Terminal workflow records, snapshots and settlement
+results are retained with each task. Existing task-query endpoints read this
+history under the current owner's authentication and model policy. Historical
+results expose their original provider URL; its original availability/expiry
+still applies. No old credential, reservation, upstream dispatch or second
+debit is created. Historical `/content` proxy requests return 410 and direct
+callers to the result URL. Pending tasks/workflows, missing terminal settlement,
+inconsistent owners or duplicate public IDs block import. Every unknown populated
+application table appears in `unmapped_sources` and blocks application; empty
+unknown tables and explicit schema-tool bookkeeping contain no customer data.
+
 The importer retains native typed identities, keys, provider configuration,
 pricing, catalog metadata, subscriptions and cycles, orders and refunds,
 redemptions, wallet transfers and invoice records, current group buys and blind

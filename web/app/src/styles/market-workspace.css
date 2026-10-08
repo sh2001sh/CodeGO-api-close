@@ -1,0 +1,200 @@
+.market-workspace,
+.channel-workspace {
+  min-width: 0;
+}
+
+.market-listing-remark {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-block: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.market-recent,
+.market-recent-empty {
+  margin: 0 var(--space-3) var(--space-5);
+  max-width: 520px;
+  font-size: var(--text-xs);
+}
+.market-recent-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.market-recent-slots,
+.market-recent-legend {
+  display: flex;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.market-recent-slots > li {
+  flex: 1;
+}
+.market-recent-slot {
+  display: block;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+}
+.market-recent [data-tone='good'] {
+  background: var(--success);
+}
+.market-recent [data-tone='warning'] {
+  background: #b48118;
+}
+.market-recent [data-tone='poor'] {
+  background: var(--danger);
+}
+.market-recent [data-tone='empty'] {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+.market-recent-slot:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+.market-recent-legend {
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+  color: var(--text-muted);
+}
+.market-recent-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.market-recent-legend li > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+.pool-list {
+  display: grid;
+  gap: var(--space-5);
+}
+.pool-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-5);
+  min-width: 0;
+}
+.pool-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+.pool-card h3 {
+  margin-block: 0 var(--space-3);
+  overflow-wrap: anywhere;
+}
+.pool-saved-members {
+  padding-inline-start: var(--space-5);
+  overflow-wrap: anywhere;
+}
+.pool-limits,
+.pool-build-status dl {
+  display: flex;
+  gap: var(--space-4) var(--space-6);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  margin-block: var(--space-4);
+}
+.pool-limits dt,
+.pool-build-status dt {
+  color: var(--text-muted);
+}
+.pool-limits dd,
+.pool-build-status dd {
+  margin: var(--space-1) 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.pool-build-error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+.pool-members,
+.pool-auto-settings {
+  flex-basis: 100%;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}
+.pool-member-order {
+  list-style: none;
+  padding: 0;
+  margin-block: var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+}
+.pool-member-order > li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  background: var(--bg-subtle);
+  border-radius: var(--radius);
+}
+.pool-member-order > li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pool-group-picker,
+.pool-model-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+.pool-group-picker label,
+.pool-model-picker label,
+.pool-auto-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-block: var(--space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+.pool-model-picker code {
+  overflow-wrap: anywhere;
+}
+.pool-auto-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: var(--space-4);
+  margin-block: var(--space-5);
+}
+.pool-add {
+  margin-block: var(--space-5);
+  border-block-start: 1px solid var(--border);
+  padding-block-start: var(--space-4);
+}
+.pool-add .row-actions {
+  align-items: end;
+}
+
+@media (max-width: 640px) {
+  .pool-member-order > li > .row-actions {
+    width: 100%;
+    justify-content: end;
+  }
+  .pool-card {
+    padding: var(--space-4);
+  }
+  .market-recent-slot {
+    height: 22px;
+  }
+}
+
+.market-workspace .tabs-list {
+  overflow-y: hidden;
+}

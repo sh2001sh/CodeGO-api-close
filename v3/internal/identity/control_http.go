@@ -16,6 +16,8 @@ func (c *Control) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/user/register", c.registerHTTP)
 	mux.HandleFunc("POST /api/user/login", c.loginHTTP)
+	c.registerSecurityRoutes(mux)
+	c.registerPolicyRoutes(mux)
 	mux.HandleFunc("POST /api/user/refresh", c.refreshHTTP)
 	mux.HandleFunc("POST /api/user/logout", c.logoutHTTP)
 	mux.HandleFunc("GET /api/user/logout", c.logoutHTTP)
@@ -112,6 +114,11 @@ func (c *Control) reply(w http.ResponseWriter, data any, err error) {
 		switch {
 		case errors.Is(err, ErrCredentials):
 			status, message = http.StatusUnauthorized, "身份验证失败"
+		case errors.Is(err, ErrSecondFactorRequired):
+			status, message = http.StatusUnauthorized, "需要两步验证"
+		case errors.Is(err, ErrEmailRateLimit):
+			status, message = http.StatusTooManyRequests, "请稍后再次发送邮件"
+			w.Header().Set("Retry-After", "60")
 		case errors.Is(err, ErrForbidden):
 			status, message = http.StatusForbidden, "无权执行此操作"
 			if errors.As(err, &denied) && denied.message != "" {

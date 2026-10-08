@@ -22,6 +22,12 @@ type UsageRecorder interface {
 // from the same fresh primary event. It runs before ledger account row locks.
 type UsageHook func(context.Context, pgx.Tx, map[string]string) error
 
+// UsageBatchHook receives fresh primary model events and all fresh nonzero
+// debit account IDs, including secondary funding. It follows domain/progress
+// locks and precedes UsageHook/debits, so credits can prelock the complete
+// financial account set in one order. It must not commit the transaction.
+type UsageBatchHook func(context.Context, pgx.Tx, []map[string]string, []int64) error
+
 func recordMarketplaceUsage(ctx context.Context, tx pgx.Tx, recorder UsageRecorder, fields map[string]string) error {
 	if recorder != nil {
 		read := func(name string) (int64, error) {

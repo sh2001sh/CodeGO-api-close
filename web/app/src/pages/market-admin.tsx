@@ -1,13 +1,23 @@
+import { useTranslation } from '../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { api, unwrap } from '../lib/api'
 import { resourceOptions } from '../lib/queries'
 import type { Schema } from '../lib/types'
 import { DataTable } from '../components/data-table'
-import { Button, ErrorMessage, Field, PageHeader, Status } from '../components/ui'
+import {
+  Button,
+  CopyField,
+  ErrorMessage,
+  Field,
+  PageHeader,
+  Status,
+  confirmAction,
+} from '../components/ui'
 import { MarketForm, text } from '../features/channelmarket/form'
 import { MarketIncome, MarketSecurity } from '../features/channelmarket/reports'
 import { MarketChannelForm, channelPatch } from '../features/channelmarket/channel-form'
+import { ShopReview } from '../features/channelmarket/shop-review'
 
 export const marketAdminOptions = () =>
   resourceOptions('market-admin-channels', (signal) =>
@@ -15,6 +25,7 @@ export const marketAdminOptions = () =>
   )
 
 export default function MarketAdminPage() {
+  const { t } = useTranslation()
   const client = useQueryClient()
   const rows = useSuspenseQuery(marketAdminOptions()).data
   const [selected, setSelected] = useState<Schema['ChannelMarketChannelView'] | null>(null)
@@ -64,6 +75,7 @@ export default function MarketAdminPage() {
   return (
     <>
       <PageHeader title="渠道市场审核" />
+      <ShopReview />
       <ErrorMessage error={review.error ?? action.error ?? save.error} />
       {editing && (
         <MarketChannelForm
@@ -75,22 +87,29 @@ export default function MarketAdminPage() {
         />
       )}
       <label className="field filters" htmlFor="review-filter">
-        <span>渠道状态</span>
+        <span>{t('渠道状态')}</span>
         <select
           id="review-filter"
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
         >
-          <option value="">全部</option>
-          <option value="draft">待验证</option>
-          <option value="verifying">验证中 / 待审核</option>
-          <option value="active">服务中</option>
-          <option value="paused">已暂停</option>
-          <option value="rejected">未通过</option>
+          <option value="">{t('全部')}</option>
+          <option value="name_pending">{t('名称待审核')}</option>
+          <option value="draft">{t('待验证')}</option>
+          <option value="verifying">{t('验证中 / 待审核')}</option>
+          <option value="active">{t('服务中')}</option>
+          <option value="paused">{t('已暂停')}</option>
+          <option value="rejected">{t('未通过')}</option>
         </select>
       </label>
       <DataTable
-        rows={rows.filter((row) => !filter || row.lifecycle_status === filter)}
+        rows={rows.filter(
+          (row) =>
+            !filter ||
+            (filter === 'name_pending'
+              ? row.name_status === 'pending'
+              : row.lifecycle_status === filter),
+        )}
         rowKey={(row) => row.id}
         columns={[
           {
@@ -98,7 +117,22 @@ export default function MarketAdminPage() {
             render: (row) => (
               <>
                 {row.system_display_name}
-                <p className="muted">渠道主 {String(row.owner_user_id)}</p>
+                <CopyField value={row.id} label="复制分组 ID" />
+                {row.remark && <p>{row.remark}</p>}
+                {row.name_status === 'pending' && (
+                  <p>
+                    {t('待审名称')} · {row.submitted_name}
+                    {row.submitted_remark !== undefined && (
+                      <>
+                        <br />
+                        {t('待审备注')} · {row.submitted_remark || t('无')}
+                      </>
+                    )}
+                  </p>
+                )}
+                <p className="muted">
+                  {t('渠道主')} {String(row.owner_user_id)}
+                </p>
               </>
             ),
           },
@@ -110,24 +144,24 @@ export default function MarketAdminPage() {
             render: (row) => (
               <div className="row-actions">
                 <Button variant="quiet" onClick={() => setEditing(row)}>
-                  编辑
+                  {t('编辑')}
                 </Button>
                 <Button variant="quiet" onClick={() => setSelected(row)}>
-                  审核
+                  {t('审核')}
                 </Button>
                 <Button
                   variant="quiet"
                   disabled={action.isPending}
                   onClick={() => action.mutate({ id: row.id, action: 'test' })}
                 >
-                  测试连接
+                  {t('测试连接')}
                 </Button>
                 <Button
                   variant="quiet"
                   disabled={action.isPending}
                   onClick={() => action.mutate({ id: row.id, action: 'verify' })}
                 >
-                  重新验证
+                  {t('重新验证')}
                 </Button>
                 {row.lifecycle_status === 'active' && (
                   <Button
@@ -135,7 +169,7 @@ export default function MarketAdminPage() {
                     disabled={action.isPending}
                     onClick={() => action.mutate({ id: row.id, action: 'pause' })}
                   >
-                    暂停
+                    {t('暂停')}
                   </Button>
                 )}
                 {row.lifecycle_status === 'paused' && (
@@ -144,18 +178,22 @@ export default function MarketAdminPage() {
                     disabled={action.isPending}
                     onClick={() => action.mutate({ id: row.id, action: 'resume' })}
                   >
-                    恢复
+                    {t('恢复')}
                   </Button>
                 )}
                 <Button
                   variant="danger"
                   disabled={action.isPending}
                   onClick={() => {
-                    if (window.confirm(`删除渠道「${row.system_display_name}」？`))
-                      action.mutate({ id: row.id, action: 'delete' })
+                    void confirmAction({
+                      title: `${t('删除渠道「')}${row.system_display_name}${t('」？')}`,
+                      danger: true,
+                    }).then((ok) => {
+                      if (ok) action.mutate({ id: row.id, action: 'delete' })
+                    })
                   }}
                 >
-                  删除
+                  {t('删除')}
                 </Button>
               </div>
             ),
@@ -164,8 +202,26 @@ export default function MarketAdminPage() {
       />
       {selected && (
         <section className="section">
-          <h2>审核 · {selected.system_display_name}</h2>
-          <p className="muted">验证通过后可批准发布；未通过时填写原因。</p>
+          <h2>
+            {t('审核 ·')} {selected.system_display_name}
+          </h2>
+          <p className="muted">{t('验证通过后可批准发布；未通过时填写原因。')}</p>
+          {selected.name_status === 'pending' && (
+            <dl>
+              <dt>{t('当前公开名称')}</dt>
+              <dd>{selected.system_display_name}</dd>
+              <dt>{t('待审名称')}</dt>
+              <dd>{selected.submitted_name}</dd>
+              <dt>{t('当前公开备注')}</dt>
+              <dd>{selected.remark || t('无')}</dd>
+              <dt>{t('待审备注')}</dt>
+              <dd>{selected.submitted_remark ?? selected.remark ?? t('无')}</dd>
+            </dl>
+          )}
+          {selected.name_status === 'pending' &&
+            ['active', 'paused'].includes(selected.lifecycle_status) && (
+              <p className="muted">{t('仅审核本次名称与备注修改，拒绝后保留原内容与服务状态。')}</p>
+            )}
           <MarketForm
             pending={review.isPending}
             submit="提交审核"
@@ -177,17 +233,17 @@ export default function MarketAdminPage() {
             }
           >
             <label className="field" htmlFor="review-decision">
-              <span>审核结果</span>
+              <span>{t('审核结果')}</span>
               <select id="review-decision" name="decision" defaultValue="reject">
-                <option value="reject">不通过</option>
+                <option value="reject">{t('不通过')}</option>
                 <option value="approve" disabled={selected.verification_status !== 'passed'}>
-                  批准发布
+                  {t('批准发布')}
                 </option>
               </select>
             </label>
             <Field name="review-reason" label="审核理由" required maxLength={1000} />
             <Button type="button" variant="quiet" onClick={() => setSelected(null)}>
-              取消
+              {t('取消')}
             </Button>
           </MarketForm>
         </section>

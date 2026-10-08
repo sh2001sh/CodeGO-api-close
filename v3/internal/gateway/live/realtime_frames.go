@@ -12,13 +12,26 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-func (h *Handler) forwardRealtime(ctx context.Context, client, upstream *websocket.Conn, req *gateway.Request, target gateway.Target) relayEnd {
+func (h *Handler) forwardRealtime(ctx context.Context, client, upstream *websocket.Conn, r *http.Request, req *gateway.Request, target gateway.Target, accounting *realtimeAccounting) relayEnd {
 	for {
 		var frame wireFrame
 		if err := frameCodec.Receive(client, &frame); err != nil {
 			return relayEnd{client: true, err: err}
 		}
 		root := gjson.ParseBytes(frame.data)
+		// Recheck even audio input: VAD can start a response without an
+		// explicit response.create frame from the client.
+		principal, ok := h.authorizeSocket(ctx, client, r, req.Model)
+		if !ok {
+			return relayEnd{client: true}
+		}
+		policyRequest := &gateway.Request{ID: req.ID, Received: req.Received, Protocol: req.Protocol,
+			Path: req.Path, Body: req.Body, Model: req.Model, Stream: true,
+			Principal: principal, PricingHeaders: req.PricingHeaders}
+		if failure := h.targetPolicyFailure(policyRequest, target); failure != nil {
+			_ = socketRequestGuardError(client, failure)
+			return relayEnd{client: true}
+		}
 		path := ""
 		switch root.Get("type").Str {
 		case "session.update":
@@ -46,7 +59,24 @@ func (h *Handler) forwardRealtime(ctx context.Context, client, upstream *websock
 			}
 			frame.data = prepared
 		}
-		if err := frameCodec.Send(upstream, frame); err != nil {
+		accounting.mu.Lock()
+		if accounting.req == nil {
+			accounting.mu.Unlock()
+			return relayEnd{client: true}
+		}
+		if root.Get("type").Str == "response.create" && accounting.pending {
+			accounting.mu.Unlock()
+			if err := socketError(client, 409, "response_in_progress", "wait for the current realtime response before creating another"); err != nil {
+				return relayEnd{client: true, err: err}
+			}
+			continue
+		}
+		if root.Get("type").Str == "response.create" {
+			accounting.pending = true
+		}
+		err := frameCodec.Send(upstream, frame)
+		accounting.mu.Unlock()
+		if err != nil {
 			return relayEnd{err: err}
 		}
 	}

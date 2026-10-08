@@ -48,7 +48,7 @@ func (s *Service) InitializeImportedMonthlyBenefitsTx(ctx context.Context, tx pg
 			if err = tx.QueryRow(ctx, `SELECT price_minor FROM v3_commerce.plans WHERE id=$1 FOR SHARE`, o.PlanID).Scan(&o.AmountMinor); err != nil {
 				return err
 			}
-			if err = s.FreezeMonthlyPurchaseBenefitsTx(ctx, tx, o); err != nil {
+			if err = s.freezeImportedMonthlyPurchaseBenefitsTx(ctx, tx, o); err != nil {
 				return err
 			}
 			count++

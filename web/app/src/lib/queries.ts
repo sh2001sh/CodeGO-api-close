@@ -17,6 +17,9 @@ export const sessionOptions = () => ({
   ),
   staleTime: 60_000,
   retry: false as const,
+  // Anonymous public frames share a 401 result. Remounting a child must not
+  // restart the session check and toggle its parent back into a loading frame.
+  retryOnMount: false,
 })
 export const keysOptions = () =>
   resourceOptions('keys', (signal) =>

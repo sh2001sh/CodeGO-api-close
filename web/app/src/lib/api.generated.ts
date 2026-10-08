@@ -241,7 +241,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** @description Administrator-only listing of all configured pools, including disabled pools. Returns complete policies and reward definitions. */
+        get: operations["listBlindBoxAdminPools"];
         put: operations["putApiBlindBoxAdminPools"];
         post?: never;
         delete?: never;
@@ -1297,6 +1298,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/commerce/orders/{trade_no}/invoice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Download an already issued Hong Kong commercial invoice for the session user's own paid order. Administrators retain own scope. Exact PDF bytes, actual issue time, purchaser and seller details are frozen by initial self-service issuance. Unpaid, non-positive, refunded or refund-pending orders are rejected on every read. Returns 428 when purchaser details must first be submitted through POST. Reading has no side effects. */
+        get: operations["getApiCommerceOrdersTrade_NoInvoice"];
+        put?: never;
+        /** @description Self-service issue and download of a paid purchase's commercial invoice, without manual review. Freeze purchaser name/address, the configured InvoiceSellerAddress, actual issue time, order details and PDF in one durable document per order. An identical replay returns the existing PDF; changed purchaser details return 409. The seller address must be configured; no profile name or location fallback is used. Ownership, positive paid amount and refund checks apply on every call. Does not change the profile, payment or ledger. */
+        post: operations["postApiCommerceOrdersTrade_NoInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/commerce/orders/{trade_no}/cancel": {
         parameters: {
             query?: never;
@@ -1419,6 +1438,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        /**
+         * @deprecated
+         * @description Read-only community bridge. Rating mutations return410; use the main-site session marketplace rating endpoint.
+         */
         put: operations["putApiCommunityV1ChannelsIdRating"];
         post?: never;
         delete?: never;
@@ -4768,10 +4791,1761 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/user/login/2fa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiUserLogin2fa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/2fa/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiUser2faStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/2fa/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiUser2faSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/2fa/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiUser2faEnable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/2fa/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiUser2faDisable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/2fa/backup_codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiUser2faBackup_codes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/2fa/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiUser2faStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/{id}/2fa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiUserId2fa"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Sends registration verification anonymously or binding verification for the authenticated account. Missing email configuration returns 503. */
+        get: operations["getApiVerification"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/email/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiUserEmailVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reset_password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Sends a one-use, ten-minute reset link. The response does not disclose whether the email belongs to an account. */
+        get: operations["getApiReset_password"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Consumes a one-use token, revokes sessions and pending two-factor challenges, and retains enabled two-factor authentication. Legacy requests without password receive a generated password. */
+        post: operations["postApiUserReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/favorites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiModelsFavorites"];
+        put: operations["putApiModelsFavorites"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/favorites/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiModelsFavoritesSlashAlias"];
+        put: operations["putApiModelsFavoritesSlashAlias"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ratio_sync/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiRatio_syncChannels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ratio_sync/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Fetches a preview without writing prices; upstream failures are explicit test_results entries. */
+        post: operations["postApiRatio_syncFetch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ratio_sync/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiRatio_syncApply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeploymentsSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/settings/test-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description An alternate api_key requires root; ordinary administrators may test the stored configured credential. */
+        post: operations["postApiDeploymentsSettingsTest_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/test-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description An alternate api_key requires root; ordinary administrators may test the stored configured credential. */
+        post: operations["postApiDeploymentsTest_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeployments"];
+        put?: never;
+        post: operations["postApiDeployments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeploymentsSearch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/hardware-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeploymentsHardware_types"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeploymentsLocations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/available-replicas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeploymentsAvailable_replicas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/check-name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeploymentsCheck_name"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/price-estimation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiDeploymentsPrice_estimation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeploymentsId"];
+        put: operations["putApiDeploymentsId"];
+        post?: never;
+        delete: operations["deleteApiDeploymentsId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/{id}/name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["putApiDeploymentsIdName"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/{id}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiDeploymentsIdExtend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/{id}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeploymentsIdLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/{id}/containers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeploymentsIdContainers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/deployments/{id}/containers/{container_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDeploymentsIdContainersContainer_id"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDesktopAuthSession"];
+        put?: never;
+        post: operations["postApiDesktopAuthSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/auth/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiDesktopAuthPoll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/auth/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiDesktopAuthApprove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/auth/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiDesktopAuthReject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDesktopDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiDesktopDevicesId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/authorized-devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires account:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopAuthorized_devices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/authorized-devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Requires account:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        delete: operations["deleteApiDesktopAuthorized_devicesId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/account/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires account:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopAccountSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/usage/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires logs:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopUsageLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/usage/trends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires logs:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopUsageTrends"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires account:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopGroups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/group-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires account:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopGroup_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires account:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopPricing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires tokens:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopTokens"];
+        /** @description Requires tokens:write on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        put: operations["putApiDesktopTokens"];
+        /** @description Requires tokens:write on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        post: operations["postApiDesktopTokens"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Requires tokens:write on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        delete: operations["deleteApiDesktopTokensId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/tokens/{id}/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Requires tokens:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        post: operations["postApiDesktopTokensIdKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/tokens/{id}/group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Requires tokens:write on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        put: operations["putApiDesktopTokensIdGroup"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/tokens/ensure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Requires tokens:write on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        post: operations["postApiDesktopTokensEnsure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/tokens/{id}/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires tokens:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopTokensIdConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/config/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires config:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopConfigTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/config/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires config:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopConfigTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/import/deeplink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiDesktopImportDeeplink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/import/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Consumes an encrypted one-use import grant. It expires after ten minutes and checks current user/key state before returning the configuration. */
+        get: operations["getApiDesktopImportConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/service/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires account:read on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        get: operations["getApiDesktopServiceStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/diagnostics/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Requires config:write on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        post: operations["postApiDesktopDiagnosticsReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/telemetry/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Requires telemetry:write on an authenticated, unrevoked device; session and gateway keys do not authorize this operation. */
+        post: operations["postApiDesktopTelemetryEvents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/release/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDesktopReleaseLatest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop/release/latest.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiDesktopReleaseLatest_json"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/oauth/email/bind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiOauthEmailBind"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/performance/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiPerformanceStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/performance/gc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiPerformanceGc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/performance/reset_stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiPerformanceResetStats"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/performance/disk_cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiPerformanceDiskCache"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/performance/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiPerformanceLogs"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiPerformanceLogs"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/aff/rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiUserAffRewards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/self/reset-opportunity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiSubscriptionSelfResetOpportunity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/self/reset-opportunity/use": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiSubscriptionSelfResetOpportunityUse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/aff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiUserAff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/aff/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Retained invitation rewards overview endpoint; returns the same persisted reward and reset summary as /api/user/aff/rewards. */
+        get: operations["getApiUserAffOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/self/wallet-conversion/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiApiSubscriptionSelfWalletConversionQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/self/wallet-conversion/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiApiSubscriptionSelfWalletConversionConfirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/self/wallet-conversion/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiApiSubscriptionSelfWalletConversionRequestId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/admin/redesign-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiApiSubscriptionAdminRedesignRules"];
+        put: operations["putApiApiSubscriptionAdminRedesignRules"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/admin/redesign-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiApiSubscriptionAdminRedesignPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/self/reset-cards/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiApiSubscriptionSelfResetCardsQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/self/reset-cards/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiApiSubscriptionSelfResetCardsConfirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/self/reset-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiApiSubscriptionSelfResetCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/self/reset-cards/{id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiApiSubscriptionSelfResetCardsIdActivate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/admin/referral-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiApiSubscriptionAdminReferralPolicy"];
+        put: operations["putApiApiSubscriptionAdminReferralPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/aff/consumption-rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiApiUserAffConsumptionRewards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/admin/referral-qualifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiApiSubscriptionAdminReferralQualifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/admin/referral-qualifications/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiApiSubscriptionAdminReferralQualificationsIdApprove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/self/reset-cards/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiApiSubscriptionSelfResetCardsRules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Safe model metadata and exact decimal credits quotations after advertised group multipliers. Only actor-accessible active groups are included. Dynamic expressions are disclosed instead of reported as free. Seller/user/time discounts and request-specific usage may change the final charge. */
+        get: operations["getApiPublicModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscription/admin/wallet-conversion-review/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiApiSubscriptionAdminWalletConversionReviewId"];
+        put: operations["putApiApiSubscriptionAdminWalletConversionReviewId"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/shops": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMarketShops"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/shops/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMarketShop"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/shop/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMyMarketShop"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateMyMarketShop"];
+        trace?: never;
+    };
+    "/api/marketplace/admin/shops": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAdminMarketShops"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/admin/shops/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewMarketShop"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNotificationSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/{id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["setNotificationReadState"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markNotificationsReadThrough"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["streamNotificationEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/groups/{id}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Rate a channel as the authenticated session user. The server derives the stable member subject; browser input cannot select another viewer. */
+        get: operations["getMarketGroupRating"];
+        put?: never;
+        /** @description Rate a channel as the authenticated session user. The server derives the stable member subject; browser input cannot select another viewer. */
+        post: operations["postMarketGroupRating"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/route-pools/group-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Session-scoped route pool candidates. Includes accessible marketplace groups and permitted official groups with enabled channels and credentials; excludes nested personal pools and empty groups. */
+        get: operations["getApiMarketplaceRoutePoolsGroupOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/channels/mine/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getChannelOwnerAnalytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/channels/mine/analytics/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["exportChannelOwnerAnalytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/groups/{id}/insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getChannelMarketInsights"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/marketplace/channels/{id}/disclosure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getChannelMarketDisclosure"];
+        put: operations["putChannelMarketDisclosure"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/policies/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCurrentPolicies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/policy-acceptance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPolicyAcceptances"];
+        put?: never;
+        post: operations["acceptPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OrderInvoiceBuyerInput: {
+            /** @description Actual individual full name or company full name; no Mainland tax identifier is required. Leading/trailing whitespace is trimmed. Frozen at issuance. */
+            buyer_name: string;
+            /** @description Actual purchaser address including street/unit, city, region and country. Newlines are accepted; leading/trailing whitespace is trimmed. Frozen at issuance. */
+            buyer_address: string;
+        };
         AdjustmentInput: {
             /** Format: int64 */
             account_id: number | string | bigint;
@@ -5700,6 +7474,7 @@ export interface components {
             /** Format: date-time */
             verification_completed_at?: string | null;
             model_verification_results: components["schemas"]["ChannelMarketModelTest"][] | null;
+            /** @description Stable public marketplace channel ID, retaining imported legacy numeric IDs. Internal group_id and routing_group remain unchanged. */
             id: string;
             /** Format: int64 */
             internal_channel_id: number | string | bigint;
@@ -5724,9 +7499,34 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Stable gateway routing name; display-name changes do not alter it. */
+            routing_group: string;
+            /** @description Authorized exact model quotes after the advertised group multiplier; excludes procurement costs. */
+            effective_model_prices: {
+                [key: string]: components["schemas"]["PublicModelPrice"];
+            };
+            quality?: components["schemas"]["ChannelMarketGroupQuality"];
+            /** @description Self-declared model-provider tags from the platform vocabulary; no advertising or contact fields. */
+            tags?: ("openai" | "anthropic" | "google" | "deepseek" | "xai" | "meta" | "mistral" | "qwen" | "moonshot" | "zhipu" | "cohere")[];
+            /** @description Owner/admin-only proposed name; never exposed to market consumers. */
+            submitted_name?: string;
+            /** @enum {string} */
+            name_status?: "pending" | "approved" | "rejected";
+            name_review_reason?: string;
+            /** @description Plain service remark. Links, contact details, advertisements and impersonation are rejected. Published edits require review. */
+            remark?: string;
+            /** @description Owner/admin-only proposed remark; approved text remains public while awaiting review. */
+            submitted_remark?: string;
+            /** @enum {integer} */
+            recent_request_bucket_seconds: 3600;
+            /** @description Current UTC hour and previous five hourly buckets of persisted request outcomes, independent of connection probes. */
+            recent_request_series: components["schemas"]["ChannelMarketRecentRequestBucket"][] | null;
+            shop?: components["schemas"]["ChannelMarketShopReference"];
+            rating: components["schemas"]["PublicRating"];
         };
         ChannelMarketCreateInput: {
             provider_type: string;
+            /** @description Optional normalized short service name. Empty selects a system name. No contacts, links, ads or impersonation. Changing a name preserves group IDs and bindings. */
             name?: string;
             source_label?: string;
             base_url: string;
@@ -5747,6 +7547,10 @@ export interface components {
             auto_probe_enabled?: boolean;
             auto_probe_interval_minutes?: number;
             auto_probe_model?: string;
+            /** @description Self-declared model-provider tags from the platform vocabulary; no advertising or contact fields. */
+            tags?: ("openai" | "anthropic" | "google" | "deepseek" | "xai" | "meta" | "mistral" | "qwen" | "moonshot" | "zhipu" | "cohere")[];
+            /** @description Plain service remark. Links, contact details, advertisements and impersonation are rejected. Published edits require review. */
+            remark?: string;
         };
         ChannelMarketCreateRequest: {
             provider_type: string;
@@ -5770,6 +7574,10 @@ export interface components {
             auto_probe_enabled: boolean;
             auto_probe_interval_minutes: number;
             auto_probe_model: string;
+            /** @description Self-declared model-provider tags from the platform vocabulary; no advertising or contact fields. */
+            tags?: ("openai" | "anthropic" | "google" | "deepseek" | "xai" | "meta" | "mistral" | "qwen" | "moonshot" | "zhipu" | "cohere")[];
+            /** @description Plain service remark. Links, contact details, advertisements and impersonation are rejected. Published edits require review. */
+            remark?: string;
         };
         ChannelMarketFetchModelsRequest: {
             provider_type: string;
@@ -5838,6 +7646,7 @@ export interface components {
         };
         ChannelMarketPatchInput: {
             provider_type?: string;
+            /** @description Optional normalized short service name. Empty selects a system name. No contacts, links, ads or impersonation. Changing a name preserves group IDs and bindings. */
             name?: string;
             source_label?: string;
             base_url?: string;
@@ -5858,6 +7667,10 @@ export interface components {
             auto_probe_enabled?: boolean;
             auto_probe_interval_minutes?: number;
             auto_probe_model?: string;
+            /** @description Self-declared model-provider tags from the platform vocabulary; no advertising or contact fields. */
+            tags?: ("openai" | "anthropic" | "google" | "deepseek" | "xai" | "meta" | "mistral" | "qwen" | "moonshot" | "zhipu" | "cohere")[];
+            /** @description Plain service remark. Links, contact details, advertisements and impersonation are rejected. Published edits require review. */
+            remark?: string;
         };
         ChannelMarketPoolMember: {
             group_id: string;
@@ -5901,7 +7714,8 @@ export interface components {
             /** Format: int64 */
             owner_user_id: number | string | bigint;
             name: string;
-            strategy: string;
+            /** @enum {string} */
+            strategy: "priority" | "cost" | "score" | "weighted" | "round_robin" | "fill_first";
             max_attempts: number;
             failure_cooldown_seconds: number;
             /** Format: double */
@@ -5909,7 +7723,7 @@ export interface components {
             members: components["schemas"]["ChannelMarketPoolMember"][] | null;
             config?: components["schemas"]["JSONValue"];
             group_ids?: string[] | null;
-            auto_build?: components["schemas"]["JSONValue"];
+            auto_build?: components["schemas"]["ChannelMarketAutoBuild"];
             token_group?: string;
         };
         ChannelMarketRoutePoolInput: {
@@ -5917,7 +7731,8 @@ export interface components {
             /** Format: int64 */
             owner_user_id?: number | string | bigint;
             name: string;
-            strategy?: string;
+            /** @enum {string} */
+            strategy?: "priority" | "cost" | "score" | "weighted" | "round_robin" | "fill_first";
             max_attempts?: number;
             failure_cooldown_seconds?: number;
             /** Format: double */
@@ -5925,7 +7740,7 @@ export interface components {
             members: components["schemas"]["ChannelMarketPoolMember"][] | null;
             config?: components["schemas"]["JSONValue"];
             group_ids?: string[] | null;
-            auto_build?: components["schemas"]["JSONValue"];
+            auto_build?: components["schemas"]["ChannelMarketAutoBuild"];
             token_group?: string;
         };
         ChannelMarketTimeMultiplier: {
@@ -6269,6 +8084,11 @@ export interface components {
             /** Format: int64 */
             unattributed_cost_micro: number | string | bigint;
             sources: components["schemas"]["FundingEconomicsSource"][];
+            /**
+             * Format: int64
+             * @description Number of settled requests whose procurement cost remains unknown.
+             */
+            unpriced_requests: number | string | bigint;
         };
         FundingEconomicsSource: {
             /** @enum {string} */
@@ -6958,6 +8778,18 @@ export interface components {
             target_subscription_id: number | string | bigint;
             /** Format: date-time */
             fuel_expires_at?: string | null;
+            /** Format: int64 */
+            recognized_revenue_credits?: number | string | bigint | null;
+            /**
+             * @description Frozen funding policy; omitted Plan inputs use legacy. Existing grants are never globally upgraded.
+             * @enum {string}
+             */
+            policy_version: "legacy" | "standard_v2";
+            plan_snapshot: components["schemas"]["Plan"];
+            /** @description Frozen invitation promise; old imported orders may have an empty object. */
+            referral_terms: {
+                [key: string]: unknown;
+            } | null;
         };
         PackagePaymentReview: {
             /** Format: int64 */
@@ -7049,6 +8881,13 @@ export interface components {
             fuel_min_credits: number | string | bigint;
             /** Format: int64 */
             fuel_credit_step: number | string | bigint;
+            /** @description Whether an eligible monthly subscription receives a lucky number. Persisted per plan; omitted inputs default to false. */
+            lucky_draw_enabled: boolean;
+            /**
+             * @description Frozen funding policy; omitted Plan inputs use legacy. Existing grants are never globally upgraded.
+             * @enum {string}
+             */
+            policy_version?: "legacy" | "standard_v2";
         };
         PlanInput: {
             /** @description Optional existing pricing group granted by this paid plan. Trimmed before validation; empty means no group change. */
@@ -7100,6 +8939,8 @@ export interface components {
             fuel_min_credits?: number | string | bigint;
             /** Format: int64 */
             fuel_credit_step?: number | string | bigint;
+            /** @description Whether an eligible monthly subscription receives a lucky number. Persisted per plan; omitted inputs default to false. */
+            lucky_draw_enabled?: boolean;
         };
         PlanStatusInput: {
             enabled: boolean;
@@ -7184,6 +9025,12 @@ export interface components {
             password: string;
             display_name?: string;
             email?: string;
+            verification_code?: string;
+            aff_code?: string;
+            accepted_terms_version: string;
+            accepted_privacy_version: string;
+            /** @enum {string} */
+            agreement_locale: "zh-HK" | "zh-CN" | "en" | "ja" | "ru" | "ko" | "fr" | "de" | "ar";
         };
         ResetSubscriptionInput: {
             request_id?: string;
@@ -7300,6 +9147,17 @@ export interface components {
             reset_period: string;
             /** Format: int64 */
             reset_custom_seconds: number | string | bigint;
+            /**
+             * @description Frozen funding policy; omitted Plan inputs use legacy. Existing grants are never globally upgraded.
+             * @enum {string}
+             */
+            policy_version: "legacy" | "standard_v2";
+            /** Format: date-time */
+            converted_at?: string | null;
+            /** Format: date-time */
+            benefits_until?: string | null;
+            /** @description Original advertised specification frozen when granted. Snapshot ID zero denotes legacy data without a frozen specification. */
+            plan_snapshot: components["schemas"]["Plan"];
         };
         SubscriptionConversion: {
             request_id: string;
@@ -7465,6 +9323,1705 @@ export interface components {
             status: string;
             /** Format: int64 */
             created_at: number | string | bigint;
+        };
+        TwoFactorLoginChallenge: {
+            /** @enum {boolean} */
+            require_2fa: true;
+            challenge_token: string;
+        };
+        TwoFactorLoginInput: {
+            code: string;
+            challenge_token?: string;
+        };
+        TwoFactorStatus: {
+            enabled: boolean;
+            locked: boolean;
+            backup_codes_remaining: number;
+        };
+        TwoFactorSetup: {
+            secret: string;
+            qr_code_data: string;
+            backup_codes: string[];
+        };
+        TwoFactorCodeInput: {
+            code: string;
+        };
+        TwoFactorBackupCodes: {
+            backup_codes: string[];
+        };
+        TwoFactorStatistics: {
+            /** Format: int64 */
+            total_users: number | string | bigint;
+            /** Format: int64 */
+            enabled_users: number | string | bigint;
+            enabled_rate: string;
+        };
+        EmailVerificationInput: {
+            /** Format: email */
+            email: string;
+            code: string;
+        };
+        PasswordResetInput: {
+            /** Format: email */
+            email: string;
+            token: string;
+            password?: string;
+        };
+        DeploymentDeploymentRequest: {
+            resource_private_name: string;
+            duration_hours: number;
+            gpus_per_container: number;
+            hardware_id: number;
+            location_ids: number[];
+            container_config: components["schemas"]["DeploymentContainerConfig"];
+            registry_config: components["schemas"]["DeploymentRegistryConfig"];
+        };
+        DeploymentContainerConfig: {
+            replica_count: number;
+            env_variables?: {
+                [key: string]: string;
+            };
+            secret_env_variables?: {
+                [key: string]: string;
+            };
+            entrypoint?: string[];
+            traffic_port?: number;
+            args?: string[];
+        };
+        DeploymentRegistryConfig: {
+            image_url: string;
+            registry_username?: string;
+            registry_secret?: string;
+        };
+        DeploymentDeploymentLocation: {
+            id: number;
+            iso2: string;
+            name: string;
+        };
+        DeploymentDeploymentContainerConfig: {
+            entrypoint: string[];
+            env_variables: {
+                [key: string]: components["schemas"]["JSONValue"];
+            };
+            traffic_port: number;
+            image_url: string;
+        };
+        DeploymentAvailableReplica: {
+            location_id: number;
+            location_name: string;
+            hardware_id: number;
+            hardware_name: string;
+            available_count: number;
+            max_gpus: number;
+        };
+        DeploymentAvailableReplicasResponse: {
+            replicas: components["schemas"]["DeploymentAvailableReplica"][];
+        };
+        DeploymentPriceEstimationRequest: {
+            location_ids: number[];
+            hardware_id: number;
+            gpus_per_container: number;
+            duration_hours: number;
+            replica_count: number;
+            currency: string;
+            duration_type: string;
+            duration_qty: number;
+            hardware_qty: number;
+        };
+        DeploymentPriceEstimationResponse: {
+            /** Format: double */
+            estimated_cost: number;
+            currency: string;
+            price_breakdown: components["schemas"]["DeploymentPriceBreakdown"];
+            estimation_valid: boolean;
+        };
+        DeploymentPriceBreakdown: {
+            /** Format: double */
+            compute_cost: number;
+            /** Format: double */
+            network_cost?: number;
+            /** Format: double */
+            storage_cost?: number;
+            /** Format: double */
+            total_cost: number;
+            /** Format: double */
+            hourly_rate: number;
+        };
+        DeploymentUpdateDeploymentRequest: {
+            env_variables?: {
+                [key: string]: string;
+            };
+            secret_env_variables?: {
+                [key: string]: string;
+            };
+            entrypoint?: string[];
+            traffic_port?: number | null;
+            image_url?: string;
+            registry_username?: string;
+            registry_secret?: string;
+            args?: string[];
+            command?: string;
+        };
+        DeploymentExtendDurationRequest: {
+            duration_hours: number;
+        };
+        DeploymentHardwareType: {
+            id: number;
+            name: string;
+            description?: string;
+            gpu_type: string;
+            gpu_memory: number;
+            max_gpus: number;
+            cpu?: string;
+            memory?: number;
+            storage?: number;
+            /** Format: double */
+            hourly_rate: number;
+            available: boolean;
+            brand_name?: string;
+            available_count?: number;
+        };
+        DeploymentLocation: {
+            id: number;
+            name: string;
+            iso2?: string;
+            region?: string;
+            country?: string;
+            /** Format: double */
+            latitude?: number;
+            /** Format: double */
+            longitude?: number;
+            available?: number;
+            description?: string;
+        };
+        DeploymentLocationsResponse: {
+            locations: components["schemas"]["DeploymentLocation"][];
+            total: number;
+        };
+        ModelFavorites: {
+            model_ids: (number | string | bigint)[];
+            models?: {
+                /** Format: int64 */
+                id: number | string | bigint;
+                model_name: string;
+            }[];
+        };
+        ModelFavoriteInput: {
+            /** Format: int64 */
+            model_id: number | string | bigint;
+            favorite: boolean;
+        };
+        RatioSyncUpstream: {
+            /** Format: int64 */
+            id?: number | string | bigint;
+            name: string;
+            base_url: string;
+            endpoint: string;
+        };
+        RatioSyncInput: {
+            channel_ids?: (number | string | bigint)[];
+            upstreams?: components["schemas"]["RatioSyncUpstream"][];
+            timeout?: number;
+        };
+        RatioSyncChannel: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            name: string;
+            base_url: string;
+            status: number;
+            type: number;
+        };
+        RatioSyncTestResult: {
+            name: string;
+            status: string;
+            error?: string;
+        };
+        RatioSyncDifference: {
+            current: (number | string) | null;
+            upstreams: {
+                [key: string]: (number | string) | null;
+            };
+            confidence: {
+                [key: string]: boolean;
+            };
+        };
+        RatioSyncResult: {
+            differences: {
+                [key: string]: {
+                    [key: string]: components["schemas"]["RatioSyncDifference"];
+                };
+            };
+            test_results: components["schemas"]["RatioSyncTestResult"][];
+        };
+        RatioSyncApplyInput: {
+            prices: components["schemas"]["CatalogPriceInput"][];
+        };
+        RatioSyncApplyResult: {
+            updated: number;
+        };
+        DeploymentSettings: {
+            provider: string;
+            enabled: boolean;
+            configured: boolean;
+            can_connect: boolean;
+        };
+        DeploymentConnectionInput: {
+            api_key?: string;
+        };
+        DeploymentConnectionResult: {
+            hardware_count: number;
+            total_available: number;
+        };
+        DeploymentResources: {
+            cpu: string;
+            memory: string;
+            gpu: string;
+        };
+        DeploymentItem: {
+            id: string;
+            deployment_name: string;
+            status: string;
+            model_name: string;
+            model_version: string;
+            instance_count: number;
+            resource_config: components["schemas"]["DeploymentResources"];
+            /** Format: int64 */
+            created_at: number | string | bigint;
+            /** Format: int64 */
+            updated_at: number | string | bigint;
+            description: string;
+            container_name: string;
+            type: string;
+            time_remaining: string;
+            time_remaining_minutes: number;
+            hardware_info: string;
+            hardware_name: string;
+            brand_name: string;
+            hardware_quantity: number;
+            /** Format: double */
+            completed_percent: number;
+            compute_minutes_served: number;
+            compute_minutes_remaining: number;
+            provider: string;
+        };
+        DeploymentPage: {
+            page: number;
+            page_size: number;
+            total: number;
+            items: components["schemas"]["DeploymentItem"][];
+            status_counts?: {
+                [key: string]: number | string | bigint;
+            };
+        };
+        DeploymentDetails: {
+            id: string;
+            deployment_name: string;
+            status: string;
+            model_name: string;
+            model_version: string;
+            instance_count: number;
+            resource_config: components["schemas"]["DeploymentResources"];
+            /** Format: int64 */
+            created_at: number | string | bigint;
+            /** Format: int64 */
+            updated_at: number | string | bigint;
+            description: string;
+            hardware_id: number;
+            /** Format: double */
+            amount_paid: number;
+            /** Format: double */
+            completed_percent: number;
+            gpus_per_container: number;
+            total_gpus: number;
+            total_containers: number;
+            hardware_name: string;
+            brand_name: string;
+            compute_minutes_served: number;
+            compute_minutes_remaining: number;
+            locations: components["schemas"]["DeploymentDeploymentLocation"][];
+            container_config: components["schemas"]["DeploymentDeploymentContainerConfig"];
+        };
+        DeploymentHardwarePage: {
+            hardware_types: components["schemas"]["DeploymentHardwareType"][];
+            total: number;
+            total_available: number;
+        };
+        DeploymentNameInput: {
+            name: string;
+        };
+        DeploymentNameAvailability: {
+            available: boolean;
+            name: string;
+        };
+        DeploymentNameResult: {
+            status: string;
+            message: string;
+            id: string;
+            name: string;
+        };
+        DeploymentMutationResult: {
+            status: string;
+            deployment_id: string;
+            message?: string;
+        };
+        DeploymentEventView: {
+            /** Format: int64 */
+            time: number | string | bigint;
+            message: string;
+        };
+        DeploymentContainerView: {
+            container_id: string;
+            device_id: string;
+            status: string;
+            hardware: string;
+            brand_name: string;
+            /** Format: int64 */
+            created_at: number | string | bigint;
+            uptime_percent: number;
+            gpus_per_container: number;
+            public_url: string;
+            events: components["schemas"]["DeploymentEventView"][];
+        };
+        DeploymentContainerDetails: {
+            container_id: string;
+            device_id: string;
+            status: string;
+            hardware: string;
+            brand_name: string;
+            /** Format: int64 */
+            created_at: number | string | bigint;
+            uptime_percent: number;
+            gpus_per_container: number;
+            public_url: string;
+            events: components["schemas"]["DeploymentEventView"][];
+            deployment_id: string;
+        };
+        DeploymentContainerPage: {
+            total: number;
+            containers: components["schemas"]["DeploymentContainerView"][];
+        };
+        DesktopStartInput: {
+            device_name?: string;
+            platform?: string;
+            app_version?: string;
+        };
+        DesktopStartResult: {
+            session_id: string;
+            user_code: string;
+            verification_uri: string;
+            /** Format: int64 */
+            expires_in: number | string | bigint;
+            interval: number;
+        };
+        DesktopAuthView: {
+            session_id: string;
+            user_code: string;
+            device_name: string;
+            platform: string;
+            app_version: string;
+            status: string;
+            /** Format: int64 */
+            created_at: number | string | bigint;
+            /** Format: int64 */
+            expires_at: number | string | bigint;
+            /** Format: int64 */
+            approved_at: number | string | bigint;
+            permissions: string[];
+        };
+        DesktopPollResult: {
+            status: string;
+            authenticated: boolean;
+            access_token?: string;
+            /** Format: int64 */
+            user_id?: number | string | bigint;
+            /** Format: int64 */
+            device_id?: number | string | bigint;
+            server_address?: string;
+            last_username?: string;
+            scopes?: string[];
+        };
+        DesktopTemplate: {
+            tool: string;
+            label: string;
+            server_address: string;
+            endpoint: string;
+            auth_scheme: string;
+            model_format: string;
+            env: {
+                [key: string]: string;
+            };
+            default_provider: string;
+        };
+        DesktopImportInput: {
+            /** @enum {string} */
+            target?: "codego" | "ccswitch" | "";
+            tool: string;
+            /** Format: int64 */
+            token_id: number | string | bigint;
+            name?: string;
+            model?: string;
+            haiku_model?: string;
+            sonnet_model?: string;
+            opus_model?: string;
+            enabled?: boolean | null;
+        };
+        DesktopImportPayload: {
+            tool: string;
+            name: string;
+            homepage: string;
+            endpoint: string;
+            apiKey: string;
+            model?: string;
+            haikuModel?: string;
+            sonnetModel?: string;
+            opusModel?: string;
+            enabled: boolean;
+            config: string;
+            configFormat: string;
+            icon?: string;
+            notes?: string;
+        };
+        DesktopReleaseAsset: {
+            name: string;
+            /** Format: int64 */
+            size: number | string | bigint;
+            digest?: string;
+            browser_download_url: string;
+            platform?: string;
+            arch?: string;
+            tauri_target?: string;
+        };
+        DesktopReleasePlatform: {
+            signature: string;
+            url: string;
+        };
+        DesktopReleaseManifest: {
+            tag_name: string;
+            version: string;
+            html_url: string;
+            published_at?: string;
+            notes?: string;
+            homebrew_url?: string;
+            assets: components["schemas"]["DesktopReleaseAsset"][];
+            platforms?: {
+                [key: string]: components["schemas"]["DesktopReleasePlatform"];
+            };
+        };
+        DesktopDevice: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            device_name: string;
+            platform: string;
+            app_version: string;
+            scopes: string[];
+            status: string;
+            /** Format: int64 */
+            created_at: number | string | bigint;
+            /** Format: int64 */
+            last_used_at: number | string | bigint;
+            /** Format: int64 */
+            expires_at: number | string | bigint;
+            /** Format: int64 */
+            revoked_at: number | string | bigint;
+        };
+        DesktopSessionInput: {
+            session_id: string;
+        };
+        DesktopDecision: {
+            status: string;
+            /** Format: int64 */
+            approved_at: number | string | bigint;
+            /** Format: int64 */
+            device_id?: number | string | bigint;
+            device_name?: string;
+            scopes?: string[];
+            /** Format: int64 */
+            expires_at?: number | string | bigint;
+        };
+        DesktopKeyGroupInput: {
+            group: string;
+        };
+        DesktopEnsureInput: {
+            device_name?: string;
+            group?: string;
+        };
+        DesktopEnsureResult: {
+            token: components["schemas"]["KeyRecord"];
+            created: boolean;
+            full_key: string;
+            token_name: string;
+        };
+        DesktopTemplateCollection: {
+            base_url: string;
+            tools: {
+                [key: string]: components["schemas"]["DesktopTemplate"];
+            };
+        };
+        DesktopTokenConfig: {
+            token: components["schemas"]["KeyRecord"];
+            server_address: string;
+            tools: {
+                [key: string]: components["schemas"]["DesktopImportPayload"];
+            };
+        };
+        DesktopImportResult: {
+            code: string;
+            deep_link: string;
+            config_url: string;
+            /** Format: int64 */
+            expires_in_seconds: number | string | bigint;
+            tool: string;
+            token_name: string;
+            provider_name: string;
+        };
+        DesktopDiagnosticResult: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            status: string;
+        };
+        DesktopUpdaterManifest: {
+            version: string;
+            notes: string;
+            pub_date: string;
+            platforms: {
+                [key: string]: components["schemas"]["DesktopReleasePlatform"];
+            };
+        };
+        DesktopServiceStatus: {
+            status: string;
+            notice: string;
+            maintenance: boolean;
+            recommended_action: string;
+            affected_scopes: string[];
+        };
+        DesktopGroup: {
+            name: string;
+            desc: string;
+            /** Format: double */
+            ratio: number;
+            current: boolean;
+            /** Format: int64 */
+            available_models_count: number | string | bigint;
+        };
+        DesktopGroups: {
+            current: string;
+            items: components["schemas"]["DesktopGroup"][];
+        };
+        DesktopPrice: {
+            model_name: string;
+            mode: string;
+            /** Format: int64 */
+            input_per_mtok: number | string | bigint;
+            /** Format: int64 */
+            output_per_mtok: number | string | bigint;
+            /** Format: int64 */
+            per_request: number | string | bigint;
+            quota_type: number;
+            /** Format: double */
+            model_ratio: number;
+            /** Format: double */
+            model_price: number;
+            /** Format: double */
+            completion_ratio: number;
+            /** Format: double */
+            cache_ratio: number;
+            /** Format: double */
+            create_cache_ratio: number;
+            owner_by: string;
+            enable_groups: string[];
+            supported_endpoint_types: string[];
+            billing_mode: string;
+            pricing_available: boolean;
+            description?: string;
+            icon?: string;
+            tags?: string;
+            /** Format: int64 */
+            vendor_id?: number | string | bigint;
+            /** @description Retained billing expression for expression mode; billing_mode is tiered_expr while mode remains expression. */
+            billing_expr?: string;
+            /** @description Optional exact numeric multiplier from persisted model pricing rules. */
+            image_ratio?: number;
+            /** @description Optional exact numeric multiplier from persisted model pricing rules. */
+            audio_ratio?: number;
+            /** @description Optional exact numeric multiplier from persisted model pricing rules. */
+            audio_completion_ratio?: number;
+        };
+        DesktopTrend: {
+            date: string;
+            /** Format: int64 */
+            timestamp: number | string | bigint;
+            /** Format: int64 */
+            requests: number | string | bigint;
+            /** Format: int64 */
+            quota: number | string | bigint;
+            /** Format: int64 */
+            token_used: number | string | bigint;
+            /** Format: double */
+            quota_usd: number;
+        };
+        DesktopTrends: {
+            days: number;
+            trend: components["schemas"]["DesktopTrend"][];
+        };
+        DesktopLegacyLog: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            /** Format: int64 */
+            user_id: number | string | bigint;
+            /** Format: int64 */
+            created_at: number | string | bigint;
+            type: number;
+            /** Format: int64 */
+            token_id: number | string | bigint;
+            /** Format: int64 */
+            channel_id: number | string | bigint;
+            model_name: string;
+            /** Format: int64 */
+            quota: number | string | bigint;
+            amount_micro_credits: string;
+            /** Format: int64 */
+            prompt_tokens: number | string | bigint;
+            /** Format: int64 */
+            completion_tokens: number | string | bigint;
+            request_id: string;
+            content: string;
+            other: string;
+        };
+        DesktopAccount: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            username: string;
+            display_name: string;
+            group: string;
+            /** Format: int64 */
+            quota: number | string | bigint;
+            /** Format: int64 */
+            used_quota: number | string | bigint;
+            /** Format: int64 */
+            request_count: number | string | bigint;
+            /** Format: double */
+            quota_usd: number;
+            /** Format: double */
+            used_quota_usd: number;
+            billing_preference: string;
+            funding_source_order: string[] | null;
+            /** Format: int64 */
+            balance_micro_credits: number | string | bigint;
+        };
+        DesktopSubscriptionSnapshot: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            /** Format: int64 */
+            plan_id: number | string | bigint;
+            plan_title: string;
+            /** Format: double */
+            amount_total_usd: number;
+            /** Format: double */
+            amount_used_usd: number;
+            /** Format: double */
+            remaining_usd: number;
+            unlimited: boolean;
+            /** Format: double */
+            period_amount_usd: number;
+            /** Format: double */
+            period_used_usd: number;
+            /** Format: double */
+            period_remaining_usd: number;
+            /** Format: int64 */
+            start_time: number | string | bigint;
+            /** Format: int64 */
+            end_time: number | string | bigint;
+            /** Format: int64 */
+            next_reset_time: number | string | bigint;
+        };
+        DesktopSummary: {
+            account: components["schemas"]["DesktopAccount"];
+            subscriptions: components["schemas"]["DesktopSubscriptionSnapshot"][];
+            tokens: {
+                /** Format: int64 */
+                total: number | string | bigint;
+            };
+            usage: {
+                available_models: string[];
+                /** Format: double */
+                today_usd: number;
+                /** Format: double */
+                last_7_days_usd: number;
+                /** Format: int64 */
+                last_request_at: number | string | bigint;
+            };
+            service: components["schemas"]["DesktopServiceStatus"];
+            recent_logs: components["schemas"]["DesktopLegacyLog"][];
+            actions: {
+                server_address: string;
+                topup_link: string;
+                tokens_path: string;
+                logs_path: string;
+            };
+        };
+        PerformanceMemory: {
+            /** Format: int64 */
+            alloc: number | string | bigint;
+            /** Format: int64 */
+            total_alloc: number | string | bigint;
+            /** Format: int64 */
+            sys: number | string | bigint;
+            num_gc: number;
+            num_goroutine: number;
+        };
+        PerformanceDiskCache: {
+            path: string;
+            exists: boolean;
+            file_count: number;
+            /** Format: int64 */
+            total_size: number | string | bigint;
+        };
+        PerformanceLogFile: {
+            name: string;
+            /** Format: int64 */
+            size: number | string | bigint;
+            /** Format: date-time */
+            mod_time: string;
+        };
+        PerformanceCleanupResult: {
+            deleted_count: number;
+            /** Format: int64 */
+            freed_bytes: number | string | bigint;
+            failed_files: string[];
+        };
+        PerformanceStats: {
+            memory_stats: components["schemas"]["PerformanceMemory"];
+            disk_cache_info: components["schemas"]["PerformanceDiskCache"];
+            config: {
+                disk_cache_enabled: boolean;
+                disk_cache_path: string;
+                is_running_in_container: boolean;
+                monitor_enabled: boolean;
+            };
+            cache_stats: Record<string, never>;
+            /** Format: int64 */
+            requests: number | string | bigint;
+            /** Format: int64 */
+            uptime_seconds: number | string | bigint;
+            service: string;
+            log_output: string;
+            database_pool?: {
+                acquired: number;
+                idle: number;
+                total: number;
+                max: number;
+            };
+        };
+        PerformanceLogs: {
+            log_dir: string;
+            enabled: boolean;
+            file_count: number;
+            /** Format: int64 */
+            total_size: number | string | bigint;
+            files: components["schemas"]["PerformanceLogFile"][];
+            output: string;
+            /** Format: date-time */
+            newest_time?: string;
+            /** Format: date-time */
+            oldest_time?: string;
+        };
+        DesktopDiagnosticInput: {
+            source?: string;
+            summary?: string;
+            app_version?: string;
+            platform?: string;
+            locale?: string;
+            consent: boolean;
+            /** @enum {string} */
+            report_type: "panic" | "crash" | "manual" | "support";
+            payload: string;
+        };
+        DesktopTelemetryInput: {
+            source?: string;
+            summary?: string;
+            app_version?: string;
+            platform?: string;
+            locale?: string;
+            consent: boolean;
+            /** @enum {string} */
+            event_name: "auth_connected" | "summary_refreshed" | "diagnostic_report_submitted";
+            payload?: {
+                [key: string]: (string | boolean | number) | null;
+            };
+        };
+        ResetSummary: {
+            /** Format: int64 */
+            available_count: number | string | bigint;
+            /** Format: int64 */
+            earned_total: number | string | bigint;
+            /** Format: int64 */
+            used_total: number | string | bigint;
+            last_used_month: string;
+            current_month: string;
+            used_this_month: boolean;
+            /** Format: int64 */
+            exchanged_total: number | string | bigint;
+        };
+        ResetResult: {
+            reset_opportunity: components["schemas"]["ResetSummary"];
+            /** Format: int64 */
+            user_subscription_id: number | string | bigint;
+            /** Format: int64 */
+            amount_used_before: number | string | bigint;
+            /** Format: int64 */
+            amount_used_after: number | string | bigint;
+            /** Format: int64 */
+            period_used_before: number | string | bigint;
+            /** Format: int64 */
+            period_used_after: number | string | bigint;
+            /** Format: int64 */
+            cleared_used_amount: number | string | bigint;
+        };
+        ResetOpportunityUseInput: Record<string, never>;
+        AffiliateInvitee: {
+            /** Format: int64 */
+            invitee_id: number | string | bigint;
+            invitee_external_id: string;
+            invitee_username: string;
+            invitee_display_name: string;
+            /** Format: int64 */
+            created_at: number | string | bigint;
+            month_card_purchased: boolean;
+            reset_opportunity_earned: boolean;
+            /** Format: int64 */
+            reset_opportunity_earned_at: number | string | bigint;
+        };
+        AffiliateRewards: {
+            affiliate_code: string | null;
+            /** Format: int64 */
+            invited_count: number | string | bigint;
+            /** Format: int64 */
+            successful_purchase_invites: number | string | bigint;
+            reset_opportunity: components["schemas"]["ResetSummary"];
+            invitees: components["schemas"]["AffiliateInvitee"][];
+        };
+        DesktopStatusBucket: {
+            /** Format: int64 */
+            ts: number | string | bigint;
+            /** Format: double */
+            success_rate: number | null;
+            /** Format: int64 */
+            request_count: number | string | bigint;
+        };
+        DesktopModelStatus: {
+            model: string;
+            status: string;
+            /** Format: double */
+            success_rate: number | null;
+            /** Format: int64 */
+            request_count: number | string | bigint;
+            /** Format: double */
+            cache_hit_rate: number | null;
+            /** Format: double */
+            sample_window: number;
+            /** Format: double */
+            series_window: number;
+            bucket_seconds: number;
+            series: components["schemas"]["DesktopStatusBucket"][];
+        };
+        DesktopGroupStatus: {
+            group_id: string;
+            group: string;
+            display_name: string;
+            source_type: string;
+            models: components["schemas"]["DesktopModelStatus"][];
+            status: string;
+            /** Format: double */
+            success_rate: number | null;
+            /** Format: int64 */
+            request_count: number | string | bigint;
+            /** Format: double */
+            cache_hit_rate: number | null;
+        };
+        DesktopEndpointInfo: {
+            path: string;
+            method: string;
+        };
+        DesktopPricingResponse: {
+            /** @enum {boolean} */
+            success: true;
+            data: components["schemas"]["DesktopPrice"][];
+            available_models: string[];
+            priced_models: string[];
+            priced_model_details: components["schemas"]["DesktopPrice"][];
+            vendors: components["schemas"]["CatalogVendorMetadata"][];
+            group_ratio: {
+                [key: string]: number;
+            };
+            usable_group: {
+                [key: string]: string;
+            };
+            supported_endpoint: {
+                [key: string]: components["schemas"]["DesktopEndpointInfo"];
+            };
+            auto_groups: string[];
+            pricing_version: string;
+        };
+        ConversionRule: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            /** Format: int64 */
+            plan_id: number | string | bigint;
+            basis_key: string;
+            /** Format: int64 */
+            source_credits: number | string | bigint;
+            /** Format: int64 */
+            wallet_credits: number | string | bigint;
+            /** Format: int64 */
+            paid_wallet_credits: number | string | bigint;
+            /** Format: int64 */
+            recognized_revenue_credits?: number | string | bigint | null;
+            /** Format: int64 */
+            refreshed_paid_wallet_credits?: number | string | bigint | null;
+            enabled: boolean;
+            reviewed: boolean;
+            /** Format: int64 */
+            revision: number | string | bigint;
+            note: string;
+        };
+        ResetCardRule: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            name: string;
+            /** Format: int64 */
+            reference_plan_id: number | string | bigint;
+            /** Format: int64 */
+            card_plan_id: number | string | bigint;
+            /** Format: int64 */
+            credits: number | string | bigint;
+            /** Format: int64 */
+            cost_per_card: number | string | bigint;
+            /** Format: int64 */
+            baseline_cost: number | string | bigint;
+            /** Format: int64 */
+            budget_total: number | string | bigint;
+            /** Format: int64 */
+            budget_reserved: number | string | bigint;
+            /** Format: int64 */
+            incremental_budget_total: number | string | bigint;
+            /** Format: int64 */
+            incremental_reserved: number | string | bigint;
+            enabled: boolean;
+            reviewed: boolean;
+            /** Format: int64 */
+            revision: number | string | bigint;
+            note: string;
+        };
+        RedesignRules: {
+            conversion_rules: components["schemas"]["ConversionRule"][];
+            card_rules: components["schemas"]["ResetCardRule"][];
+        };
+        WalletConversionQuote: {
+            quote_id: string;
+            /** Format: int64 */
+            subscription_id: number | string | bigint;
+            state: string;
+            review_reason?: string;
+            basis_key: string;
+            /** Format: int64 */
+            rule_id: number | string | bigint;
+            /** Format: int64 */
+            rule_revision: number | string | bigint;
+            /** Format: int64 */
+            source_total: number | string | bigint;
+            /** Format: int64 */
+            source_credits: number | string | bigint;
+            /** Format: int64 */
+            target_credits: number | string | bigint;
+            /** Format: int64 */
+            paid_credits: number | string | bigint;
+            /** Format: int64 */
+            reward_credits: number | string | bigint;
+            /** Format: date-time */
+            subscription_expires_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            terms_version: string;
+            /** Format: int64 */
+            review_id?: number | string | bigint;
+            /** Format: int64 */
+            future_credits?: number | string | bigint;
+            segments?: components["schemas"]["WalletConversionSegment"][];
+        };
+        WalletConversion: {
+            request_id: string;
+            quote_id: string;
+            /** Format: int64 */
+            subscription_id: number | string | bigint;
+            state: string;
+            /** Format: int64 */
+            source_credits: number | string | bigint;
+            /** Format: int64 */
+            target_credits: number | string | bigint;
+            /** Format: int64 */
+            paid_credits: number | string | bigint;
+            /** Format: int64 */
+            wallet_account_id?: number | string | bigint | null;
+            failure_reason?: string;
+            /** Format: date-time */
+            completed_at?: string | null;
+        };
+        ResetCardQuote: {
+            quote_id: string;
+            /** Format: int64 */
+            rule_id: number | string | bigint;
+            /** Format: int64 */
+            rule_revision: number | string | bigint;
+            quantity: number;
+            /** Format: int64 */
+            available_count: number | string | bigint;
+            plan: components["schemas"]["Plan"];
+            /** Format: date-time */
+            expires_at: string;
+            terms_version: string;
+        };
+        BoundSubscriptionCard: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            state: string;
+            plan: components["schemas"]["Plan"];
+            /** Format: int64 */
+            subscription_id?: number | string | bigint | null;
+            /** Format: date-time */
+            activated_at?: string | null;
+        };
+        ResetCardExchange: {
+            request_id: string;
+            quote_id: string;
+            quantity: number;
+            /** Format: int64 */
+            remaining_count: number | string | bigint;
+            cards: components["schemas"]["BoundSubscriptionCard"][];
+        };
+        RedesignCostPreview: {
+            /** Format: int64 */
+            active_legacy_count: number | string | bigint;
+            /** Format: int64 */
+            available_reset_count: number | string | bigint;
+            rules: components["schemas"]["RedesignRules"];
+            candidates: components["schemas"]["WalletConversionQuote"][];
+        };
+        ReferralPolicy: {
+            enabled: boolean;
+            /** Format: int64 */
+            revision: number | string | bigint;
+            /** Format: date-time */
+            effective_at: string | null;
+            /** Format: int64 */
+            ancillary_cost_ppm: number | string | bigint | null;
+            /** Format: int64 */
+            reward_ppm: number | string | bigint;
+            /** Format: int64 */
+            profit_share_ppm: number | string | bigint;
+            window_days: number;
+            delay_days: number;
+            /** Format: int64 */
+            max_reward_credits: number | string | bigint;
+            /** Format: int64 */
+            total_budget_credits: number | string | bigint;
+            /** Format: int64 */
+            reserved_credits: number | string | bigint;
+            /** Format: int64 */
+            spent_credits: number | string | bigint;
+        };
+        WalletConversionQuoteInput: {
+            /** Format: int64 */
+            subscription_id: number | string | bigint;
+        };
+        EntitlementConfirmInput: {
+            quote_id: string;
+            request_id: string;
+            /** @description Must be explicitly true; old subscription ceases and cannot refresh after wallet conversion. */
+            accepted_terms: boolean;
+        };
+        ResetCardQuoteInput: {
+            /** Format: int64 */
+            rule_id: number | string | bigint;
+            quantity: number;
+        };
+        BoundCardActivationInput: {
+            request_id: string;
+        };
+        ConsumptionReferralRewards: {
+            records: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Format: int64 */
+            refund_offset_credits: number | string | bigint;
+            owner_only: boolean;
+            new_invites_grant_refresh: boolean;
+        };
+        ConsumptionReferralQualifications: {
+            records: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Format: int64 */
+            total: number | string | bigint;
+            page: number;
+            page_size: number;
+        };
+        AvailableResetCardRule: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            name: string;
+            /** Format: int64 */
+            reference_plan_id: number | string | bigint;
+            /** Format: int64 */
+            credits: number | string | bigint;
+            duration_days: number;
+        };
+        ReferralTerms: {
+            eligible: boolean;
+            reason: string;
+            version: string;
+            /** Format: int64 */
+            policy_revision: number | string | bigint;
+            /** Format: int64 */
+            reward_ppm: number | string | bigint;
+            /** Format: int64 */
+            profit_share_ppm: number | string | bigint;
+            window_days: number;
+            delay_days: number;
+            /** Format: int64 */
+            max_reward_credits: number | string | bigint;
+            owner_only: boolean;
+            no_refresh: boolean;
+            legacy_reset_eligible?: boolean | null;
+        };
+        ReferralRewardRecord: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            /** Format: int64 */
+            order_id: number | string | bigint;
+            /** Format: int64 */
+            invitee_id: number | string | bigint;
+            state: string;
+            reason: string;
+            terms: components["schemas"]["ReferralTerms"];
+            /** Format: int64 */
+            max_reward_credits: number | string | bigint;
+            /** Format: int64 */
+            paid_credits: number | string | bigint;
+            /** Format: int64 */
+            refunded_reward_credits: number | string | bigint;
+            /** Format: int64 */
+            reserved_credits: number | string | bigint;
+            /** Format: date-time */
+            paid_at: string | null;
+            /** Format: date-time */
+            window_until: string | null;
+        };
+        ReferralRewardsSummary: {
+            records: components["schemas"]["ReferralRewardRecord"][];
+            /** Format: int64 */
+            refund_offset_credits: number | string | bigint;
+            owner_only: boolean;
+            new_invites_grant_refresh: boolean;
+        };
+        ReferralQualificationRecord: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            /** Format: int64 */
+            order_id: number | string | bigint;
+            /** Format: int64 */
+            inviter_id: number | string | bigint;
+            /** Format: int64 */
+            invitee_id: number | string | bigint;
+            state: string;
+            reason: string;
+            terms: components["schemas"]["ReferralTerms"];
+            /** Format: int64 */
+            reward_ppm: number | string | bigint;
+            /** Format: int64 */
+            profit_share_ppm: number | string | bigint;
+            /** Format: int64 */
+            ancillary_cost_ppm: number | string | bigint;
+            window_days: number;
+            delay_days: number;
+            /** Format: int64 */
+            max_reward_credits: number | string | bigint;
+            /** Format: int64 */
+            paid_credits: number | string | bigint;
+            /** Format: int64 */
+            refunded_reward_credits: number | string | bigint;
+            /** Format: int64 */
+            reserved_credits: number | string | bigint;
+            /** Format: int64 */
+            net_revenue_credits: number | string | bigint;
+            /** Format: int64 */
+            net_cost_credits: number | string | bigint;
+            /** Format: date-time */
+            paid_at: string | null;
+            /** Format: date-time */
+            window_until: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ReferralQualificationsResult: {
+            records: components["schemas"]["ReferralQualificationRecord"][];
+            /** Format: int64 */
+            total: number | string | bigint;
+            page: number;
+            page_size: number;
+        };
+        PublicModelPrice: {
+            mode: string;
+            unit: string;
+            input_per_million: string;
+            output_per_million: string;
+            cache_read_per_million: string;
+            cache_write_per_million: string;
+            per_unit: string;
+            expression?: string;
+        };
+        PublicModelGroup: {
+            slug: string;
+            name: string;
+            multiplier: string;
+            verified: boolean;
+            price?: components["schemas"]["PublicModelPrice"];
+        };
+        PublicModelCatalog: {
+            name: string;
+            /** Format: int64 */
+            model_id?: number | string | bigint;
+            description?: string;
+            vendor?: string;
+            groups: components["schemas"]["PublicModelGroup"][];
+        };
+        WalletConversionSegment: {
+            name: string;
+            /** Format: int64 */
+            original_order_id: number | string | bigint;
+            /** Format: int64 */
+            source_total: number | string | bigint;
+            /** Format: int64 */
+            current_credits: number | string | bigint;
+            /** Format: int64 */
+            future_credits: number | string | bigint;
+            /** Format: int64 */
+            wallet_credits: number | string | bigint;
+            /** Format: int64 */
+            paid_wallet_credits: number | string | bigint;
+            /** Format: int64 */
+            target_credits: number | string | bigint;
+            /** Format: int64 */
+            paid_credits: number | string | bigint;
+            /** Format: int64 */
+            revenue_multiplier_ppm: number | string | bigint;
+        };
+        WalletConversionReview: {
+            /** Format: int64 */
+            id: number | string | bigint;
+            /** Format: int64 */
+            subscription_id: number | string | bigint;
+            fact_hash: string;
+            /** Format: int64 */
+            revision: number | string | bigint;
+            segments: components["schemas"]["WalletConversionSegment"][];
+            note: string;
+            enabled: boolean;
+            reviewed: boolean;
+            /** Format: int64 */
+            reviewer_id: number | string | bigint;
+            /** Format: date-time */
+            reviewed_at: string;
+        };
+        WalletConversionSource: {
+            /** Format: int64 */
+            order_id: number | string | bigint;
+            state: string;
+            purchase_type: string;
+            /** Format: int64 */
+            credits: number | string | bigint;
+            /** Format: int64 */
+            revenue_credits?: number | string | bigint | null;
+            /** Format: int64 */
+            previously_paid: number | string | bigint;
+            pending_refund: boolean;
+        };
+        WalletConversionReviewEvidence: {
+            /** Format: int64 */
+            subscription_id: number | string | bigint;
+            /** Format: int64 */
+            user_id: number | string | bigint;
+            fact_hash: string;
+            /** Format: int64 */
+            current_credits: number | string | bigint;
+            /** Format: int64 */
+            future_credits: number | string | bigint;
+            /** Format: date-time */
+            expires_at: string;
+            reset_used: boolean;
+            sources: components["schemas"]["WalletConversionSource"][];
+            review?: components["schemas"]["WalletConversionReview"];
+        };
+        /** @description Persisted 24-hour settled usage snapshot. Missing measurements are omitted; probe latency is not TTFT. Decimal credits are exact strings. */
+        ChannelMarketGroupQuality: {
+            window_hours: number;
+            rank: number;
+            score: number;
+            success_rate?: number;
+            wilson_success_rate?: number;
+            cache_hit_rate?: number;
+            /** Format: int64 */
+            request_count: number | string | bigint;
+            observing: boolean;
+            /** Format: date-time */
+            calculated_at: string;
+            /** @description Exact average settled debit in decimal credits; absent without usage samples. */
+            average_charge_credits?: string;
+        };
+        ChannelMarketRecentRequestBucket: {
+            /**
+             * Format: int64
+             * @description UTC Unix seconds for the start of the hourly bucket.
+             */
+            ts: number | string | bigint;
+            /** Format: int64 */
+            request_count: number | string | bigint;
+            /** Format: double */
+            success_rate: number;
+        };
+        ChannelMarketAutoBuild: {
+            enabled?: boolean;
+            model?: string;
+            models?: string[];
+            size?: number;
+            explore?: number;
+            /** @enum {string} */
+            schedule?: "interval" | "daily";
+            interval_minutes?: number;
+            /** @description UTC HH:mm when schedule is daily. */
+            daily_time?: string;
+            consumer_weight?: number;
+            success_weight?: number;
+            cache_weight?: number;
+            /** @description Legacy setting retained; unmeasured TTFT is never substituted with probe latency. */
+            ttft_weight?: number;
+            /** Format: date-time */
+            readonly last_build_at?: string | null;
+            /** Format: date-time */
+            readonly next_build_at?: string | null;
+            readonly last_error?: string;
+        };
+        ChannelMarketShopReference: {
+            id: string;
+            name: string;
+        };
+        ChannelMarketShop: {
+            id: string;
+            name: string;
+            description: string;
+            group_count: number;
+            declared_models: string[];
+            tags: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @enum {string} */
+            review_status?: "approved" | "pending" | "rejected";
+            submitted_name?: string;
+            submitted_description?: string;
+            review_reason?: string;
+            rating: components["schemas"]["PublicRating"];
+        };
+        ChannelMarketShopDetail: {
+            shop: components["schemas"]["ChannelMarketShop"];
+            groups: components["schemas"]["ChannelMarketChannelView"][];
+            pagination?: components["schemas"]["ChannelMarketPagination"];
+        };
+        ChannelMarketShopUpdate: {
+            name: string;
+            description: string;
+        };
+        ChannelMarketShopReviewInput: {
+            approved: boolean;
+            reason: string;
+        };
+        NotificationItem: {
+            id: string;
+            /** @enum {string} */
+            category: "all" | "market" | "billing" | "review" | "rewards" | "system";
+            kind: string;
+            title_key: string;
+            body_key: string;
+            data: {
+                [key: string]: unknown;
+            };
+            action_url: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            read_at: string | null;
+        };
+        NotificationList: {
+            items: components["schemas"]["NotificationItem"][];
+            /** Format: int64 */
+            unread_count: number | string | bigint;
+            latest_id: string;
+            /** Format: int64 */
+            total: number | string | bigint;
+            page: number;
+            page_size: number;
+        };
+        NotificationSummary: {
+            /** Format: int64 */
+            unread_count: number | string | bigint;
+            latest_id: string;
+        };
+        NotificationReadInput: {
+            read: boolean;
+        };
+        NotificationReadAllInput: {
+            through_id: string;
+            /** @enum {string} */
+            category?: "all" | "market" | "billing" | "review" | "rewards" | "system";
+        };
+        NotificationReadResult: {
+            read: boolean;
+        };
+        MarketRating: {
+            group_id: string;
+            channel_id: string;
+            channel: components["schemas"]["CommunityRatingSummary"];
+            seller: components["schemas"]["CommunityRatingSummary"];
+            can_rate: boolean;
+            eligibility_reason: string;
+        };
+        PublicRating: {
+            average_score: number;
+            /** Format: int64 */
+            rating_count: number | string | bigint;
+        };
+        ChannelMarketRoutePoolGroupOption: {
+            /** @description Routing group name for model discovery and request headers; distinct from the route-pool member ID. */
+            routing_group: string;
+            /** @description Market internal group ID or official:<catalog group name>. */
+            group_id: string;
+            name: string;
+            /** @description Market public numeric ID or official catalog group name. */
+            display_id: string;
+            /** @enum {string} */
+            kind: "market" | "official";
+            /** Format: double */
+            multiplier: number;
+            models: string[];
+        };
+        ChannelOwnerAnalyticsSummary: {
+            /** Format: int64 */
+            request_count: number | string | bigint;
+            /** Format: int64 */
+            success_count: number | string | bigint;
+            /** Format: int64 */
+            consumer_count: number | string | bigint;
+            /** Format: int64 */
+            prompt_tokens: number | string | bigint;
+            /** Format: int64 */
+            completion_tokens: number | string | bigint;
+            /** Format: int64 */
+            consumer_micro: number | string | bigint;
+            /** Format: int64 */
+            gross_micro: number | string | bigint;
+            /** Format: int64 */
+            commission_micro: number | string | bigint;
+            /** Format: int64 */
+            fee_micro: number | string | bigint;
+            /** Format: int64 */
+            net_micro: number | string | bigint;
+            /** Format: int64 */
+            pending_income_micro: number | string | bigint;
+            /** Format: int64 */
+            released_income_micro: number | string | bigint;
+            /** Format: int64 */
+            reclaimed_income_micro: number | string | bigint;
+            /** Format: date-time */
+            next_available_at?: string;
+        };
+        ChannelOwnerAnalyticsPoint: {
+            /** Format: date-time */
+            timestamp: string;
+            /** Format: int64 */
+            request_count: number | string | bigint;
+            /** Format: int64 */
+            success_count: number | string | bigint;
+            /** Format: int64 */
+            gross_micro: number | string | bigint;
+            /** Format: int64 */
+            commission_micro: number | string | bigint;
+            /** Format: int64 */
+            fee_micro: number | string | bigint;
+            /** Format: int64 */
+            net_micro: number | string | bigint;
+        };
+        ChannelOwnerAnalyticsChannel: {
+            channel_id: string;
+            group_id: string;
+            name: string;
+            model: string;
+            /** Format: int64 */
+            request_count: number | string | bigint;
+            /** Format: int64 */
+            success_count: number | string | bigint;
+            /** Format: int64 */
+            consumer_count: number | string | bigint;
+            /** Format: int64 */
+            gross_micro: number | string | bigint;
+            /** Format: int64 */
+            commission_micro: number | string | bigint;
+            /** Format: int64 */
+            fee_micro: number | string | bigint;
+            /** Format: int64 */
+            net_micro: number | string | bigint;
+            /** Format: int64 */
+            pending_income_micro: number | string | bigint;
+            /** Format: int64 */
+            released_income_micro: number | string | bigint;
+            /** Format: int64 */
+            reclaimed_income_micro: number | string | bigint;
+        };
+        ChannelOwnerAnalyticsSettlement: {
+            id: string;
+            request_id: string;
+            channel_id: string;
+            model: string;
+            billing_source: string;
+            state: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            available_at: string;
+            /** Format: int64 */
+            consumer_micro: number | string | bigint;
+            /** Format: int64 */
+            gross_micro: number | string | bigint;
+            /** Format: int64 */
+            commission_micro: number | string | bigint;
+            /** Format: int64 */
+            fee_micro: number | string | bigint;
+            /** Format: int64 */
+            net_micro: number | string | bigint;
+        };
+        ChannelOwnerAnalytics: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            /** Format: int64 */
+            bucket_seconds: number | string | bigint;
+            summary: components["schemas"]["ChannelOwnerAnalyticsSummary"];
+            points: components["schemas"]["ChannelOwnerAnalyticsPoint"][];
+            channels: components["schemas"]["ChannelOwnerAnalyticsChannel"][];
+            settlements: components["schemas"]["ChannelOwnerAnalyticsSettlement"][];
+            settlements_truncated: boolean;
+        };
+        ChannelMarketModelDisclosure: {
+            model: string;
+            /** @enum {string} */
+            streaming: "unknown" | "supported" | "unsupported";
+            /** @enum {string} */
+            tools: "unknown" | "supported" | "unsupported";
+            /** @enum {string} */
+            structured_outputs: "unknown" | "supported" | "unsupported";
+            /** @enum {string} */
+            vision: "unknown" | "supported" | "unsupported";
+            /** Format: int64 */
+            context_tokens?: number | string | bigint;
+            /** Format: int64 */
+            max_output_tokens?: number | string | bigint;
+        };
+        ChannelMarketDisclosureInput: {
+            /** @enum {string} */
+            source_kind: "unknown" | "direct" | "reseller" | "self_hosted";
+            regions: string[];
+            /** @enum {string} */
+            retention: "unknown" | "none" | "limited";
+            retention_days?: number;
+            /** @enum {string} */
+            training: "unknown" | "no" | "yes";
+            policy_url?: string;
+            models: components["schemas"]["ChannelMarketModelDisclosure"][];
+        };
+        ChannelMarketDisclosure: {
+            /** @enum {string} */
+            source_kind: "unknown" | "direct" | "reseller" | "self_hosted";
+            regions: string[];
+            /** @enum {string} */
+            retention: "unknown" | "none" | "limited";
+            retention_days?: number;
+            /** @enum {string} */
+            training: "unknown" | "no" | "yes";
+            policy_url?: string;
+            models: components["schemas"]["ChannelMarketModelDisclosure"][];
+            /** Format: date-time */
+            updated_at: string;
+            /** @enum {string} */
+            provenance: "owner_declared";
+        };
+        ChannelMarketFailureCount: {
+            category: string;
+            /** Format: int64 */
+            count: number | string | bigint;
+        };
+        ChannelMarketInsights: {
+            group_id: string;
+            display_id: string;
+            model: string;
+            window_hours: number;
+            /** Format: int64 */
+            request_count: number | string | bigint;
+            /** Format: int64 */
+            success_count: number | string | bigint;
+            /** Format: int64 */
+            independent_consumers: number | string | bigint;
+            /** Format: int64 */
+            performance_samples: number | string | bigint;
+            success_rate?: number;
+            wilson_success_rate?: number;
+            ttft_p50_ms?: number;
+            ttft_p95_ms?: number;
+            avg_tps?: number;
+            disclosure?: components["schemas"]["ChannelMarketDisclosure"];
+            failure_counts: components["schemas"]["ChannelMarketFailureCount"][];
+        };
+        PolicyAcceptanceInput: {
+            /** @enum {string} */
+            document: "terms" | "privacy" | "supplier";
+            version: string;
+            /** @enum {string} */
+            locale: "zh-HK" | "zh-CN" | "en" | "ja" | "ru" | "ko" | "fr" | "de" | "ar";
+        };
+        PolicyAcceptance: {
+            /** @enum {string} */
+            document: "terms" | "privacy" | "supplier";
+            version: string;
+            /** @enum {string} */
+            locale: "zh-HK" | "zh-CN" | "en" | "ja" | "ru" | "ko" | "fr" | "de" | "ar";
+            /** Format: date-time */
+            accepted_at: string;
+        };
+        CurrentPolicies: {
+            version: string;
+            documents: components["schemas"]["PolicyRequirement"][];
+        };
+        PolicyRequirement: {
+            /** @enum {string} */
+            document: "terms" | "privacy" | "supplier";
+            version: string;
+            url: string;
+        };
+        ChannelMarketPagination: {
+            page: number;
+            page_size: number;
+            total: number;
         };
     };
     responses: {
@@ -8054,6 +11611,39 @@ export interface operations {
                         success: true;
                         message?: string;
                         data: components["schemas"]["LedgerHistoryPage"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    listBlindBoxAdminPools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["MarketplacePool"][];
                     };
                 };
             };
@@ -11446,6 +15036,77 @@ export interface operations {
             503: components["responses"]["Failure"];
         };
     };
+    getApiCommerceOrdersTrade_NoInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trade_no: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Raw PDF attachment. Does not use the JSON success/data envelope. */
+            200: {
+                headers: {
+                    /** @example attachment; filename="CG-2026-000000000001.pdf" */
+                    "Content-Disposition"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            428: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiCommerceOrdersTrade_NoInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trade_no: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderInvoiceBuyerInput"];
+            };
+        };
+        responses: {
+            /** @description Issued or identically replayed invoice as raw PDF. Does not use the JSON success/data envelope. */
+            200: {
+                headers: {
+                    /** @example attachment; filename="CG-2026-000000000001.pdf" */
+                    "Content-Disposition"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
     postApiCommerceOrdersTrade_NoCancel: {
         parameters: {
             query?: never;
@@ -11741,6 +15402,7 @@ export interface operations {
             403: components["responses"]["Failure"];
             404: components["responses"]["Failure"];
             409: components["responses"]["Failure"];
+            410: components["responses"]["Failure"];
             429: components["responses"]["Failure"];
             500: components["responses"]["Failure"];
             503: components["responses"]["Failure"];
@@ -13503,6 +17165,7 @@ export interface operations {
             403: components["responses"]["Failure"];
             404: components["responses"]["Failure"];
             409: components["responses"]["Failure"];
+            428: components["responses"]["Failure"];
             429: components["responses"]["Failure"];
             500: components["responses"]["Failure"];
             503: components["responses"]["Failure"];
@@ -13656,6 +17319,10 @@ export interface operations {
                 before?: string;
                 before_id?: number | string | bigint;
                 page_size?: number;
+                from?: string;
+                to?: string;
+                channel_id?: string;
+                model?: string;
             };
             header?: never;
             path?: never;
@@ -13689,7 +17356,12 @@ export interface operations {
     };
     getApiMarketplaceChannelsMineLogsExport: {
         parameters: {
-            query?: never;
+            query?: {
+                from?: string;
+                to?: string;
+                channel_id?: string;
+                model?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -13821,7 +17493,12 @@ export interface operations {
     };
     getApiMarketplaceChannelsMineUserUsage: {
         parameters: {
-            query?: never;
+            query?: {
+                from?: string;
+                to?: string;
+                channel_id?: string;
+                model?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -13921,6 +17598,7 @@ export interface operations {
             403: components["responses"]["Failure"];
             404: components["responses"]["Failure"];
             409: components["responses"]["Failure"];
+            428: components["responses"]["Failure"];
             429: components["responses"]["Failure"];
             500: components["responses"]["Failure"];
             503: components["responses"]["Failure"];
@@ -14510,7 +18188,16 @@ export interface operations {
     };
     getApiMarketplaceGroups: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string;
+                model?: string;
+                tag?: string;
+                scope?: "all" | "public" | "private";
+                sort?: "recommended" | "multiplier" | "price" | "models" | "success" | "name";
+                price_basis?: "input" | "output" | "cache-read" | "cache-write" | "request";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -14528,6 +18215,8 @@ export interface operations {
                         success: true;
                         message?: string;
                         data: components["schemas"]["ChannelMarketChannelView"][];
+                        pagination?: components["schemas"]["ChannelMarketPagination"];
+                        models?: string[];
                     };
                 };
             };
@@ -14802,7 +18491,16 @@ export interface operations {
     };
     getApiMarketplaceKeyGroupOptions: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string;
+                model?: string;
+                tag?: string;
+                scope?: "all" | "public" | "private";
+                sort?: "recommended" | "multiplier" | "price" | "models" | "success" | "name";
+                price_basis?: "input" | "output" | "cache-read" | "cache-write" | "request";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -14820,6 +18518,8 @@ export interface operations {
                         success: true;
                         message?: string;
                         data: components["schemas"]["ChannelMarketChannelView"][];
+                        pagination?: components["schemas"]["ChannelMarketPagination"];
+                        models?: string[];
                     };
                 };
             };
@@ -19803,7 +23503,7 @@ export interface operations {
                         /** @enum {boolean} */
                         success: true;
                         message?: string;
-                        data: components["schemas"]["Session"];
+                        data: components["schemas"]["Session"] | components["schemas"]["TwoFactorLoginChallenge"];
                     };
                 };
             };
@@ -21919,6 +25619,4432 @@ export interface operations {
             503: components["responses"]["Failure"];
         };
     };
+    postApiUserLogin2fa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TwoFactorLoginInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["Session"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiUser2faStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["TwoFactorStatus"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiUser2faSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["TwoFactorSetup"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiUser2faEnable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TwoFactorCodeInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiUser2faDisable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TwoFactorCodeInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiUser2faBackup_codes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TwoFactorCodeInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["TwoFactorBackupCodes"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiUser2faStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["TwoFactorStatistics"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    deleteApiUserId2fa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiVerification: {
+        parameters: {
+            query: {
+                email: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiUserEmailVerify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailVerificationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["User"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiReset_password: {
+        parameters: {
+            query: {
+                email: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiUserReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data?: string;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiModelsFavorites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ModelFavorites"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putApiModelsFavorites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelFavoriteInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ModelFavorites"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiModelsFavoritesSlashAlias: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ModelFavorites"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putApiModelsFavoritesSlashAlias: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelFavoriteInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ModelFavorites"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiRatio_syncChannels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["RatioSyncChannel"][];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiRatio_syncFetch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RatioSyncInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["RatioSyncResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiRatio_syncApply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RatioSyncApplyInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["RatioSyncApplyResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeploymentsSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentSettings"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDeploymentsSettingsTest_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentConnectionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentConnectionResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDeploymentsTest_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentConnectionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentConnectionResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeployments: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentPage"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDeployments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentDeploymentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentMutationResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeploymentsSearch: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                status?: string;
+                keyword?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentPage"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeploymentsHardware_types: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentHardwarePage"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeploymentsLocations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentLocationsResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeploymentsAvailable_replicas: {
+        parameters: {
+            query: {
+                hardware_id: number;
+                gpu_count?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentAvailableReplicasResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeploymentsCheck_name: {
+        parameters: {
+            query: {
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentNameAvailability"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDeploymentsPrice_estimation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentPriceEstimationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentPriceEstimationResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeploymentsId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentDetails"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putApiDeploymentsId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentUpdateDeploymentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentMutationResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    deleteApiDeploymentsId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentMutationResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putApiDeploymentsIdName: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentNameInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentNameResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDeploymentsIdExtend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentExtendDurationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentItem"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeploymentsIdLogs: {
+        parameters: {
+            query: {
+                container_id: string;
+                limit?: number;
+                cursor?: string;
+                level?: string;
+                stream?: string;
+                follow?: boolean;
+                start_time?: string;
+                end_time?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: string;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeploymentsIdContainers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentContainerPage"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDeploymentsIdContainersContainer_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                container_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DeploymentContainerDetails"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            502: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopAuthSession: {
+        parameters: {
+            query: {
+                session_id: string;
+                code: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopAuthView"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDesktopAuthSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopStartInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopStartResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDesktopAuthPoll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopSessionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopPollResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDesktopAuthApprove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopSessionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopDecision"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDesktopAuthReject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopSessionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopDecision"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopDevice"][];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    deleteApiDesktopDevicesId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopAuthorized_devices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopDevice"][];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    deleteApiDesktopAuthorized_devicesId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopAccountSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopUsageLogs: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                model_name?: string;
+                model?: string;
+                page_size?: number;
+                ps?: number;
+                p?: number;
+                page?: number;
+                start_timestamp?: number | string | bigint;
+                end_timestamp?: number | string | bigint;
+                request_id?: string;
+            };
+            header?: {
+                /** @description Send 3 for documented native DTOs. Missing/2 retains released desktop formats. */
+                "X-CodeGo-API-Version"?: "2" | "3";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["AuditPage"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopUsageTrends: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopTrends"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopGroups"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopGroup_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopGroupStatus"][];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopPricing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesktopPricingResponse"];
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopTokens: {
+        parameters: {
+            query?: {
+                before?: number | string | bigint;
+                page_size?: number;
+                p?: number;
+                ps?: number;
+            };
+            header?: {
+                /** @description Send 3 for documented native DTOs. Missing/2 retains released desktop formats. */
+                "X-CodeGo-API-Version"?: "2" | "3";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["KeyRecord"][];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putApiDesktopTokens: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send 3 for documented native DTOs. Missing/2 retains released desktop formats. */
+                "X-CodeGo-API-Version"?: "2" | "3";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeyWriteInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDesktopTokens: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send 3 for documented native DTOs. Missing/2 retains released desktop formats. */
+                "X-CodeGo-API-Version"?: "2" | "3";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeyWriteInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["KeyCreated"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    deleteApiDesktopTokensId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDesktopTokensIdKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["KeyReveal"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putApiDesktopTokensIdGroup: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send 3 for documented native DTOs. Missing/2 retains released desktop formats. */
+                "X-CodeGo-API-Version"?: "2" | "3";
+            };
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopKeyGroupInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["KeyRecord"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDesktopTokensEnsure: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send 3 for documented native key DTOs. Missing/2 retains released desktop formats. */
+                "X-CodeGo-API-Version"?: "2" | "3";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopEnsureInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopEnsureResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopTokensIdConfig: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send 3 for documented native key DTOs. Missing/2 retains released desktop formats. */
+                "X-CodeGo-API-Version"?: "2" | "3";
+            };
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopTokenConfig"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopConfigTemplate: {
+        parameters: {
+            query: {
+                tool: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopTemplate"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopConfigTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopTemplateCollection"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDesktopImportDeeplink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopImportInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopImportResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopImportConfig: {
+        parameters: {
+            query: {
+                code: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopImportPayload"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopServiceStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopServiceStatus"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDesktopDiagnosticsReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopDiagnosticInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["DesktopDiagnosticResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiDesktopTelemetryEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopTelemetryInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopReleaseLatest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesktopReleaseManifest"];
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiDesktopReleaseLatest_json: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesktopUpdaterManifest"];
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiOauthEmailBind: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailVerificationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["User"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiPerformanceStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["PerformanceStats"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiPerformanceGc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiPerformanceResetStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    deleteApiPerformanceDiskCache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["PerformanceCleanupResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiPerformanceLogs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["PerformanceLogs"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    deleteApiPerformanceLogs: {
+        parameters: {
+            query: {
+                mode: "by_count" | "by_days";
+                value: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["PerformanceCleanupResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiUserAffRewards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        data: components["schemas"]["AffiliateRewards"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiSubscriptionSelfResetOpportunity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        data: components["schemas"]["ResetSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiSubscriptionSelfResetOpportunityUse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetOpportunityUseInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        data: components["schemas"]["ResetResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiUserAff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        data: string;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiUserAffOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        data: components["schemas"]["AffiliateRewards"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiApiSubscriptionSelfWalletConversionQuote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalletConversionQuoteInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["WalletConversionQuote"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiApiSubscriptionSelfWalletConversionConfirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntitlementConfirmInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["WalletConversion"];
+                    };
+                };
+            };
+            /** @description Authorized operation awaiting funding drain or synchronization; query its status. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["WalletConversion"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiApiSubscriptionSelfWalletConversionRequestId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["WalletConversion"];
+                    };
+                };
+            };
+            /** @description Authorized operation awaiting funding drain or synchronization; query its status. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["WalletConversion"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiApiSubscriptionAdminRedesignRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["RedesignRules"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putApiApiSubscriptionAdminRedesignRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedesignRules"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["RedesignRules"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiApiSubscriptionAdminRedesignPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["RedesignCostPreview"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiApiSubscriptionSelfResetCardsQuote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetCardQuoteInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ResetCardQuote"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiApiSubscriptionSelfResetCardsConfirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntitlementConfirmInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ResetCardExchange"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiApiSubscriptionSelfResetCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["BoundSubscriptionCard"][] | null;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiApiSubscriptionSelfResetCardsIdActivate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BoundCardActivationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["BoundSubscriptionCard"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiApiSubscriptionAdminReferralPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ReferralPolicy"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putApiApiSubscriptionAdminReferralPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferralPolicy"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ReferralPolicy"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiApiUserAffConsumptionRewards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ReferralRewardsSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiApiSubscriptionAdminReferralQualifications: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ReferralQualificationsResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postApiApiSubscriptionAdminReferralQualificationsIdApprove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiApiSubscriptionSelfResetCardsRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["AvailableResetCardRule"][] | null;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiPublicModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["PublicModelCatalog"][];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiApiSubscriptionAdminWalletConversionReviewId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["WalletConversionReviewEvidence"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putApiApiSubscriptionAdminWalletConversionReviewId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number | string | bigint;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalletConversionReview"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["WalletConversionReview"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getMarketShops: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string;
+                model?: string;
+                tag?: string;
+                sort?: "recommended" | "name";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ChannelMarketShop"][];
+                        pagination?: components["schemas"]["ChannelMarketPagination"];
+                        models?: string[];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getMarketShop: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string;
+                model?: string;
+                tag?: string;
+                scope?: "all" | "public" | "private";
+                sort?: "recommended" | "multiplier" | "price" | "models" | "success" | "name";
+                price_basis?: "input" | "output" | "cache-read" | "cache-write" | "request";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ChannelMarketShopDetail"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getMyMarketShop: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ChannelMarketShop"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    updateMyMarketShop: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelMarketShopUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ChannelMarketShop"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getAdminMarketShops: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ChannelMarketShop"][];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    reviewMarketShop: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelMarketShopReviewInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: Record<string, never> | null;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getNotifications: {
+        parameters: {
+            query?: {
+                category?: "all" | "market" | "billing" | "review" | "rewards" | "system";
+                unread?: boolean;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["NotificationList"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getNotificationSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["NotificationSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    setNotificationReadState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationReadInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["NotificationReadResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    markNotificationsReadThrough: {
+        parameters: {
+            query?: {
+                category?: "all" | "market" | "billing" | "review" | "rewards" | "system";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationReadAllInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["NotificationReadResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    streamNotificationEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cookie authenticated SSE. Initial unread_count and subsequent invalidate events; heartbeat comments. Reconnect reconciles missed events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getMarketGroupRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["MarketRating"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    postMarketGroupRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunitySessionRatingInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["MarketRating"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getApiMarketplaceRoutePoolsGroupOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ChannelMarketRoutePoolGroupOption"][];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getChannelOwnerAnalytics: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                channel_id?: string;
+                model?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ChannelOwnerAnalytics"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    exportChannelOwnerAnalytics: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                channel_id?: string;
+                model?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Filtered settlement CSV */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getChannelMarketInsights: {
+        parameters: {
+            query: {
+                model: string;
+                window_hours?: 24 | 168;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ChannelMarketInsights"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getChannelMarketDisclosure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ChannelMarketDisclosure"] | null;
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    putChannelMarketDisclosure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelMarketDisclosureInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["ChannelMarketDisclosure"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getCurrentPolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["CurrentPolicies"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    getPolicyAcceptances: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["PolicyAcceptance"][];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
+    acceptPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PolicyAcceptanceInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        success: true;
+                        message?: string;
+                        data: components["schemas"]["PolicyAcceptance"];
+                    };
+                };
+            };
+            400: components["responses"]["Failure"];
+            401: components["responses"]["Failure"];
+            403: components["responses"]["Failure"];
+            404: components["responses"]["Failure"];
+            409: components["responses"]["Failure"];
+            429: components["responses"]["Failure"];
+            500: components["responses"]["Failure"];
+            503: components["responses"]["Failure"];
+        };
+    };
 }
 
 export const integerRequestFields: Readonly<Record<string, readonly (readonly string[])[]>> = {
@@ -23288,6 +31414,303 @@ export const integerRequestFields: Readonly<Record<string, readonly (readonly st
   "POST:/api/wallet/transfers": [
     [
       "amount_micro"
+    ]
+  ],
+  "PUT:/api/models/favorites": [
+    [
+      "model_id"
+    ]
+  ],
+  "PUT:/api/models/favorites/": [
+    [
+      "model_id"
+    ]
+  ],
+  "POST:/api/ratio_sync/fetch": [
+    [
+      "channel_ids",
+      "*"
+    ],
+    [
+      "upstreams",
+      "*",
+      "id"
+    ]
+  ],
+  "POST:/api/ratio_sync/apply": [
+    [
+      "prices",
+      "*",
+      "input_per_mtok"
+    ],
+    [
+      "prices",
+      "*",
+      "output_per_mtok"
+    ],
+    [
+      "prices",
+      "*",
+      "cache_read_per_mtok"
+    ],
+    [
+      "prices",
+      "*",
+      "cache_write_per_mtok"
+    ],
+    [
+      "prices",
+      "*",
+      "per_request"
+    ]
+  ],
+  "POST:/api/desktop/tokens": [
+    [
+      "id"
+    ],
+    [
+      "budget_micro_credits"
+    ],
+    [
+      "max_marketplace_multiplier_ppm"
+    ],
+    [
+      "budget_account_id"
+    ],
+    [
+      "user_id"
+    ],
+    [
+      "spent_micro_credits"
+    ]
+  ],
+  "PUT:/api/desktop/tokens": [
+    [
+      "id"
+    ],
+    [
+      "budget_micro_credits"
+    ],
+    [
+      "max_marketplace_multiplier_ppm"
+    ],
+    [
+      "budget_account_id"
+    ],
+    [
+      "user_id"
+    ],
+    [
+      "spent_micro_credits"
+    ]
+  ],
+  "POST:/api/desktop/import/deeplink": [
+    [
+      "token_id"
+    ]
+  ],
+  "POST:/api/subscription/self/wallet-conversion/quote": [
+    [
+      "subscription_id"
+    ]
+  ],
+  "PUT:/api/subscription/admin/redesign-rules": [
+    [
+      "conversion_rules",
+      "*",
+      "id"
+    ],
+    [
+      "conversion_rules",
+      "*",
+      "plan_id"
+    ],
+    [
+      "conversion_rules",
+      "*",
+      "source_credits"
+    ],
+    [
+      "conversion_rules",
+      "*",
+      "wallet_credits"
+    ],
+    [
+      "conversion_rules",
+      "*",
+      "paid_wallet_credits"
+    ],
+    [
+      "conversion_rules",
+      "*",
+      "recognized_revenue_credits"
+    ],
+    [
+      "conversion_rules",
+      "*",
+      "refreshed_paid_wallet_credits"
+    ],
+    [
+      "conversion_rules",
+      "*",
+      "revision"
+    ],
+    [
+      "card_rules",
+      "*",
+      "id"
+    ],
+    [
+      "card_rules",
+      "*",
+      "reference_plan_id"
+    ],
+    [
+      "card_rules",
+      "*",
+      "card_plan_id"
+    ],
+    [
+      "card_rules",
+      "*",
+      "credits"
+    ],
+    [
+      "card_rules",
+      "*",
+      "cost_per_card"
+    ],
+    [
+      "card_rules",
+      "*",
+      "baseline_cost"
+    ],
+    [
+      "card_rules",
+      "*",
+      "budget_total"
+    ],
+    [
+      "card_rules",
+      "*",
+      "budget_reserved"
+    ],
+    [
+      "card_rules",
+      "*",
+      "incremental_budget_total"
+    ],
+    [
+      "card_rules",
+      "*",
+      "incremental_reserved"
+    ],
+    [
+      "card_rules",
+      "*",
+      "revision"
+    ]
+  ],
+  "POST:/api/subscription/self/reset-cards/quote": [
+    [
+      "rule_id"
+    ]
+  ],
+  "PUT:/api/subscription/admin/referral-policy": [
+    [
+      "revision"
+    ],
+    [
+      "ancillary_cost_ppm"
+    ],
+    [
+      "reward_ppm"
+    ],
+    [
+      "profit_share_ppm"
+    ],
+    [
+      "max_reward_credits"
+    ],
+    [
+      "total_budget_credits"
+    ],
+    [
+      "reserved_credits"
+    ],
+    [
+      "spent_credits"
+    ]
+  ],
+  "PUT:/api/subscription/admin/wallet-conversion-review/{id}": [
+    [
+      "id"
+    ],
+    [
+      "subscription_id"
+    ],
+    [
+      "revision"
+    ],
+    [
+      "segments",
+      "*",
+      "original_order_id"
+    ],
+    [
+      "segments",
+      "*",
+      "source_total"
+    ],
+    [
+      "segments",
+      "*",
+      "current_credits"
+    ],
+    [
+      "segments",
+      "*",
+      "future_credits"
+    ],
+    [
+      "segments",
+      "*",
+      "wallet_credits"
+    ],
+    [
+      "segments",
+      "*",
+      "paid_wallet_credits"
+    ],
+    [
+      "segments",
+      "*",
+      "target_credits"
+    ],
+    [
+      "segments",
+      "*",
+      "paid_credits"
+    ],
+    [
+      "segments",
+      "*",
+      "revenue_multiplier_ppm"
+    ],
+    [
+      "reviewer_id"
+    ]
+  ],
+  "PUT:/api/marketplace/channels/{id}/disclosure": [
+    [
+      "models",
+      "*",
+      "context_tokens"
+    ],
+    [
+      "models",
+      "*",
+      "max_output_tokens"
     ]
   ]
 };

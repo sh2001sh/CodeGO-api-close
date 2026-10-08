@@ -1,0 +1,26 @@
+# Optional capacity profile; PostgreSQL requires a 4 GiB memory budget.
+# Combine with compose.test.yaml. Keep the normal durability settings enabled.
+services:
+  postgres:
+    command: [postgres, -c, shared_buffers=1GB, -c, max_wal_size=4GB]
+    cpus: 4
+    mem_limit: 4g
+    shm_size: 1gb
+  gateway:
+    cpus: 4
+    mem_limit: 4g
+  control:
+    cpus: 2
+    mem_limit: 2g
+  worker:
+    cpus: 2
+    mem_limit: 2g
+    environment:
+      V3_LEDGER_CONSUMERS: ${V3_LEDGER_CONSUMERS:-2}
+      V3_LEDGER_BATCH_SIZE: ${V3_LEDGER_BATCH_SIZE:-500}
+  redis:
+    cpus: 2
+    mem_limit: 4g
+  web:
+    cpus: 2
+    mem_limit: 1g

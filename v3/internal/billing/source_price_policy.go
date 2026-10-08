@@ -59,6 +59,12 @@ func freezeSourcePolicies(req *gateway.Request, snap *catalog.Snapshot, prices m
 		return false, nil
 	}
 	monthly, hasPackage := profile.PackageCard("monthly_pass_multiplier", now)
+	legacyActive := false
+	for _, bucket := range profile.Subscriptions {
+		if bucket.PolicyVersion != "standard_v2" && !now.Before(bucket.StartsAt) && now.Before(bucket.ExpiresAt) {
+			legacyActive = true
+		}
+	}
 	pref, err := normalizeFundingPreference(profile.BillingPreference, profile.FundingSourceOrder)
 	if err != nil {
 		return false, err
@@ -86,10 +92,13 @@ func freezeSourcePolicies(req *gateway.Request, snap *catalog.Snapshot, prices m
 				continue
 			}
 			factor := new(big.Int).Mul(big.NewInt(value.MultiplierPPM), big.NewInt(10))
-			if !factor.IsInt64() {
+			if !factor.IsInt64() && legacyActive {
 				return false, fmt.Errorf("billing: market subscription factor overflow")
 			}
-			value.SubscriptionFactorPPM, value.SubscriptionAllowed = factor.Int64(), true
+			value.SubscriptionFactorPPM, value.SubscriptionAllowed = value.MultiplierPPM, true
+			if legacyActive {
+				value.SubscriptionFactorPPM = factor.Int64()
+			}
 		} else {
 			policy, factor, err := officialSubscriptionPolicy(snap, target.Group)
 			if err != nil {
@@ -105,10 +114,31 @@ func freezeSourcePolicies(req *gateway.Request, snap *catalog.Snapshot, prices m
 			value.PackagePPM = monthly.MultiplierPPM
 		}
 		value.SubscriptionAccounts = make(map[int64]bool)
+		value.SubscriptionPolicies = make(map[int64]subscriptionPrice)
 		for _, bucket := range profile.Subscriptions {
+			if bucket.PolicyVersion != "" && bucket.PolicyVersion != "legacy" && bucket.PolicyVersion != "standard_v2" {
+				return false, fmt.Errorf("billing: invalid subscription policy version")
+			}
 			if value.SubscriptionAllowed && !now.Before(bucket.StartsAt) && now.Before(bucket.ExpiresAt) && subscriptionBucketAllows(bucket, req.Model, paidOnly) {
 				value.SubscriptionAccounts[bucket.AccountID] = true
+				version := bucket.PolicyVersion
+				if version == "" {
+					version = "legacy"
+				}
+				var revenue *int64
+				if bucket.RevenueMultiplierPPM != nil {
+					frozen := *bucket.RevenueMultiplierPPM
+					revenue = &frozen
+				}
+				value.SubscriptionPolicies[bucket.AccountID] = subscriptionPrice{PolicyVersion: version, OrderID: bucket.OrderID, RevenueMultiplierPPM: revenue}
 			}
+		}
+		if !legacyActive {
+			value.SubscriptionFactorPPM = value.MultiplierPPM
+			if value.MultiplierPPM == 0 {
+				value.SubscriptionFactorPPM = 1_000_000
+			}
+			value.PackagePPM = 1_000_000
 		}
 		prices[key] = value
 	}

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Button, ErrorMessage, Field } from './ui'
 import { useTranslation } from '../lib/i18n'
-import type { Schema } from '../lib/types'
+import { FetchModelsAction } from '../features/catalog/fetch-models'
+import type { Channel } from '../features/catalog/types'
 
-export type Channel = Schema['CatalogChannel']
+export type { Channel }
 
 function mapping(value: unknown): Record<string, string> | null {
   if (value === null) return null
@@ -45,6 +46,10 @@ export function ChannelForm(props: {
   const { t } = useTranslation()
   const [error, setError] = useState<Error | null>(null)
   const c = props.channel
+  const [provider, setProvider] = useState(c?.provider ?? 'openai')
+  const [baseURL, setBaseURL] = useState(c?.base_url ?? '')
+  const [secret, setSecret] = useState('')
+  const [models, setModels] = useState(c?.models ?? [])
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
@@ -57,19 +62,19 @@ export function ChannelForm(props: {
         .filter(Boolean)
     try {
       const advanced = advancedConfiguration(text('advanced'))
-      const credentials = text('secret').trim()
+      const credentials = secret.trim()
         ? {
-            credentials: [{ secret: text('secret'), kind: text('credential_kind') }],
+            credentials: [{ secret, kind: text('credential_kind') }],
             append_credentials: Boolean(c),
           }
         : {}
       props.onSave({
         ...c,
         id: c?.id ?? 0,
-        tag: c?.tag ?? null,
+        tag: text('tag') || null,
         name: text('name'),
-        provider: text('provider'),
-        base_url: text('base_url'),
+        provider,
+        base_url: baseURL,
         proxy_url: text('proxy_url'),
         status: text('status'),
         scope: text('scope'),
@@ -79,7 +84,7 @@ export function ChannelForm(props: {
         max_concurrency: Number(text('max_concurrency')),
         max_user_concurrency: Number(text('max_user_concurrency')),
         groups: list('groups'),
-        models: list('models'),
+        models,
         remark: text('remark'),
         auto_disable: form.has('auto_disable'),
         multiplier_card_supported: form.has('multiplier_card_supported'),
@@ -93,8 +98,26 @@ export function ChannelForm(props: {
   return (
     <form className="form-panel" onSubmit={submit}>
       <Field name="name" label="名称" required defaultValue={c?.name} maxLength={255} />
-      <Field name="provider" label="Provider" required defaultValue={c?.provider ?? 'openai'} />
-      <Field name="base_url" label="上游地址" type="url" defaultValue={c?.base_url} />
+      <label className="field" htmlFor="provider">
+        <span>{t('Provider')}</span>
+        <input
+          id="provider"
+          name="provider"
+          required
+          value={provider}
+          onChange={(event) => setProvider(event.target.value)}
+        />
+      </label>
+      <label className="field" htmlFor="base_url">
+        <span>{t('上游地址')}</span>
+        <input
+          id="base_url"
+          name="base_url"
+          type="url"
+          value={baseURL}
+          onChange={(event) => setBaseURL(event.target.value)}
+        />
+      </label>
       <Field name="proxy_url" label="代理地址" defaultValue={c?.proxy_url} />
       <Field
         name="groups"
@@ -102,7 +125,31 @@ export function ChannelForm(props: {
         defaultValue={c?.groups?.join(', ') ?? 'default'}
         required
       />
-      <Field name="models" label="模型" defaultValue={c?.models?.join(', ')} required />
+      <Field name="tag" label="标签" defaultValue={c?.tag ?? ''} />
+      <label className="field" htmlFor="models_display">
+        <span>{t('模型')}</span>
+        <input
+          id="models_display"
+          required
+          value={models.join(', ')}
+          onChange={(event) =>
+            setModels(
+              event.target.value
+                .split(',')
+                .map((item) => item.trim())
+                .filter(Boolean),
+            )
+          }
+        />
+      </label>
+      <FetchModelsAction
+        channelID={c ? String(c.id) : undefined}
+        provider={provider}
+        baseURL={baseURL}
+        secret={secret}
+        selected={models}
+        onPick={setModels}
+      />
       <Field name="priority" label="优先级" type="number" defaultValue={String(c?.priority ?? 0)} />
       <Field
         name="weight"
@@ -148,7 +195,15 @@ export function ChannelForm(props: {
         defaultValue={String(c?.owner_user_id ?? '')}
       />
       <Field name="remark" label="备注" defaultValue={c?.remark} />
-      <Field name="secret" label={c ? '添加凭据' : '凭据'} type="password" />
+      <label className="field" htmlFor="secret">
+        <span>{t(c ? '添加凭据' : '凭据')}</span>
+        <input
+          id="secret"
+          type="password"
+          value={secret}
+          onChange={(event) => setSecret(event.target.value)}
+        />
+      </label>
       <label className="field" htmlFor="credential-kind">
         <span>{t('凭据类型')}</span>
         <select id="credential-kind" name="credential_kind">
@@ -156,19 +211,19 @@ export function ChannelForm(props: {
           <option value="oauth">OAuth</option>
         </select>
       </label>
-      <label>
-        <input type="checkbox" name="auto_disable" defaultChecked={c?.auto_disable} />{' '}
+      <label className="checkbox-field">
+        <input type="checkbox" name="auto_disable" defaultChecked={c?.auto_disable} />
         {t('自动停用')}
       </label>
-      <label>
+      <label className="checkbox-field">
         <input
           type="checkbox"
           name="multiplier_card_supported"
           defaultChecked={c?.multiplier_card_supported}
-        />{' '}
+        />
         {t('支持倍率卡')}
       </label>
-      <label className="field" style={{ flexBasis: '100%' }} htmlFor="advanced">
+      <label className="field full-width" style={{ flexBasis: '100%' }} htmlFor="advanced">
         <span>{t('高级配置')}</span>
         <textarea
           rows={6}

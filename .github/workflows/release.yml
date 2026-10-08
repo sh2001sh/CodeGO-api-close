@@ -1,4 +1,4 @@
-name: Release (Linux, macOS, Windows)
+name: Legacy v2 binaries (manual)
 permissions:
   contents: write
 
@@ -8,10 +8,6 @@ on:
       name:
         description: 'reason'
         required: false
-  push:
-    tags:
-      - '*'
-      - '!*-alpha*'
 
 jobs:
   linux:

@@ -21,7 +21,7 @@ import (
 
 func TestAttachmentsNativeMultipartPersistenceAndDeletion(t *testing.T) {
 	store := filesTestStore(t)
-	raw := []byte{0, 1, 255, 128, 13, 10, 34, 42}
+	raw := filesTestPNG(t)
 	file, err := store.Create(context.Background(), 11, "图像.bin", "vision", "image/png", bytes.NewReader(raw), 1024)
 	if err != nil {
 		t.Fatal(err)

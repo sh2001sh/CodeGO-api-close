@@ -1,3 +1,4 @@
+import { useTranslation } from '../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { api, unwrap } from '../lib/api'
@@ -8,6 +9,7 @@ import { Button, ErrorMessage, Field } from '../components/ui'
 import { errorFrom } from './commerce/amounts'
 
 export function AffiliateTransfer() {
+  const { t } = useTranslation()
   const client = useQueryClient()
   const profile = useSuspenseQuery(sessionOptions()).data
   const balance = BigInt(profile.affiliate_micro_credits ?? 0)
@@ -32,13 +34,18 @@ export function AffiliateTransfer() {
   }
   if (balance <= 0n && !draft && !transfer.isSuccess) return null
   return (
-    <section className="section" aria-label="可提现余额转入钱包">
-      <h2>可提现余额</h2>
-      <p>当前可提现余额：{credits(balance)}</p>
-      <p className="muted">转入钱包后可用于当前服务消费，最低转入 1 credit。</p>
+    <section className="section" aria-label={t('可提现余额转入钱包')}>
+      <h2>{t('可提现余额')}</h2>
+      <p>
+        {t('当前可提现余额：')}
+        {credits(balance)}
+      </p>
+      <p className="muted">{t('转入钱包后可用于当前服务消费，最低转入 1 credit。')}</p>
       <ErrorMessage error={error ?? transfer.error} />
       {transfer.data && (
-        <p role="status">已转入钱包 {credits(transfer.data.amount_micro_credits)}</p>
+        <p role="status">
+          {t('已转入钱包')} {credits(transfer.data.amount_micro_credits)}
+        </p>
       )}
       {!draft && balance >= 1_000_000n && (
         <form
@@ -59,7 +66,7 @@ export function AffiliateTransfer() {
         >
           <Field name="affiliate-amount" label="转入金额 credits" required placeholder="1.00" />
           <Button type="submit" disabled={transfer.isPending}>
-            核对转入金额
+            {t('核对转入金额')}
           </Button>
           <Button
             variant="quiet"
@@ -69,26 +76,32 @@ export function AffiliateTransfer() {
               prepare(balance)
             }}
           >
-            全部转入钱包
+            {t('全部转入钱包')}
           </Button>
         </form>
       )}
       {!draft && balance > 0n && balance < 1_000_000n && (
-        <p className="muted">余额不足 1 credit，暂时无法转入。</p>
+        <p className="muted">{t('余额不足 1 credit，暂时无法转入。')}</p>
       )}
       {draft && (
         <div className="form-panel">
-          <p className="full-width">确认将 {credits(draft.amount_micro_credits)} 转入钱包？</p>
+          <p className="full-width">
+            {t('确认将')} {credits(draft.amount_micro_credits)} {t('转入钱包？')}
+          </p>
           <Button disabled={transfer.isPending} onClick={() => transfer.mutate(draft)}>
-            {transfer.isPending ? '转入中…' : transfer.isError ? '重试同一次转入' : '确认转入钱包'}
+            {transfer.isPending
+              ? t('转入中…')
+              : transfer.isError
+                ? t('重试同一次转入')
+                : t('确认转入钱包')}
           </Button>
           {!transfer.isError && (
             <Button variant="quiet" disabled={transfer.isPending} onClick={() => setDraft(null)}>
-              返回修改
+              {t('返回修改')}
             </Button>
           )}
           {transfer.isError && (
-            <p className="muted full-width">重试会核对同一次转入结果，请勿重复创建转入。</p>
+            <p className="muted full-width">{t('重试会核对同一次转入结果，请勿重复创建转入。')}</p>
           )}
         </div>
       )}

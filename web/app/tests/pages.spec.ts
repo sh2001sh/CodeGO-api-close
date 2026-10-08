@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { fixtureAPI } from './fixtures'
+import { selectLanguage } from './language-helper'
 
 test.beforeEach(async ({ page }) => fixtureAPI(page))
 
@@ -11,18 +12,15 @@ for (const [path, heading] of [
   ['/wallet', '钱包'],
   ['/usage-logs', '使用日志'],
   ['/orders', '订单'],
-  ['/group-buy', '拼团'],
   ['/blind-box', '盲盒'],
   ['/channels', '渠道'],
   ['/users', '用户'],
   ['/settings', '系统设置'],
-  ['/community', '社区'],
   ['/profile', '个人资料'],
   ['/channel-market', '渠道市场'],
-  ['/my-channels', '我的渠道'],
+  ['/my-channels', '渠道工作台'],
   ['/market-admin', '渠道市场审核'],
   ['/transfers', '钱包转账'],
-  ['/invoices', '发票'],
   ['/redemptions', '兑换码管理'],
   ['/subscriptions', '套餐管理'],
 ]) {
@@ -65,7 +63,7 @@ test('creates a key and reveals the new value once', async ({ page }) => {
 test('shows exact credits and lazy-loads the English language pack', async ({ page }) => {
   await page.goto('/dashboard')
   await expect(page.getByText('123.456789 credits', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'EN', exact: true }).click()
+  await selectLanguage(page, 'English')
   await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible()
 })
 
@@ -129,11 +127,14 @@ test('blind-box retry reuses the operation identifier after a server failure', a
         : { json: { success: true, data: { id: 1 } } },
     )
   })
-  page.on('dialog', (dialog) => dialog.accept())
+  const confirm = () =>
+    page.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click()
   await page.goto('/blind-box')
   await page.getByRole('button', { name: '购买', exact: true }).click()
+  await confirm()
   await expect(page.getByRole('alert')).toHaveText('账本服务暂时不可用')
   await page.getByRole('button', { name: '购买', exact: true }).click()
+  await confirm()
   await expect(page.getByRole('alert')).toHaveCount(0)
   expect(identifiers).toHaveLength(2)
   expect(identifiers[0]).toBe(identifiers[1])

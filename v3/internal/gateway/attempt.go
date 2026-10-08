@@ -61,6 +61,11 @@ func (g *Gateway) attempt(clientCtx context.Context, req *Request, target Target
 	defer func() { _ = events.Close() }()
 	f, result = g.relay(upCtx, req, events, cs, sent)
 	result.TTFT = f.ttft
+	if !req.Stream {
+		// Routing retains its legacy buffered-response latency; public TTFT
+		// requires genuine streaming output.
+		f.ttft = 0
+	}
 	if f.usage != nil && !f.usage.Estimated {
 		result.PromptTokens, result.CachedTokens = f.usage.PromptTokens, f.usage.CachedTokens
 	}
@@ -159,8 +164,13 @@ func (g *Gateway) sendProviderRequest(upCtx context.Context, provider Provider, 
 // relay pumps events to the client until the stream ends. Before the first
 // data event nothing is visible to the client, so an in-band error or an
 // empty stream is reported as retryable and the next candidate takes over.
-func (g *Gateway) relay(upCtx context.Context, req *Request, events EventStream, cs *clientStream, sent time.Time) (finish, AttemptResult) {
-	var f finish
+func (g *Gateway) relay(upCtx context.Context, req *Request, events EventStream, cs *clientStream, sent time.Time) (f finish, result AttemptResult) {
+	defer func() {
+		// Measure before finalization, which may include a billing outage.
+		if req.Stream && f.ttft > 0 {
+			f.generation = time.Since(sent) - f.ttft
+		}
+	}()
 	var textBytes int64
 loop:
 	for {

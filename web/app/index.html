@@ -1,10 +1,23 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-HK" dir="ltr" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#faf7f3" />
-    <title>CodeGo · new-api</title>
+    <link rel="icon" type="image/svg+xml" href="/brand/codego-logo.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#141416" media="(prefers-color-scheme: dark)" />
+    <meta
+      name="description"
+      content="CodeGo AI — 由香港 CodeGo AI Limited（码高智能有限公司）运营的统一模型 API 平台，提供模型路由、渠道市场与按量计费。"
+    />
+    <title>CodeGo AI · 统一模型 API 平台</title>
+    <script>
+      // Apply the saved theme before first paint to avoid a light flash in dark mode.
+      try {
+        var theme = localStorage.getItem('codego.theme')
+        if (theme === 'dark' || theme === 'system') document.documentElement.dataset.theme = theme
+      } catch (_) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

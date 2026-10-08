@@ -46,7 +46,26 @@ func (p *PostgresRepository) Create(ctx context.Context, t Task) error {
 }
 
 func (p *PostgresRepository) GetOwned(ctx context.Context, id string, userID int64) (Task, error) {
-	return scan(p.Pool.QueryRow(ctx, `SELECT `+columns+` FROM v3_workflow.tasks WHERE id=$1 AND user_id=$2`, id, userID))
+	t, err := scan(p.Pool.QueryRow(ctx, `SELECT `+columns+` FROM v3_workflow.tasks WHERE id=$1 AND user_id=$2`, id, userID))
+	if !errors.Is(err, ErrNotFound) {
+		return t, err
+	}
+	err = p.Pool.QueryRow(ctx, `SELECT id,user_id,group_name,provider,channel_id,model,upstream_model,upstream_id,
+	 action,status,provider_data,result_url,error_message,actual_credits,created_at,updated_at
+	 FROM v3_workflow.legacy_tasks WHERE id=$1 AND user_id=$2`, id, userID).Scan(
+		&t.ID, &t.UserID, &t.Group, &t.Provider, &t.ChannelID, &t.Model, &t.UpstreamModel, &t.UpstreamID,
+		&t.Action, &t.Status, &t.Data, &t.URL, &t.Error, &t.ActualCredits, &t.CreatedAt, &t.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Task{}, ErrNotFound
+	}
+	if err != nil {
+		return Task{}, err
+	}
+	t.Historical, t.CostState = true, "settled"
+	if t.Status == "failed" {
+		t.CostState = "refunded"
+	}
+	return t, nil
 }
 
 func (p *PostgresRepository) Pending(ctx context.Context, limit int) ([]Task, error) {

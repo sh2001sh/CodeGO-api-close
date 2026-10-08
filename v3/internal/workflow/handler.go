@@ -20,6 +20,7 @@ type Config struct {
 	Authorizer      gateway.Authorizer
 	Planner         gateway.Planner
 	Settler         Settler
+	Requests        gateway.RequestRecorder
 	Repository      TaskRepository
 	ResolveTarget   TargetResolver
 	Providers       map[string]native.Adapter

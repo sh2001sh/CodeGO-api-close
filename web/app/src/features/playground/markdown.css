@@ -1,0 +1,97 @@
+.chat-markdown {
+  min-width: 0;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.chat-markdown p {
+  margin: 0 0 var(--space-3);
+}
+.chat-markdown > div:last-child > :last-child {
+  margin-bottom: 0;
+}
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4,
+.chat-markdown h5,
+.chat-markdown h6 {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--text-lg);
+  line-height: 1.45;
+  font-weight: 600;
+}
+.chat-markdown h3,
+.chat-markdown h4,
+.chat-markdown h5,
+.chat-markdown h6 {
+  font-size: var(--text-base);
+}
+.chat-markdown > div:first-child > :first-child {
+  margin-top: 0;
+}
+.chat-markdown ul,
+.chat-markdown ol {
+  padding-inline-start: var(--space-6);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.chat-markdown li > p {
+  margin-block: var(--space-1);
+}
+.chat-markdown blockquote {
+  margin: var(--space-3) 0;
+  padding-inline-start: var(--space-4);
+  border-inline-start: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+}
+.chat-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.chat-markdown :not(pre) > code {
+  padding: 2px 4px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+}
+.chat-markdown .code-block {
+  margin-block: var(--space-3);
+}
+.chat-markdown pre {
+  margin: 0;
+  padding-block-start: var(--space-8);
+  overflow-x: auto;
+}
+.chat-code-language {
+  position: absolute;
+  inset-block-start: var(--space-3);
+  inset-inline-start: var(--space-4);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.chat-markdown a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.chat-markdown .table-scroll {
+  margin-block: var(--space-3);
+  max-width: 100%;
+}
+.chat-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.chat-markdown th,
+.chat-markdown td {
+  padding: var(--space-2) var(--space-3);
+  border-block-end: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+.chat-markdown th {
+  font-weight: 600;
+}
+.chat-markdown hr {
+  border: 0;
+  border-block-start: 1px solid var(--border);
+  margin-block: var(--space-5);
+}

@@ -3,7 +3,6 @@ package ledger
 import (
 	"context"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -31,7 +30,12 @@ func fundingID(parts ...string) string {
 }
 
 func fundingSource(e billing.Entry) string {
+	if source, _ := e.Metadata["source"].(string); source == "referral_reward" || source == "subscription_conversion" {
+		return source
+	}
 	switch {
+	case e.Kind == "referral_reward" || e.Reason == "referral_consumption_reward" || e.Reason == "referral_reward":
+		return "referral_reward"
 	case e.Kind == "topup":
 		return "topup"
 	case e.Kind == "reward" && e.Reason == "blind_box_reward":
@@ -46,15 +50,7 @@ func fundingSource(e billing.Entry) string {
 }
 
 func createFundingLotTx(ctx context.Context, tx pgx.Tx, account int64, amount credits.Micro, source, origin, key string, now time.Time) error {
-	var ppm int64
-	err := tx.QueryRow(ctx, `SELECT revenue_multiplier_ppm FROM v3_billing.funding_source_policies WHERE source=$1`, source).Scan(&ppm)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO v3_billing.funding_lots
-	 (lot_id,source_account_id,account_id,source,reference_type,reference_id,idempotency_key,original_amount,remaining_amount,revenue_multiplier_ppm,created_at)
-	 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10)`, fundingID("lot", key), fmt.Sprintf("native:account:%d", account), account, source, origin, key, "native:lot:"+key, int64(amount), ppm, now)
-	return err
+	return createFundingLotPolicyTx(ctx, tx, account, amount, source, origin, key, nil, false, false, []byte(`{}`), now)
 }
 
 func recordFundingEntryTx(ctx context.Context, tx pgx.Tx, e billing.Entry, before credits.Micro, now time.Time) error {
@@ -63,7 +59,15 @@ func recordFundingEntryTx(ctx context.Context, tx pgx.Tx, e billing.Entry, befor
 		return err // limits/subscriptions/platform accounts are not wallet money
 	}
 	if e.Amount > 0 {
-		if err := createFundingLotTx(ctx, tx, e.AccountID, e.Amount, fundingSource(e), e.Kind, e.OperationID, now); err != nil {
+		if e.Reason == "wallet_peer_transfer_credit" {
+			return createPeerTransferFundingLotsTx(ctx, tx, e, now)
+		}
+		if e.Kind == "refund" {
+			if handled, err := restoreRefundFundingLotsTx(ctx, tx, e); handled || err != nil {
+				return err
+			}
+		}
+		if err := createFundingEntryLotTx(ctx, tx, e, now); err != nil {
 			return err
 		}
 		if e.Kind == "reward" && e.Reason == "blind_box_reward" {
@@ -78,15 +82,24 @@ func recordFundingEntryTx(ctx context.Context, tx pgx.Tx, e billing.Entry, befor
 	if e.Amount == credits.Micro(math.MinInt64) {
 		return credits.ErrOverflow
 	}
+	if e.Reason == conversionProviderRefundReason {
+		return recordConversionRevocationEntryTx(ctx, tx, e, now)
+	}
 	peer := e.Reason == "wallet_peer_transfer_debit"
 	request := e.RequestID
 	if request == "" {
 		request = "native:operation:" + e.OperationID
 	}
-	if err := allocateFundingTx(ctx, tx, e.AccountID, request, -e.Amount, before, now); err != nil {
+	mode := fundingOwnerSpend
+	if peer {
+		mode = fundingPeerTransfer
+	} else if e.Kind == "refund" {
+		mode = fundingRefund
+	}
+	if err := allocateFundingModeTx(ctx, tx, e.AccountID, request, -e.Amount, before, now, mode, fundingTopupRefundTrade(e)); err != nil {
 		return err
 	}
-	if !peer {
+	if mode == fundingOwnerSpend {
 		return consumeWalletRewardHoldsTx(ctx, tx, e.AccountID, -e.Amount)
 	}
 	return nil
@@ -94,17 +107,29 @@ func recordFundingEntryTx(ctx context.Context, tx pgx.Tx, e billing.Entry, befor
 
 // Reject a known locked reward before taking any Redis posting reservation.
 func ensureWalletTransferTx(ctx context.Context, tx pgx.Tx, e billing.Entry, now time.Time) error {
-	if e.Amount >= 0 || e.Reason != "wallet_peer_transfer_debit" {
+	if e.Amount >= 0 || (e.Reason != "wallet_peer_transfer_debit" && e.Kind != "refund") {
 		return nil
+	}
+	kind, err := accountKindTx(ctx, tx, e.AccountID)
+	if err != nil || kind != "wallet" {
+		return err
 	}
 	if e.Amount == credits.Micro(math.MinInt64) {
 		return credits.ErrOverflow
 	}
-	available, err := TransferableBalanceTx(ctx, tx, e.AccountID, now)
+	var available credits.Micro
+	if e.Kind == "refund" {
+		available, err = RefundableBalanceTx(ctx, tx, e.AccountID)
+	} else {
+		available, err = TransferableBalanceTx(ctx, tx, e.AccountID, now)
+	}
 	if err != nil {
 		return err
 	}
 	if available < -e.Amount {
+		if e.Kind == "refund" {
+			return ErrWalletRewardRefundLocked
+		}
 		return ErrWalletRewardTransferLocked
 	}
 	return nil
@@ -113,11 +138,17 @@ func ensureWalletTransferTx(ctx context.Context, tx pgx.Tx, e billing.Entry, now
 type fundingLot struct {
 	id, sourceAccount, source string
 	remaining, ppm            int64
+	nonTransferable           bool
+	nonRefundable             bool
 }
 
 // Each caller is a fresh immutable ledger operation. Historical allocation
 // collisions are errors, not permission to debit the same money again.
 func allocateFundingTx(ctx context.Context, tx pgx.Tx, account int64, request string, amount, before credits.Micro, now time.Time) error {
+	return allocateFundingModeTx(ctx, tx, account, request, amount, before, now, fundingOwnerSpend, "")
+}
+
+func allocateFundingModeTx(ctx context.Context, tx pgx.Tx, account int64, request string, amount, before credits.Micro, now time.Time, mode fundingSpendMode, topupTrade string) error {
 	exists, err := fundingAllocationExistsTx(ctx, tx, request, account)
 	if err != nil {
 		return err
@@ -125,19 +156,26 @@ func allocateFundingTx(ctx context.Context, tx pgx.Tx, account int64, request st
 	if exists {
 		return fmt.Errorf("%w: historical funding allocation %s", billing.ErrPostConflict, request)
 	}
-	lots, known, err := lockFundingLotsTx(ctx, tx, account)
+	lots, known, err := lockFundingLotsTx(ctx, tx, account, topupTrade)
 	if err != nil {
 		return err
 	}
 	// Preserve explicitly unattributed preexisting money as such. Native credits
 	// always create exact-origin lots; no topup is relabeled as a legacy reward.
-	if deficit := amount - known; deficit > 0 {
+	deficit := amount - known
+	if mode != fundingOwnerSpend {
+		// A restricted transfer may need pre-provenance paid money even when
+		// known reward lots exceed its amount. Never invent overdraft funds to
+		// bypass permanent restrictions.
+		deficit = before - known
+	}
+	if deficit > 0 {
 		lots, err = backfillUnattributedLotsTx(ctx, tx, account, request, deficit, before, known, lots, now)
 		if err != nil {
 			return err
 		}
 	}
-	return consumeFundingLotsTx(ctx, tx, account, request, amount, lots, now)
+	return consumeFundingModeLotsTx(ctx, tx, account, request, amount, lots, now, mode)
 }
 
 // fundingAllocationExistsTx reports whether request has already been
@@ -146,36 +184,6 @@ func fundingAllocationExistsTx(ctx context.Context, tx pgx.Tx, request string, a
 	var exists bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_billing.funding_allocations WHERE request_id=$1 AND account_id=$2)`, request, account).Scan(&exists)
 	return exists, err
-}
-
-// lockFundingLotsTx locks account's open funding lots in allocation order
-// and returns them along with their total remaining amount.
-func lockFundingLotsTx(ctx context.Context, tx pgx.Tx, account int64) ([]fundingLot, credits.Micro, error) {
-	rows, err := tx.Query(ctx, `SELECT lot_id,source_account_id,source,remaining_amount,revenue_multiplier_ppm FROM v3_billing.funding_lots
-	 WHERE account_id=$1 AND remaining_amount>0 ORDER BY created_at,lot_id FOR UPDATE`, account)
-	if err != nil {
-		return nil, 0, err
-	}
-	var lots []fundingLot
-	var known credits.Micro
-	for rows.Next() {
-		var lot fundingLot
-		if err := rows.Scan(&lot.id, &lot.sourceAccount, &lot.source, &lot.remaining, &lot.ppm); err != nil {
-			rows.Close()
-			return nil, 0, err
-		}
-		known, err = known.Add(credits.Micro(lot.remaining))
-		if err != nil {
-			rows.Close()
-			return nil, 0, err
-		}
-		lots = append(lots, lot)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	return lots, known, nil
 }
 
 // backfillUnattributedLotsTx creates lots to cover a deficit between what
@@ -208,14 +216,33 @@ func backfillUnattributedLotsTx(ctx context.Context, tx pgx.Tx, account int64, r
 	return lots, nil
 }
 
-// consumeFundingLotsTx draws amount from lots in order, recording each draw
-// as a funding allocation.
-func consumeFundingLotsTx(ctx context.Context, tx pgx.Tx, account int64, request string, amount credits.Micro, lots []fundingLot, now time.Time) error {
+// Consume only eligible source lots, preserving the original attribution.
+func consumeFundingModeLotsTx(ctx context.Context, tx pgx.Tx, account int64, request string, amount credits.Micro, lots []fundingLot, now time.Time, mode fundingSpendMode) error {
+	var legacyLocked credits.Micro
+	if mode == fundingPeerTransfer {
+		var err error
+		legacyLocked, err = legacyLockedRewardAmountTx(ctx, tx, account, now)
+		if err != nil {
+			return err
+		}
+	}
 	remaining := int64(amount)
 	for _, lot := range lots {
-		used := min(lot.remaining, remaining)
-		if used == 0 {
+		if remaining == 0 {
 			break
+		}
+		if mode == fundingPeerTransfer && lot.nonTransferable || mode == fundingRefund && lot.nonRefundable {
+			continue
+		}
+		available := lot.remaining
+		if mode == fundingPeerTransfer && lot.source == "blind_box" {
+			protected := min(available, int64(legacyLocked))
+			available -= protected
+			legacyLocked -= credits.Micro(protected)
+		}
+		used := min(available, remaining)
+		if used == 0 {
+			continue
 		}
 		if _, err := tx.Exec(ctx, `UPDATE v3_billing.funding_lots SET remaining_amount=remaining_amount-$2 WHERE lot_id=$1`, lot.id, used); err != nil {
 			return err
@@ -226,6 +253,15 @@ func consumeFundingLotsTx(ctx context.Context, tx pgx.Tx, account int64, request
 			return err
 		}
 		remaining -= used
+	}
+	if remaining != 0 {
+		if mode == fundingPeerTransfer {
+			return ErrWalletRewardTransferLocked
+		}
+		if mode == fundingRefund {
+			return ErrWalletRewardRefundLocked
+		}
+		return fmt.Errorf("ledger: funding allocation shortfall %d of %d", remaining, amount)
 	}
 	return nil
 }

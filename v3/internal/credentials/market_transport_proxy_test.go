@@ -55,17 +55,20 @@ func TestProductionMarketClientPreservesNativePOSTThroughCredentialHTTPAndHTTPSP
 			if err != nil {
 				t.Fatal(err)
 			}
-			req, _ := http.NewRequest(http.MethodPost, "https://8.8.8.8/v1/responses", strings.NewReader(`{"input":"native payload"}`))
-			req.Header.Set("Authorization", "Bearer native-key")
-			req.Header.Set("X-Api-Key", "native-key")
-			response, err := market.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			body, err := io.ReadAll(response.Body)
-			_ = response.Body.Close()
-			if err != nil || string(body) != "native response" || response.StatusCode != http.StatusTemporaryRedirect || origins.Load() != 1 || connects.Load() != 1 || market.Transport == selected.Transport {
-				t.Fatalf("native market response/redirect isolation lost: body=%q origins=%d connects=%d error=%v", body, origins.Load(), connects.Load(), err)
+			defer market.CloseIdleConnections()
+			for i := int32(1); i <= 3; i++ {
+				req, _ := http.NewRequest(http.MethodPost, "https://8.8.8.8/v1/responses", strings.NewReader(`{"input":"native payload"}`))
+				req.Header.Set("Authorization", "Bearer native-key")
+				req.Header.Set("X-Api-Key", "native-key")
+				response, err := market.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				body, err := io.ReadAll(response.Body)
+				_ = response.Body.Close()
+				if err != nil || string(body) != "native response" || response.StatusCode != http.StatusTemporaryRedirect || origins.Load() != i || connects.Load() != 1 || market.Transport == selected.Transport {
+					t.Fatalf("native market pooling/redirect isolation lost: body=%q origins=%d connects=%d error=%v", body, origins.Load(), connects.Load(), err)
+				}
 			}
 		})
 	}

@@ -16,7 +16,7 @@ import (
 
 func verifySecurityAuditAssembly(t *testing.T, pool *pgxpool.Pool, call apiCall, admin string, adminID int64, apiKey string) {
 	t.Helper()
-	w := call("POST", "/api/user/register", "", `{"username":"security_owner","password":"strong-password"}`, 200)
+	w := call("POST", "/api/user/register", "", `{"username":"security_owner","password":"strong-password","accepted_terms_version":"2026-10-07","accepted_privacy_version":"2026-10-07","agreement_locale":"en"}`, 200)
 	var registered struct {
 		Data identity.Session `json:"data"`
 	}

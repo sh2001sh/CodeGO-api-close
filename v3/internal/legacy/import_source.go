@@ -22,6 +22,8 @@ type importData struct {
 	oidc           *oidcData
 	catalog        *catalogData
 	security       *securityData
+	restored       *restoredState
+	tasks          *taskHistoryData
 }
 
 func inspectSource(ctx context.Context, tx pgx.Tx, sources map[string]string) (*importData, Report, error) {
@@ -150,6 +152,15 @@ func inspectSource(ctx context.Context, tx pgx.Tx, sources map[string]string) (*
 		return nil, r, err
 	}
 	security.validate(&r)
+	restored, err := loadRestoredState(ctx, tx, sources, users, catalog)
+	if err != nil {
+		return nil, r, err
+	}
+	restored.validate(&r)
+	tasks, err := loadTaskHistory(ctx, tx, sources, userIDs, &r)
+	if err != nil {
+		return nil, r, err
+	}
 
-	return &importData{users: users, keys: keys, channels: channels, options: options, prices: prices, commerce: commerce, marketplace: marketplace, channelMarket: channelMarket, history: history, funding: funding, entitlements: entitlements, oidc: oidc, catalog: catalog, security: security}, r, nil
+	return &importData{users: users, keys: keys, channels: channels, options: options, prices: prices, commerce: commerce, marketplace: marketplace, channelMarket: channelMarket, history: history, funding: funding, entitlements: entitlements, oidc: oidc, catalog: catalog, security: security, restored: restored, tasks: tasks}, r, nil
 }

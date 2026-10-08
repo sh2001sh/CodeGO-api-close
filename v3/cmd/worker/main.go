@@ -36,8 +36,19 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	if err := run(ctx, log); err != nil {
+	log, closeLog, err := boot.ProcessLogger("worker", os.Getenv("V3_LOG_DIR"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "worker logging:", err)
+		os.Exit(1)
+	}
+	err = run(ctx, log)
+	if closeErr := closeLog(); closeErr != nil {
+		fmt.Fprintln(os.Stderr, "worker logging close:", closeErr)
+		if err == nil {
+			err = closeErr
+		}
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "worker:", err)
 		os.Exit(1)
 	}
@@ -57,7 +68,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err := ledger.EnsureUsagePartitions(ctx, deps.PG.Pool, time.Now().UTC()); err != nil {
 		return err
 	}
-	s, err := buildServices(ctx, deps, log)
+	s, err := buildServices(ctx, deps, cfg, log)
 	if err != nil {
 		return err
 	}
@@ -85,7 +96,8 @@ func run(ctx context.Context, log *slog.Logger) error {
 	}()
 	startLoops(ctx, group, deps, s, credentialPool, cfg, log)
 
-	log.Info("worker running", "metrics", cfg.metricsAddr)
+	log.Info("worker running", "metrics", cfg.metricsAddr, "ledger_consumers", cfg.ledgerConsumers, "ledger_batch_size", cfg.ledgerBatchSize,
+		"pg_max_conns", deps.PG.Pool.Config().MaxConns)
 	err = group.Wait()
 	// errgroup cancels its context on any failure; the caller's cancellation
 	// is distinguished by the error returned from the running service.
@@ -122,16 +134,19 @@ func startLoops(ctx context.Context, group *errgroup.Group, deps *boot.Deps, s *
 	}{
 		{"catalog relay", s.relay.Run},
 		{"worker catalog subscription", s.store.Run},
-		{"ledger consumer", s.posting.Run},
 		{"balance relay", ledger.NewBalanceRelay(deps.PG.Pool, deps.Redis, log).Run},
 		{"credential refresh", credentialPool.Run},
 		{"billing WAL replay", s.sweeper.Run},
 		{"response background jobs", s.native.live.Run},
 		{"account protection cache refresh", func(ctx context.Context) error { return runSecurityRefresh(ctx, s.guard, log) }},
 		{"user refund recovery", s.refunds.Run},
+		{"community rating sync", func(ctx context.Context) error { return runCommunityRatingSync(ctx, deps, log) }},
 		{"metrics server", func(ctx context.Context) error { return s.obs.serve(ctx, cfg.metricsAddr) }},
 	}
 	for _, l := range loops {
 		group.Go(func() error { return runService(ctx, l.name, l.run) })
+	}
+	for i, worker := range s.posting {
+		group.Go(func() error { return runService(ctx, fmt.Sprintf("ledger consumer %d", i), worker.Run) })
 	}
 }

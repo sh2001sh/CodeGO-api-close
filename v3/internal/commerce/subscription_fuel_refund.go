@@ -23,6 +23,13 @@ func (s *Service) RevokeSubscriptionFuelTx(ctx context.Context, tx pgx.Tx, o Ord
 	if err != nil || revoked {
 		return err
 	}
+	if handled, e := s.refundConvertedSubscriptionTx(ctx, tx, o); handled || e != nil {
+		if e != nil {
+			return e
+		}
+		_, err = tx.Exec(ctx, `UPDATE v3_commerce.subscription_fuel_fulfillments SET revoked=true WHERE order_id=$1`, o.ID)
+		return err
+	}
 	var account int64
 	var total, used, periodUsed credits.Micro
 	var end time.Time

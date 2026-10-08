@@ -1,0 +1,149 @@
+.blind-box-page {
+  max-inline-size: 1120px;
+}
+.blind-box-page h2,
+.blind-box-page h3,
+.blind-box-page h4 {
+  margin-block: 0 var(--space-3);
+}
+.blind-box-page p {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.box-inventory {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-lg);
+}
+.box-inventory-count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-block: var(--space-3);
+}
+.box-inventory-count strong {
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.box-inventory-count span {
+  color: var(--text-secondary);
+}
+.box-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: var(--space-6);
+  margin-block-end: var(--space-6);
+}
+.box-section-heading .field {
+  min-inline-size: 160px;
+  max-inline-size: 320px;
+}
+.box-pool-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  gap: var(--space-8);
+}
+.box-pool-main {
+  min-inline-size: 0;
+}
+.box-pool-order {
+  padding-inline-start: var(--space-6);
+  border-inline-start: 1px solid var(--border);
+}
+.box-price {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  margin-block: var(--space-2) var(--space-6);
+  font-variant-numeric: tabular-nums;
+}
+.box-limits > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-block: var(--space-2);
+}
+.box-limits dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.box-limits dt {
+  color: var(--text-secondary);
+}
+.box-reward-list {
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+.box-reward-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  padding-block: var(--space-3);
+  border-block-end: 1px solid var(--divider);
+}
+.box-reward-name {
+  display: grid;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.box-probability {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.blind-box-page summary {
+  min-block-size: 44px;
+  padding-block: var(--space-3);
+  cursor: pointer;
+}
+.box-guarantees {
+  border-block-start: 1px solid var(--divider);
+  margin-block-start: var(--space-4);
+}
+.box-rule-note {
+  margin-block-start: var(--space-5);
+}
+.box-open-result h2 {
+  font-size: var(--text-lg);
+}
+.box-prop-actions {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+.box-retained-props table {
+  min-inline-size: 660px;
+}
+.box-transfer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+@media (max-width: 720px) {
+  .box-inventory,
+  .box-section-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .box-pool-layout,
+  .box-transfer-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .box-pool-order {
+    grid-row: 1;
+    padding-inline-start: 0;
+    padding-block-end: var(--space-5);
+    border-inline-start: 0;
+    border-block-end: 1px solid var(--border);
+  }
+  .box-section-heading .field {
+    max-inline-size: none;
+  }
+}

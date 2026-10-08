@@ -17,7 +17,7 @@ test('root explicitly opens Shanghai funding report with exact revenue, negative
       contentType: 'application/json',
       body: `{"success":true,"data":{"date":"2026-10-01",
         "recognized_revenue_micro":9007199254740993,"recognized_cost_micro":9007199255740994,
-        "recognized_profit_micro":-1000001,"unattributed_cost_micro":3,"sources":[
+        "recognized_profit_micro":-1000001,"unattributed_cost_micro":3,"unpriced_requests":2,"sources":[
         {"source":"topup","amount_micro":9007199254740993,"revenue_micro":9007199254740993,"cost_micro":9007199255740994,"profit_micro":-1000001},
         {"source":"legacy_unattributed","amount_micro":3,"revenue_micro":0,"cost_micro":3,"profit_micro":-3}]}}`,
     })
@@ -34,6 +34,7 @@ test('root explicitly opens Shanghai funding report with exact revenue, negative
     '9,007,199,255.740994 credits',
     '-1.000001 credits',
     '0.000003 credits',
+    '2',
   ])
   const paid = report.getByRole('row').filter({ hasText: 'topup' })
   await expect(paid.getByRole('cell')).toHaveText([
@@ -73,6 +74,7 @@ test('root can retry a failed report and explicitly select an empty historical d
           recognized_cost_micro: 0,
           recognized_profit_micro: 0,
           unattributed_cost_micro: 0,
+          unpriced_requests: 0,
           sources: [],
         },
       },

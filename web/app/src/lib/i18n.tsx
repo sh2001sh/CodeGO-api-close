@@ -1,6 +1,20 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { storedLocale, storeLocale } from './preferences'
+import { languages, resolveLocale, type Locale } from './locales'
+import { DirectionProvider } from '@base-ui/react/direction-provider'
 
 type Dictionary = Record<string, string>
+export type TranslationParameters = Record<string, string | number>
+export type Translate = (key: string, parameters?: TranslationParameters) => string
+
+export function interpolateTranslation(
+  message: string,
+  parameters?: TranslationParameters,
+): string {
+  return message.replace(/\{(\w+)\}/g, (placeholder, key: string) =>
+    parameters?.[key] === undefined ? placeholder : String(parameters[key]),
+  )
+}
 const chinese: Dictionary = {
   active: '启用',
   enabled: '启用',
@@ -39,24 +53,86 @@ const chinese: Dictionary = {
   ClientCanceled: '客户端取消',
   Timeout: '超时',
 }
+const loaders: Record<Exclude<Locale, 'zh-CN'>, () => Promise<{ default: Dictionary }>> = {
+  'zh-HK': () => import('../locales/zh-HK.json'),
+  en: () => import('../locales/en'),
+  ja: () => import('../locales/ja.json'),
+  ru: () => import('../locales/ru.json'),
+  ko: () => import('../locales/ko.json'),
+  fr: () => import('../locales/fr.json'),
+  de: () => import('../locales/de.json'),
+  ar: () => import('../locales/ar.json'),
+}
 const Language = createContext({
-  locale: 'zh-CN',
-  t: (key: string) => key,
+  locale: 'zh-CN' as Locale,
+  t: ((key, parameters) => interpolateTranslation(key, parameters)) as Translate,
   change: async (_locale: string) => {},
+  pending: false,
+  error: false,
 })
 
 export function LanguageProvider(props: { children: ReactNode }) {
-  const [locale, setLocale] = useState('zh-CN')
+  const [locale, setLocale] = useState<Locale>('zh-CN')
   const [dictionary, setDictionary] = useState<Dictionary>(chinese)
-  const change = async (next: string) => {
-    const messages = next === 'en' ? (await import('../locales/en')).default : chinese
-    setDictionary(messages)
-    setLocale(next)
-    document.documentElement.lang = next
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState(false)
+  const [initialized, setInitialized] = useState(false)
+  const request = useRef(0)
+  const fallback = useRef<Dictionary>({})
+  const change = async (value: string) => {
+    const next = resolveLocale(value)
+    if (!next) return
+    const current = ++request.current
+    setPending(true)
+    setError(false)
+    try {
+      const messages = next === 'zh-CN' ? chinese : (await loaders[next]()).default
+      // Unknown localized text uses English; source Chinese is only the final fallback.
+      const english = next === 'zh-CN' ? {} : (await loaders.en()).default
+      if (current !== request.current) return
+      fallback.current = english
+      setDictionary(messages)
+      setLocale(next)
+      storeLocale(next)
+      document.documentElement.lang = next
+      document.documentElement.dir = languages.find((language) => language.code === next)!.dir
+    } catch {
+      if (current === request.current) setError(true)
+    } finally {
+      if (current === request.current) {
+        setPending(false)
+        setInitialized(true)
+      }
+    }
   }
+  useEffect(() => {
+    void change(storedLocale())
+    return () => {
+      request.current++
+    }
+  }, [])
   return (
-    <Language.Provider value={{ locale, t: (key) => dictionary[key] ?? key, change }}>
-      {props.children}
+    <Language.Provider
+      value={{
+        locale,
+        t: (key, parameters) =>
+          interpolateTranslation(dictionary[key] ?? fallback.current[key] ?? key, parameters),
+        change,
+        pending,
+        error,
+      }}
+    >
+      <DirectionProvider direction={locale === 'ar' ? 'rtl' : 'ltr'}>
+        {initialized ? (
+          props.children
+        ) : (
+          <div className="loading" role="status" aria-label="CodeGo AI">
+            <span />
+            <span />
+            <span />
+          </div>
+        )}
+      </DirectionProvider>
     </Language.Provider>
   )
 }

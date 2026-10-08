@@ -12,7 +12,7 @@ RUN case "$SERVICE" in gateway|control|worker|migrate) ;; *) exit 2 ;; esac && \
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata && \
     addgroup -S codego && adduser -S -G codego codego && \
-    mkdir -p /data/wal && chown -R codego:codego /data
+    mkdir -p /data/wal /data/files /data/logs && chown -R codego:codego /data && chmod 700 /data/logs
 COPY --from=build /out/server /app/server
 COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md /licenses/
 USER codego

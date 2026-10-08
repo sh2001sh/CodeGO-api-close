@@ -123,6 +123,10 @@ func (s *Service) registerBlindBoxRoutes(register registerFunc) {
 		o, e := s.ConvertDiscountProp(r.Context(), id, pathID(r))
 		reply(w, o, e)
 	})
+	register("GET /api/blind-box/admin/pools", true, func(w http.ResponseWriter, r *http.Request, _ int64) {
+		o, e := s.AdminPools(r.Context())
+		reply(w, o, e)
+	})
 	register("PUT /api/blind-box/admin/pools", true, func(w http.ResponseWriter, r *http.Request, _ int64) {
 		var p Pool
 		if !decode(w, r, &p) {

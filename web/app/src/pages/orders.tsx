@@ -7,6 +7,7 @@ import { followPayment, paymentAmount, type Order } from '../lib/commerce'
 import { useTranslation } from '../lib/i18n'
 import { DataTable } from '../components/data-table'
 import { Button, ErrorMessage, PageHeader, Status } from '../components/ui'
+import { ReferralOrderTerms } from '../features/commerce/referral-order-terms'
 
 export default function OrdersPage() {
   const { t } = useTranslation()
@@ -82,6 +83,7 @@ export default function OrdersPage() {
           },
           { label: '额度', render: (row) => credits(row.credits), numeric: true },
           { label: '创建时间', render: (row) => date(row.created_at) },
+          { label: '订单邀请条款', render: (row) => <ReferralOrderTerms order={row} /> },
           {
             label: '操作',
             render: (row) =>

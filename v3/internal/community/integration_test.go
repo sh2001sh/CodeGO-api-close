@@ -89,6 +89,9 @@ func TestPublicEligibilityRatingUpsertWeightedOwnerAndRevocation(t *testing.T) {
 		}
 	}
 	s := New(pool, Config{ServiceSecret: testServiceSecret})
+	for _, use := range []struct{ user, channel int64 }{{2, 1}, {2, 2}, {3, 1}} {
+		recordRealUsage(t, pool, use.user, use.channel, "sync", true)
+	}
 	member, err := s.GetMember(ctx, "ABC234")
 	if err != nil || !member.VerifiedChannelOwner || member.Username == "owner@example.com" {
 		t.Fatalf("public member %+v %v", member, err)
@@ -142,7 +145,7 @@ func TestPublicEligibilityRatingUpsertWeightedOwnerAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	member, err = s.GetMember(ctx, "ABC234")
-	if err != nil || member.RatingCount != 3 || member.AverageScore != 22.0/3.0 {
+	if err != nil || member.RatingCount != 2 || member.AverageScore != 6.5 {
 		t.Fatalf("weighted owner %+v %v", member, err)
 	}
 	list, err = s.ListChannels(ctx, "ABC234", ChannelQuery{ViewerSubject: "DEF567", Sort: "name"})
@@ -150,11 +153,11 @@ func TestPublicEligibilityRatingUpsertWeightedOwnerAndRevocation(t *testing.T) {
 		t.Fatalf("viewer stars %+v %v", list, err)
 	}
 	sellers, err := s.ListSellers(ctx, SellerQuery{})
-	if err != nil || sellers.Total != 1 || len(sellers.Items) != 1 || sellers.Items[0].ChannelCount != 2 || sellers.Items[0].RatingCount != 3 {
+	if err != nil || sellers.Total != 1 || len(sellers.Items) != 1 || sellers.Items[0].ChannelCount != 2 || sellers.Items[0].RatingCount != 2 {
 		t.Fatalf("sellers %+v %v", sellers, err)
 	}
 	filtered, err := s.ListSellers(ctx, SellerQuery{Provider: "openai"})
-	if err != nil || len(filtered.Items) != 1 || filtered.Items[0].ChannelCount != 1 || filtered.Items[0].AverageScore != 6 {
+	if err != nil || len(filtered.Items) != 1 || filtered.Items[0].ChannelCount != 1 || filtered.Items[0].AverageScore != 6.5 {
 		t.Fatalf("provider filter %+v %v", filtered, err)
 	}
 	if _, err := pool.Exec(ctx, `UPDATE v3_catalog.channels SET settings=jsonb_set(settings,'{community,visibility}','"private"') WHERE id=1`); err != nil {

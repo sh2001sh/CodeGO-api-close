@@ -12,24 +12,28 @@ import (
 )
 
 var (
-	ErrInvalidInput = errors.New("identity: invalid input")
-	ErrCredentials  = errors.New("identity: invalid credentials")
-	ErrForbidden    = errors.New("identity: forbidden")
-	ErrNotFound     = errors.New("identity: not found")
-	ErrDuplicate    = errors.New("identity: already exists")
+	ErrInvalidInput         = errors.New("identity: invalid input")
+	ErrCredentials          = errors.New("identity: invalid credentials")
+	ErrForbidden            = errors.New("identity: forbidden")
+	ErrNotFound             = errors.New("identity: not found")
+	ErrDuplicate            = errors.New("identity: already exists")
+	ErrSecondFactorRequired = errors.New("identity: second factor required")
+	ErrEmailRateLimit       = errors.New("identity: email request rate limited")
 )
 
 type ControlConfig struct {
-	SessionSecret       []byte
-	EncryptionKey       []byte
-	PublicURL           string
-	DisableRegistration bool
-	AccessTTL           time.Duration
-	RefreshTTL          time.Duration
-	Now                 func() time.Time
-	OAuth               map[string]OAuthProvider
-	HTTPClient          *http.Client
-	BudgetPoster        KeyBudgetPoster
+	SessionSecret            []byte
+	EncryptionKey            []byte
+	PublicURL                string
+	DisableRegistration      bool
+	AccessTTL                time.Duration
+	RefreshTTL               time.Duration
+	Now                      func() time.Time
+	OAuth                    map[string]OAuthProvider
+	HTTPClient               *http.Client
+	BudgetPoster             KeyBudgetPoster
+	EmailSender              AccountEmailSender
+	RequireEmailVerification bool
 }
 
 type Control struct {

@@ -5,17 +5,33 @@ import { api, unwrap } from '../lib/api'
 import { resourceOptions } from '../lib/queries'
 import { useTranslation } from '../lib/i18n'
 import { DataTable } from '../components/data-table'
-import { Button, ErrorMessage, PageHeader, Status } from '../components/ui'
+import { Button, confirmAction, Drawer, ErrorMessage, PageHeader, Status } from '../components/ui'
 import { ChannelForm, type Channel } from '../components/channel-form'
 import { CatalogConfiguration } from '../components/catalog-configuration'
+import {
+  ChannelFilterBar,
+  emptyChannelFilters,
+  matchesChannelFilters,
+  type ChannelFilterState,
+} from '../features/catalog/channel-filters'
+import { ChannelBatchBar } from '../features/catalog/channel-batch'
+import {
+  ChannelTestCell,
+  useChannelTest,
+  useChannelTestAll,
+} from '../features/catalog/channel-test'
+import type { ProbeResult } from '../features/catalog/types'
 
 export default function ChannelsPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [keyword, setKeyword] = useState('')
+  const [filters, setFilters] = useState<ChannelFilterState>(emptyChannelFilters)
   const [editing, setEditing] = useState<Channel | 'new' | null>(null)
   const [configuration, setConfiguration] = useState(false)
+  const [selected, setSelected] = useState<Channel[]>([])
+  const [results, setResults] = useState<Record<string, ProbeResult>>({})
   const { data } = useSuspenseQuery(
     resourceOptions(
       'channels',
@@ -29,6 +45,7 @@ export default function ChannelsPage() {
       [page, keyword],
     ),
   )
+  const rows = (data.items ?? []).filter((row) => matchesChannelFilters(row, filters))
   const save = useMutation({
     mutationFn: (channel: Channel) =>
       channel.id
@@ -47,6 +64,12 @@ export default function ChannelsPage() {
       api.DELETE('/api/catalog/channels/{id}', { params: { path: { id: String(id) } } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['channels'] }),
   })
+  const test = useChannelTest()
+  const testAll = useChannelTestAll()
+  const runTest = (row: Channel) =>
+    test.mutate(row.id, {
+      onSuccess: (result) => setResults((prev) => ({ ...prev, [String(row.id)]: result })),
+    })
   return (
     <>
       <PageHeader
@@ -56,6 +79,22 @@ export default function ChannelsPage() {
             <Button variant="quiet" onClick={() => setConfiguration(!configuration)}>
               {t('分组与定价')}
             </Button>
+            <Button
+              variant="quiet"
+              disabled={testAll.isPending}
+              onClick={() =>
+                testAll.mutate(undefined, {
+                  onSuccess: (batch) => {
+                    const next: Record<string, ProbeResult> = {}
+                    for (const result of batch.data)
+                      if (result.id !== undefined) next[String(result.id)] = result
+                    setResults(next)
+                  },
+                })
+              }
+            >
+              {t('测试全部')}
+            </Button>
             <Button onClick={() => setEditing('new')}>
               <Plus size={16} aria-hidden />
               {t('创建')}
@@ -63,41 +102,70 @@ export default function ChannelsPage() {
           </>
         }
       />
-      <ErrorMessage error={save.error ?? remove.error} />
+      <ErrorMessage error={save.error ?? remove.error ?? test.error ?? testAll.error} />
       {configuration && <CatalogConfiguration />}
-      {editing && (
-        <ChannelForm
-          key={editing === 'new' ? 'new' : editing.id}
-          channel={editing === 'new' ? undefined : editing}
-          pending={save.isPending}
-          onSave={(channel) => save.mutate(channel)}
-          onCancel={() => setEditing(null)}
-        />
-      )}
-      <form
-        className="filters"
-        onSubmit={(event) => {
-          event.preventDefault()
-          setKeyword(String(new FormData(event.currentTarget).get('keyword')))
+      <Drawer
+        open={editing !== null}
+        onOpenChange={(open) => !open && setEditing(null)}
+        title={editing === 'new' ? '创建渠道' : '编辑渠道'}
+      >
+        {editing && (
+          <ChannelForm
+            key={editing === 'new' ? 'new' : editing.id}
+            channel={editing === 'new' ? undefined : editing}
+            pending={save.isPending}
+            onSave={(channel) => save.mutate(channel)}
+            onCancel={() => setEditing(null)}
+          />
+        )}
+      </Drawer>
+      <ChannelFilterBar
+        initialKeyword={keyword}
+        filters={filters}
+        onSearch={(value) => {
+          setKeyword(value)
           setPage(1)
         }}
-      >
-        <label className="field" htmlFor="channel-search">
-          <span>{t('名称')}</span>
-          <input id="channel-search" name="keyword" />
-        </label>
-        <Button type="submit">{t('搜索')}</Button>
-      </form>
+        onFiltersChange={setFilters}
+      />
+      <ChannelBatchBar selected={selected} onClear={() => setSelected([])} />
       <DataTable
-        rows={data.items ?? []}
+        rows={rows}
         rowKey={(row) => row.id}
         columns={[
+          {
+            label: '',
+            render: (row) => (
+              <input
+                type="checkbox"
+                aria-label={`${t('选择')} ${row.name}`}
+                checked={selected.some((item) => item.id === row.id)}
+                onChange={(event) =>
+                  setSelected(
+                    event.target.checked
+                      ? [...selected, row]
+                      : selected.filter((item) => item.id !== row.id),
+                  )
+                }
+              />
+            ),
+          },
           { label: '名称', render: (row) => row.name },
           { label: 'Provider', render: (row) => row.provider },
           { label: '模型', render: (row) => row.models?.join(', ') },
           { label: '分组', render: (row) => row.groups?.join(', ') },
           { label: '优先级', render: (row) => row.priority, numeric: true },
           { label: '状态', render: (row) => <Status value={row.status} /> },
+          {
+            label: '测速',
+            render: (row) => (
+              <ChannelTestCell
+                result={results[String(row.id)]}
+                pending={test.isPending}
+                onTest={() => runTest(row)}
+              />
+            ),
+          },
           {
             label: '操作',
             render: (row) => (
@@ -109,8 +177,15 @@ export default function ChannelsPage() {
                   variant="danger"
                   aria-label={`${t('删除')} ${row.name}`}
                   disabled={remove.isPending}
-                  onClick={() => {
-                    if (window.confirm(t('删除后无法恢复，确认删除？'))) remove.mutate(row.id)
+                  onClick={async () => {
+                    if (
+                      await confirmAction({
+                        title: '删除渠道',
+                        description: '删除后无法恢复，确认删除？',
+                        danger: true,
+                      })
+                    )
+                      remove.mutate(row.id)
                   }}
                 >
                   <Trash2 size={16} aria-hidden />

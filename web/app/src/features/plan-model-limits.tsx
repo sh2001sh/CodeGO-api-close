@@ -1,3 +1,4 @@
+import { useTranslation } from '../lib/i18n'
 import { useState } from 'react'
 import type { Plan } from '../lib/commerce'
 import { toMicroCredits } from '../lib/format'
@@ -21,6 +22,7 @@ export function readPlanModelLimits(form: FormData): NonNullable<Plan['model_lim
 }
 
 export function PlanModelLimits(props: { limits: Plan['model_limits'] }) {
+  const { t } = useTranslation()
   const [rows, setRows] = useState(() =>
     Object.entries(props.limits ?? {}).map(([model, amount]) => ({
       id: crypto.randomUUID(),
@@ -30,14 +32,14 @@ export function PlanModelLimits(props: { limits: Plan['model_limits'] }) {
   )
   return (
     <fieldset className="full-width section">
-      <legend>按模型限制消费额度</legend>
+      <legend>{t('按模型限制消费额度')}</legend>
       <p className="muted">
-        每个模型的消费上限以 credits 填写，最多六位小数；不设置或填写 0 表示不限制。
+        {t('每个模型的消费上限以 credits 填写，最多六位小数；不设置或填写 0 表示不限制。')}
       </p>
       {rows.map((row) => (
         <div className="form-panel" key={row.id}>
           <label className="field" htmlFor={`model-${row.id}`}>
-            <span>模型名称</span>
+            <span>{t('模型名称')}</span>
             <input
               id={`model-${row.id}`}
               name="plan-model-name"
@@ -52,7 +54,7 @@ export function PlanModelLimits(props: { limits: Plan['model_limits'] }) {
             />
           </label>
           <label className="field" htmlFor={`limit-${row.id}`}>
-            <span>模型消费上限 credits</span>
+            <span>{t('模型消费上限 credits')}</span>
             <input
               id={`limit-${row.id}`}
               name="plan-model-limit"
@@ -70,7 +72,7 @@ export function PlanModelLimits(props: { limits: Plan['model_limits'] }) {
             variant="quiet"
             onClick={() => setRows(rows.filter((item) => item.id !== row.id))}
           >
-            移除模型限制
+            {t('移除模型限制')}
           </Button>
         </div>
       ))}
@@ -78,7 +80,7 @@ export function PlanModelLimits(props: { limits: Plan['model_limits'] }) {
         variant="quiet"
         onClick={() => setRows([...rows, { id: crypto.randomUUID(), model: '', amount: '' }])}
       >
-        添加模型限制
+        {t('添加模型限制')}
       </Button>
     </fieldset>
   )

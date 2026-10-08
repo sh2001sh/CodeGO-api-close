@@ -26,7 +26,7 @@ type nativeHandlers struct {
 func assembleNative(deps *boot.Deps, auth gateway.Authorizer, planner gateway.Planner, settler *billing.Settler,
 	leases gateway.LeaseController, failures gateway.AuthFailureController, registry map[string]gateway.Provider,
 	transports *httpx.Pool, clients gateway.ClientProvider, policy gateway.TargetPolicy, guard gateway.RequestGuard,
-	trusted []netip.Prefix, log *slog.Logger) (result nativeHandlers, err error) {
+	trusted []netip.Prefix, log *slog.Logger, requests gateway.RequestRecorder) (result nativeHandlers, err error) {
 	resolve := deps.ResolveTarget
 	contentAuthorizer, err := newContentAuthorizer(deps, log)
 	if err != nil {
@@ -47,7 +47,7 @@ func assembleNative(deps *boot.Deps, auth gateway.Authorizer, planner gateway.Pl
 		}
 	}()
 	result.live, err = live.New(live.Config{
-		Auth: auth, Planner: planner, Settler: settler, Limits: leases, AuthFailures: failures,
+		Auth: auth, Planner: planner, Settler: settler, Limits: leases, AuthFailures: failures, Requests: requests,
 		Providers: registry, Resolve: resolve, Repository: locators, Clients: clients, TargetPolicy: policy, RequestGuard: guard,
 		BackgroundJobs: jobs, BackgroundBilling: billing.NewBackgroundSettler(settler, jobs),
 		ResolvePrincipal: func(ctx context.Context, userID, keyID int64) (gateway.Principal, error) {
@@ -62,7 +62,7 @@ func assembleNative(deps *boot.Deps, auth gateway.Authorizer, planner gateway.Pl
 		registry[name] = result.live.TrackingProvider(provider)
 	}
 	result.auxiliary, err = auxiliary.New(auxiliary.Config{
-		Authorizer: auth, Planner: result.live, Settler: settler, Limits: leases,
+		Authorizer: auth, Planner: result.live, Settler: settler, Limits: leases, Requests: requests,
 		TargetPolicy: policy, RequestGuard: guard,
 		AuthFailures: failures, TrustedProxies: trusted, Transports: transports, Clients: clients, Logger: log,
 	})
@@ -71,7 +71,7 @@ func assembleNative(deps *boot.Deps, auth gateway.Authorizer, planner gateway.Pl
 	}
 	result.workflow, err = workflow.New(workflow.Config{
 		Authorizer: auth, Planner: result.live, Settler: billing.NewWorkflowSettler(settler),
-		Repository: &workflow.PostgresRepository{Pool: deps.PG.Pool}, ResolveTarget: resolve,
+		Repository: &workflow.PostgresRepository{Pool: deps.PG.Pool}, ResolveTarget: resolve, Requests: requests,
 		Limits: leases, TrustedProxies: trusted, Clients: clients, ContentAuthorizer: contentAuthorizer, Logger: log,
 	})
 	return result, err

@@ -12,9 +12,11 @@ import (
 // units are evidence of exclusion, not an opening monetary credit.
 func reportRetiredSources(ctx context.Context, source pgx.Tx, sources map[string]string, report *Report) error {
 	fields := map[string][]string{
-		"point_accounts":      {"balance", "frozen_balance"},
-		"point_ledgers":       {"delta"},
-		"bonus_quota_credits": {"original_amount", "remaining_amount"},
+		"point_accounts":         {"balance", "frozen_balance"},
+		"point_ledgers":          {"delta"},
+		"bonus_quota_credits":    {"original_amount", "remaining_amount"},
+		"user_wechat_bindings":   nil,
+		"miniprogram_bind_codes": nil,
 	}
 	for name := range sources {
 		if strings.HasPrefix(name, "pet_") || strings.HasPrefix(name, "user_pet") || name == "pets" {

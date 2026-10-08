@@ -147,6 +147,12 @@ func (h *Handler) resolveContentTarget(w http.ResponseWriter, r *http.Request, p
 	if !h.policy(w, r, p, t.Model) {
 		return Task{}, gateway.Target{}, nil, false
 	}
+	if t.Historical {
+		// Historical results expose their original public URL. They carry no
+		// credentials and must never invoke an upstream adapter after cutover.
+		fail(w, http.StatusGone, "historical_content_use_result_url")
+		return Task{}, gateway.Target{}, nil, false
+	}
 	target, err := h.cfg.ResolveTarget(r.Context(), t.ChannelID, t.CredentialID)
 	if err != nil || target.ChannelID != t.ChannelID || target.CredentialID != t.CredentialID || target.Provider != t.Provider {
 		fail(w, http.StatusServiceUnavailable, "task_credential_unavailable")

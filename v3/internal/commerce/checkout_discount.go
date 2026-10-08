@@ -223,7 +223,7 @@ func (s *Service) RecoverCheckoutDiscounts(ctx context.Context, limit int) (int,
 			if err != nil {
 				return err
 			}
-			if err = s.ReleaseCheckoutDiscountTx(ctx, tx, o); err != nil {
+			if err = s.releaseCheckoutTx(ctx, tx, o); err != nil {
 				return err
 			}
 			count++

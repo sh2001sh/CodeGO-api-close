@@ -1,0 +1,92 @@
+/* Styles owned by the settings workstream. Use tokens from tokens.css only. */
+
+.settings-search {
+  max-width: 360px;
+  margin-bottom: var(--space-6);
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.settings-rail {
+  position: sticky;
+  top: calc(var(--topbar-h) + var(--space-6));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.settings-rail-item {
+  padding: 10px var(--space-3);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  font-weight: 560;
+  text-align: start;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.settings-rail-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.settings-rail-item[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+}
+
+.settings-content {
+  min-width: 0;
+}
+.settings-content fieldset.form-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  margin: 0;
+  padding: var(--space-5) 0;
+  border: 0;
+  border-bottom: 1px solid var(--divider);
+  border-radius: 0;
+}
+.settings-content .form-panel .field {
+  min-width: 0;
+}
+.settings-content .form-panel legend {
+  padding-top: var(--space-4);
+}
+.settings-content fieldset.form-panel .checkbox-field {
+  min-height: 44px;
+}
+
+.settings-mobile-nav {
+  display: none;
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 800px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-rail {
+    display: none;
+  }
+  .settings-mobile-nav {
+    display: grid;
+  }
+}
+@media (max-width: 640px) {
+  .settings-content fieldset.form-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

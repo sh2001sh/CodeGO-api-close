@@ -36,22 +36,25 @@ func (q SellerQuery) validate() (SellerQuery, error) {
 
 const sellersCTE = `WITH public_channels AS (
  SELECT c.id AS internal_id,c.owner_user_id AS owner_id,owner.external_id AS sub,
- owner.username,owner.display_name,c.updated_at,
+ owner.username,COALESCE((SELECT COALESCE(NULLIF(s.name,''),'渠道店铺 #'||s.id::text) FROM v3_channelmarket.shops s WHERE s.owner_user_id=owner.id),'member-'||owner.external_id) AS display_name,c.updated_at,
  c.settings->'community'->>'id' AS id,
  COALESCE(c.settings->'community'->>'slug','') AS slug,
  COALESCE(c.settings->'community'->>'name',c.name) AS name,c.provider,
  c.settings->'community'->>'lifecycle_status' AS lifecycle_status,
  c.settings->'community'->>'verification_status' AS verification_status
- ` + eligibleChannels + ` AND ($1::text='' OR c.provider=$1)),
- filtered_channels AS (SELECT p.* FROM public_channels p WHERE $2::text='' OR
+ ` + eligibleChannels + ` AND COALESCE(owner.external_id,'')<>''),
+ filtered_channels AS (SELECT p.* FROM public_channels p WHERE ($1::text='' OR p.provider=$1) AND ($2::text='' OR
  LOWER(username) LIKE $3 ESCAPE '!' OR LOWER(display_name) LIKE $3 ESCAPE '!'
  OR owner_id IN (SELECT owner_id FROM public_channels WHERE
- LOWER(name) LIKE $3 ESCAPE '!' OR LOWER(slug) LIKE $3 ESCAPE '!')),
+ LOWER(name) LIKE $3 ESCAPE '!' OR LOWER(slug) LIKE $3 ESCAPE '!'))),
+ consumer_ratings AS (SELECT p.owner_id,r.user_id,avg(r.stars) AS stars
+ FROM public_channels p JOIN v3_community.channel_ratings r ON r.channel_id=p.id GROUP BY p.owner_id,r.user_id),
+ owner_ratings AS (SELECT owner_id,avg(stars)*2 AS average_score,count(*) AS rating_count FROM consumer_ratings GROUP BY owner_id),
  sellers AS (SELECT p.owner_id,p.sub,p.username,p.display_name,
- count(DISTINCT p.id) AS channel_count,COALESCE(avg(r.stars)*2,0)::float8 AS average_score,
- count(r.user_id) AS rating_count,max(p.updated_at) AS updated_at
- FROM filtered_channels p LEFT JOIN v3_community.channel_ratings r ON r.channel_id=p.id
- GROUP BY p.owner_id,p.sub,p.username,p.display_name)`
+ count(DISTINCT p.id) AS channel_count,COALESCE(r.average_score,0)::float8 AS average_score,
+ COALESCE(r.rating_count,0) AS rating_count,max(p.updated_at) AS updated_at
+ FROM filtered_channels p LEFT JOIN owner_ratings r ON r.owner_id=p.owner_id
+ GROUP BY p.owner_id,p.sub,p.username,p.display_name,r.average_score,r.rating_count)`
 
 func (s *Service) ListSellers(ctx context.Context, query SellerQuery) (SellerList, error) {
 	q, err := query.validate()

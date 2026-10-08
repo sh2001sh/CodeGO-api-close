@@ -1,3 +1,4 @@
+import { useTranslation } from '../lib/i18n'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api, unwrap } from '../lib/api'
@@ -7,6 +8,7 @@ import { DataTable } from '../components/data-table'
 import { Button, ErrorMessage, Loading } from '../components/ui'
 
 export function FundingEconomics() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [selectedDay, setSelectedDay] = useState(shanghaiDay)
   const [day, setDay] = useState(selectedDay)
@@ -23,12 +25,12 @@ export function FundingEconomics() {
     retry: false,
   })
   return (
-    <section className="section funding-report" aria-label="资金经营日报">
+    <section className="section funding-report" aria-label={t('资金经营日报')}>
       <details onToggle={(event) => setOpen(event.currentTarget.open)}>
-        <summary>资金经营日报</summary>
+        <summary>{t('资金经营日报')}</summary>
         {open && (
           <>
-            <p>按上海时间统计已结算请求。未归属成本单列，不计入已确认收入、成本和利润。</p>
+            <p>{t('按上海时间统计已结算请求。未归属成本单列，不计入已确认收入、成本和利润。')}</p>
             <form
               className="filters"
               onSubmit={(event) => {
@@ -38,7 +40,7 @@ export function FundingEconomics() {
               }}
             >
               <label className="field" htmlFor="funding-day">
-                <span>统计日期（上海）</span>
+                <span>{t('统计日期（上海）')}</span>
                 <input
                   id="funding-day"
                   type="date"
@@ -48,33 +50,44 @@ export function FundingEconomics() {
                 />
               </label>
               <Button type="submit" disabled={report.isFetching}>
-                查询日报
+                {t('查询日报')}
               </Button>
             </form>
             <ErrorMessage error={report.error} />
             {report.isFetching && <Loading />}
             {report.data && (
               <>
-                <p>报告日期：{report.data.date}</p>
+                <p>
+                  {t('报告日期：')}
+                  {report.data.date}
+                </p>
                 <dl className="balance-ledger">
                   <div>
-                    <dt>已确认收入</dt>
+                    <dt>{t('已确认收入')}</dt>
                     <dd>{credits(report.data.recognized_revenue_micro)}</dd>
                   </div>
                   <div>
-                    <dt>已确认成本</dt>
+                    <dt>{t('已确认成本')}</dt>
                     <dd>{credits(report.data.recognized_cost_micro)}</dd>
                   </div>
                   <div>
-                    <dt>已确认利润</dt>
+                    <dt>{t('已确认利润')}</dt>
                     <dd>{credits(report.data.recognized_profit_micro)}</dd>
                   </div>
                   <div>
-                    <dt>未归属成本</dt>
+                    <dt>{t('未归属成本')}</dt>
                     <dd>{credits(report.data.unattributed_cost_micro)}</dd>
                   </div>
+                  <div>
+                    <dt>{t('成本尚未核定的请求')}</dt>
+                    <dd>
+                      {report.data.unpriced_requests == null
+                        ? '—'
+                        : String(report.data.unpriced_requests)}
+                    </dd>
+                  </div>
                 </dl>
-                <h3>资金来源</h3>
+                <h3>{t('资金来源')}</h3>
                 <DataTable
                   rows={report.data.sources ?? []}
                   rowKey={(row) => row.source}

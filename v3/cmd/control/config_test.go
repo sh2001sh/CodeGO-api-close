@@ -19,6 +19,15 @@ func TestConfigurationRejectsMissingAndMalformedSecrets(t *testing.T) {
 	key := base64.StdEncoding.EncodeToString(make([]byte, 32))
 	t.Setenv("V3_SESSION_SECRET", key)
 	t.Setenv("V3_SECRET_KEY", key)
+	t.Setenv("V3_TRUSTED_PROXY_CIDRS", "invalid")
+	if _, err := configFromEnv(); err == nil {
+		t.Fatal("invalid trusted proxy CIDR accepted")
+	}
+	t.Setenv("V3_TRUSTED_PROXY_CIDRS", "10.0.0.0/8, 127.0.0.1/32")
+	if cfg, err := configFromEnv(); err != nil || len(cfg.TrustedProxies) != 2 {
+		t.Fatalf("valid trusted proxy CIDRs rejected: %v", err)
+	}
+	t.Setenv("V3_TRUSTED_PROXY_CIDRS", "")
 	if _, err := configFromEnv(); err != nil {
 		t.Fatal(err)
 	}

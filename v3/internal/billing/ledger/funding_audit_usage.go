@@ -44,55 +44,67 @@ func economicsNumber(e event, key string) (int64, error) {
 	return n, nil
 }
 
-// Record one root-only economics snapshot per request. Aggregate actual is a
-// money charge; marketplace gross is explanatory metadata and is never added.
+// Record root-only economics snapshots in one insert per batch. Aggregate
+// actual is a money charge; marketplace gross is explanatory metadata and is
+// never added. A historical or same-batch request collision rejects the entire
+// ledger transaction, including the source facts recorded first.
 func recordRequestEconomicsTx(ctx context.Context, tx pgx.Tx, events []event) error {
+	if err := recordFundingSourceFactsTx(ctx, tx, events); err != nil {
+		return err
+	}
+	var requests, sources []string
+	var channels, routes, amounts, subscriptions, costs, revenues []int64
+	var settled []time.Time
+	keys := []string{billing.FieldChannelID, "route_pool_id", "subscription_id", "procurement_cost_multiplier_ppm", "revenue_multiplier_ppm"}
 	for _, e := range events {
 		if e.fields[billing.FieldModel] == "" || e.fields["funding_part"] == "secondary" {
 			continue
 		}
-		if err := recordOneRequestEconomicsTx(ctx, tx, e); err != nil {
-			return err
+		var values [5]int64
+		for i, key := range keys {
+			var err error
+			values[i], err = economicsNumber(e, key)
+			if err != nil {
+				return err
+			}
 		}
-	}
-	return nil
-}
-
-// recordOneRequestEconomicsTx inserts the economics snapshot row for a
-// single primary-funding usage event.
-func recordOneRequestEconomicsTx(ctx context.Context, tx pgx.Tx, e event) error {
-	keys := []string{billing.FieldChannelID, "route_pool_id", "subscription_id", "procurement_cost_multiplier_ppm", "revenue_multiplier_ppm"}
-	values := make([]int64, len(keys))
-	for i, key := range keys {
-		var err error
-		values[i], err = economicsNumber(e, key)
+		actual := e.amount
+		if e.fields["funding_part"] == "primary" {
+			var err error
+			actual, err = economicsNumber(e, "usage_total_amount")
+			if err != nil {
+				return err
+			}
+		}
+		source, err := requestEconomicsBillingSource(ctx, tx, e)
 		if err != nil {
 			return err
 		}
-	}
-	actual := e.amount
-	if e.fields["funding_part"] == "primary" {
-		var err error
-		actual, err = economicsNumber(e, "usage_total_amount")
-		if err != nil {
+		if err := fillRevenueMultiplier(ctx, tx, e, source, &values[4]); err != nil {
 			return err
 		}
+		requests = append(requests, e.requestID)
+		channels = append(channels, values[0])
+		routes = append(routes, values[1])
+		amounts = append(amounts, actual)
+		sources = append(sources, source)
+		subscriptions = append(subscriptions, values[2])
+		costs = append(costs, values[3])
+		revenues = append(revenues, values[4])
+		settled = append(settled, fundingEventTime(e))
 	}
-	source, err := requestEconomicsBillingSource(ctx, tx, e)
-	if err != nil {
-		return err
-	}
-	if err := fillRevenueMultiplier(ctx, tx, e, source, &values[4]); err != nil {
-		return err
+	if len(requests) == 0 {
+		return nil
 	}
 	result, err := tx.Exec(ctx, `INSERT INTO v3_billing.request_economics
 	 (request_id,channel_id,route_pool_id,actual_amount,billing_source,subscription_id,procurement_cost_multiplier_ppm,revenue_multiplier_ppm,settled_at)
-	 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(request_id) DO NOTHING`, e.requestID, values[0], values[1], actual, source, values[2], values[3], values[4], fundingEventTime(e))
+	 SELECT * FROM unnest($1::text[],$2::bigint[],$3::bigint[],$4::bigint[],$5::text[],$6::bigint[],$7::bigint[],$8::bigint[],$9::timestamptz[])
+	 ON CONFLICT(request_id) DO NOTHING`, requests, channels, routes, amounts, sources, subscriptions, costs, revenues, settled)
 	if err != nil {
 		return err
 	}
-	if result.RowsAffected() != 1 {
-		return fmt.Errorf("%w: historical economics request %s", billing.ErrPostConflict, e.requestID)
+	if result.RowsAffected() != int64(len(requests)) {
+		return fmt.Errorf("%w: economics batch inserted %d of %d requests", billing.ErrPostConflict, result.RowsAffected(), len(requests))
 	}
 	return nil
 }
@@ -121,6 +133,11 @@ func requestEconomicsBillingSource(ctx context.Context, tx pgx.Tx, e event) (str
 // itself: wallet rates come from the lots actually consumed, while
 // subscription rates come from the current source policy.
 func fillRevenueMultiplier(ctx context.Context, tx pgx.Tx, e event, source string, revenueMultiplier *int64) error {
+	if e.fields["funding_policy_version"] != "" {
+		// Per-bucket facts are authoritative; a global legacy factor cannot
+		// summarize new and old sources from the same request.
+		return nil
+	}
 	if e.fields["revenue_multiplier_ppm"] != "" {
 		return nil
 	}

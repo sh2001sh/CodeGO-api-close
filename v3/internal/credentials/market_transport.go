@@ -29,6 +29,11 @@ func newMarketTransport(host string, address netip.Addr, cfg TransportConfig, fp
 	if err != nil {
 		return nil, httpx.ErrMarketTransportPolicy
 	}
+	// Image fetching deliberately keeps a tiny isolated pool. Marketplace
+	// relay reuses this transport across requests, using the selected
+	// credential's normal idle budget instead of the image budget of two.
+	pinned.transport.MaxIdleConns = 256
+	pinned.transport.MaxIdleConnsPerHost = cfg.withDefaults().MaxIdleConnsPerHost
 	return &marketRelayTransport{transport: pinned.transport, host: pinned.host, userAgent: pinned.userAgent}, nil
 }
 

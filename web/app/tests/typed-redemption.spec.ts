@@ -83,7 +83,13 @@ test('blind-box redemption reports quantity and opens the refreshed inventory', 
   )
   await page.goto('/blind-box')
   await expect(page.locator('.balance-ledger dd')).toHaveText('2')
-  await page.getByRole('link', { name: '钱包', exact: true }).click()
+  // On narrow viewports the console navigation lives in a drawer.
+  const openNav = page.getByRole('button', { name: '打开导航', exact: true })
+  if (await openNav.isVisible()) await openNav.click()
+  await page
+    .getByRole('navigation', { name: '主导航' })
+    .getByRole('link', { name: '钱包', exact: true })
+    .click()
   await page.getByLabel('兑换码', { exact: true }).fill('blind-box-code')
   await page.getByRole('button', { name: '兑换', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('已兑换 3 个盲盒。')

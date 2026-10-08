@@ -1,9 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { Link, useLocation, useParams } from '@tanstack/react-router'
+import { useTranslation } from '../lib/i18n'
 import { ErrorMessage, Loading } from '../components/ui'
 import { oauthCallbackTarget } from '../lib/auth-navigation'
+import { AuthShell } from '../features/public/auth-shell'
 
 export default function OAuthCallbackPage() {
+  const { t } = useTranslation()
   const { provider } = useParams({ strict: false })
   const search = useLocation({ select: (location) => location.searchStr })
   const forwarded = useRef(false)
@@ -21,12 +24,12 @@ export default function OAuthCallbackPage() {
     }
   }, [target])
   return (
-    <main className="auth-layout">
+    <AuthShell>
       <section className="auth-panel">
-        <h1>外部账号登录</h1>
+        <h1>{t('外部账号登录')}</h1>
         <ErrorMessage error={error} />
-        {target ? <Loading /> : <Link to="/sign-in">返回登录</Link>}
+        {target ? <Loading /> : <Link to="/sign-in">{t('返回登录')}</Link>}
       </section>
-    </main>
+    </AuthShell>
   )
 }

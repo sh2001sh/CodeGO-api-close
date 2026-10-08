@@ -13,13 +13,21 @@ import (
 )
 
 type Importer struct {
-	source *pgxpool.Pool
-	pool   *pgxpool.Pool
-	crypto catalog.Encrypter
+	source             *pgxpool.Pool
+	pool               *pgxpool.Pool
+	crypto             catalog.Encrypter
+	sourceCryptoSecret string
 }
 
 func NewImporter(source, target *pgxpool.Pool, crypto catalog.Encrypter) *Importer {
 	return &Importer{source: source, pool: target, crypto: crypto}
+}
+
+// WithSourceCryptoSecret supplies the v2 CryptoSecret only for enc:v1 values.
+// It is intentionally independent of the target encryption key.
+func (m *Importer) WithSourceCryptoSecret(secret string) *Importer {
+	m.sourceCryptoSecret = secret
+	return m
 }
 
 // Import runs a read-only preview by default. Apply requires all v2 writers to
@@ -43,6 +51,7 @@ func (m *Importer) Import(ctx context.Context, apply bool) (Report, error) {
 	if err != nil {
 		return r, err
 	}
+	m.validateRestoredSecrets(data, &r)
 	if !apply {
 		return r, tx.Commit(ctx)
 	}
@@ -94,6 +103,12 @@ func (m *Importer) Import(ctx context.Context, apply bool) (Report, error) {
 		return r, err
 	}
 	if err = m.importSecurityData(ctx, target, data.security); err != nil {
+		return r, err
+	}
+	if err = m.importRestoredState(ctx, target, data.restored); err != nil {
+		return r, err
+	}
+	if err = m.importTaskHistory(ctx, target, data.tasks); err != nil {
 		return r, err
 	}
 	if err = m.initializeCommerceRuntime(ctx, target, &r); err != nil {

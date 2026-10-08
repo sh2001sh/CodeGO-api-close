@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { fixtureAPI } from './fixtures'
+import { fixtureAPI, plan } from './fixtures'
 
 test.beforeEach(async ({ page }) => fixtureAPI(page))
 
@@ -84,7 +84,7 @@ test('market selection binds an owned key to the chosen group', async ({ page })
   const sent = page.waitForRequest('**/api/marketplace/groups/group-test/bind-token')
   await page.getByRole('button', { name: '绑定 Key', exact: true }).click()
   expect((await sent).postDataJSON()).toEqual({ token_id: 1 })
-  await expect(page.getByRole('status')).toHaveText('已保存')
+  await expect(page.getByRole('status')).toHaveText('分组已绑定，可前往对话测试。')
 })
 
 test('owner multiplier sends the selected channel and exact user ID', async ({ page }) => {
@@ -92,7 +92,7 @@ test('owner multiplier sends the selected channel and exact user ID', async ({ p
   await page.getByRole('button', { name: '访问管理', exact: true }).click()
   await page.getByLabel('用户 ID', { exact: true }).fill('9223372036854775807')
   await page.getByLabel('专属倍率', { exact: true }).fill('0.75')
-  const sent = page.waitForRequest('**/api/marketplace/channels/public-channel/user-multiplier')
+  const sent = page.waitForRequest('**/api/marketplace/channels/349/user-multiplier')
   await page.getByRole('button', { name: '设置用户倍率', exact: true }).click()
   expect((await sent).postData()).toBe('{"user_id":9223372036854775807,"multiplier":0.75}')
 })
@@ -118,14 +118,13 @@ test('administrator saves exact plan credits and calendar duration', async ({ pa
   })
 })
 
-test('community rating uses the session facade without a viewer identity', async ({ page }) => {
+test('legacy community URL leads to the external community', async ({ page }) => {
+  await page.route('https://community.codegoai.com/**', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<h1>CodeGo community</h1>' }),
+  )
   await page.goto('/community')
-  const sent = page.waitForRequest('**/api/community/channels/2/rating')
-  await page.getByRole('combobox', { name: '评分', exact: true }).selectOption('4')
-  await page.getByRole('button', { name: '提交评分', exact: true }).click()
-  const request = await sent
-  expect(request.method()).toBe('POST')
-  expect(request.postDataJSON()).toEqual({ stars: 4 })
+  await expect(page).toHaveURL('https://community.codegoai.com/')
+  await expect(page.getByRole('heading', { name: 'CodeGo community' })).toBeVisible()
 })
 
 test('editing a plan preserves zero credits fields and exact group rewards', async ({ page }) => {
@@ -188,9 +187,9 @@ test('discount props convert on confirmation and cannot be manually activated', 
   await page.goto('/blind-box')
   await expect(page.getByText('购买套餐时自动使用', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '使用', exact: true })).toBeDisabled()
-  page.once('dialog', (dialog) => dialog.accept())
   const sent = page.waitForRequest('**/api/blind-box/props/9223372036854775807/convert')
   await page.getByRole('button', { name: '转换为九折充值卡', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click()
   expect((await sent).postDataJSON()).toEqual({ target_type: 'topup_discount_90' })
 })
 
@@ -302,6 +301,7 @@ test('fuel uses a server quote and rejects an amount outside the configured step
         success: true,
         data: [
           {
+            ...plan,
             id: 1,
             name: '燃料月卡',
             enabled: true,
@@ -327,6 +327,8 @@ test('fuel uses a server quote and rejects an amount outside the configured step
         data: {
           subscription_id: 1,
           credits: 2000000,
+          min_credits: 1000000,
+          credit_step: 1000000,
           amount_minor: 17,
           currency: 'usd',
           expires_at: '2026-10-30T08:00:00Z',

@@ -1,7 +1,10 @@
-import { Button, Field } from '../../components/ui'
+import { useTranslation } from '../../lib/i18n'
+import { Button, CopyField, Field } from '../../components/ui'
 import { useState } from 'react'
 import type { Schema } from '../../lib/types'
 import { MarketForm, factor, text } from './form'
+import { marketTags } from './tags'
+import { DisclosureEditor } from './disclosure-editor'
 
 export function channelPatch(
   body: Schema['ChannelMarketCreateInput'],
@@ -9,7 +12,13 @@ export function channelPatch(
   updateService: boolean,
 ): Schema['ChannelMarketPatchInput'] {
   return {
-    name: body.name,
+    ...(body.name !== (previous.submitted_name || previous.system_display_name)
+      ? { name: body.name }
+      : {}),
+    ...(body.remark !== (previous.submitted_remark ?? previous.remark ?? '')
+      ? { remark: body.remark }
+      : {}),
+    tags: body.tags,
     source_label: body.source_label,
     model_prices: body.model_prices,
     multiplier: body.multiplier,
@@ -43,11 +52,22 @@ export function MarketChannelForm(props: {
   onSave: (input: Schema['ChannelMarketCreateInput'], updateService: boolean) => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation()
   const channel = props.channel
   const [updateService, setUpdateService] = useState(!channel)
+  const [selectedTags, setSelectedTags] = useState<(typeof marketTags)[number]['value'][]>(
+    channel?.tags ?? [],
+  )
   return (
     <section className="section">
-      <h2>{channel ? '编辑渠道' : '提交渠道'}</h2>
+      <h2>{channel ? t('编辑渠道') : t('提交渠道')}</h2>
+      {channel && (
+        <div className="field">
+          <span className="field-label">{t('分组 ID')}</span>
+          <CopyField value={channel.id} label="复制分组 ID" />
+          <span className="field-hint">{t('改名不改变分组 ID、Key 绑定或历史记录。')}</span>
+        </div>
+      )}
       <MarketForm
         pending={props.pending}
         onSubmit={(fields) => {
@@ -59,6 +79,8 @@ export function MarketChannelForm(props: {
           props.onSave(
             {
               name: text(fields, 'name'),
+              remark: text(fields, 'remark'),
+              tags: selectedTags,
               provider_type: text(fields, 'provider_type'),
               source_label: text(fields, 'source_label'),
               base_url: text(fields, 'base_url'),
@@ -87,10 +109,41 @@ export function MarketChannelForm(props: {
       >
         <Field
           name="name"
-          label="渠道名称"
-          required
-          defaultValue={channel?.system_display_name}
-          maxLength={255}
+          label="分组名称"
+          defaultValue={channel?.submitted_name || channel?.system_display_name}
+          maxLength={40}
+          placeholder="例如：Claude 推理"
+          hint="名称限 2–40 个字符；不得包含广告、联系方式、外链或冒充官方。留空使用系统名称。"
+        />
+        <fieldset className="market-tag-picker">
+          <legend>{t('厂商标签')}</legend>
+          <p className="field-hint">{t('最多选择 5 个模型厂商，用于市场搜索和相关分组推荐。')}</p>
+          <div className="row-actions">
+            {marketTags.map((tag) => (
+              <label key={tag.value}>
+                <input
+                  type="checkbox"
+                  checked={selectedTags.includes(tag.value)}
+                  disabled={!selectedTags.includes(tag.value) && selectedTags.length >= 5}
+                  onChange={(event) =>
+                    setSelectedTags((current) =>
+                      event.target.checked
+                        ? [...current, tag.value]
+                        : current.filter((value) => value !== tag.value),
+                    )
+                  }
+                />{' '}
+                {t(tag.label)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <Field
+          name="remark"
+          label="分组备注"
+          defaultValue={channel?.submitted_remark ?? channel?.remark ?? ''}
+          maxLength={200}
+          hint="备注用于说明服务特性，不得包含广告、联系方式、外链或冒充官方。"
         />
         <Field
           name="provider_type"
@@ -129,19 +182,19 @@ export function MarketChannelForm(props: {
           defaultValue={String(channel?.multiplier ?? 1)}
         />
         <label className="field" htmlFor="market-visibility">
-          <span>可见范围</span>
+          <span>{t('可见范围')}</span>
           <select
             id="market-visibility"
             name="visibility"
             defaultValue={channel?.visibility ?? 'private'}
           >
-            <option value="private">私有 · 仅受邀用户</option>
-            <option value="public">公开</option>
-            <option value="unlisted">不列出 · 已授权用户</option>
+            <option value="private">{t('私有 · 仅受邀用户')}</option>
+            <option value="public">{t('公开')}</option>
+            <option value="unlisted">{t('不列出 · 已授权用户')}</option>
           </select>
         </label>
         <label className="field" htmlFor="market-prices" style={{ flexBasis: '100%' }}>
-          <span>模型价格 JSON</span>
+          <span>{t('模型价格 JSON')}</span>
           <textarea
             id="market-prices"
             name="model_prices"
@@ -156,7 +209,7 @@ export function MarketChannelForm(props: {
               checked={updateService}
               onChange={(event) => setUpdateService(event.target.checked)}
             />{' '}
-            更新并发与服务策略（重新填写）
+            {t('更新并发与服务策略（重新填写）')}
           </label>
         )}
         {updateService && (
@@ -186,21 +239,29 @@ export function MarketChannelForm(props: {
             />
             <Field name="probe_model" label="自动探测模型" />
             <label>
-              <input type="checkbox" name="auto_probe" /> 自动探测
+              <input type="checkbox" name="auto_probe" /> {t('自动探测')}
             </label>
             <label>
-              <input type="checkbox" name="interception" defaultChecked /> 敏感词拦截
+              <input type="checkbox" name="interception" defaultChecked /> {t('敏感词拦截')}
             </label>
             <label>
-              <input type="checkbox" name="cards" /> 支持倍率卡
+              <input type="checkbox" name="cards" /> {t('支持倍率卡')}
             </label>
           </>
         )}
         <Button variant="quiet" type="button" onClick={props.onCancel}>
-          取消
+          {t('取消')}
         </Button>
       </MarketForm>
-      <p className="muted">连接和模型修改后需要重新验证与审核。</p>
+      <p className="muted">
+        {t('已发布分组的名称与备注修改需审核，通过前继续显示原内容。厂商标签修改立即生效。')}
+      </p>
+      <p className="muted">{t('连接和模型修改后需要重新验证与审核。')}</p>
+      {channel ? (
+        <DisclosureEditor id={channel.id} models={channel.declared_models ?? []} />
+      ) : (
+        <p className="muted">{t('渠道创建后，可在编辑页单独补充来源、数据政策与模型能力声明。')}</p>
+      )}
     </section>
   )
 }

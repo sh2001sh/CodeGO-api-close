@@ -21,6 +21,9 @@ func validateSourceState(ctx context.Context, source pgx.Tx, sources map[string]
 		{"request_executions", "gateway_request_executions", "status", []string{"settled"}},
 		{"request_audits", "gateway_request_audits", "status", []string{"succeeded", "failed", "rejected", "cancelled"}},
 		{"responses_background_jobs", "gateway_responses_background_jobs", "status", []string{"completed", "failed", "cancelled"}},
+		{"tasks", "tasks", "status", []string{"SUCCESS", "FAILURE"}},
+		{"task_workflows", "workflow_task_workflows", "status", []string{"succeeded", "failed", "timeout"}},
+		{"task_terminal_results", "workflow_task_terminal_results", "settlement_status", []string{"settled", "refunded"}},
 	}
 	for _, guard := range guards {
 		table := sources[guard.alias]

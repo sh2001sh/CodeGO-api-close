@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/sh2001sh/new-api/v3/pkg/redisx"
 )
@@ -20,6 +21,36 @@ const coalesceWindow = 200 * time.Millisecond
 // snapshotTTL is how long a superseded snapshot blob stays in Redis, so a
 // gateway that saw the old announcement late can still load it.
 const snapshotTTL = time.Hour
+
+// Keep the current snapshot and two predecessors. The TTL bounds idle
+// retention, while this count bounds memory during frequent publications.
+const retainedSnapshots int64 = 3
+
+// Track successful publications rather than consecutive version numbers:
+// PostgreSQL may already have bumped the version when a Redis write fails.
+// The registry and blobs require the same single Redis primary as billing.
+const snapshotVersionsKey = "v3:snapshot:retained"
+
+var publishSnapshot = redis.NewScript(`
+local previous = redis.call('ZREVRANGE', KEYS[2], 0, 0)[1]
+redis.call('SET', KEYS[1], ARGV[1])
+if previous and previous ~= KEYS[1] then
+    redis.call('EXPIRE', previous, ARGV[3])
+elseif not previous then
+    redis.call('EXPIRE', KEYS[3], ARGV[3])
+end
+redis.call('ZADD', KEYS[2], ARGV[2], KEYS[1])
+local excess = redis.call('ZCARD', KEYS[2]) - tonumber(ARGV[4])
+if excess > 0 then
+    local retired = redis.call('ZRANGE', KEYS[2], 0, excess - 1)
+    for _, key in ipairs(retired) do
+        redis.call('UNLINK', key)
+        redis.call('ZREM', KEYS[2], key)
+    end
+end
+redis.call('PUBLISH', ARGV[5], ARGV[2])
+return 1
+`)
 
 // Publisher compiles snapshots and makes them visible to gateways: it bumps
 // v3_platform.snapshot_versions, writes the blob to Redis and publishes the
@@ -120,16 +151,12 @@ func (p *Publisher) publishLocked(ctx context.Context, conn *pgxpool.Conn) error
 	}
 	// The current version never expires, so a gateway starting after a long
 	// quiet period can still load it. Older versions age out.
-	if err := p.redis.Set(ctx, snapshotKey(version), blob, 0).Err(); err != nil {
-		return fmt.Errorf("catalog: write snapshot to redis: %w", err)
-	}
-	if version > 1 {
-		if err := p.redis.Expire(ctx, snapshotKey(version-1), snapshotTTL).Err(); err != nil {
-			p.log.Error("catalog: expire previous snapshot failed", "version", version-1, "err", err)
-		}
-	}
-	if err := p.redis.Publish(ctx, redisx.ChannelSnapshot, fmt.Sprint(version)).Err(); err != nil {
-		return fmt.Errorf("catalog: publish version: %w", err)
+	// Publication and retention are atomic. UNLINK releases retired blobs
+	// off the Redis command thread; pre-upgrade snapshots still age out by TTL.
+	if err := publishSnapshot.Run(ctx, p.redis.Client,
+		[]string{snapshotKey(version), snapshotVersionsKey, snapshotKey(version - 1)},
+		blob, version, int64(snapshotTTL/time.Second), retainedSnapshots, redisx.ChannelSnapshot).Err(); err != nil {
+		return fmt.Errorf("catalog: publish snapshot to redis: %w", err)
 	}
 	p.log.Info("catalog: published snapshot", "version", version, "channels", len(snap.Channels))
 	return nil

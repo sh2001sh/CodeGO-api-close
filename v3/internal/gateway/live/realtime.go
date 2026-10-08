@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
@@ -50,22 +49,25 @@ func (h *Handler) serveRealtime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Targets = targets
-	if !h.reserve(w, r, req) {
+	if !h.reserve(w, r.WithContext(ctx), req) {
 		return
 	}
 	out := gateway.Decide(gateway.Observation{Err: &gateway.UpstreamError{Status: 503, Code: "upstream_unavailable", Message: "upstream realtime connection failed"}})
-	defer func() { h.finalize(req, out) }()
-	if h.connectRealtimeUpstream(ctx, w, r, req, targets, model, &out) {
+	finalized := false
+	defer func() {
+		if !finalized {
+			h.finalize(req, out)
+		}
+	}()
+	if h.connectRealtimeUpstream(ctx, w, r, req, targets, model, &out, &finalized) {
 		return
 	}
 	writeError(w, 503, "upstream_unavailable", "no upstream accepted the realtime session")
 }
 
-// connectRealtimeUpstream tries each planned target in order until one accepts an upstream
-// realtime connection, then bridges the client WebSocket to it. ok reports whether a bridged
-// session was started (and its outcome written to *out); the caller must not write any further
-// response in that case, since acceptWebSocket already took over the connection.
-func (h *Handler) connectRealtimeUpstream(ctx context.Context, w http.ResponseWriter, r *http.Request, req *gateway.Request, targets []gateway.Target, model string, out *gateway.Outcome) (ok bool) {
+// connectRealtimeUpstream tries planned targets and bridges the first accepted
+// connection. A true result means the caller must not write another response.
+func (h *Handler) connectRealtimeUpstream(ctx context.Context, w http.ResponseWriter, r *http.Request, req *gateway.Request, targets []gateway.Target, model string, out *gateway.Outcome, finalized *bool) (ok bool) {
 	for _, target := range targets {
 		cfg, err := realtimeConfig(target, model)
 		if err != nil {
@@ -77,12 +79,16 @@ func (h *Handler) connectRealtimeUpstream(ctx context.Context, w http.ResponseWr
 				return true
 			}
 		}
+		started := time.Now()
+		out.Target = &target
 		upstream, err := h.connectRealtime(ctx, cfg, req, target)
 		if err != nil {
 			if h.cfg.Limits != nil {
 				h.release(req, target)
 			}
-			h.cfg.Planner.Report(target, gateway.AttemptResult{Retryable: true, Scope: gateway.ScopeCredential})
+			result := gateway.AttemptResult{Retryable: true, Scope: gateway.ScopeCredential}
+			req.Attempts = append(req.Attempts, gateway.Attempt{Target: target, Result: result, Duration: time.Since(started)})
+			h.cfg.Planner.Report(target, result)
 			continue
 		}
 		defer func() { _ = upstream.Close() }()
@@ -90,8 +96,12 @@ func (h *Handler) connectRealtimeUpstream(ctx context.Context, w http.ResponseWr
 			defer h.release(req, target)
 		}
 		out.Target = &target
+		req.Attempts = append(req.Attempts, gateway.Attempt{Target: target, Result: gateway.AttemptResult{OK: true, Status: 101}, Duration: time.Since(started)})
 		h.cfg.Planner.Report(target, gateway.AttemptResult{OK: true, Status: 101})
-		acceptWebSocket(w, r, func(client *websocket.Conn) { *out = h.bridgeRealtime(ctx, client, upstream, req, target) })
+		acceptWebSocket(w, r, func(client *websocket.Conn) {
+			*finalized = true
+			*out = h.bridgeRealtime(ctx, client, upstream, r, req, target)
+		})
 		return true
 	}
 	return false
@@ -183,12 +193,7 @@ func applyRealtimeProviderPath(u *url.URL, target gateway.Target, model string) 
 	return nil
 }
 
-type relayEnd struct {
-	client bool
-	err    error
-}
-
-func (h *Handler) bridgeRealtime(ctx context.Context, client, upstream *websocket.Conn, req *gateway.Request, target gateway.Target) gateway.Outcome {
+func (h *Handler) bridgeRealtime(ctx context.Context, client, upstream *websocket.Conn, r *http.Request, req *gateway.Request, target gateway.Target) gateway.Outcome {
 	defer func() { _ = client.Close() }()
 	defer func() { _ = upstream.Close() }()
 	deadline, _ := ctx.Deadline()
@@ -199,12 +204,12 @@ func (h *Handler) bridgeRealtime(ctx context.Context, client, upstream *websocke
 	stop := context.AfterFunc(ctx, func() { _ = client.Close(); _ = upstream.Close() })
 	defer stop()
 	ends := make(chan relayEnd, 2)
-	accounting := &realtimeAccounting{out: gateway.Outcome{Target: &target}, seen: map[string]bool{}}
+	accounting := &realtimeAccounting{req: req, out: gateway.Outcome{Target: &target}, seen: map[string]bool{}}
 	go func() {
-		ends <- h.forwardRealtime(ctx, client, upstream, req, target)
+		ends <- h.forwardRealtime(ctx, client, upstream, r, req, target, accounting)
 	}()
 	go func() {
-		ends <- h.relayRealtimeUpstream(client, upstream, accounting)
+		ends <- h.relayRealtimeUpstream(ctx, client, upstream, r, target, accounting)
 	}()
 	end := <-ends
 	_ = client.Close()
@@ -212,8 +217,11 @@ func (h *Handler) bridgeRealtime(ctx context.Context, client, upstream *websocke
 	<-ends // join both loops before reading their accounting observations
 	accounting.mu.Lock()
 	defer accounting.mu.Unlock()
+	if accounting.req == nil {
+		return accounting.out
+	}
 	observed := gateway.Observation{Delivered: accounting.out.Delivered, TimedOut: errors.Is(ctx.Err(), context.DeadlineExceeded), ClientCanceled: end.client,
-		Estimate: gateway.Usage{PromptTokens: (int64(len(req.Body)) + 3) / 4, CompletionTokens: (accounting.outputChars + 3) / 4, Estimated: true}}
+		Estimate: gateway.Usage{PromptTokens: (int64(len(accounting.req.Body)) + 3) / 4, CompletionTokens: (accounting.outputChars + 3) / 4, Estimated: true}}
 	if accounting.usageReported {
 		observed.Usage = &accounting.out.Usage
 	}
@@ -221,24 +229,14 @@ func (h *Handler) bridgeRealtime(ctx context.Context, client, upstream *websocke
 		observed.Err = &gateway.UpstreamError{Status: 502, Code: "realtime_interrupted", Message: "upstream realtime connection was interrupted"}
 	}
 	result := gateway.Decide(observed)
-	result.Target = &target
+	result.Target = accounting.out.Target
+	h.finalize(accounting.req, result)
 	return result
-}
-
-// realtimeAccounting tracks usage/delivery state observed while relaying upstream realtime
-// frames to the client, guarded by mu since the relay goroutine and bridgeRealtime's final
-// read both touch it.
-type realtimeAccounting struct {
-	mu            sync.Mutex
-	out           gateway.Outcome
-	seen          map[string]bool
-	usageReported bool
-	outputChars   int64
 }
 
 // relayRealtimeUpstream reads frames from upstream, accounts for usage/delivery/output size,
 // and forwards each frame to client, until a receive or send error ends the relay.
-func (h *Handler) relayRealtimeUpstream(client, upstream *websocket.Conn, accounting *realtimeAccounting) relayEnd {
+func (h *Handler) relayRealtimeUpstream(ctx context.Context, client, upstream *websocket.Conn, r *http.Request, target gateway.Target, accounting *realtimeAccounting) relayEnd {
 	for {
 		var f wireFrame
 		if err := frameCodec.Receive(upstream, &f); err != nil {
@@ -246,14 +244,44 @@ func (h *Handler) relayRealtimeUpstream(client, upstream *websocket.Conn, accoun
 		}
 		root := gjson.ParseBytes(f.data)
 		accounting.mu.Lock()
-		if root.Get("type").Str == "response.done" {
+		typ := root.Get("type").Str
+		if typ == "response.created" {
+			accounting.pending = true
+		}
+		if typ == "response.done" {
 			response := root.Get("response")
 			id := response.Get("id").Str
 			usage := response.Get("usage")
-			if usage.IsObject() && (id == "" || !accounting.seen[id]) {
+			if id == "" || !accounting.seen[id] {
 				accounting.seen[id] = true
-				addRealtimeUsage(&accounting.out.Usage, usage)
-				accounting.usageReported = true
+				if usage.IsObject() {
+					addRealtimeUsage(&accounting.out.Usage, usage)
+					accounting.usageReported = true
+				}
+				accounting.out.Delivered = accounting.out.Delivered || response.Get("output.#").Int() > 0
+				err := h.completeRealtimeTurn(ctx, r, target, accounting)
+				if err != nil {
+					accounting.mu.Unlock()
+					// Stop upstream consumption immediately, even if the client
+					// has stopped reading and terminal delivery blocks.
+					_ = upstream.Close()
+					// Preserve the accepted terminal response before reporting why
+					// the next turn cannot be admitted.
+					_ = frameCodec.Send(client, f)
+					status := 503
+					if errors.Is(err, gateway.ErrInsufficientCredits) {
+						status = 402
+					}
+					if errors.Is(err, gateway.ErrInvalidKey) {
+						status = 401
+					}
+					var failure *gateway.UpstreamError
+					if errors.As(err, &failure) {
+						status = failure.Status
+					}
+					_ = socketError(client, status, "realtime_admission_failed", "unable to authorize or reserve the next realtime turn")
+					return relayEnd{err: err}
+				}
 			}
 		}
 		if text := root.Get("delta"); text.Type == gjson.String && (strings.Contains(root.Get("type").Str, "text") || strings.Contains(root.Get("type").Str, "transcript")) {
@@ -264,26 +292,9 @@ func (h *Handler) relayRealtimeUpstream(client, upstream *websocket.Conn, accoun
 			return relayEnd{client: true, err: err}
 		}
 		accounting.mu.Lock()
-		typ := root.Get("type").Str
-		if (strings.HasSuffix(typ, ".delta") && root.Get("delta").Str != "") || (typ == "response.done" && root.Get("response.output.#").Int() > 0) {
+		if strings.HasSuffix(typ, ".delta") && root.Get("delta").Str != "" {
 			accounting.out.Delivered = true
 		}
 		accounting.mu.Unlock()
-	}
-}
-
-func addRealtimeUsage(total *gateway.Usage, usage gjson.Result) {
-	total.PromptTokens += usage.Get("input_tokens").Int()
-	total.CompletionTokens += usage.Get("output_tokens").Int()
-	total.CachedTokens += usage.Get("input_token_details.cached_tokens").Int()
-	total.AudioInputTokens += usage.Get("input_token_details.audio_tokens").Int()
-	total.AudioOutputTokens += usage.Get("output_token_details.audio_tokens").Int()
-	// Providers have shipped both singular and plural detail field names.
-	if !usage.Get("input_token_details").Exists() {
-		total.CachedTokens += usage.Get("input_tokens_details.cached_tokens").Int()
-		total.AudioInputTokens += usage.Get("input_tokens_details.audio_tokens").Int()
-	}
-	if !usage.Get("output_token_details").Exists() {
-		total.AudioOutputTokens += usage.Get("output_tokens_details.audio_tokens").Int()
 	}
 }

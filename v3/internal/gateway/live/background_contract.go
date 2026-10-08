@@ -23,6 +23,8 @@ type BackgroundJob struct {
 	UserID               int64             `json:"user_id"`
 	KeyID                int64             `json:"key_id"`
 	Group                string            `json:"group"`
+	TargetGroup          string            `json:"target_group,omitempty"`
+	AttemptsCount        int64             `json:"attempts_count,omitempty"`
 	Model                string            `json:"model"`
 	Path                 string            `json:"path,omitempty"`
 	ChannelID            int64             `json:"channel_id"`

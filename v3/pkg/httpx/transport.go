@@ -43,9 +43,11 @@ func (c TransportConfig) withDefaults() TransportConfig {
 // per response-header-timeout bucket, which split connection pools; here the
 // header timeout is enforced per request with WithHeaderTimeout instead.
 type Pool struct {
-	cfg        TransportConfig
-	mu         sync.Mutex
-	transports map[string]*http.Transport
+	cfg           TransportConfig
+	mu            sync.Mutex
+	transports    map[string]*http.Transport
+	marketClients map[marketClientKey]*marketClientEntry
+	marketClock   uint64
 }
 
 // NewPool returns an empty transport pool.
@@ -100,6 +102,9 @@ func (p *Pool) CloseIdle() {
 	defer p.mu.Unlock()
 	for _, t := range p.transports {
 		t.CloseIdleConnections()
+	}
+	for _, cached := range p.marketClients {
+		cached.transport.CloseIdleConnections()
 	}
 }
 

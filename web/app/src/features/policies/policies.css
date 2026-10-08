@@ -1,0 +1,116 @@
+.policy-layout {
+  grid-template-columns: minmax(200px, 0.85fr) minmax(0, 2.15fr);
+}
+.policy-sidebar .policy-eyebrow {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+.policy-sidebar nav {
+  margin-top: var(--space-3);
+}
+.policy-sidebar nav a[aria-current='page'] {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+.policy-contents {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+.policy-contents summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  padding-block: var(--space-2);
+}
+.policy-contents ol {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0 0;
+}
+.policy-contents a {
+  display: block;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  padding-block: 10px;
+  line-height: 1.5;
+}
+.policy-contents a:hover,
+.policy-support-link:hover {
+  text-decoration: underline;
+}
+.policy-support-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: var(--space-4);
+  color: var(--text-secondary);
+}
+.policy-main {
+  min-width: 0;
+}
+.policy-header h1 {
+  font-size: clamp(28px, 3.3vw, 42px);
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  font-weight: 560;
+  text-wrap: balance;
+  margin: 0;
+}
+.policy-prose .resource-updated {
+  margin-top: var(--space-3);
+}
+.policy-prose .resource-intro {
+  margin-top: var(--space-6);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border);
+  font-size: clamp(18px, 2vw, 22px);
+}
+.policy-prose h2 {
+  scroll-margin-top: calc(var(--topbar-h) + 24px);
+}
+.policy-language-notice {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4);
+  border-inline-start: 3px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  line-height: 1.65;
+  font-size: var(--text-sm);
+}
+.policy-company {
+  margin-top: var(--space-10);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-5);
+  color: var(--text-secondary);
+}
+.policy-company p {
+  margin-block: var(--space-1);
+}
+.policy-company .company-address {
+  margin-block: var(--space-3);
+}
+@media (max-width: 700px) {
+  .policy-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .policy-contents {
+    margin-top: var(--space-3);
+  }
+  .policy-contents ol {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 var(--space-3);
+  }
+  .policy-main {
+    margin-top: var(--space-5);
+  }
+}
+@media (max-width: 420px) {
+  .policy-contents ol {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

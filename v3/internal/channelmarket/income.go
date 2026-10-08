@@ -25,15 +25,24 @@ type IncomeResult struct {
 }
 
 func accountTx(ctx context.Context, tx pgx.Tx, owner int64, kind string) (int64, error) {
+	return accountOfTypeTx(ctx, tx, "user", owner, kind)
+}
+
+func accountOfTypeTx(ctx context.Context, tx pgx.Tx, ownerType string, owner int64, kind string) (int64, error) {
 	var id int64
-	err := tx.QueryRow(ctx, `SELECT id FROM v3_billing.accounts WHERE owner_type='user' AND owner_id=$1 AND kind=$2`, owner, kind).Scan(&id)
+	err := tx.QueryRow(ctx, `SELECT id FROM v3_billing.accounts WHERE owner_type=$1 AND owner_id=$2 AND kind=$3`, ownerType, owner, kind).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return 0, err
 	}
-	err = tx.QueryRow(ctx, `INSERT INTO v3_billing.accounts(owner_type,owner_id,kind) VALUES('user',$1,$2) ON CONFLICT(owner_type,owner_id,kind) DO UPDATE SET owner_id=EXCLUDED.owner_id RETURNING id`, owner, kind).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO v3_billing.accounts(owner_type,owner_id,kind) VALUES($1,$2,$3) ON CONFLICT(owner_type,owner_id,kind) DO NOTHING RETURNING id`, ownerType, owner, kind).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// A concurrent creator may win the insert. A separate statement gets
+		// its committed row without an empty UPDATE and profile invalidation.
+		err = tx.QueryRow(ctx, `SELECT id FROM v3_billing.accounts WHERE owner_type=$1 AND owner_id=$2 AND kind=$3`, ownerType, owner, kind).Scan(&id)
+	}
 	return id, err
 }
 func lockAccounts(ctx context.Context, tx pgx.Tx, ids ...int64) error {
@@ -126,8 +135,8 @@ func (s *Service) postAccrueEntriesTx(ctx context.Context, tx pgx.Tx, requestID 
 	if commission <= 0 {
 		return nil
 	}
-	var platform int64
-	if err = tx.QueryRow(ctx, `INSERT INTO v3_billing.accounts(owner_type,owner_id,kind) VALUES('platform',1,'platform_revenue') ON CONFLICT(owner_type,owner_id,kind) DO UPDATE SET owner_id=EXCLUDED.owner_id RETURNING id`).Scan(&platform); err != nil {
+	platform, err := accountOfTypeTx(ctx, tx, "platform", 1, "platform_revenue")
+	if err != nil {
 		return err
 	}
 	_, err = s.poster.PostTx(ctx, tx, billing.Entry{AccountID: platform, Amount: credits.Micro(commission), Kind: "marketplace_accrue", OperationID: "market-commission:" + requestID, RequestID: requestID, Reason: "marketplace five percent commission"})
@@ -137,8 +146,9 @@ func (s *Service) postAccrueEntriesTx(ctx context.Context, tx pgx.Tx, requestID 
 // releasableSettlement is a pending settlement whose hold period has elapsed,
 // locked for release.
 type releasableSettlement struct {
-	id         string
-	owner, net int64
+	id              string
+	owner, net      int64
+	pending, wallet int64
 }
 
 func (s *Service) ReleaseIncome(ctx context.Context, limit int) (IncomeResult, error) {
@@ -152,6 +162,9 @@ func (s *Service) ReleaseIncome(ctx context.Context, limit int) (IncomeResult, e
 	err := s.transaction(ctx, func(tx pgx.Tx) error {
 		items, err := loadReleasableSettlementsTx(ctx, tx, s.cfg.Now(), limit)
 		if err != nil {
+			return err
+		}
+		if err := prelockIncomeReleaseAccountsTx(ctx, tx, items); err != nil {
 			return err
 		}
 		for _, i := range items {
@@ -198,16 +211,9 @@ func loadReleasableSettlementsTx(ctx context.Context, tx pgx.Tx, now time.Time, 
 // releaseSettlementTx moves one settlement's net earnings from the owner's
 // pending account to their wallet and marks the settlement released.
 func (s *Service) releaseSettlementTx(ctx context.Context, tx pgx.Tx, i releasableSettlement) error {
-	pending, err := accountTx(ctx, tx, i.owner, "marketplace_pending")
-	if err != nil {
-		return err
-	}
-	wallet, err := accountTx(ctx, tx, i.owner, "wallet")
-	if err != nil {
-		return err
-	}
-	if err := lockAccounts(ctx, tx, pending, wallet); err != nil {
-		return err
+	pending, wallet := i.pending, i.wallet
+	if pending <= 0 || wallet <= 0 {
+		return ErrConflict
 	}
 	if i.net > 0 {
 		for _, entry := range []billing.Entry{{AccountID: pending, Amount: credits.Micro(-i.net), Kind: "marketplace_release", OperationID: "market-release-out:" + i.id, Reason: "release held owner earnings"}, {AccountID: wallet, Amount: credits.Micro(i.net), Kind: "marketplace_release", OperationID: "market-release-in:" + i.id, Reason: "released owner earnings"}} {

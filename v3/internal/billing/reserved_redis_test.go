@@ -3,6 +3,7 @@
 package billing
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -43,6 +44,124 @@ func TestReservedReconstructionPreservesLiveHoldsAndRepairsLostHashes(t *testing
 	}
 	if bal, held := balance(t, rdb); bal != 900 || held != 0 {
 		t.Fatalf("late settle=%d held=%d", bal, held)
+	}
+}
+
+func TestReservedReconstructionRepairsModelCountersAndPreservesUsage(t *testing.T) {
+	s, rdb, _, clock := setup(t, 1000)
+	req, snapshot := sourceFixture(clock.now())
+	profile := snapshot.AccountProfiles[7]
+	profile.Subscriptions[0].ModelLimits = map[string]int64{"model": 900}
+	profile.Subscriptions[0].ModelUsage = map[string]int64{"model": 20}
+	snapshot.AccountProfiles[7] = profile
+	s.snapshot = func() *catalog.Snapshot { return snapshot }
+	if err := s.Reserve(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	model := sourceLimits(profile, "model")[43].ModelKey
+	const liveAmount int64 = 9_007_199_254_740_993
+	liveHash := keysFor(43, "still-live").reservation
+	if err := rdb.HSet(ctx, liveHash, "amount", liveAmount, "model_key", model, "model_amount", liveAmount).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := rdb.SAdd(ctx, ReservationIndexKey(43), liveHash).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := rdb.Del(ctx, keysFor(43, req.ID).reservation).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SweepExpired(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		fixed, err := RecomputeReserved(ctx, rdb, 43)
+		if err != nil || fixed != (i == 0) {
+			t.Fatalf("recompute %d fixed=%t err=%v", i, fixed, err)
+		}
+	}
+	for _, field := range []string{"reserved", model + ":reserved"} {
+		if got, err := rdb.HGet(ctx, BalanceKey(43), field).Int64(); err != nil || got != liveAmount {
+			t.Fatalf("%s=%d err=%v", field, got, err)
+		}
+	}
+	if got, _ := rdb.HGet(ctx, BalanceKey(43), model+":used").Int64(); got != 20 {
+		t.Fatalf("model usage was changed: %d", got)
+	}
+	if err := rdb.Del(ctx, liveHash).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RecomputeReserved(ctx, rdb, 43); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := rdb.HGet(ctx, BalanceKey(43), model+":reserved").Int64(); got != 0 {
+		t.Fatalf("lost model hold remains: %d", got)
+	}
+}
+
+func TestReservationSurvivesLongSessionDeadline(t *testing.T) {
+	s, rdb, _, clock := setup(t, 1000)
+	clock.ms.Store(time.Now().UnixMilli())
+	long, cancel := context.WithTimeout(ctx, time.Hour)
+	defer cancel()
+	req := newReq("long-session")
+	if err := s.Reserve(long, req); err != nil {
+		t.Fatal(err)
+	}
+	clock.ms.Add(36 * time.Minute.Milliseconds())
+	if released, err := s.SweepExpired(ctx, 100); err != nil || released != 0 {
+		t.Fatalf("live hold swept: released=%d err=%v", released, err)
+	}
+	if err := s.Finalize(ctx, req, completed(10, 20)); err != nil {
+		t.Fatal(err)
+	}
+	if bal, held := balance(t, rdb); bal != 950 || held != 0 {
+		t.Fatalf("long session finalization=%d/%d", bal, held)
+	}
+}
+
+func TestFundingReservationSurvivesLongSessionDeadline(t *testing.T) {
+	for _, sourcePricing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "key_budget", true: "source_pricing"}[sourcePricing], func(t *testing.T) {
+			s, rdb, _, clock := setup(t, 1000)
+			clock.ms.Store(time.Now().UnixMilli())
+			long, cancel := context.WithTimeout(ctx, time.Hour)
+			defer cancel()
+			req := newReq("funding-long-session")
+			if sourcePricing {
+				var snapshot *catalog.Snapshot
+				req, snapshot = sourceFixture(clock.now())
+				s.snapshot = func() *catalog.Snapshot { return snapshot }
+				if err := rdb.HSet(ctx, BalanceKey(43), "balance", 450, "reserved", 0, "ver", 0).Err(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			req.Principal.BudgetLimited, req.Principal.BudgetAccountID = true, 44
+			if err := rdb.HSet(ctx, BalanceKey(44), "balance", 1000, "reserved", 0, "ver", 0).Err(); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Reserve(long, req); err != nil {
+				t.Fatal(err)
+			}
+			clock.ms.Add(36 * time.Minute.Milliseconds())
+			if released, err := s.SweepExpired(ctx, 100); err != nil || released != 0 {
+				t.Fatalf("live funding hold swept: released=%d err=%v", released, err)
+			}
+			out := completed(10, 20)
+			wantWallet, wantBudget := int64(950), int64(950)
+			if sourcePricing {
+				out.Target = &req.Targets[0]
+				wantWallet, wantBudget = 955, 505
+			}
+			if err := s.Finalize(ctx, req, out); err != nil {
+				t.Fatal(err)
+			}
+			if bal, held := balance(t, rdb); bal != wantWallet || held != 0 {
+				t.Fatalf("wallet finalization=%d/%d", bal, held)
+			}
+			if got, _ := rdb.HGet(ctx, BalanceKey(44), "balance").Int64(); got != wantBudget {
+				t.Fatalf("budget balance=%d want=%d", got, wantBudget)
+			}
+		})
 	}
 }
 

@@ -14,16 +14,23 @@ import (
 // catalog rotations. Price.Rules is immutable after admission, including any
 // private Veo request facts added to a copy of the catalog price.
 type targetPrice struct {
-	Price                        catalog.Price  `json:"price"`
-	MultiplierPPM                int64          `json:"multiplier_ppm"`
-	Group                        string         `json:"group"`
-	Market                       bool           `json:"market"`
-	SubscriptionAllowed          bool           `json:"subscription_allowed,omitempty"`
-	SubscriptionFactorPPM        int64          `json:"subscription_factor_ppm,omitempty"`
-	PackagePPM                   int64          `json:"package_ppm,omitempty"`
-	SubscriptionAccounts         map[int64]bool `json:"subscription_accounts,omitempty"`
-	RoutePoolID                  int64          `json:"route_pool_id,omitempty"`
-	ProcurementCostMultiplierPPM int64          `json:"procurement_cost_multiplier_ppm,omitempty"`
+	SubscriptionPolicies         map[int64]subscriptionPrice `json:"subscription_policies,omitempty"`
+	Price                        catalog.Price               `json:"price"`
+	MultiplierPPM                int64                       `json:"multiplier_ppm"`
+	Group                        string                      `json:"group"`
+	Market                       bool                        `json:"market"`
+	SubscriptionAllowed          bool                        `json:"subscription_allowed,omitempty"`
+	SubscriptionFactorPPM        int64                       `json:"subscription_factor_ppm,omitempty"`
+	PackagePPM                   int64                       `json:"package_ppm,omitempty"`
+	SubscriptionAccounts         map[int64]bool              `json:"subscription_accounts,omitempty"`
+	RoutePoolID                  int64                       `json:"route_pool_id,omitempty"`
+	ProcurementCostMultiplierPPM int64                       `json:"procurement_cost_multiplier_ppm,omitempty"`
+}
+
+type subscriptionPrice struct {
+	PolicyVersion        string `json:"policy_version"`
+	OrderID              int64  `json:"order_id,omitempty"`
+	RevenueMultiplierPPM *int64 `json:"revenue_multiplier_ppm,omitempty"`
 }
 
 func targetPriceKey(target gateway.Target) string {

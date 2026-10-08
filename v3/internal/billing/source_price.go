@@ -1,6 +1,7 @@
 package billing
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 
@@ -96,13 +97,15 @@ func (s *Settler) quoteSource(h *hold, target gateway.Target, usage gateway.Usag
 	return quote, nil
 }
 
-func (s *Settler) sourceReserveArgs(req *gateway.Request, h *hold, budgetIndex int) ([]any, error) {
+func (s *Settler) sourceReserveArgs(ctx context.Context, req *gateway.Request, h *hold, budgetIndex int) ([]any, error) {
 	targets := req.Targets
 	if len(h.targetPrices) == 0 && len(targets) == 0 {
 		targets = []gateway.Target{{}}
 	}
-	args := []any{"source-v1", int64(s.cfg.OverdraftAllowance), s.cfg.Now().Add(s.cfg.ReservationExpiry).UnixMilli(),
-		(s.cfg.ReservationExpiry + reservationGrace).Milliseconds(), req.ID, len(targets), budgetIndex}
+	protocol := sourceProtocol(h)
+	lifetime := s.reservationLifetime(ctx)
+	args := []any{protocol, int64(s.cfg.OverdraftAllowance), s.cfg.Now().Add(lifetime).UnixMilli(),
+		(lifetime + reservationGrace).Milliseconds(), req.ID, len(targets), budgetIndex}
 	for _, part := range h.funding {
 		args = append(args, part.account)
 	}
@@ -138,6 +141,10 @@ func (s *Settler) sourceReserveArgs(req *gateway.Request, h *hold, budgetIndex i
 				allowed = 1
 			}
 			args = append(args, allowed)
+			if protocol == "source-v2" {
+				amount, _, _, _ := bucketQuote(p, quote, part.account)
+				args = append(args, int64(amount))
+			}
 		}
 	}
 	return args, nil
@@ -165,7 +172,8 @@ func (s *Settler) sourceFinalizeCall(req *gateway.Request, out gateway.Outcome, 
 	if h.budgetAccount > 0 {
 		budgetIndex = len(h.funding)
 	}
-	args := []any{"source-v1", int64(quote.Wallet), int64(quote.Subscription), int64(s.cfg.OverdraftCap), s.cfg.DoneTTL.Milliseconds(),
+	protocol := sourceProtocol(h)
+	args := []any{protocol, int64(quote.Wallet), int64(quote.Subscription), int64(s.cfg.OverdraftCap), s.cfg.DoneTTL.Milliseconds(),
 		req.ID, len(h.funding), budgetIndex, int64(quote.WalletBefore), int64(quote.SubscriptionBefore), quote.CardID, quote.GrossDivisor, quote.Quantum}
 	for _, part := range h.funding {
 		allowed := 0
@@ -178,6 +186,18 @@ func (s *Settler) sourceFinalizeCall(req *gateway.Request, out gateway.Outcome, 
 		}
 		limit := h.sourceLimits[part.account]
 		args = append(args, part.account, int64(part.amount), allowed, limit.ModelKey, limit.Limit, limit.Used, limit.SubscriptionID)
+		if protocol == "source-v2" {
+			amount, before, divisor, policy := bucketQuote(selected, quote, part.account)
+			revenue, err := frozenRevenue(policy)
+			if err != nil {
+				return walRecord{}, err
+			}
+			if part.account == h.account {
+				amount, before, divisor, policy = quote.Wallet, quote.WalletBefore, 1, subscriptionPrice{PolicyVersion: "wallet"}
+				revenue = ""
+			}
+			args = append(args, int64(amount), int64(before), divisor, policy.PolicyVersion, policy.OrderID, revenue)
+		}
 	}
 	pref, err := normalizeFundingPreference(h.fundingPreference, nil)
 	if err != nil {
@@ -187,6 +207,16 @@ func (s *Settler) sourceFinalizeCall(req *gateway.Request, out gateway.Outcome, 
 		pref = "release"
 	}
 	args = append(args, FieldFundingPreference, pref)
+	if protocol == "source-v2" {
+		args = append(args, "funding_full_wallet_before", int64(quote.WalletBefore))
+		if out.Charge && selected.RoutePoolID > 0 && selected.ProcurementCostMultiplierPPM > 0 {
+			cost, err := pricing.PriceForRequestPPM(out.Usage, selected.Price, selected.ProcurementCostMultiplierPPM, h.pricingInput)
+			if err != nil {
+				return walRecord{}, err
+			}
+			args = append(args, "funding_full_procurement_cost", int64(cost))
+		}
+	}
 	rec := s.finalizeCall(req, out, h, quote.Wallet)
 	for _, value := range rec.Args[4:] {
 		args = append(args, value)

@@ -94,6 +94,14 @@ func (d *ModelDiscovery) authorize(r *http.Request) (Principal, *clientError) {
 		d.failedAuth(address)
 		return Principal{}, errInvalidKey
 	}
+	principal, err = requestedPrincipal(principal, r)
+	if err != nil {
+		var refusal *UpstreamError
+		if errors.As(err, &refusal) {
+			return Principal{}, &clientError{refusal.Status, refusal.Type, refusal.Code, refusal.Message}
+		}
+		return Principal{}, &clientError{http.StatusForbidden, "permission_error", "group_not_allowed", "API key does not allow this group"}
+	}
 	if err := ValidateRequestPolicy(principal, "", r, d.cfg.TrustedProxies); err != nil {
 		var policy *UpstreamError
 		if errors.As(err, &policy) {

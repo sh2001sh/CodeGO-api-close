@@ -5,14 +5,14 @@ import "time"
 const planColumns = `id,name,price_minor,currency,credits,period_seconds,enabled,
 group_buy_enabled,group_buy_target,group_buy_bonus,group_buy_lifetime_seconds,
 period_credits,reset_period,reset_custom_seconds,internal_only,max_purchase_per_user,duration_unit,duration_value,custom_seconds,
-group_buy_bonus2_micro,group_buy_bonus3_micro,group_buy_bonus5_micro,plan_type,fuel_enabled,fuel_unit_price_micro,fuel_min_credits,fuel_credit_step,membership_tier,upgrade_group,model_limits`
+group_buy_bonus2_micro,group_buy_bonus3_micro,group_buy_bonus5_micro,plan_type,fuel_enabled,fuel_unit_price_micro,fuel_min_credits,fuel_credit_step,membership_tier,upgrade_group,model_limits,lucky_draw_enabled,policy_version`
 
 func scanPlan(row scanner) (Plan, error) {
 	var p Plan
 	err := row.Scan(&p.ID, &p.Name, &p.PriceMinor, &p.Currency, &p.Credits, &p.PeriodSeconds, &p.Enabled,
 		&p.GroupBuyEnabled, &p.GroupBuyTarget, &p.GroupBuyBonus, &p.GroupBuyLifetimeSeconds,
 		&p.PeriodCredits, &p.ResetPeriod, &p.ResetCustomSeconds, &p.InternalOnly, &p.MaxPurchasePerUser, &p.DurationUnit, &p.DurationValue, &p.CustomSeconds,
-		&p.GroupBuyBonus2, &p.GroupBuyBonus3, &p.GroupBuyBonus5, &p.PlanType, &p.FuelEnabled, &p.FuelUnitPriceMicro, &p.FuelMinCredits, &p.FuelCreditStep, &p.MembershipTier, &p.UpgradeGroup, &p.ModelLimits)
+		&p.GroupBuyBonus2, &p.GroupBuyBonus3, &p.GroupBuyBonus5, &p.PlanType, &p.FuelEnabled, &p.FuelUnitPriceMicro, &p.FuelMinCredits, &p.FuelCreditStep, &p.MembershipTier, &p.UpgradeGroup, &p.ModelLimits, &p.LuckyDrawEnabled, &p.PolicyVersion)
 	return p, err
 }
 
@@ -128,4 +128,16 @@ func advanceReset(due time.Time, period string, seconds int64, now, end time.Tim
 		last = *next
 	}
 	return last, nil
+}
+
+func validCurrency(currency string) bool {
+	if len(currency) < 3 || len(currency) > 12 || currency[0] < 'a' || currency[0] > 'z' {
+		return false
+	}
+	for _, r := range currency {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
 }

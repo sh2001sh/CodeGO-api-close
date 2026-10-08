@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sh2001sh/new-api/v3/api"
+	"github.com/sh2001sh/new-api/v3/internal/adminops"
 	"github.com/sh2001sh/new-api/v3/internal/audit"
 	"github.com/sh2001sh/new-api/v3/internal/billing/ledger"
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
@@ -15,8 +16,11 @@ import (
 	"github.com/sh2001sh/new-api/v3/internal/channelmarket"
 	"github.com/sh2001sh/new-api/v3/internal/commerce"
 	"github.com/sh2001sh/new-api/v3/internal/community"
+	"github.com/sh2001sh/new-api/v3/internal/desktop"
 	"github.com/sh2001sh/new-api/v3/internal/identity"
+	"github.com/sh2001sh/new-api/v3/internal/incentives"
 	"github.com/sh2001sh/new-api/v3/internal/marketplace"
+	"github.com/sh2001sh/new-api/v3/internal/notifications"
 	"github.com/sh2001sh/new-api/v3/internal/security"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
 )
@@ -31,7 +35,23 @@ func TestGeneratedDTOsRetainDomainWireValues(t *testing.T) {
 		name              string
 		domain, generated any
 	}{
+		{"routing_selection", channelmarket.RoutePoolGroupOption{GroupID: "internal-id", RoutingGroup: "market_internal-id", Name: "Private group", DisplayID: "9007199254740993", Kind: "market", Multiplier: json.Number("1.000001"), Models: []string{"test-model"}}, &api.ChannelMarketRoutePoolGroupOption{}},
+		{"owner_analytics_exact_income", channelmarket.ChannelOwnerAnalytics{From: at, To: at.Add(time.Hour), BucketSeconds: 3600, Summary: channelmarket.OwnerAnalyticsSummary{NetMicro: large, PendingIncomeMicro: large}, Points: []channelmarket.OwnerAnalyticsPoint{}, Channels: []channelmarket.OwnerAnalyticsChannel{}, Settlements: []channelmarket.OwnerAnalyticsSettlement{}}, &api.ChannelOwnerAnalytics{}},
+		{"market_insights_unknown_performance", channelmarket.ChannelMarketInsights{GroupID: "group", DisplayID: "123", Model: "alpha", WindowHours: 24, RequestCount: large, FailureCounts: []channelmarket.ModelFailureCount{}}, &api.ChannelMarketInsights{}},
+		{"market_owner_disclosure", channelmarket.ChannelMarketDisclosure{ChannelMarketDisclosureInput: channelmarket.ChannelMarketDisclosureInput{SourceKind: "unknown", Regions: []string{}, Retention: "unknown", Training: "unknown", Models: []channelmarket.ChannelModelDisclosure{}}, UpdatedAt: at, Provenance: "owner_declared"}, &api.ChannelMarketDisclosure{}},
+		{"current_policies", identity.CurrentPolicies{Version: identity.CurrentPolicyVersion, Documents: []identity.PolicyRequirement{{Document: "supplier", Version: identity.CurrentPolicyVersion, URL: "/supplier-agreement"}}}, &api.CurrentPolicies{}},
+		{"policy_acceptance", identity.PolicyAcceptance{Document: "supplier", Version: identity.CurrentPolicyVersion, Locale: "zh-HK", AcceptedAt: at}, &api.PolicyAcceptance{}},
 		{"key", identity.KeyRecord{KeyInput: identity.KeyInput{ID: 1, Name: "test", BudgetLimited: true, BudgetMicroCredits: ptr(int64(large))}, CreatedAt: at}, &api.KeyRecord{}},
+		{"two_factor_status", identity.TwoFactorStatus{Enabled: true, Locked: true, BackupCodesRemaining: 4}, &api.TwoFactorStatus{}},
+		{"two_factor_setup", identity.TwoFactorSetup{Secret: "test-base32", QRCodeData: "otpauth://totp/test", BackupCodes: []string{"one", "two"}}, &api.TwoFactorSetup{}},
+		{"desktop_device", desktop.Device{ID: large, DeviceName: "test", Scopes: []string{"account:read"}, ExpiresAt: large}, &api.DesktopDevice{}},
+		{"desktop_pending_poll", desktop.PollResult{Status: "pending"}, &api.DesktopPollResult{}},
+		{"desktop_approved_poll", desktop.PollResult{Status: "approved", Authenticated: true, AccessToken: "fixture-device-token", UserID: large, DeviceID: large, Scopes: []string{"account:read"}}, &api.DesktopPollResult{}},
+		{"desktop_import", desktop.ImportPayload{Tool: "codex", APIKey: "fixture-key", Enabled: true, Config: "e30="}, &api.DesktopImportPayload{}},
+		{"deployment_settings", adminops.DeploymentSettings{Provider: "io.net", Enabled: true, Configured: true, CanConnect: true}, &api.DeploymentSettings{}},
+		{"performance_cleanup", adminops.LogCleanupResult{FreedBytes: large, FailedFiles: []string{}}, &api.PerformanceCleanupResult{}},
+		{"reset_summary", incentives.ResetSummary{AvailableCount: large, EarnedTotal: large, CurrentMonth: "2026-10", LastUsedMonth: "2026-09"}, &api.ResetSummary{}},
+		{"reset_result", incentives.ResetResult{SubscriptionID: large, UsedBefore: large, ClearedUsed: large}, &api.ResetResult{}},
 		{"user_affiliate_balance", identity.User{ID: 1, AffiliateMicroCredits: large}, &api.User{}},
 		{"affiliate_transfer", identity.AffiliateTransfer{AffiliateTransferInput: identity.AffiliateTransferInput{AmountMicroCredits: large, OperationID: "affiliate-transfer-1"}, AffiliateMicroCredits: large, WalletMicroCredits: large}, &api.AffiliateTransfer{}},
 		{"audit_usage", audit.Usage{Amount: large, CreatedAt: at}, &api.AuditUsage{}},
@@ -53,6 +73,10 @@ func TestGeneratedDTOsRetainDomainWireValues(t *testing.T) {
 		}}, &api.FundingDailyEconomics{}},
 		{"funding_economics_empty_sources", ledger.FundingDailyEconomics{Date: "0001-01-01", Sources: []ledger.FundingEconomicsSource{}}, &api.FundingDailyEconomics{}},
 		{"rating", community.RatingResult{Channel: community.RatingSummary{AverageScore: 8.2, RatingCount: 3}}, &api.CommunityRatingResult{}},
+		{"market_rating", community.MarketRating{GroupID: "group", ChannelID: "349", Channel: community.RatingSummary{AverageScore: 8, RatingCount: large, ViewerStars: 4}, EligibilityReason: "login_required"}, &api.MarketRating{}},
+		{"shop_rating", channelmarket.Shop{ID: "10001", Name: "Approved shop", Models: []string{}, Tags: []string{}, Rating: community.PublicRating{AverageScore: 8, RatingCount: large}, CreatedAt: at, UpdatedAt: at}, &api.ChannelMarketShop{}},
+		{"notification_list", notifications.List{Items: []notifications.Item{{ID: "9007199254740993", Category: "review", Kind: "shop_review", Data: json.RawMessage(`{"shop_id":"10001"}`), CreatedAt: at}}, UnreadCount: large, Total: large, Page: 1, PageSize: 20, LatestID: "9007199254740993"}, &api.NotificationList{}},
+		{"notification_summary", notifications.Summary{UnreadCount: large, LatestID: "9007199254740993"}, &api.NotificationSummary{}},
 		{"credential", catalogcontrol.Credential{ID: 5}, &api.CatalogCredential{}},
 		{"model_metadata", catalog.ModelMetadata{ID: large, ModelName: "gpt-", NameRule: catalog.NameRulePrefix, VendorID: large, Status: 1, SyncOfficial: 1}, &api.CatalogModelMetadata{}},
 		{"vendor_metadata", catalog.VendorMetadata{ID: large, Name: "vendor", Status: 1}, &api.CatalogVendorMetadata{}},
@@ -73,6 +97,7 @@ func TestGeneratedDTOsRetainDomainWireValues(t *testing.T) {
 		{"plan_paid_group_model_limits", commerce.Plan{Credits: large, PeriodCredits: large, UpgradeGroup: "vip", ModelLimits: map[string]int64{"chat": large, "small": 1}}, &api.Plan{}},
 		{"subscription", commerce.Subscription{Balance: large, TotalCredits: large, PeriodCredits: large}, &api.Subscription{}},
 		{"order", commerce.Order{AmountMinor: large, Credits: large, CreatedAt: at, ExpiresAt: at}, &api.Order{}},
+		{"order_frozen_referral_precision", commerce.Order{ReferralTerms: json.RawMessage(`{"max_reward_credits":9007199254740993,"legacy_reset_eligible":false}`), CreatedAt: at, ExpiresAt: at}, &api.Order{}},
 		{"checkout_discount", commerce.CheckoutDiscount{OriginalMinor: large, PaidMinor: large, Multiplier: "0.01", State: "reserved"}, &api.CheckoutDiscount{}},
 		{"redemption_credits", commerce.RedemptionResult{RedeemType: "credits", Credits: large}, &api.RedemptionResult{}},
 		{"redemption_subscription", commerce.RedemptionResult{RedeemType: "subscription", PlanID: large, PlanTitle: "保留订阅", UserSubscriptionID: large}, &api.RedemptionResult{}},

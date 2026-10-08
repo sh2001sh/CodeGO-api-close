@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"strconv"
 
+	"github.com/sh2001sh/new-api/v3/internal/billing/pricing"
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
@@ -48,6 +49,15 @@ func appendEconomicsCall(rec walRecord, h *hold, out gateway.Outcome) (walRecord
 	if price.RoutePoolID > 0 {
 		rec.Args = append(rec.Args, FieldRoutePoolID, strconv.FormatInt(price.RoutePoolID, 10),
 			FieldProcurementCost, strconv.FormatInt(price.ProcurementCostMultiplierPPM, 10))
+		cost, err := pricing.PriceForRequestPPM(out.Usage, price.Price, price.ProcurementCostMultiplierPPM, h.pricingInput)
+		if err != nil {
+			return rec, err
+		}
+		value, err := pricing.PriceForRequestPPM(out.Usage, price.Price, price.MultiplierPPM, h.pricingInput)
+		if err != nil {
+			return rec, err
+		}
+		rec.Args = append(rec.Args, "request_procurement_cost_micro", strconv.FormatInt(int64(cost), 10), "request_wallet_before_micro", strconv.FormatInt(int64(value), 10))
 	}
 	return rec, nil
 }

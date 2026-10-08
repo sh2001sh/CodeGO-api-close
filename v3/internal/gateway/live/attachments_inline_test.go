@@ -44,6 +44,10 @@ func TestAttachmentsInlineProtocolVariants(t *testing.T) {
 	}
 	h := attachmentsHandler(t, store, &attachmentsRepository{})
 	dataURL := "data:application/pdf;base64," + base64.StdEncoding.EncodeToString([]byte{0, 128, 255})
+	imageFile, err := store.Create(context.Background(), 11, "image.png", "vision", "image/png", bytes.NewReader(filesTestPNG(t)), 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, test := range []struct {
 		name               string
 		protocol           gateway.Protocol
@@ -58,13 +62,18 @@ func TestAttachmentsInlineProtocolVariants(t *testing.T) {
 		{"gemini-part", gateway.ProtocolGemini, `{"contents":[{"parts":[{"fileData":{"file_id":%q}}]}]}`, "contents.0.parts.0.inlineData.data", base64.StdEncoding.EncodeToString([]byte{0, 128, 255})},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			req := attachmentsRequest(file.ID, test.protocol)
-			req.Body = []byte(fmt.Sprintf(test.source, file.ID))
+			selected, want := file, test.want
+			if strings.Contains(test.name, "image") {
+				selected = imageFile
+				want = "data:image/png;base64," + base64.StdEncoding.EncodeToString(filesTestPNG(t))
+			}
+			req := attachmentsRequest(selected.ID, test.protocol)
+			req.Body = []byte(fmt.Sprintf(test.source, selected.ID))
 			body, err := h.PrepareFileReferences(context.Background(), req, gateway.Target{Provider: "custom"})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if gjson.GetBytes(body, test.path).Str != test.want || bytes.Contains(body, []byte(file.ID)) {
+			if gjson.GetBytes(body, test.path).Str != want || bytes.Contains(body, []byte(selected.ID)) {
 				t.Fatalf("inline variant=%s", body)
 			}
 			if test.name == "anthropic-source" && (gjson.GetBytes(body, "messages.0.content.0.source.type").Str != "base64" || gjson.GetBytes(body, "messages.0.content.0.source.media_type").Str != "application/pdf") {

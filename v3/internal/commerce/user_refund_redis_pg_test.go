@@ -125,7 +125,7 @@ func TestUserRefundCrashLeaseRecoveryBlocksGatewayThenReopensOwnToken(t *testing
 	if err := rdb.HSet(ctx, key, "balance", 10_000_000, "reserved", 0, "ver", 1, "base", 1, "closed", 1, "user_refund_owner", "crash-token").Err(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO v3_commerce.user_refund_freezes(account_id,token,expires_at) VALUES($1,'crash-token',now()-interval '1 second')`, account); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO v3_commerce.user_refund_freezes(account_id,token,expires_at) VALUES($1,'crash-token',$2)`, account, time.Now().Add(-time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	accounts := ledger.NewAccounts(pool)
@@ -167,7 +167,7 @@ func TestUserRefundCrashLeaseRecoveryBlocksGatewayThenReopensOwnToken(t *testing
 	if err = rdb.HSet(ctx, key, "closed", 1).Err(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(ctx, `INSERT INTO v3_commerce.user_refund_freezes(account_id,token,expires_at) VALUES($1,'unused-token',now()-interval '1 second')`, account); err != nil {
+	if _, err = pool.Exec(ctx, `INSERT INTO v3_commerce.user_refund_freezes(account_id,token,expires_at) VALUES($1,'unused-token',$2)`, account, time.Now().Add(-time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if err = refunds.Recover(ctx); err != nil {

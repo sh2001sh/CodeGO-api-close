@@ -28,9 +28,21 @@ func (s *Service) Update(ctx context.Context, a Actor, channel int64, patch json
 		if e != nil {
 			return e
 		}
+		previousName, previousRemark := r.Name, r.Remark
 		r, factor, e := mergeAndValidateUpdate(r, fields)
 		if e != nil {
 			return e
+		}
+		_, nameSupplied := fields["name"]
+		_, remarkSupplied := fields["remark"]
+		if nameSupplied || remarkSupplied {
+			published, reviewErr := queueNameReviewTx(ctx, tx, channel, r.Name, previousName, r.Remark, previousRemark, nameSupplied, remarkSupplied)
+			if reviewErr != nil {
+				return reviewErr
+			}
+			if published {
+				r.Name, r.Remark = previousName, previousRemark
+			}
 		}
 		sourceChanged := r.SourceLabel != previousSource
 		configChanged := updateChangesConfig(fields, sourceChanged)
@@ -41,13 +53,18 @@ func (s *Service) Update(ctx context.Context, a Actor, channel int64, patch json
 			return e
 		}
 		result, e = scanChannel(tx.QueryRow(ctx, `SELECT `+channelColumns+channelFrom+` WHERE g.id=$1`, id))
+		if e == nil {
+			groups := []ChannelView{result}
+			e = attachRecentRequests(ctx, tx, groups, s.cfg.Now())
+			result = groups[0]
+		}
 		return e
 	})
 	return result, err
 }
 
 // updatableFields lists the patch keys any owner may set via Update.
-var updatableFields = []string{"name", "provider_type", "source_label", "base_url", "api_key", "declared_models", "model_prices", "multiplier", "visibility", "max_concurrency", "user_max_concurrency", "qps", "maintenance_window", "sensitive_word_interception_enabled", "multiplier_card_supported", "multiplier_card_user_enabled", "auto_probe_enabled", "auto_probe_interval_minutes", "auto_probe_model"}
+var updatableFields = []string{"name", "remark", "tags", "provider_type", "source_label", "base_url", "api_key", "declared_models", "model_prices", "multiplier", "visibility", "max_concurrency", "user_max_concurrency", "qps", "maintenance_window", "sensitive_word_interception_enabled", "multiplier_card_supported", "multiplier_card_user_enabled", "auto_probe_enabled", "auto_probe_interval_minutes", "auto_probe_model"}
 
 // validateUpdateFields rejects any patch key outside updatableFields, except
 // model_consistency_status which is admin-only.
@@ -109,12 +126,14 @@ func loadCurrentChannelRequestTx(ctx context.Context, tx pgx.Tx, channel int64) 
 	if e = json.Unmarshal(current, &r); e != nil {
 		return r, "", e
 	}
+	r.Tags = visibleProviderTags(r.Tags)
 	return r, r.SourceLabel, nil
 }
 
 // mergeAndValidateUpdate overlays fields onto the JSON form of r, re-decodes
 // it, and validates the merged request, returning the resolved multiplier factor.
 func mergeAndValidateUpdate(r CreateRequest, fields map[string]json.RawMessage) (CreateRequest, int64, error) {
+	previousName, previousRemark := r.Name, r.Remark
 	original, e := json.Marshal(r)
 	if e != nil {
 		return r, 0, e
@@ -132,6 +151,21 @@ func mergeAndValidateUpdate(r CreateRequest, fields map[string]json.RawMessage) 
 	}
 	if e = json.Unmarshal(payload, &r); e != nil {
 		return r, 0, ErrInvalid
+	}
+	if _, supplied := fields["name"]; supplied && r.Name != previousName {
+		r.Name, e = normalizeGroupName(r.Name)
+		if e != nil {
+			return r, 0, ErrInvalidName
+		}
+		if r.Name == "" {
+			r.Name = r.Provider
+		}
+	}
+	if _, supplied := fields["remark"]; supplied && r.Remark != previousRemark {
+		r.Remark, e = normalizeGroupRemark(r.Remark)
+		if e != nil {
+			return r, 0, e
+		}
 	}
 	factor, e := r.validate()
 	if e != nil {
@@ -165,7 +199,7 @@ func (s *Service) persistChannelUpdateTx(ctx context.Context, tx pgx.Tx, channel
 			return e
 		}
 	}
-	if _, e = tx.Exec(ctx, `UPDATE v3_catalog.channels SET name=$2,provider=$3,base_url=$4,max_concurrency=$5,max_user_concurrency=$6,multiplier_card_supported=$7,status=CASE WHEN $8 THEN 'disabled' ELSE status END,settings=jsonb_set(settings,'{market}',coalesce(settings->'market','{}')||$9::jsonb) WHERE id=$1`, channel, r.Name, nativeProvider(r.Provider), r.BaseURL, r.MaxConcurrency, r.UserMaxConcurrency, r.MultiplierCardSupported, configChanged, settings); e != nil {
+	if _, e = tx.Exec(ctx, `UPDATE v3_catalog.channels SET name=$2,provider=$3,base_url=$4,max_concurrency=$5,max_user_concurrency=$6,multiplier_card_supported=$7,status=CASE WHEN $8 THEN 'disabled' ELSE status END,settings=jsonb_set(settings,'{market}',coalesce(settings->'market','{}')||$9::jsonb||jsonb_build_object('remark',$10::text)) WHERE id=$1`, channel, r.Name, nativeProvider(r.Provider), r.BaseURL, r.MaxConcurrency, r.UserMaxConcurrency, r.MultiplierCardSupported, configChanged, settings, r.Remark); e != nil {
 		return e
 	}
 	if _, keyChanged := fields["api_key"]; keyChanged {

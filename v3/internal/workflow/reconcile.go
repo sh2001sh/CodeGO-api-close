@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
+	"github.com/sh2001sh/new-api/v3/internal/gateway"
 	"github.com/sh2001sh/new-api/v3/internal/workflow/native"
 )
 
@@ -110,6 +112,9 @@ func (h *Handler) settle(ctx context.Context, t *Task, result native.Result) err
 	} else {
 		t.CostState = "settled"
 	}
+	atomic.StoreInt64(&req.SettledAmount, int64(actual))
+	req.Attempts = []gateway.Attempt{{Target: req.Targets[0]}}
+	gateway.RecordRequest(h.cfg.Requests, req, out, true)
 	return nil
 }
 

@@ -1,3 +1,4 @@
+import { useTranslation } from '../../lib/i18n'
 import { useState, type ReactNode } from 'react'
 import { Button, ErrorMessage } from '../../components/ui'
 
@@ -7,12 +8,14 @@ export function MarketForm(props: {
   submit?: string
   onSubmit: (fields: FormData) => void
 }) {
+  const { t } = useTranslation()
   const [error, setError] = useState<Error | null>(null)
   return (
     <form
       className="form-panel"
       onSubmit={(event) => {
         event.preventDefault()
+        if (props.pending) return
         setError(null)
         try {
           props.onSubmit(new FormData(event.currentTarget))
@@ -23,7 +26,7 @@ export function MarketForm(props: {
     >
       {props.children}
       <Button type="submit" disabled={props.pending}>
-        {props.pending ? '正在提交…' : (props.submit ?? '保存')}
+        {props.pending ? t('正在提交…') : t(props.submit ?? '保存')}
       </Button>
       <ErrorMessage error={error} />
     </form>

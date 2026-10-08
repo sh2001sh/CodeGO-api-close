@@ -1,4 +1,190 @@
+import areaSettings from './en-settings'
+import areaAnalytics from './en-analytics'
+import areaPlayground from './en-playground'
+import areaCatalogAdmin from './en-catalog-admin'
+import areaPublic from './en-public'
+import areaCommerceAdmin from './en-commerce-admin'
+import shell from './en-shell'
+import marketWorkspace from './en-market-workspace'
+import marketShops from './en-market-shops'
+import resources from './en-resources'
+import home from './en-home'
+import legacyUI from './en-legacy-ui'
+import marketConfidence from './en-market-confidence'
+const optimizationMessages: Record<string, string> = {
+  '此列表包含启用和停用的奖池。编辑会保留完整奖励与保底规则，停用的奖池可重新启用。':
+    'This list includes enabled and disabled reward pools. Editing preserves complete reward and guarantee rules. Disabled pools can be enabled again.',
+  暂无盲盒池: 'No blind-box pools',
+  '高级配置使用完整 JSON。金额单位为 micro-credits；权重保持精确整数。修改前请核对原有奖励、金额区间、道具上限和保底规则。':
+    'Advanced settings use complete JSON. Amounts are in micro-credits; weights remain exact integers. Check existing rewards, amount ranges, item caps, and guarantee rules before making changes.',
+  '奖励配置 JSON': 'Reward configuration JSON',
+  '保底配置 JSON': 'Guarantee configuration JSON',
+  '标准池策略 JSON': 'Standard pool policy JSON',
+  '配置 JSON 格式无效，请检查后重试': 'Invalid configuration JSON. Check it and retry.',
+  '奖励配置无效，请检查类型、金额和权重':
+    'Invalid reward configuration. Check types, amounts, and weights.',
+  '保底配置无效，请检查次数、重置金额和奖励':
+    'Invalid guarantee configuration. Check counts, reset amounts, and rewards.',
+  '标准池策略无效，请检查概率、套餐和范围':
+    'Invalid standard pool policy. Check probabilities, plans, and ranges.',
+  盲盒价格必须大于零: 'The blind-box price must be greater than zero',
+  '单个购买价格 credits': 'Purchase price per box (credits)',
+  '首页最多展示 24 个匹配分组，统计仅覆盖当前展示结果；完整筛选与比较请进入渠道市场。':
+    'The home page shows up to 24 matching groups. Statistics cover these results only; use the channel market for complete filtering and comparisons.',
+  '购买成功，已加入未开启库存': 'Purchase complete. Added to unopened inventory.',
+  已转换: 'Converted',
+  '先了解奖池和规则，再选择是否购买。已有盲盒与道具保留原权益。':
+    'Review the reward pool and rules before buying. Existing blind boxes and items retain their original benefits.',
+  我的盲盒: 'My blind boxes',
+  '开启已有盲盒不会再次扣除购买费用，奖励按该盲盒对应规则发放。':
+    'Opening an owned box does not charge you again. Rewards follow that box’s applicable rules.',
+  正在开启: 'Opening…',
+  本次开启结果: 'Opening results',
+  '额度已计入钱包；道具和套餐权益可在对应页面查看。':
+    'Credits have been added to your wallet. View items and plan benefits on their respective pages.',
+  '奖励随机，可能低于购买价格；请按预算选择。':
+    'Rewards are random and may be worth less than the purchase price. Choose within your budget.',
+  选择奖池: 'Select reward pool',
+  基础奖池占比: 'Base reward pool shares',
+  '以下占比仅代表基础奖池权重；首购、保底、套餐奖励与零时卡分支可能改变本次结果。':
+    'These shares represent base pool weights only. First-purchase benefits, guarantees, plan rewards, and zero-time card rules may change this opening’s result.',
+  查看其余基础奖励: 'View remaining base rewards',
+  '奖池概率配置暂不可用，请稍后再试。':
+    'Reward probabilities are temporarily unavailable. Try again later.',
+  '这里展示当前在售奖池；历史未开启盲盒可能使用购买时冻结的规则或原有动态规则。':
+    'This shows the pool currently on sale. Older unopened boxes may use rules fixed at purchase or their original dynamic rules.',
+  购买信息: 'Purchase details',
+  单个价格: 'Price per box',
+  '限购和开启次数以服务端校验为准。': 'Purchase and opening limits are enforced by the server.',
+  '购买后加入未开启库存。奖励随机，可能低于购买价格。':
+    'The box will be added to your unopened inventory. Rewards are random and may be worth less than the purchase price.',
+  正在购买: 'Purchasing…',
+  购买一个: 'Buy one',
+  '已有库存仍可按原规则开启。': 'Existing inventory can still be opened under its original rules.',
+  '零时卡按既有独立规则运行，不保证命中或盈利。':
+    'Zero-time cards follow their existing independent rules. A win or profit is not guaranteed.',
+  '，基础额度分支保底': '; base credit reward guarantee:',
+  查看条件与奖励分支: 'View conditions and reward branches',
+  '套餐奖励分支先于基础额度分支判断；首购和保底金额不是所有奖励的统一最低价值。':
+    'Plan rewards are checked before base credit rewards. First-purchase and guaranteed amounts are not a universal minimum value for every reward.',
+  '本人首次付费购买并开启时，基础额度奖励至少':
+    'For your first paid purchase and opening, the base credit reward is at least',
+  '；旧 Claude 额度奖励的首购门槛为上述金额的四分之一。':
+    '; the legacy Claude credit reward uses one quarter of that amount as its first-purchase threshold.',
+  '基础额度达到高价值门槛或获得套餐奖励时重置进度。高价值门槛为':
+    'Progress resets when a base credit reward reaches the high-value threshold or a plan reward is received. The high-value threshold is',
+  '；旧 Claude 额度按原门槛计算。': '; legacy Claude credits use their original threshold.',
+  套餐奖励分支概率: 'Plan reward branch probability',
+  '，命中后重置保底进度。': '; receiving it resets guarantee progress.',
+  '赠送和免费发放的盲盒不触发本人付费首购权益；零时卡按原独立规则判断。':
+    'Gifted and free boxes do not trigger your first paid-purchase benefits. Zero-time cards follow their original independent rules.',
+  '零时卡命中也会重置保底进度。': 'Receiving a zero-time card also resets guarantee progress.',
+  '此奖池未配置额外保底。': 'This pool has no additional guarantee.',
+  '小保底奖池：': 'Small guarantee reward pool:',
+  '；额度达到': '; resets when credits reach',
+  '大保底奖池：': 'Large guarantee reward pool:',
+  '保底会切换至对应奖池；重置门槛不代表保底奖池的统一最低奖励。':
+    'A guarantee switches to its corresponding pool. The reset threshold is not a universal minimum reward in that pool.',
+  筛选与排序: 'Filters and sorting',
+  仪表盘: 'Dashboard',
+  渠道主工作台: 'Provider workspace',
+  个人设置: 'Personal settings',
+  '选择 API Key 并加载可用模型后，示例会使用你的当前权限。':
+    'Select an API key and load available models. The example will use your current permissions.',
+  '这里只提供可复制示例，不会发送付费请求。':
+    'These are copyable examples. No paid requests are sent.',
+  我的道具: 'My items',
+  '已有倍率卡、折扣券和套餐道具继续按原权益使用。':
+    'Existing multiplier cards, discount vouchers, and plan items retain their original benefits.',
+  权益: 'Benefits',
+  折扣上限: 'Maximum discount',
+  概率暂不可用: 'Probability unavailable',
+  '请输入有效的收件人用户 ID': 'Enter a valid recipient user ID',
+  确认赠送至用户: 'Confirm gift to user',
+  '请核对用户 ID。赠送后物品将归收件人所有，无法自行撤回。':
+    'Check the user ID. After gifting, the recipient owns the item and you cannot recall it yourself.',
+  赠送盲盒与道具: 'Gift boxes and items',
+  '操作失败时可在当前页面重试；同一操作会复用请求编号，避免重复扣费或发奖。':
+    'If an operation fails, retry on this page. The same operation reuses its request ID to avoid duplicate charges or rewards.',
+  收起数据表: 'Hide data table',
+  查看数据表: 'View data table',
+  '时重置。': '.',
+}
 const messages: Record<string, string> = {
+  当前老套餐版本尚未核定转换比例:
+    'The conversion rate for this legacy plan version has not been reviewed.',
+  '消费、刷新或来源已变化，需重新核定分段权益':
+    'Usage, a reset, or a source change requires a new segment review.',
+  '历史补量、赠送、周期或来源需先人工核对':
+    'Historical supplements, rewards, periods, or sources require manual review.',
+  已刷新权益的付费与赠送构成尚未核定:
+    'The paid and reward allocation of reset credits has not been reviewed.',
+  '无原实付订单，不能把赠送转换为本金':
+    'Rewards cannot become paid principal without an original paid order.',
+  '剩余权益不足最小消费单位，不会扣除套餐':
+    'Remaining rights are below the minimum billing unit. The plan will not be deducted.',
+  原实付收入尚未核定: 'The original paid revenue has not been reviewed.',
+  本金转换额超过已核定原实付收入: 'Converted principal exceeds the reviewed original paid revenue.',
+  '套餐已到期、状态或比例发生变化':
+    'The plan has expired, or its status or conversion rate has changed.',
+  '消费、刷新或到期使报价失效，请重新预览':
+    'Usage, a reset, or expiry invalidated the quote. Preview it again.',
+  核定分段转换: 'Review segmented conversion',
+  '按原订单与赠送来源逐段核对。当前额度和未发周期承诺必须全部覆盖；只保存核定报价，不会替用户转换。消费、刷新或退款后需要重新核定。':
+    'Review each original order and reward source. Cover all current credits and promised future grants. Saving the review does not perform a conversion. Usage, a reset, or a refund requires a new review.',
+  当前可用老额度: 'Currently available legacy credits',
+  未发放的周期承诺: 'Promised future period credits',
+  已转换本金: 'Previously converted principal',
+  '分段核定已保存，用户仍须预览报价并同意转换。':
+    'Segment review saved. The user must still preview and accept the conversion.',
+  分段额度或付费构成无效: 'Invalid segment credits or paid allocation',
+  分段合计必须覆盖全部当前额度及未来周期承诺:
+    'Segments must cover all current credits and promised future period credits',
+  权益分段: 'Entitlement segments',
+  来源说明: 'Source description',
+  '原付费订单（赠送可不选）': 'Original paid order (optional for rewards)',
+  赠送或独立刷新权益: 'Reward or independent reset entitlement',
+  '该来源整包老额度 credits': 'Full legacy source credits',
+  '该段当前未消耗老额度 credits': 'Unspent current legacy credits for this segment',
+  '该段未发周期额度 credits': 'Promised future credits for this segment',
+  '该来源整包可兑余额 credits': 'Wallet credits for the full source',
+  移除分段: 'Remove segment',
+  添加权益分段: 'Add entitlement segment',
+  启用此核定报价: 'Enable this reviewed quote',
+  保存分段核定: 'Save segment review',
+  '未来周期承诺已计入本次到账，转换后不会再次自动发放。':
+    'Promised future period credits are included in this conversion and will not be granted again afterwards.',
+  '确认停用“{name}”？套餐和历史记录将保留，已发行兑换码仍可兑现。':
+    'Disable “{name}”? The plan and its history will be retained, and issued redemption codes can still be redeemed.',
+  确认停用套餐: 'Confirm disabling plan',
+  停用套餐: 'Disable plan',
+  '价格已包含分组倍率，以 credits 展示。个别优惠和实际用量会影响最终结算。':
+    'Prices include the advertised group multiplier and are shown in credits. Individual discounts and actual usage may affect the final charge.',
+  每次请求: 'per request',
+  每张图片: 'per image',
+  每个音频字符: 'per audio character',
+  每秒音频: 'per second of audio',
+  每秒视频: 'per second of video',
+  暂未提供价格: 'Pricing unavailable',
+  按动态规则计价: 'Dynamic pricing',
+  '表达式以 credits / 百万 tokens 为单位，再乘以当前分组倍率。':
+    'Expression rates are in credits per million tokens, multiplied by the current group multiplier.',
+  '将删除 {count} 个 Key，删除后无法恢复，确认继续？':
+    'Delete {count} keys? Deleted keys cannot be restored.',
+  '{failed} / {total} 项操作失败，请检查后重试':
+    '{failed} / {total} operations failed. Check and retry.',
+  '支付金额最多支持 {digits} 位小数': 'Payment amounts support at most {digits} decimal places',
+  '转账金额需按 {amount} 递增': 'Transfer amounts must increase in steps of {amount}',
+  '{title}：{count} 个数据点，最大值 {max}': '{title}: {count} data points; maximum {max}',
+  移除通行密钥: 'Remove passkeys',
+  '将移除此账号的全部通行密钥。需要验证当前通行密钥，并保留密码或外部账号作为其他登录方式。':
+    'This removes all passkeys for this account. Verify a current passkey and keep a password or linked external account as an alternative sign-in method.',
+  确认移除: 'Confirm removal',
+  '验证并移除中…': 'Verifying and removing…',
+  '已保存 {count} 项：{keys}。其余配置未保存，请检查错误后重试。':
+    'Saved {count} settings: {keys}. The remaining settings were not saved. Check the error and retry.',
+  '页面创建密钥。妥善保管完整密钥；本人可在密钥管理中再次查看。':
+    'page to create a key. Store the full key securely; you can reveal it again in your key management page.',
   余额调整: 'Balance adjustment',
   '钱包账户 ID': 'Wallet account ID',
   '调整 credits': 'Credits change',
@@ -203,4 +389,20 @@ const messages: Record<string, string> = {
   admin: 'Administrator',
   root: 'Owner',
 }
-export default messages
+export default {
+  ...shell,
+  ...areaSettings,
+  ...areaAnalytics,
+  ...areaPlayground,
+  ...areaCatalogAdmin,
+  ...areaPublic,
+  ...areaCommerceAdmin,
+  ...messages,
+  ...marketWorkspace,
+  ...marketShops,
+  ...resources,
+  ...home,
+  ...legacyUI,
+  ...marketConfidence,
+  ...optimizationMessages,
+}

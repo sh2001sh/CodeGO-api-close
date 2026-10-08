@@ -12,7 +12,8 @@ import (
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
 )
 
-var ErrWalletRewardTransferLocked = errors.New("ledger: blind-box reward is not transferable yet")
+var ErrWalletRewardTransferLocked = errors.New("ledger: reward balance is not transferable")
+var ErrWalletRewardRefundLocked = errors.New("ledger: reward balance is not refundable")
 
 // CreateWalletRewardHoldTx holds current blind-box wallet money for new users.
 // The credited money stays spendable. Calling this never posts another credit.
@@ -85,10 +86,27 @@ func walletRewardStateTx(ctx context.Context, tx pgx.Tx, account int64, now time
 	if err := tx.QueryRow(ctx, `SELECT balance FROM v3_billing.accounts WHERE id=$1 AND kind='wallet' FOR UPDATE`, account).Scan(&balance); err != nil {
 		return 0, 0, err
 	}
+	locked, err := legacyLockedRewardAmountTx(ctx, tx, account, now)
+	if err != nil {
+		return 0, 0, err
+	}
+	var permanent credits.Micro
+	if err := tx.QueryRow(ctx, `SELECT coalesce(sum(remaining_amount),0)::bigint FROM v3_billing.funding_lots
+	 WHERE account_id=$1 AND non_transferable`, account).Scan(&permanent); err != nil {
+		return 0, 0, err
+	}
+	locked, err = locked.Add(permanent)
+	return balance, locked, err
+}
+
+// Legacy blind-box release is based on the original user age. Permanent
+// referral and conversion reward restrictions are separate lot properties and
+// can never age out or be consumed by spending a different paid lot.
+func legacyLockedRewardAmountTx(ctx context.Context, tx pgx.Tx, account int64, now time.Time) (credits.Micro, error) {
 	rows, err := tx.Query(ctx, `SELECT original_amount,consumed_amount,user_created_at FROM v3_billing.wallet_reward_holds
 	 WHERE account_id=$1 AND consumed_amount<original_amount ORDER BY created_at,hold_id FOR UPDATE`, account)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 	defer rows.Close()
 	var locked credits.Micro
@@ -96,14 +114,14 @@ func walletRewardStateTx(ctx context.Context, tx pgx.Tx, account int64, now time
 		var original, consumed int64
 		var created *time.Time
 		if err := rows.Scan(&original, &consumed, &created); err != nil {
-			return 0, 0, err
+			return 0, err
 		}
 		locked, err = locked.Add(credits.Micro(unreleasedReward(original, consumed, created, now)))
 		if err != nil {
-			return 0, 0, err
+			return 0, err
 		}
 	}
-	return balance, locked, rows.Err()
+	return locked, rows.Err()
 }
 
 // Private because the caller already owns the account row lock. Peer transfers

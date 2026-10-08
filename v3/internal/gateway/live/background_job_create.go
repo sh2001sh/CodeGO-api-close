@@ -64,7 +64,7 @@ func (h *Handler) createBackgroundJob(w http.ResponseWriter, r *http.Request, bo
 	if !ok {
 		return
 	}
-	job := BackgroundJob{ID: req.ID, UserID: principal.UserID, KeyID: principal.KeyID, Group: principal.Group, Model: req.Model, Path: req.Path,
+	job := BackgroundJob{ID: req.ID, UserID: principal.UserID, KeyID: principal.KeyID, Group: principal.Group, TargetGroup: target.Group, Model: req.Model, Path: req.Path,
 		ChannelID: target.ChannelID, CredentialID: target.CredentialID, Body: req.Body, ClientIP: h.clientIP(r), PricingHeaders: req.PricingHeaders,
 		Reservation: bytes.Clone(hold), Status: "queued", Native: backgroundNative(target.Provider), Stream: req.Stream,
 		LastUpstreamSequence: -1, CreatedAt: req.Received, UpdatedAt: req.Received}
@@ -126,6 +126,11 @@ func (h *Handler) planBackgroundCreateTarget(w http.ResponseWriter, r *http.Requ
 	}
 	targets, err := h.cfg.Planner.Plan(r.Context(), req)
 	if err != nil {
+		var refusal *gateway.UpstreamError
+		if errors.As(err, &refusal) {
+			writeError(w, refusal.Status, refusal.Code, refusal.Message)
+			return target, false
+		}
 		writeError(w, 503, "no_available_channel", "no background route is available")
 		return target, false
 	}

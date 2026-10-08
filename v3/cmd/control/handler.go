@@ -19,7 +19,9 @@ import (
 	"github.com/sh2001sh/new-api/v3/internal/control"
 	"github.com/sh2001sh/new-api/v3/internal/identity"
 	"github.com/sh2001sh/new-api/v3/internal/identity/oidc"
+	"github.com/sh2001sh/new-api/v3/internal/incentives"
 	"github.com/sh2001sh/new-api/v3/internal/marketplace"
+	"github.com/sh2001sh/new-api/v3/internal/notifications"
 	"github.com/sh2001sh/new-api/v3/internal/security"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
 )
@@ -42,6 +44,8 @@ type controlStack struct {
 	commerceService *commerce.Service
 	marketService   *marketplace.Service
 	securityAudit   *security.Guard
+	rewards         *incentives.Service
+	emailSender     commerce.WalletEmailSender
 }
 
 func controlHandler(deps *boot.Deps, cfg config, assets string, log *slog.Logger) (http.Handler, error) {
@@ -60,13 +64,16 @@ func controlHandler(deps *boot.Deps, cfg config, assets string, log *slog.Logger
 		return nil, err
 	}
 	st.registerAudit()
+	st.registerNotifications()
+	st.registerAdminTools()
+	st.registerDesktop()
 	if err := st.buildOIDCAndCommunity(); err != nil {
 		return nil, err
 	}
 	if assets != "" {
 		st.mux.Handle("/", control.Static(assets))
 	}
-	return st.srv.Guard(api.DomainHandler(st.mux, notFoundHandler)), nil
+	return clientAddressHandler(st.srv.Guard(api.DomainHandler(st.mux, notFoundHandler)), cfg.TrustedProxies), nil
 }
 
 func notFoundHandler(w http.ResponseWriter, r *http.Request, _ error) {
@@ -87,6 +94,20 @@ func (st *controlStack) buildIdentity() error {
 	deps, log := st.deps, st.log
 	st.accounts, st.poster = ledger.NewAccounts(deps.PG.Pool), ledger.NewPoster(deps.PG.Pool, deps.Redis)
 	st.cfg.Identity.BudgetPoster = st.poster
+	storedSender := boot.NewStoredEmailSender(deps.PG.Pool, deps.Crypto)
+	st.emailSender = storedSender
+	if st.cfg.SMTP != nil {
+		sender, err := commerce.NewSMTPWalletSender(*st.cfg.SMTP)
+		if err != nil {
+			return err
+		}
+		st.emailSender = sender
+		if st.cfg.Identity.EmailSender == nil {
+			st.cfg.Identity.EmailSender = sender
+		}
+	} else if st.cfg.Identity.EmailSender == nil {
+		st.cfg.Identity.EmailSender = storedSender
+	}
 	var err error
 	st.id, err = identity.NewControl(deps.PG.Pool, st.cfg.Identity, log)
 	if err != nil {
@@ -108,10 +129,10 @@ func (st *controlStack) buildIdentity() error {
 	st.mux = st.srv.Mux()
 	st.mux.HandleFunc("GET /api/openapi.json", api.Specification)
 	idHandler := st.id.Handler()
-	for _, path := range []string{"/api/user/", "/api/token/", "/api/oauth/", "/api/passkey/", "/api/passkey"} {
+	for _, path := range []string{"/api/user/", "/api/policies/", "/api/token/", "/api/oauth/", "/api/passkey/", "/api/passkey", "/api/verification", "/api/reset_password"} {
 		st.mux.Handle(path, idHandler)
 	}
-	catalogcontrol.New(deps.PG.Pool, deps.Crypto, log).Register(st.mux, st.srv.RequireAdmin)
+	catalogcontrol.New(deps.PG.Pool, deps.Crypto, log).Register(st.mux, st.requireCatalogAdministrator)
 	st.srv.RegisterBilling(deps.PG.Pool, st.accounts, st.poster)
 	return nil
 }
@@ -127,18 +148,12 @@ func (st *controlStack) buildCommerce() error {
 	if len(payments) == 0 {
 		st.log.Warn("payment checkout unavailable: payment provider credentials are not configured")
 	}
-	var recovery commerce.WalletRecovery
-	if cfg.SMTP != nil {
-		sender, err := commerce.NewSMTPWalletSender(*cfg.SMTP)
-		if err != nil {
-			return err
-		}
-		recovery, err = commerce.NewWalletRecovery(deps.PG.Pool, sender, commerce.WalletRecoveryConfig{Key: cfg.Identity.SessionSecret})
-		if err != nil {
-			return err
-		}
+	recovery, err := commerce.NewWalletRecovery(deps.PG.Pool, st.emailSender, commerce.WalletRecoveryConfig{Key: cfg.Identity.SessionSecret})
+	if err != nil {
+		return err
 	}
 	st.commerceService = commerce.New(deps.PG.Pool, st.poster, payments, commerce.Config{
+		Now:             cfg.Identity.Now,
 		ProviderPricing: pricing,
 		ReturnOrigins:   []string{cfg.Identity.PublicURL},
 		FundingDrain:    ledger.NewDrainChecker(deps.Redis),
@@ -150,6 +165,7 @@ func (st *controlStack) buildCommerce() error {
 	}
 	st.commerceService.Register(st.mux, commerceAuth)
 	commerce.NewUserRefunds(deps.PG.Pool, st.poster, deps.Redis, refunds).RegisterUserRefunds(st.mux, commerceAuth)
+	st.registerIncentives()
 	return nil
 }
 
@@ -246,6 +262,13 @@ func (st *controlStack) registerAudit() {
 	}}).RegisterRoutes(st.mux)
 }
 
+func (st *controlStack) registerNotifications() {
+	notifications.New(st.deps.PG.Pool, st.log).Register(st.mux, func(r *http.Request) (int64, error) {
+		u, err := st.id.AuthenticateRequest(r)
+		return u.ID, err
+	})
+}
+
 // buildOIDCAndCommunity wires the OIDC provider (if configured) and the
 // NodeBB community bridge.
 func (st *controlStack) buildOIDCAndCommunity() error {
@@ -277,13 +300,4 @@ func (st *controlStack) buildOIDCAndCommunity() error {
 		log.Warn("NodeBB service bridge unavailable: community service secret is not configured")
 	}
 	return nil
-}
-
-func auditHistoryRead(r *http.Request) bool {
-	if r.Method != http.MethodGet {
-		return false
-	}
-	path := r.URL.Path
-	return path == "/api/audit/events" || path == "/api/audit/events/export" || path == "/api/audit/requests" ||
-		(strings.HasPrefix(path, "/api/audit/requests/") && strings.HasSuffix(path, "/attempts"))
 }

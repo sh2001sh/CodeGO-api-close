@@ -93,7 +93,11 @@ func runLegacyImport(ctx context.Context, command string, apply bool, pool *pgxp
 		return fmt.Errorf("source postgres: %w", err)
 	}
 	defer source.Close()
-	importer := legacy.NewImporter(source.Pool, pool, crypto)
+	sourceSecret := os.Getenv("V3_MIGRATION_SOURCE_CRYPTO_SECRET")
+	if sourceSecret == "" {
+		sourceSecret = os.Getenv("LEGACY_CRYPTO_SECRET")
+	}
+	importer := legacy.NewImporter(source.Pool, pool, crypto).WithSourceCryptoSecret(sourceSecret)
 	var report legacy.Report
 	var importErr error
 	if command == "check" {

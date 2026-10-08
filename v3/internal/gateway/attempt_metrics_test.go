@@ -132,6 +132,9 @@ func TestAttemptMetricsFirstOutputIsSeparateFromFullRelay(t *testing.T) {
 			if out.Terminal != gateway.TerminalCompleted || !out.Charge || out.Usage.PromptTokens != 100 || out.Usage.CachedTokens != 75 {
 				t.Fatalf("actual accounting observation mismatch: %+v", out)
 			}
+			if out.TTFT != last.TTFT || out.Generation < trailingDelay*3/4 || out.Generation >= full {
+				t.Fatalf("public performance lost final attempt observation: out=%+v final=%+v duration=%s", out, last, full)
+			}
 			if retry && (reports[0].TTFT != 0 || reports[0].PromptTokens != 0 || reports[0].CachedTokens != 0 || reports[0].Status != 503 || !reports[0].Retryable) {
 				t.Fatalf("failed attempt inherited success metrics: %+v", reports[0])
 			}
@@ -158,6 +161,9 @@ func TestAttemptMetricsEstimatedUsageIsNotARealRoutingObservation(t *testing.T) 
 	if len(reports) != 1 || !reports[0].OK || reports[0].TTFT < 15*time.Millisecond || reports[0].PromptTokens != 0 || reports[0].CachedTokens != 0 {
 		t.Fatalf("local estimate became fake real token observation: %+v", reports)
 	}
+	if out.TTFT != reports[0].TTFT {
+		t.Fatalf("estimated billing lost independently measured timing: %+v", out)
+	}
 }
 
 func TestAttemptMetricsNoOutputMeansNoFirstOutputTime(t *testing.T) {
@@ -181,7 +187,7 @@ func TestAttemptMetricsNoOutputMeansNoFirstOutputTime(t *testing.T) {
 			h, _ := attemptMetricHarness(t, upstream.URL, 1)
 			view, out := h.do(streamBody), h.outcome()
 			reports := h.planner.results()
-			if view.status == 200 || out.Delivered || out.Charge || len(reports) != 1 || reports[0].OK || reports[0].TTFT != 0 {
+			if view.status == 200 || out.Delivered || out.Charge || out.TTFT != 0 || out.Generation != 0 || len(reports) != 1 || reports[0].OK || reports[0].TTFT != 0 {
 				t.Fatalf("invisible failure/metadata acquired output metrics: view=%+v out=%+v reports=%+v", view, out, reports)
 			}
 			if scenario == "usage_only" {
@@ -192,5 +198,24 @@ func TestAttemptMetricsNoOutputMeansNoFirstOutputTime(t *testing.T) {
 				t.Fatalf("failed attempt fabricated tokens: %+v", reports[0])
 			}
 		})
+	}
+}
+
+func TestAttemptMetricsBufferedResponseDoesNotInventFirstTokenTiming(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(2 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"choices":[{"index":0,"message":{"role":"assistant","content":"complete"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":12}}`)
+	}))
+	t.Cleanup(upstream.Close)
+	h, _ := attemptMetricHarness(t, upstream.URL, 1)
+	view := h.do(`{"model":"gpt-test","stream":false,"messages":[{"role":"user","content":"hi"}]}`)
+	out := h.outcome()
+	reports := h.planner.results()
+	if view.status != 200 || out.Terminal != gateway.TerminalCompleted || out.Usage.CompletionTokens != 12 || len(reports) != 1 || reports[0].TTFT <= 0 {
+		t.Fatalf("buffered accounting/legacy route metric changed: view=%+v out=%+v reports=%+v", view, out, reports)
+	}
+	if out.TTFT != 0 || out.Generation != 0 {
+		t.Fatalf("buffered response acquired fabricated public token timing: %+v", out)
 	}
 }

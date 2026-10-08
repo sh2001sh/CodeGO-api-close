@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
+	"github.com/sh2001sh/new-api/v3/pkg/httpx"
 )
 
 type unsupportedStream struct {
@@ -35,25 +36,28 @@ func (s *unsupportedStream) Close() error { return s.body.Close() }
 func DecodeImages(req *gateway.Request, resp *http.Response) gateway.EventStream {
 	ctx := context.Background()
 	client := http.Client{}
+	trustedOrigin := ""
 	if resp.Request != nil {
 		ctx = resp.Request.Context()
 	}
 	if pending, ok := resp.Body.(*predictionBody); ok {
 		ctx, client = pending.ctx, *pending.client
+		trustedOrigin = pending.origin.String()
 	}
 	client.Jar = nil
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	return &imageStream{body: resp.Body, request: req, client: &client, ctx: ctx, cancel: cancel}
+	return &imageStream{body: resp.Body, request: req, client: &client, trustedOrigin: trustedOrigin, ctx: ctx, cancel: cancel}
 }
 
 type imageStream struct {
-	body    io.ReadCloser
-	request *gateway.Request
-	client  *http.Client
-	ctx     context.Context
-	cancel  context.CancelFunc
-	done    bool
+	body          io.ReadCloser
+	request       *gateway.Request
+	client        *http.Client
+	trustedOrigin string
+	ctx           context.Context
+	cancel        context.CancelFunc
+	done          bool
 }
 
 func (s *imageStream) Close() error {
@@ -176,20 +180,8 @@ func (s *imageStream) collectImages(urls []string) (images []map[string]string, 
 }
 
 func (s *imageStream) download(image string) (string, error) {
-	req, err := http.NewRequestWithContext(s.ctx, http.MethodGet, image, nil)
-	if err != nil {
-		return "", err
-	}
 	// File outputs often use a separate CDN. Never attach the prediction key.
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", errors.New("replicate: image HTTP error")
-	}
-	data, err := readBody(resp.Body)
+	data, err := httpx.FetchMedia(s.ctx, image, httpx.MediaFetchConfig{Client: s.client, TrustedOrigin: s.trustedOrigin, MaxBytes: maxJSONBody})
 	if err != nil {
 		return "", err
 	}

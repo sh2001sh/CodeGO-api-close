@@ -2,6 +2,7 @@
 // environment variables:
 //
 //	V3_PG_DSN       postgres:// URL (required)
+//	V3_PG_MAX_CONNS maximum pooled connections per process (defaults to role budget)
 //	V3_REDIS_ADDR   host:port (required)
 //	V3_REDIS_PASSWORD
 //	V3_REDIS_POOL_SIZE  connections per process (default 256)
@@ -29,6 +30,10 @@ type Deps struct {
 
 // Open connects to PostgreSQL and Redis and loads the secret key.
 func Open(ctx context.Context, maxPGConns int32) (*Deps, error) {
+	maxPGConns, err := postgresMaxConns(maxPGConns)
+	if err != nil {
+		return nil, err
+	}
 	dsn, addr, secret := os.Getenv("V3_PG_DSN"), os.Getenv("V3_REDIS_ADDR"), os.Getenv("V3_SECRET_KEY")
 	if dsn == "" || addr == "" || secret == "" {
 		return nil, errors.New("V3_PG_DSN, V3_REDIS_ADDR and V3_SECRET_KEY must be set")
@@ -54,6 +59,18 @@ func Open(ctx context.Context, maxPGConns int32) (*Deps, error) {
 		return nil, fmt.Errorf("redis: %w", err)
 	}
 	return &Deps{PG: pool, Redis: rdb, Crypto: crypto}, nil
+}
+
+func postgresMaxConns(defaultMax int32) (int32, error) {
+	raw := os.Getenv("V3_PG_MAX_CONNS")
+	if raw == "" {
+		return defaultMax, nil
+	}
+	n, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil || n <= 0 {
+		return 0, errors.New("V3_PG_MAX_CONNS must be a positive 32-bit integer")
+	}
+	return int32(n), nil
 }
 
 // Close releases the connections.

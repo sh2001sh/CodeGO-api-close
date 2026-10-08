@@ -98,7 +98,7 @@ func (s *Service) applyRefundProgressTx(ctx context.Context, tx pgx.Tx, o Order,
 		}
 		_, err = s.poster.PostTx(ctx, tx, billing.Entry{AccountID: account, Amount: -delta, Kind: "adjustment",
 			OperationID: "order:refund:" + tradeNo + ":" + strconv.FormatInt(amount, 10), Reason: "provider confirmed cumulative refund",
-			Metadata: map[string]any{"refund_id": eventID, "order_id": o.ID, "refunded_minor": amount}})
+			Metadata: map[string]any{"refund_id": eventID, "order_id": o.ID, "refunded_minor": amount, "refund_trade_no": o.TradeNo}})
 		return total, err
 	}
 }

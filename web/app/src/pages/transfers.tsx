@@ -1,3 +1,4 @@
+import { useTranslation } from '../lib/i18n'
 import { useState } from 'react'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { api, unwrap } from '../lib/api'
@@ -19,6 +20,7 @@ export const transfersOptions = (page = 1) =>
   )
 
 export default function TransfersPage() {
+  const { t } = useTranslation()
   const first = useSuspenseQuery(transfersOptions()).data
   const [page, setPage] = useState(1)
   const history = useQuery(transfersOptions(page))
@@ -33,20 +35,20 @@ export default function TransfersPage() {
             disabled={history.isFetching}
             onClick={() => void history.refetch()}
           >
-            刷新
+            {t('刷新')}
           </Button>
         }
       />
       <dl className="balance-ledger">
         <div>
-          <dt>钱包余额</dt>
+          <dt>{t('钱包余额')}</dt>
           <dd>{credits(overview.balance)}</dd>
         </div>
       </dl>
       <TransferForm overview={overview} />
       <PaymentPassword security={overview.security} />
       <section className="section">
-        <h2>转账记录</h2>
+        <h2>{t('转账记录')}</h2>
         <ErrorMessage error={history.error} />
         {history.isFetching && <Loading />}
         <DataTable
@@ -54,7 +56,10 @@ export default function TransfersPage() {
           rowKey={(row) => row.id}
           empty="暂无转账记录。完成一笔转账后会显示在这里。"
           columns={[
-            { label: '方向', render: (row) => (row.direction === 'outgoing' ? '转出' : '转入') },
+            {
+              label: '方向',
+              render: (row) => (row.direction === 'outgoing' ? t('转出') : t('转入')),
+            },
             {
               label: '对方',
               render: (row) =>
@@ -67,15 +72,17 @@ export default function TransfersPage() {
             { label: '时间', render: (row) => date(Number(row.created_at) * 1000) },
           ]}
         />
-        <nav className="pagination" aria-label="转账记录分页">
+        <nav className="pagination" aria-label={t('转账记录分页')}>
           <Button
             variant="quiet"
             disabled={page <= 1 || history.isFetching}
             onClick={() => setPage(page - 1)}
           >
-            上一页
+            {t('上一页')}
           </Button>
-          <span>第 {page} 页</span>
+          <span>
+            {t('第')} {page} {t('页')}
+          </span>
           <Button
             variant="quiet"
             disabled={
@@ -85,7 +92,7 @@ export default function TransfersPage() {
             }
             onClick={() => setPage(page + 1)}
           >
-            下一页
+            {t('下一页')}
           </Button>
         </nav>
       </section>

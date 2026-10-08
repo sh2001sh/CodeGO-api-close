@@ -164,6 +164,9 @@ func (s *Service) RateChannel(ctx context.Context, id string, request RatingRequ
 	if ownerID == viewerID {
 		return RatingResult{}, ErrSelfRating
 	}
+	if err := requireChannelUsage(ctx, tx, id, viewerID); err != nil {
+		return RatingResult{}, err
+	}
 	result, err := s.upsertChannelRating(ctx, tx, id, viewerID, ownerID, request.Stars)
 	if err != nil {
 		return RatingResult{}, err
@@ -214,7 +217,8 @@ func lockRatableChannelOwnerTx(ctx context.Context, tx pgx.Tx, id string) (int64
 // updated rating summary and owner summary.
 func (s *Service) upsertChannelRating(ctx context.Context, tx pgx.Tx, id string, viewerID, ownerID int64, stars int) (RatingResult, error) {
 	_, err := tx.Exec(ctx, `INSERT INTO v3_community.channel_ratings(channel_id,user_id,stars)
- VALUES ($1,$2,$3) ON CONFLICT (channel_id,user_id) DO UPDATE SET stars=EXCLUDED.stars`, id, viewerID, stars)
+ VALUES ($1,$2,$3) ON CONFLICT (channel_id,user_id) DO UPDATE SET stars=EXCLUDED.stars
+ WHERE v3_community.channel_ratings.stars IS DISTINCT FROM EXCLUDED.stars`, id, viewerID, stars)
 	if err != nil {
 		return RatingResult{}, err
 	}

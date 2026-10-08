@@ -77,6 +77,16 @@ func (s *Service) Fulfill(ctx context.Context, provider string, e PaymentEvent) 
 		if o.State != "created" && o.State != "expired" && o.State != "canceled" && o.State != "failed" {
 			return ErrStateConflict
 		}
+		// The paid-order inbox trigger takes a KEY SHARE lock on this user
+		// through its notification FK. Acquire the lifecycle lock first so
+		// concurrent callbacks cannot each retain that FK lock and then
+		// deadlock when subscription fulfillment upgrades it to FOR UPDATE.
+		if o.Kind == "subscription" {
+			var lockedUser int64
+			if err = tx.QueryRow(ctx, `SELECT id FROM v3_identity.users WHERE id=$1 FOR UPDATE`, o.UserID).Scan(&lockedUser); err != nil {
+				return err
+			}
+		}
 		tag, err := tx.Exec(ctx, `UPDATE v3_commerce.orders SET state='paid',paid_at=$2,payment_event_id=$3,
 		    provider_reference=COALESCE(provider_reference,NULLIF($4,''))
 		    WHERE id=$1 AND state=$5`, o.ID, s.cfg.Now(), e.ID, e.Reference, o.State)
@@ -109,7 +119,10 @@ func (s *Service) fulfillPaidOrderTx(ctx context.Context, tx pgx.Tx, provider st
 		if err = s.grantSubscription(ctx, tx, o); err != nil {
 			return err
 		}
-		return s.ApplyGroupCheckoutTx(ctx, tx, o)
+		if err = s.ApplyGroupCheckoutTx(ctx, tx, o); err != nil {
+			return err
+		}
+		return s.applyPaidPurchaseTx(ctx, tx, o)
 	}
 	if o.Kind == "blind_box" {
 		return s.CompleteCashBoxTx(ctx, tx, o)
@@ -120,7 +133,10 @@ func (s *Service) fulfillPaidOrderTx(ctx context.Context, tx pgx.Tx, provider st
 	}
 	_, err = s.poster.PostTx(ctx, tx, billing.Entry{AccountID: account, Amount: o.Credits, Kind: "topup",
 		OperationID: "order:paid:" + o.TradeNo, Reason: "verified payment", Metadata: map[string]any{"order_id": o.ID, "provider": provider}})
-	return err
+	if err != nil {
+		return err
+	}
+	return s.applyPaidPurchaseTx(ctx, tx, o)
 }
 
 func claimPaymentEvent(ctx context.Context, tx pgx.Tx, provider string, e PaymentEvent) error {

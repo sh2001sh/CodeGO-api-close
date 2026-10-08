@@ -33,23 +33,41 @@ func monthlyPlanSecondsTx(ctx context.Context, tx pgx.Tx, plan int64) (int64, er
 	return monthlyTierSeconds(tier), nil
 }
 
-// FreezeMonthlyPurchaseBenefitsTx runs after inserting an order and before the
-// checkout leaves its transaction. Later plan edits cannot alter the benefit.
+// FreezeMonthlyPurchaseBenefitsTx records that new checkouts grant no package
+// multiplier time. Existing snapshots retain their previously promised benefit.
 func (s *Service) FreezeMonthlyPurchaseBenefitsTx(ctx context.Context, tx pgx.Tx, o Order) error {
+	if o.PolicyVersion == PolicyStandardV2 || o.Kind != "subscription" || o.PurchaseType == "fuel" || o.ID == 0 || o.PlanID == nil {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO v3_commerce.monthly_purchase_benefits(order_id,target_seconds,source_seconds,full_price_minor)
+	 VALUES($1,0,0,$2)`, o.ID, o.AmountMinor)
+	return err
+}
+
+// freezeImportedMonthlyPurchaseBenefitsTx preserves the promised card benefit
+// for pending legacy orders imported before their original callback is served.
+func (s *Service) freezeImportedMonthlyPurchaseBenefitsTx(ctx context.Context, tx pgx.Tx, o Order) error {
+	if o.PolicyVersion == PolicyStandardV2 {
+		return nil
+	}
 	if o.Kind != "subscription" || o.PurchaseType == "fuel" || o.ID == 0 || o.PlanID == nil {
 		return nil
 	}
-	target, err := monthlyPlanSecondsTx(ctx, tx, *o.PlanID)
+	var target int64
+	var err error
+	if o.PlanSnapshot.ID > 0 {
+		target = monthlyTierSeconds(o.PlanSnapshot.MembershipTier)
+	} else {
+		target, err = monthlyPlanSecondsTx(ctx, tx, *o.PlanID)
+	}
 	if err != nil {
 		return err
 	}
 	var source int64
 	if o.TargetSubscriptionID > 0 {
-		var currentPlan int64
-		if err = tx.QueryRow(ctx, `SELECT plan_id FROM v3_commerce.subscriptions WHERE id=$1 AND user_id=$2`, o.TargetSubscriptionID, o.UserID).Scan(&currentPlan); err != nil {
-			return err
-		}
-		source, err = monthlyPlanSecondsTx(ctx, tx, currentPlan)
+		p, e := subscriptionPlan(ctx, tx, o.TargetSubscriptionID)
+		err = e
+		source = monthlyTierSeconds(p.MembershipTier)
 		if err != nil {
 			return err
 		}
@@ -62,6 +80,9 @@ func (s *Service) FreezeMonthlyPurchaseBenefitsTx(ctx context.Context, tx pgx.Tx
 // ApplyMonthlyPurchaseBenefitsTx follows successful fulfillment, including a
 // package replacement. Fuel and payments awaiting provider review grant none.
 func (s *Service) ApplyMonthlyPurchaseBenefitsTx(ctx context.Context, tx pgx.Tx, o Order) error {
+	if o.PolicyVersion == PolicyStandardV2 {
+		return nil
+	}
 	if o.Kind != "subscription" || o.PurchaseType == "fuel" || o.ID == 0 || s.cfg.MonthlyBenefits == nil {
 		return nil
 	}

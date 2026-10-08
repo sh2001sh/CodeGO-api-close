@@ -45,6 +45,9 @@ func (a *domainAdapter) GetApiBillingFundingEconomics(w http.ResponseWriter, r *
 func (a *domainAdapter) GetApiBillingHistory(w http.ResponseWriter, r *http.Request, params GetApiBillingHistoryParams) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) ListBlindBoxAdminPools(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) PutApiBlindBoxAdminPools(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
@@ -331,6 +334,12 @@ func (a *domainAdapter) PostApiCommerceOrdersTradeNoCancel(w http.ResponseWriter
 func (a *domainAdapter) GetApiCommerceOrdersTradeNoDiscount(w http.ResponseWriter, r *http.Request, tradeNo string) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) GetApiCommerceOrdersTradeNoInvoice(w http.ResponseWriter, r *http.Request, tradeNo string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiCommerceOrdersTradeNoInvoice(w http.ResponseWriter, r *http.Request, tradeNo string) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) GetApiCommerceProviders(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
@@ -359,6 +368,159 @@ func (a *domainAdapter) GetApiCommunityV1Sellers(w http.ResponseWriter, r *http.
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiCreemWebhook(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeployments(w http.ResponseWriter, r *http.Request, params GetApiDeploymentsParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDeployments(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeploymentsAvailableReplicas(w http.ResponseWriter, r *http.Request, params GetApiDeploymentsAvailableReplicasParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeploymentsCheckName(w http.ResponseWriter, r *http.Request, params GetApiDeploymentsCheckNameParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeploymentsHardwareTypes(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeploymentsLocations(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDeploymentsPriceEstimation(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeploymentsSearch(w http.ResponseWriter, r *http.Request, params GetApiDeploymentsSearchParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeploymentsSettings(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDeploymentsSettingsTestConnection(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDeploymentsTestConnection(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) DeleteApiDeploymentsId(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeploymentsId(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutApiDeploymentsId(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeploymentsIdContainers(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeploymentsIdContainersContainerId(w http.ResponseWriter, r *http.Request, id string, containerId string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDeploymentsIdExtend(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDeploymentsIdLogs(w http.ResponseWriter, r *http.Request, id string, params GetApiDeploymentsIdLogsParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutApiDeploymentsIdName(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopAccountSummary(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDesktopAuthApprove(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDesktopAuthPoll(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDesktopAuthReject(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopAuthSession(w http.ResponseWriter, r *http.Request, params GetApiDesktopAuthSessionParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDesktopAuthSession(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopAuthorizedDevices(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) DeleteApiDesktopAuthorizedDevicesId(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopConfigTemplate(w http.ResponseWriter, r *http.Request, params GetApiDesktopConfigTemplateParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopConfigTemplates(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopDevices(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) DeleteApiDesktopDevicesId(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDesktopDiagnosticsReport(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopGroupStatus(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopGroups(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopImportConfig(w http.ResponseWriter, r *http.Request, params GetApiDesktopImportConfigParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDesktopImportDeeplink(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopPricing(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopReleaseLatest(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopReleaseLatestJson(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopServiceStatus(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDesktopTelemetryEvents(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopTokens(w http.ResponseWriter, r *http.Request, params GetApiDesktopTokensParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDesktopTokens(w http.ResponseWriter, r *http.Request, params PostApiDesktopTokensParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutApiDesktopTokens(w http.ResponseWriter, r *http.Request, params PutApiDesktopTokensParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDesktopTokensEnsure(w http.ResponseWriter, r *http.Request, params PostApiDesktopTokensEnsureParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) DeleteApiDesktopTokensId(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopTokensIdConfig(w http.ResponseWriter, r *http.Request, id int64, params GetApiDesktopTokensIdConfigParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutApiDesktopTokensIdGroup(w http.ResponseWriter, r *http.Request, id int64, params PutApiDesktopTokensIdGroupParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiDesktopTokensIdKey(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopUsageLogs(w http.ResponseWriter, r *http.Request, params GetApiDesktopUsageLogsParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiDesktopUsageTrends(w http.ResponseWriter, r *http.Request, params GetApiDesktopUsageTrendsParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiGroupBuyCreate(w http.ResponseWriter, r *http.Request) {
@@ -470,6 +632,12 @@ func (a *domainAdapter) GetApiMarketplaceAdminSecurityAuditEventsExport(w http.R
 func (a *domainAdapter) PatchApiMarketplaceAdminSecurityAuditEventsId(w http.ResponseWriter, r *http.Request, id string) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) GetAdminMarketShops(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) ReviewMarketShop(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) GetApiMarketplaceAutoRoutePool(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
@@ -491,6 +659,12 @@ func (a *domainAdapter) PostApiMarketplaceChannelsFetchModels(w http.ResponseWri
 func (a *domainAdapter) GetApiMarketplaceChannelsMine(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) GetChannelOwnerAnalytics(w http.ResponseWriter, r *http.Request, params GetChannelOwnerAnalyticsParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) ExportChannelOwnerAnalytics(w http.ResponseWriter, r *http.Request, params ExportChannelOwnerAnalyticsParams) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) GetApiMarketplaceChannelsMineBargainRequests(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
@@ -500,7 +674,7 @@ func (a *domainAdapter) PostApiMarketplaceChannelsMineBargainRequestsIdResolve(w
 func (a *domainAdapter) GetApiMarketplaceChannelsMineLogs(w http.ResponseWriter, r *http.Request, params GetApiMarketplaceChannelsMineLogsParams) {
 	a.next.ServeHTTP(w, r)
 }
-func (a *domainAdapter) GetApiMarketplaceChannelsMineLogsExport(w http.ResponseWriter, r *http.Request) {
+func (a *domainAdapter) GetApiMarketplaceChannelsMineLogsExport(w http.ResponseWriter, r *http.Request, params GetApiMarketplaceChannelsMineLogsExportParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiMarketplaceChannelsMineObservability(w http.ResponseWriter, r *http.Request) {
@@ -512,7 +686,7 @@ func (a *domainAdapter) GetApiMarketplaceChannelsMineUserMultipliers(w http.Resp
 func (a *domainAdapter) PostApiMarketplaceChannelsMineUserMultipliersBatch(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
-func (a *domainAdapter) GetApiMarketplaceChannelsMineUserUsage(w http.ResponseWriter, r *http.Request) {
+func (a *domainAdapter) GetApiMarketplaceChannelsMineUserUsage(w http.ResponseWriter, r *http.Request, params GetApiMarketplaceChannelsMineUserUsageParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) DeleteApiMarketplaceChannelsId(w http.ResponseWriter, r *http.Request, id string) {
@@ -522,6 +696,12 @@ func (a *domainAdapter) PatchApiMarketplaceChannelsId(w http.ResponseWriter, r *
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiMarketplaceChannelsIdBatchWelfare(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetChannelMarketDisclosure(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutChannelMarketDisclosure(w http.ResponseWriter, r *http.Request, id string) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiMarketplaceChannelsIdModelsRemoveFailed(w http.ResponseWriter, r *http.Request, id string) {
@@ -569,7 +749,7 @@ func (a *domainAdapter) PostApiMarketplaceChannelsIdVerify(w http.ResponseWriter
 func (a *domainAdapter) GetApiMarketplaceGroupStatus(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
-func (a *domainAdapter) GetApiMarketplaceGroups(w http.ResponseWriter, r *http.Request) {
+func (a *domainAdapter) GetApiMarketplaceGroups(w http.ResponseWriter, r *http.Request, params GetApiMarketplaceGroupsParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiMarketplaceGroupsIdBargainRequests(w http.ResponseWriter, r *http.Request, id string) {
@@ -581,7 +761,16 @@ func (a *domainAdapter) PostApiMarketplaceGroupsIdBindToken(w http.ResponseWrite
 func (a *domainAdapter) PostApiMarketplaceGroupsIdFeedback(w http.ResponseWriter, r *http.Request, id string) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) GetChannelMarketInsights(w http.ResponseWriter, r *http.Request, id string, params GetChannelMarketInsightsParams) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) PostApiMarketplaceGroupsIdInvite(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetMarketGroupRating(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostMarketGroupRating(w http.ResponseWriter, r *http.Request, id string) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiMarketplaceGroupsSlug(w http.ResponseWriter, r *http.Request, slug string) {
@@ -593,7 +782,7 @@ func (a *domainAdapter) GetApiMarketplaceGroupsSlugModelStatus(w http.ResponseWr
 func (a *domainAdapter) PostApiMarketplaceInvitesAccept(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
-func (a *domainAdapter) GetApiMarketplaceKeyGroupOptions(w http.ResponseWriter, r *http.Request) {
+func (a *domainAdapter) GetApiMarketplaceKeyGroupOptions(w http.ResponseWriter, r *http.Request, params GetApiMarketplaceKeyGroupOptionsParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiMarketplaceModels(w http.ResponseWriter, r *http.Request) {
@@ -612,6 +801,9 @@ func (a *domainAdapter) GetApiMarketplaceRoutePools(w http.ResponseWriter, r *ht
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiMarketplaceRoutePools(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiMarketplaceRoutePoolsGroupOptions(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) DeleteApiMarketplaceRoutePoolsId(w http.ResponseWriter, r *http.Request, id string) {
@@ -638,6 +830,18 @@ func (a *domainAdapter) GetApiMarketplaceSecurityAuditEventsExport(w http.Respon
 func (a *domainAdapter) PatchApiMarketplaceSecurityAuditEventsId(w http.ResponseWriter, r *http.Request, id string) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) GetMyMarketShop(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) UpdateMyMarketShop(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetMarketShops(w http.ResponseWriter, r *http.Request, params GetMarketShopsParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetMarketShop(w http.ResponseWriter, r *http.Request, id string, params GetMarketShopParams) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) GetApiModelsWithoutTrailingSlash(w http.ResponseWriter, r *http.Request, params GetApiModelsWithoutTrailingSlashParams) {
 	a.next.ServeHTTP(w, r)
 }
@@ -652,6 +856,18 @@ func (a *domainAdapter) GetApiModels(w http.ResponseWriter, r *http.Request, par
 }
 func (a *domainAdapter) PostApiModels(w http.ResponseWriter, r *http.Request) { a.next.ServeHTTP(w, r) }
 func (a *domainAdapter) PutApiModels(w http.ResponseWriter, r *http.Request, params PutApiModelsParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiModelsFavorites(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutApiModelsFavorites(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiModelsFavoritesSlashAlias(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutApiModelsFavoritesSlashAlias(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiModelsMissing(w http.ResponseWriter, r *http.Request) {
@@ -675,10 +891,28 @@ func (a *domainAdapter) GetApiModelsId(w http.ResponseWriter, r *http.Request, i
 func (a *domainAdapter) PutApiModelsId(w http.ResponseWriter, r *http.Request, id int64, params PutApiModelsIdParams) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) GetNotifications(w http.ResponseWriter, r *http.Request, params GetNotificationsParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) StreamNotificationEvents(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) MarkNotificationsReadThrough(w http.ResponseWriter, r *http.Request, params MarkNotificationsReadThroughParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetNotificationSummary(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) SetNotificationReadState(w http.ResponseWriter, r *http.Request, id string) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) PostApiNowpaymentsIpn(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiNowpaymentsWebhook(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiOauthEmailBind(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiOauthProviders(w http.ResponseWriter, r *http.Request, params GetApiOauthProvidersParams) {
@@ -737,6 +971,27 @@ func (a *domainAdapter) PostApiPasskeyRegisterBegin(w http.ResponseWriter, r *ht
 func (a *domainAdapter) PostApiPasskeyRegisterFinish(w http.ResponseWriter, r *http.Request, params PostApiPasskeyRegisterFinishParams) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) DeleteApiPerformanceDiskCache(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiPerformanceGc(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) DeleteApiPerformanceLogs(w http.ResponseWriter, r *http.Request, params DeleteApiPerformanceLogsParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiPerformanceLogs(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiPerformanceResetStats(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiPerformanceStats(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetCurrentPolicies(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) GetApiPrefillGroupWithoutTrailingSlash(w http.ResponseWriter, r *http.Request, params GetApiPrefillGroupWithoutTrailingSlashParams) {
 	a.next.ServeHTTP(w, r)
 }
@@ -761,6 +1016,18 @@ func (a *domainAdapter) DeleteApiPrefillGroupId(w http.ResponseWriter, r *http.R
 func (a *domainAdapter) PutApiPrefillGroupId(w http.ResponseWriter, r *http.Request, id int64) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) GetApiPublicModels(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiRatioSyncApply(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiRatioSyncChannels(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiRatioSyncFetch(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) GetApiRedemption(w http.ResponseWriter, r *http.Request, params GetApiRedemptionParams) {
 	a.next.ServeHTTP(w, r)
 }
@@ -768,6 +1035,9 @@ func (a *domainAdapter) PostApiRedemption(w http.ResponseWriter, r *http.Request
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) DeleteApiRedemptionId(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiResetPassword(w http.ResponseWriter, r *http.Request, params GetApiResetPasswordParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiRoutePools(w http.ResponseWriter, r *http.Request) {
@@ -825,6 +1095,27 @@ func (a *domainAdapter) PatchApiSubscriptionAdminPlansId(w http.ResponseWriter, 
 func (a *domainAdapter) PutApiSubscriptionAdminPlansId(w http.ResponseWriter, r *http.Request, id int64) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) PostApiApiSubscriptionAdminRedesignPreview(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiApiSubscriptionAdminRedesignRules(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutApiApiSubscriptionAdminRedesignRules(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiApiSubscriptionAdminReferralPolicy(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutApiApiSubscriptionAdminReferralPolicy(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiApiSubscriptionAdminReferralQualifications(w http.ResponseWriter, r *http.Request, params GetApiApiSubscriptionAdminReferralQualificationsParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiApiSubscriptionAdminReferralQualificationsIdApprove(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) DeleteApiSubscriptionAdminUserSubscriptionsId(w http.ResponseWriter, r *http.Request, id int64) {
 	a.next.ServeHTTP(w, r)
 }
@@ -841,6 +1132,12 @@ func (a *domainAdapter) GetApiSubscriptionAdminUsersIdSubscriptions(w http.Respo
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiSubscriptionAdminUsersIdSubscriptions(w http.ResponseWriter, r *http.Request, id int64, params PostApiSubscriptionAdminUsersIdSubscriptionsParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiApiSubscriptionAdminWalletConversionReviewId(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PutApiApiSubscriptionAdminWalletConversionReviewId(w http.ResponseWriter, r *http.Request, id int64) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiSubscriptionCreemPay(w http.ResponseWriter, r *http.Request) {
@@ -892,6 +1189,36 @@ func (a *domainAdapter) GetApiSubscriptionSelfPreference(w http.ResponseWriter, 
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PutApiSubscriptionSelfPreference(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiApiSubscriptionSelfResetCards(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiApiSubscriptionSelfResetCardsConfirm(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiApiSubscriptionSelfResetCardsQuote(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiApiSubscriptionSelfResetCardsRules(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiApiSubscriptionSelfResetCardsIdActivate(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiSubscriptionSelfResetOpportunity(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiSubscriptionSelfResetOpportunityUse(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiApiSubscriptionSelfWalletConversionConfirm(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiApiSubscriptionSelfWalletConversionQuote(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiApiSubscriptionSelfWalletConversionRequestId(w http.ResponseWriter, r *http.Request, requestId string) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiSubscriptionStripePay(w http.ResponseWriter, r *http.Request) {
@@ -948,10 +1275,41 @@ func (a *domainAdapter) PostApiUser(w http.ResponseWriter, r *http.Request, para
 func (a *domainAdapter) PutApiUser(w http.ResponseWriter, r *http.Request, params PutApiUserParams) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) PostApiUser2faBackupCodes(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiUser2faDisable(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiUser2faEnable(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiUser2faSetup(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiUser2faStats(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiUser2faStatus(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiUserAff(w http.ResponseWriter, r *http.Request) { a.next.ServeHTTP(w, r) }
+func (a *domainAdapter) GetApiApiUserAffConsumptionRewards(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiUserAffOverview(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiUserAffRewards(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) PostApiUserAffTransfer(w http.ResponseWriter, r *http.Request, params PostApiUserAffTransferParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiUserCreemPay(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiUserEmailVerify(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiUserEpayNotify(w http.ResponseWriter, r *http.Request) {
@@ -970,6 +1328,9 @@ func (a *domainAdapter) GetApiUserGroups(w http.ResponseWriter, r *http.Request,
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiUserLogin(w http.ResponseWriter, r *http.Request, params PostApiUserLoginParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiUserLogin2fa(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiUserLogout(w http.ResponseWriter, r *http.Request, params GetApiUserLogoutParams) {
@@ -1008,10 +1369,17 @@ func (a *domainAdapter) PostApiUserPasskeyVerifyFinish(w http.ResponseWriter, r 
 func (a *domainAdapter) PostApiUserPay(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) GetPolicyAcceptances(w http.ResponseWriter, r *http.Request) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) AcceptPolicy(w http.ResponseWriter, r *http.Request) { a.next.ServeHTTP(w, r) }
 func (a *domainAdapter) PostApiUserRefresh(w http.ResponseWriter, r *http.Request, params PostApiUserRefreshParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiUserRegister(w http.ResponseWriter, r *http.Request, params PostApiUserRegisterParams) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) PostApiUserReset(w http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) GetApiUserSelf(w http.ResponseWriter, r *http.Request, params GetApiUserSelfParams) {
@@ -1074,6 +1442,9 @@ func (a *domainAdapter) GetApiUserId(w http.ResponseWriter, r *http.Request, id 
 func (a *domainAdapter) PutApiUserId(w http.ResponseWriter, r *http.Request, id int64, params PutApiUserIdParams) {
 	a.next.ServeHTTP(w, r)
 }
+func (a *domainAdapter) DeleteApiUserId2fa(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
 func (a *domainAdapter) GetApiVendorsWithoutTrailingSlash(w http.ResponseWriter, r *http.Request, params GetApiVendorsWithoutTrailingSlashParams) {
 	a.next.ServeHTTP(w, r)
 }
@@ -1100,6 +1471,9 @@ func (a *domainAdapter) GetApiVendorsId(w http.ResponseWriter, r *http.Request, 
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PutApiVendorsId(w http.ResponseWriter, r *http.Request, id int64) {
+	a.next.ServeHTTP(w, r)
+}
+func (a *domainAdapter) GetApiVerification(w http.ResponseWriter, r *http.Request, params GetApiVerificationParams) {
 	a.next.ServeHTTP(w, r)
 }
 func (a *domainAdapter) PostApiWaffoPancakeWebhook(w http.ResponseWriter, r *http.Request) {

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -203,32 +202,18 @@ func (a *mediaAdapter) fetch(ctx context.Context, target gateway.Target, address
 }
 
 func (a *mediaAdapter) fetchBounded(ctx context.Context, target gateway.Target, address string, maximum int64) ([]byte, error) {
-	// Only response URLs are used, with no provider credential on the download.
-	u, err := url.Parse(address)
-	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return nil, mediaError(a.provider, "invalid_media_url")
-	}
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, mediaError(a.provider, "invalid_media_url")
-	}
 	client, err := a.httpClient(ctx, target)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.Do(r)
+	data, err := httpx.FetchMedia(ctx, address, httpx.MediaFetchConfig{Client: client, TrustedOrigin: target.BaseURL, MaxBytes: maximum})
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 		return nil, mediaError(a.provider, "media_download_failed")
 	}
-	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		return nil, mediaError(a.provider, "media_download_failed")
-	}
-	resp.Body = http.MaxBytesReader(nil, resp.Body, maximum)
-	return readResponse(resp)
+	return data, nil
 }
 
 func (a *mediaAdapter) encodeImages(ctx context.Context, target gateway.Target, images []mediaImage) error {

@@ -69,6 +69,14 @@ func (s *Service) WalletOverview(ctx context.Context, uid int64, page, pageSize 
 		return out, err
 	}
 	out.Security = WalletSecurity{PasswordSet: hasPaymentPassword, RequiresAccountPassword: hasAccountPassword, RemainingPasswordAttempts: walletMaxFailures - failed, EmailBound: email != "", EmailMasked: maskWalletEmail(email), EmailRecoveryAvailable: s.cfg.WalletRecovery != nil}
+	if recovery, ok := s.cfg.WalletRecovery.(interface {
+		Available(context.Context) (bool, error)
+	}); ok {
+		out.Security.EmailRecoveryAvailable, err = recovery.Available(ctx)
+		if err != nil {
+			return out, err
+		}
+	}
 	if locked != nil && locked.After(s.cfg.Now()) {
 		out.Security.LockedUntil = locked.Unix()
 		out.Security.RemainingPasswordAttempts = 0

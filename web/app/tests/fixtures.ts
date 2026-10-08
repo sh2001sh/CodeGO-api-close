@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import { marketBrowseResponse } from './market-fixture'
 
 export const user = {
   id: 1,
@@ -46,6 +47,7 @@ export const plan = {
   group_buy_bonus3_micro: 0,
   group_buy_bonus5_micro: 0,
   plan_type: 'monthly',
+  lucky_draw_enabled: false,
   fuel_enabled: false,
   fuel_unit_price_micro: 0,
   fuel_min_credits: 0,
@@ -78,12 +80,98 @@ const channel = {
   status_code_mapping: {},
 }
 
-export async function fixtureAPI(page: Page) {
+const fixtureMarketGroup = {
+  id: '349',
+  internal_channel_id: 1,
+  owner_user_id: 1,
+  group_id: 'group-test',
+  routing_group: 'market_group-test',
+  public_slug: 'public-test',
+  system_display_name: '公共模型渠道',
+  provider_type: 'openai',
+  approved_source_label: '公共渠道',
+  declared_models: ['gpt-4o'],
+  model_prices: {},
+  effective_model_prices: {},
+  tags: [],
+  recent_request_bucket_seconds: 3600,
+  recent_request_series: [],
+  multiplier_ppm: 1000000,
+  multiplier: 1,
+  visibility: 'public',
+  lifecycle_status: 'active',
+  verification_status: 'passed',
+  last_review_reason: '',
+  created_at: '2026-09-30T08:00:00Z',
+  updated_at: '2026-09-30T08:00:00Z',
+}
+
+export async function fixtureAPI(page: Page, locale: string | null = 'zh-CN') {
+  if (locale)
+    await page.addInitScript((value) => {
+      if (!localStorage.getItem('codego.locale')) localStorage.setItem('codego.locale', value)
+    }, locale)
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     let data: unknown = []
     if (path === '/api/user/self') data = user
-    else if (path === '/api/user/') data = [user]
+    else if (path === '/api/user/policy-acceptance')
+      data = [
+        {
+          document: 'supplier',
+          version: '2026-10-07',
+          locale: 'zh-CN',
+          accepted_at: '2026-10-07T00:00:00Z',
+        },
+      ]
+    else if (path.endsWith('/insights'))
+      data = {
+        group_id: path.split('/')[4],
+        display_id: '101',
+        model: new URL(route.request().url()).searchParams.get('model'),
+        window_hours: 24,
+        request_count: 0,
+        success_count: 0,
+        independent_consumers: 0,
+        performance_samples: 0,
+        failure_counts: [],
+      }
+    else if (path.endsWith('/disclosure')) data = null
+    else if (path === '/api/marketplace/channels/mine/analytics')
+      data = {
+        from: new Date().toISOString(),
+        to: new Date().toISOString(),
+        bucket_seconds: 86400,
+        summary: {
+          request_count: 0,
+          success_count: 0,
+          consumer_count: 0,
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          consumer_micro: 0,
+          gross_micro: 0,
+          commission_micro: 0,
+          fee_micro: 0,
+          net_micro: 0,
+          pending_income_micro: 0,
+          released_income_micro: 0,
+          reclaimed_income_micro: 0,
+        },
+        points: [],
+        channels: [],
+        settlements: [],
+        settlements_truncated: false,
+      }
+    else if (path === '/api/notifications/summary') data = { unread_count: 0, latest_id: '0' }
+    else if (path === '/api/notifications')
+      data = { items: [], unread_count: 0, latest_id: '0', total: 0, page: 1, page_size: 20 }
+    else if (path === '/api/notifications/events') {
+      await route.fulfill({
+        contentType: 'text/event-stream',
+        body: 'event: unread_count\ndata: {"unread_count":0}\n\n',
+      })
+      return
+    } else if (path === '/api/user/') data = [user]
     else if (path === '/api/user/login' || path === '/api/user/register') data = { user }
     else if (path === '/api/token/' && route.request().method() === 'POST')
       data = { ...key, key: 'sk-created-test-only' }
@@ -200,6 +288,10 @@ export async function fixtureAPI(page: Page) {
         total: 1,
       }
     else if (path === '/api/passkey') data = { enabled: false, count: 0 }
+    else if (path === '/api/user/2fa/status')
+      data = { enabled: false, locked: false, backup_codes_remaining: 0 }
+    else if (path === '/api/user/2fa/stats')
+      data = { total_users: 1, enabled_users: 0, enabled_rate: '0.00%' }
     else if (path === '/api/oauth/providers') data = [{ slug: 'github', name: 'GitHub', icon: '' }]
     else if (path === '/api/wallet/transfers')
       data = {
@@ -226,33 +318,33 @@ export async function fixtureAPI(page: Page) {
       path === '/api/marketplace/channels/mine' ||
       path === '/api/marketplace/admin/channels'
     )
-      data = [
-        {
-          id: 'public-channel',
-          internal_channel_id: 1,
-          owner_user_id: 1,
-          group_id: 'group-test',
-          public_slug: 'public-test',
-          system_display_name: '公共模型渠道',
-          provider_type: 'openai',
-          approved_source_label: '公共渠道',
-          declared_models: ['gpt-4o'],
-          model_prices: {},
-          multiplier_ppm: 1000000,
-          multiplier: 1,
-          visibility: 'public',
-          lifecycle_status: 'active',
-          verification_status: 'verified',
-          last_review_reason: '',
-          created_at: '2026-09-30T08:00:00Z',
-          updated_at: '2026-09-30T08:00:00Z',
-        },
-      ]
+      data = [fixtureMarketGroup]
+    else if (/^\/api\/marketplace\/groups\/[^/]+\/rating$/.test(path))
+      data = {
+        channel: { average_score: 0, rating_count: 0, viewer_stars: 0 },
+        seller: { average_score: 0, rating_count: 0, viewer_stars: 0 },
+        can_rate: false,
+        eligibility_reason: 'usage_required',
+      }
     else if (path === '/api/marketplace/auto-route-pool')
       data = { enabled: false, name: '自动路由', members: [] }
     else if (path === '/api/marketplace/channels/mine/user-usage') data = {}
     else if (path.endsWith('/security-audit/events'))
       data = { items: [], total: 0, page: 1, page_size: 20 }
+    if (path === '/api/marketplace/groups' || path === '/api/marketplace/key-group-options')
+      return route.fulfill({
+        json: marketBrowseResponse([fixtureMarketGroup], new URL(route.request().url())),
+      })
+    if (/^\/api\/marketplace\/groups\/[^/]+$/.test(path)) {
+      const id = decodeURIComponent(path.split('/').at(-1)!)
+      return [
+        fixtureMarketGroup.id,
+        fixtureMarketGroup.group_id,
+        fixtureMarketGroup.public_slug,
+      ].includes(id)
+        ? route.fulfill({ json: { success: true, data: fixtureMarketGroup } })
+        : route.fulfill({ status: 404, json: { success: false, message: '资源不存在或无权访问' } })
+    }
     await route.fulfill({ json: { success: true, data } })
   })
 }

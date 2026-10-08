@@ -41,6 +41,8 @@ Logging uses the standard library `log/slog` directly.
 
 ## Build
 
+The main generation gateway and `/v1/models` accept optional `X-CodeGo-Group: <group>` after API key authentication. It selects one of the principal's allowed groups for that request, preserving account/private-group/pool checks and billing at the selected route. An explicit selection disables cross-group retry and never changes the stored key. Unauthorized groups return 403; empty or repeated headers return 400. Auxiliary, realtime and workflow endpoints do not support this override.
+
 ```bash
 cd v3
 # Offline machines: GOPROXY=off GOSUMDB=off GOFLAGS=-mod=mod (module cache only)
@@ -55,7 +57,7 @@ go build ./cmd/migrate
 ```bash
 go test ./...
 go test -race ./...
-V3_TEST_PG_DSN=postgres://... V3_TEST_REDIS_ADDR=... V3_MIGRATION_TEST_PG_DSN=postgres://... V3_MIGRATION_TEST_REDIS_ADDR=... go test -race -tags=pgintegration -p 1 -timeout=10m ./...
+V3_TEST_PG_DSN=postgres://... V3_TEST_REDIS_ADDR=... V3_TEST_COMMERCE_REDIS_ADDR=... CODEGO_TEST_REDIS_ADDR=... V3_MIGRATION_TEST_PG_DSN=postgres://... V3_MIGRATION_TEST_REDIS_ADDR=... go test -race -tags=pgintegration -p 1 -timeout=10m ./...
 ```
 
 ## Verify

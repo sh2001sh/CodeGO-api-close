@@ -1,9 +1,11 @@
+import { useTranslation } from '../../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap } from '../../lib/api'
 import type { Schema } from '../../lib/types'
 import { resourceOptions } from '../../lib/queries'
 import { credits, date } from '../../lib/format'
+import { frozenSubscriptionPlan } from '../../lib/subscription-policy'
 import { DataTable } from '../../components/data-table'
 import { Button, ErrorMessage, Loading } from '../../components/ui'
 import { errorFrom } from './amounts'
@@ -21,6 +23,7 @@ export function SubscriptionConversion(props: {
   plans: Schema['Plan'][]
   subscriptions: Schema['Subscription'][]
 }) {
+  const { t } = useTranslation()
   const client = useQueryClient()
   const history = useQuery(subscriptionConversionsOptions())
   const [error, setError] = useState<Error | null>(null)
@@ -37,12 +40,14 @@ export function SubscriptionConversion(props: {
   })
   return (
     <section className="section">
-      <h2>月卡额度转换</h2>
+      <h2>{t('月卡额度转换')}</h2>
       <p className="muted">
-        将月卡部分剩余额度转换为钱包通用额度。比例按月卡总额度计算，实际可转换量和到账量由服务器核算；转换会减少月卡额度，耗尽时月卡结束。
+        {t(
+          '将月卡部分剩余额度转换为钱包通用额度。比例按月卡总额度计算，实际可转换量和到账量由服务器核算；转换会减少月卡额度，耗尽时月卡结束。',
+        )}
       </p>
       <ErrorMessage error={error ?? convert.error ?? history.error} />
-      {!props.subscriptions.length && <p className="empty-state">暂无可转换的有效月卡。</p>}
+      {!props.subscriptions.length && <p className="empty-state">{t('暂无可转换的有效月卡。')}</p>}
       {!!props.subscriptions.length && !draft && (
         <form
           className="form-panel"
@@ -70,18 +75,18 @@ export function SubscriptionConversion(props: {
           }}
         >
           <label className="field" htmlFor="conversion-subscription">
-            <span>需要转换的月卡</span>
+            <span>{t('需要转换的月卡')}</span>
             <select id="conversion-subscription" name="conversion-subscription" required>
               {props.subscriptions.map((sub) => (
                 <option key={String(sub.id)} value={String(sub.id)}>
-                  {props.plans.find((plan) => String(plan.id) === String(sub.plan_id))?.name} ·{' '}
-                  {sub.id} · 余额 {credits(sub.balance)} · {date(sub.expires_at)}
+                  {frozenSubscriptionPlan(sub, props.plans)?.name} · {sub.id} {t('· 余额')}{' '}
+                  {credits(sub.balance)} · {date(sub.expires_at)}
                 </option>
               ))}
             </select>
           </label>
           <label className="field" htmlFor="conversion-percent">
-            <span>转换比例 %</span>
+            <span>{t('转换比例 %')}</span>
             <input
               id="conversion-percent"
               name="conversion-percent"
@@ -93,43 +98,49 @@ export function SubscriptionConversion(props: {
               defaultValue="1"
             />
           </label>
-          <Button type="submit">核对额度转换</Button>
+          <Button type="submit">{t('核对额度转换')}</Button>
         </form>
       )}
       {draft && (
         <div className="form-panel">
           <p className="full-width">
-            确认转换订阅 {draft.subscription_id} 总额度的 {draft.conversion_percent}
-            %？可用余额不足、已用重置机会或仍有消费结算时，服务器会拒绝或要求稍后重试。到账量不等同于所减少的月卡额度。
+            {t('确认转换订阅')} {draft.subscription_id} {t('总额度的')} {draft.conversion_percent}
+            {t(
+              '%？可用余额不足、已用重置机会或仍有消费结算时，服务器会拒绝或要求稍后重试。到账量不等同于所减少的月卡额度。',
+            )}
           </p>
           <Button
             variant="danger"
             disabled={convert.isPending}
             onClick={() => convert.mutate(draft)}
           >
-            {convert.isPending ? '转换中…' : convert.isError ? '重试同一次转换' : '确认转换额度'}
+            {convert.isPending
+              ? t('转换中…')
+              : convert.isError
+                ? t('重试同一次转换')
+                : t('确认转换额度')}
           </Button>
           {!convert.isError && (
             <Button variant="quiet" disabled={convert.isPending} onClick={() => setDraft(null)}>
-              取消
+              {t('取消')}
             </Button>
           )}
         </div>
       )}
       {convert.data && (
         <p role="status">
-          转换完成：月卡减少 {credits(convert.data.source_credits)}，钱包到账{' '}
-          {credits(convert.data.target_credits)}。
+          {t('转换完成：月卡减少')} {credits(convert.data.source_credits)}
+          {t('，钱包到账')} {credits(convert.data.target_credits)}。
         </p>
       )}
       <div className="page-header">
-        <h3>最近转换记录</h3>
+        <h3>{t('最近转换记录')}</h3>
         <Button
           variant="quiet"
           disabled={history.isFetching}
           onClick={() => void history.refetch()}
         >
-          刷新记录
+          {t('刷新记录')}
         </Button>
       </div>
       {history.isPending && <Loading />}

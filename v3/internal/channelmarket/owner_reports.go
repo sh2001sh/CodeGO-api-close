@@ -20,16 +20,29 @@ type UserUsage struct {
 // UserUsage aggregates the complete owned history in PostgreSQL. The numeric
 // sum is cast only after aggregation, so overflow is an error, never wrapping.
 func (s *Service) UserUsage(ctx context.Context, a Actor) (map[int64]UserUsage, error) {
+	return s.UserUsageFiltered(ctx, a, OwnerAnalyticsFilter{})
+}
+
+func (s *Service) UserUsageFiltered(ctx context.Context, a Actor, f OwnerAnalyticsFilter) (map[int64]UserUsage, error) {
 	if s.pool == nil {
 		return nil, ErrUnavailable
 	}
 	if a.UserID <= 0 && !a.Admin {
 		return nil, ErrInvalid
 	}
+	if err := validateOwnerReportFilter(f); err != nil {
+		return nil, err
+	}
+	if err := s.checkOwnerSelection(ctx, s.pool, a, f.ChannelID); err != nil {
+		return nil, err
+	}
+	from, to := optionalOwnerBounds(f)
 	rows, err := s.pool.Query(ctx, `SELECT l.user_id,count(*),sum(l.amount)::bigint
-FROM v3_billing.usage_logs l JOIN v3_catalog.channels c ON c.id=l.channel_id
+FROM v3_billing.usage_logs l JOIN v3_catalog.channels c ON c.id=l.channel_id LEFT JOIN v3_channelmarket.groups g ON g.channel_id=c.id
 WHERE c.scope='marketplace' AND (c.owner_user_id=$1 OR $2)
-GROUP BY l.user_id ORDER BY l.user_id`, a.UserID, a.Admin)
+AND ($3::timestamptz IS NULL OR l.created_at >= $3) AND ($4::timestamptz IS NULL OR l.created_at < $4)
+AND ($5='' OR g.public_channel_id=$5) AND ($6='' OR l.model=$6)
+GROUP BY l.user_id ORDER BY l.user_id`, a.UserID, a.Admin, from, to, f.ChannelID, f.Model)
 	if err != nil {
 		return nil, err
 	}
@@ -46,13 +59,17 @@ GROUP BY l.user_id ORDER BY l.user_id`, a.UserID, a.Admin)
 }
 
 func (s *Service) ExportLogs(ctx context.Context, a Actor, writer *csv.Writer) error {
+	return s.ExportLogsFiltered(ctx, a, OwnerAnalyticsFilter{}, writer)
+}
+
+func (s *Service) ExportLogsFiltered(ctx context.Context, a Actor, f OwnerAnalyticsFilter, writer *csv.Writer) error {
 	if err := writer.Write([]string{"request_id", "created_at", "channel_id", "user_id", "model", "amount_micro", "terminal"}); err != nil {
 		return err
 	}
 	var before time.Time
 	var beforeID int64
 	for {
-		items, err := s.LogsPage(ctx, a, before, beforeID, 1000)
+		items, err := s.LogsPageFiltered(ctx, a, before, beforeID, 1000, f)
 		if err != nil {
 			return err
 		}

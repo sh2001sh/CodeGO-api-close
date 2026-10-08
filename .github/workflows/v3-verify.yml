@@ -19,7 +19,9 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The real PG/race suite alone exceeded 30 minutes locally. Include room
+    # for lint, migration checks and compilation without dropping coverage.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -53,6 +55,7 @@ jobs:
         run: |
           bun run typecheck
           bun run check:api
+          bun run format:check
           bun run test
           bun run build
           bun run check:size
@@ -62,22 +65,49 @@ jobs:
           path: web/app/dist
 
   images:
-    needs: [backend, frontend]
+    # Only a revision that passed the real isolated stack can be published.
+    needs: [backend, frontend, acceptance]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
-        service: [gateway, control, worker, migrate]
+        service: [gateway, control, worker, migrate, web]
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve immutable revision tag
+        id: image
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: echo "tag=sha-${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-rebuild' || startsWith(github.ref, 'refs/tags/'))
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
-          file: v3/Dockerfile
+          file: ${{ matrix.service == 'web' && 'v3/deploy/Dockerfile.web' || 'v3/Dockerfile' }}
           build-args: SERVICE=${{ matrix.service }}
-          push: false
-          tags: codego-v3:${{ matrix.service }}
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-rebuild' || startsWith(github.ref, 'refs/tags/')) }}
+          tags: ghcr.io/sh2001sh/codego-api:${{ steps.image.outputs.tag }}-${{ matrix.service }}-amd64
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+      - name: Record verified image
+        env:
+          IMAGE: ghcr.io/sh2001sh/codego-api:${{ steps.image.outputs.tag }}-${{ matrix.service }}-amd64
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          echo "Verified image: \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Digest: \`$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
 
   acceptance:
     needs: [backend, frontend]
@@ -85,6 +115,7 @@ jobs:
     timeout-minutes: 30
     env:
       V3_REAL_URL: http://localhost:18083
+      V3_REAL_PROJECT: codego-v3-ci
       V3_REAL_OIDC_CLIENT_ID: codego-v3-ci-community
       V3_REAL_OIDC_REDIRECT_URI: http://localhost:18083/community-callback
     steps:
@@ -113,21 +144,58 @@ jobs:
       - name: Build and start all services
         run: |
           docker compose --env-file /tmp/codego-v3-ci.env -f v3/deploy/compose.test.yaml -p codego-v3-ci up --build -d
+          ready=0
           for i in $(seq 1 90); do
-            if curl -fsS http://localhost:18083/healthz >/dev/null; then exit 0; fi
+            if curl -fsS http://localhost:18083/healthz >/dev/null; then ready=1; break; fi
             sleep 2
           done
-          exit 1
+          test "$ready" = 1
+          # The Compose network is dynamic. Trust this project's exact edge,
+          # rather than a broad Docker/private CIDR or caller-supplied XFF.
+          edge=$(docker compose --env-file /tmp/codego-v3-ci.env -f v3/deploy/compose.test.yaml -p codego-v3-ci ps -q web)
+          edge_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$edge")
+          test -n "$edge_ip"
+          printf 'V3_TRUSTED_PROXY_CIDRS=%s/32\n' "$edge_ip" >> /tmp/codego-v3-ci.env
+          docker compose --env-file /tmp/codego-v3-ci.env -f v3/deploy/compose.test.yaml -p codego-v3-ci up -d --no-deps --wait --wait-timeout 180 gateway control
+          # Restart (not recreate) keeps the edge IP and refreshes backend DNS.
+          docker compose --env-file /tmp/codego-v3-ci.env -f v3/deploy/compose.test.yaml -p codego-v3-ci restart web
+          ready=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:18083/api/status >/dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
       - name: Verify real API, exact settlements and failure recovery
-        run: python3 v3/scripts/acceptance-stack.py --project codego-v3-ci
+        run: python3 v3/scripts/acceptance-stack.py --project codego-v3-ci --url "$V3_REAL_URL"
+      - name: Verify proxy connection reuse, compression and stream boundaries
+        run: python3 v3/deploy/verify-proxy.py
       - name: Install browser tests
         working-directory: web/app
         run: |
           bun install --frozen-lockfile
           bunx playwright install --with-deps chromium
-      - name: Verify desktop and mobile pages against the test deployment
+      - name: Verify mock desktop and mobile workflows
         working-directory: web/app
-        run: bun run test:e2e --workers=2
+        run: bun run test:e2e --grep-invert "real|zz-" --workers=2
+        env:
+          V3_REAL_URL: ''
+      - name: Verify real desktop and mobile workflows against the isolated deployment
+        working-directory: web/app
+        run: |
+          for viewport in desktop mobile; do
+            for spec in real-stack real-oidc real-restored real-subscription-v2; do
+              # Each workflow retains the real 10/min authentication limit.
+              # Restart only the disposable control between isolated cases.
+              docker compose --env-file /tmp/codego-v3-ci.env -f ../../v3/deploy/compose.test.yaml -p "$V3_REAL_PROJECT" restart control
+              ready=0
+              for i in $(seq 1 30); do
+                if curl -fsS "$V3_REAL_URL/api/status" >/dev/null; then ready=1; break; fi
+                sleep 2
+              done
+              test "$ready" = 1
+              bun run test:e2e "$spec.spec.ts" --project="$viewport" --workers=1 --forbid-only
+            done
+          done
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

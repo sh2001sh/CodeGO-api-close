@@ -1,9 +1,12 @@
 package live
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,8 +63,110 @@ func TestRealtimeBinaryFramesAndDeduplicatedUsage(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("connection did not finalize")
 	}
-	if ledger.reserves.Load() != 1 {
-		t.Fatal("session should reserve once")
+	if ledger.reserves.Load() != 2 {
+		t.Fatal("completed turn must reserve the next hold, and duplicate usage must not rotate it")
+	}
+}
+
+type failingRealtimeFinalizer struct{ *liveLedger }
+
+func (l *failingRealtimeFinalizer) Finalize(_ context.Context, _ *gateway.Request, out gateway.Outcome) error {
+	l.finalized <- out
+	return errors.New("settlement unavailable")
+}
+
+func TestRealtimeFinalizationFailureStopsFurtherConsumption(t *testing.T) {
+	var calls atomic.Int32
+	upstream := httptest.NewServer(websocket.Server{Handshake: func(*websocket.Config, *http.Request) error { return nil }, Handler: websocket.Handler(func(conn *websocket.Conn) {
+		defer func() { _ = conn.Close() }()
+		for {
+			var frame wireFrame
+			if frameCodec.Receive(conn, &frame) != nil {
+				return
+			}
+			calls.Add(1)
+			_ = websocket.Message.Send(conn, `{"type":"response.done","response":{"id":"finalization-failure","output":[{"type":"message"}],"usage":{"input_tokens":2,"output_tokens":3}}}`)
+		}
+	})})
+	defer upstream.Close()
+	ledger := &liveLedger{finalized: make(chan gateway.Outcome, 4)}
+	h, server, _ := socketFixture(t, []gateway.Target{{ChannelID: 1, CredentialID: 2, Provider: "openai", BaseURL: upstream.URL}}, ledger)
+	failing := &failingRealtimeFinalizer{liveLedger: ledger}
+	h.cfg.Settler = failing
+	conn := dialSocket(t, server.URL, "/v1/realtime?model=gpt-realtime")
+	if err := websocket.Message.Send(conn, `{"type":"response.create"}`); err != nil {
+		t.Fatal(err)
+	}
+	var frame wireFrame
+	for _, wantType := range []string{"response.done", "error"} {
+		if err := frameCodec.Receive(conn, &frame); err != nil {
+			t.Fatal(err)
+		}
+		if gjson.GetBytes(frame.data, "type").Str != wantType {
+			t.Fatalf("accepted terminal or admission error lost: %s", frame.data)
+		}
+	}
+	if gjson.GetBytes(frame.data, "status").Int() != 503 || failing.reserves.Load() != 1 || calls.Load() != 1 {
+		t.Fatalf("settlement failure admitted next turn: frame=%s reserves=%d upstream=%d", frame.data, failing.reserves.Load(), calls.Load())
+	}
+	if out := <-failing.finalized; !out.Charge || out.Usage.CompletionTokens != 3 {
+		t.Fatalf("accepted usage lost: %+v", out)
+	}
+	if err := frameCodec.Receive(conn, &frame); err == nil {
+		t.Fatal("failed settlement left session open")
+	}
+	if len(failing.finalized) != 0 {
+		t.Fatal("disconnect attempted duplicate finalization")
+	}
+}
+
+func TestRealtimeRevocationStopsAudioInputAndSettlesAcceptedOutput(t *testing.T) {
+	var forwarded atomic.Int32
+	upstream := httptest.NewServer(websocket.Server{Handshake: func(*websocket.Config, *http.Request) error { return nil }, Handler: websocket.Handler(func(conn *websocket.Conn) {
+		defer func() { _ = conn.Close() }()
+		var frame wireFrame
+		if frameCodec.Receive(conn, &frame) != nil {
+			return
+		}
+		forwarded.Add(1)
+		_ = websocket.Message.Send(conn, `{"type":"response.output_text.delta","delta":"accepted output"}`)
+		if frameCodec.Receive(conn, &frame) == nil {
+			forwarded.Add(1)
+		}
+	})})
+	defer upstream.Close()
+	ledger := &liveLedger{finalized: make(chan gateway.Outcome, 2)}
+	h, server, _ := socketFixture(t, []gateway.Target{{ChannelID: 1, CredentialID: 2, Provider: "openai", BaseURL: upstream.URL}}, ledger)
+	auth := &changingSocketAuth{}
+	h.cfg.Auth = auth
+	conn := dialSocket(t, server.URL, "/v1/realtime?model=gpt-realtime")
+	if err := websocket.Message.Send(conn, `{"type":"response.create"}`); err != nil {
+		t.Fatal(err)
+	}
+	var frame wireFrame
+	if err := frameCodec.Receive(conn, &frame); err != nil {
+		t.Fatal(err)
+	}
+	if gjson.GetBytes(frame.data, "delta").Str != "accepted output" {
+		t.Fatalf("partial output lost: %s", frame.data)
+	}
+	auth.revoked.Store(true)
+	if err := websocket.Message.Send(conn, `{"type":"input_audio_buffer.append","audio":"AA=="}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := frameCodec.Receive(conn, &frame); err != nil {
+		t.Fatal(err)
+	}
+	if gjson.GetBytes(frame.data, "status").Int() != 401 {
+		t.Fatalf("revoked audio input accepted: %s", frame.data)
+	}
+	select {
+	case out := <-ledger.finalized:
+		if !out.Charge || !out.Delivered || !out.Usage.Estimated || out.Usage.CompletionTokens == 0 || forwarded.Load() != 1 {
+			t.Fatalf("accepted work not settled or revoked frame forwarded: out=%+v forwards=%d", out, forwarded.Load())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("revoked session did not finalize")
 	}
 }
 

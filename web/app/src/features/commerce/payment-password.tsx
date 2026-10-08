@@ -1,3 +1,4 @@
+import { useTranslation } from '../../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
@@ -6,6 +7,7 @@ import { Button, ErrorMessage, Field } from '../../components/ui'
 import { errorFrom } from './amounts'
 
 export function PaymentPassword(props: { security: Schema['WalletSecurity'] }) {
+  const { t } = useTranslation()
   const [error, setError] = useState<Error | null>(null)
   const [saved, setSaved] = useState(false)
   const queryClient = useQueryClient()
@@ -24,15 +26,18 @@ export function PaymentPassword(props: { security: Schema['WalletSecurity'] }) {
   const security = props.security
   return (
     <section className="section">
-      <h2>{security.password_set ? '修改支付密码' : '设置支付密码'}</h2>
-      <p className="muted">支付密码需包含字母和数字，长度 8–64 个字符。</p>
+      <h2>{security.password_set ? t('修改支付密码') : t('设置支付密码')}</h2>
+      <p className="muted">{t('支付密码需包含字母和数字，长度 8–64 个字符。')}</p>
       {!security.email_recovery_available && security.password_set && (
-        <p className="muted">邮箱恢复暂未开放，请使用原支付密码修改。</p>
+        <p className="muted">{t('邮箱恢复暂未开放，请使用原支付密码修改。')}</p>
       )}
       {security.password_set && !locked && (
-        <p className="muted">剩余密码尝试次数：{security.remaining_password_attempts}</p>
+        <p className="muted">
+          {t('剩余密码尝试次数：')}
+          {security.remaining_password_attempts}
+        </p>
       )}
-      {saved && <p role="status">支付密码已保存。</p>}
+      {saved && <p role="status">{t('支付密码已保存。')}</p>}
       <form
         key={`${security.password_set}-${saved}`}
         className="form-panel"
@@ -101,9 +106,9 @@ export function PaymentPassword(props: { security: Schema['WalletSecurity'] }) {
           maxLength={64}
         />
         <ErrorMessage error={error ?? change.error} />
-        {locked && <p role="alert">支付密码已临时锁定，请解锁后再试。</p>}
+        {locked && <p role="alert">{t('支付密码已临时锁定，请解锁后再试。')}</p>}
         <Button disabled={change.isPending || locked} type="submit">
-          {change.isPending ? '保存中…' : '保存支付密码'}
+          {change.isPending ? t('保存中…') : t('保存支付密码')}
         </Button>
       </form>
     </section>

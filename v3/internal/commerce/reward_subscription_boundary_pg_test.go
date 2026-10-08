@@ -12,7 +12,7 @@ import (
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
 )
 
-func TestRewardSubscriptionNewCalendarPackageAndFrozenMonthlyTier(t *testing.T) {
+func TestRewardSubscriptionNewCalendarPackageAndFrozenCreditsWithoutMonthlyCard(t *testing.T) {
 	s, pool, now := newService(t)
 	ctx := context.Background()
 	s.SetMonthlyBenefits(rewardMarket(s, pool, now))
@@ -25,8 +25,7 @@ func TestRewardSubscriptionNewCalendarPackageAndFrozenMonthlyTier(t *testing.T) 
 	if err != nil || len(subs) != 1 || !subs[0].ExpiresAt.Equal(now.AddDate(0, 1, 0)) {
 		t.Fatalf("calendar reward=%+v err=%v", subs, err)
 	}
-	// User 2 has no package, so this exercises ordinary paid subscription
-	// benefits and edits the plan only after checkout has frozen its rules.
+	// A later tier edit cannot restore retired card grants or change credits.
 	o, err := s.Create(ctx, commerce.CreateOrder{UserID: 2, PlanID: p.ID, Provider: "test", SuccessURL: "https://site.test/success", CancelURL: "https://site.test/cancel"})
 	if err != nil {
 		t.Fatal(err)
@@ -38,11 +37,11 @@ func TestRewardSubscriptionNewCalendarPackageAndFrozenMonthlyTier(t *testing.T) 
 		t.Fatal(err)
 	}
 	var seconds, balance int64
-	if err = pool.QueryRow(ctx, `SELECT remaining_seconds,(SELECT a.balance FROM v3_billing.accounts a JOIN v3_commerce.subscriptions s ON a.id=s.account_id WHERE s.user_id=2)
-	 FROM v3_marketplace.blind_box_props WHERE user_id=2 AND prop_type='monthly_pass_multiplier'`).Scan(&seconds, &balance); err != nil {
+	if err = pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM v3_marketplace.blind_box_props WHERE user_id IN (1,2) AND prop_type='monthly_pass_multiplier'),
+	 (SELECT a.balance FROM v3_billing.accounts a JOIN v3_commerce.subscriptions s ON a.id=s.account_id WHERE s.user_id=2)`).Scan(&seconds, &balance); err != nil {
 		t.Fatal(err)
 	}
-	if seconds != 900 || balance != 1000 {
+	if seconds != 0 || balance != 1000 {
 		t.Fatalf("checkout benefit changed after edit seconds=%d balance=%d", seconds, balance)
 	}
 }

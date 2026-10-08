@@ -36,7 +36,7 @@ func verifyMarketKeyAssembly(t *testing.T, pool *pgxpool.Pool, call apiCall, ses
 	}
 	call("GET", "/api/log/token", bound.Data.APIKey, "", 200)
 	call("GET", "/api/wallet", bound.Data.APIKey, "", 401)
-	w = call("POST", "/api/user/register", "", `{"username":"market_other","password":"strong-password"}`, 200)
+	w = call("POST", "/api/user/register", "", `{"username":"market_other","password":"strong-password","accepted_terms_version":"2026-10-07","accepted_privacy_version":"2026-10-07","agreement_locale":"en"}`, 200)
 	var other struct {
 		Data identity.Session `json:"data"`
 	}

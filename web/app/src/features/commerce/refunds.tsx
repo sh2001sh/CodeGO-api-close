@@ -1,3 +1,4 @@
+import { useTranslation } from '../../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap } from '../../lib/api'
@@ -24,6 +25,7 @@ function refundState(state: string) {
 }
 
 export function Refunds() {
+  const { t } = useTranslation()
   const list = useQuery(refundsOptions())
   const client = useQueryClient()
   const [selected, setSelected] = useState<Schema['RefundableOrder'] | null>(null)
@@ -57,14 +59,15 @@ export function Refunds() {
   return (
     <section className="section">
       <div className="page-header">
-        <h2>未使用额度退款</h2>
+        <h2>{t('未使用额度退款')}</h2>
         <Button variant="quiet" disabled={list.isFetching} onClick={() => void list.refetch()}>
-          刷新
+          {t('刷新')}
         </Button>
       </div>
       <p className="muted">
-        目前支持人民币易支付订单，按未使用额度计算退款并扣除 2%
-        手续费。显示金额为扣除手续费后的预计到账金额，实际结果以支付平台确认为准。
+        {t(
+          '目前支持人民币易支付订单，按未使用额度计算退款并扣除 2% 手续费。显示金额为扣除手续费后的预计到账金额，实际结果以支付平台确认为准。',
+        )}
       </p>
       <ErrorMessage error={list.error ?? create.error ?? sync.error} />
       {list.isPending && <Loading />}
@@ -74,7 +77,10 @@ export function Refunds() {
         empty="暂无支持退款的订单。已支付的易支付订单会显示在这里。"
         columns={[
           { label: '订单号', render: (row) => row.trade_no },
-          { label: '类型', render: (row) => (row.order_type === 'subscription' ? '订阅' : '充值') },
+          {
+            label: '类型',
+            render: (row) => (row.order_type === 'subscription' ? t('订阅') : t('充值')),
+          },
           { label: '未使用额度', render: (row) => credits(row.remaining_quota), numeric: true },
           {
             label: '预计到账',
@@ -98,10 +104,10 @@ export function Refunds() {
                     setSelected(row)
                   }}
                 >
-                  申请退款
+                  {t('申请退款')}
                 </Button>
               ) : (
-                row.unavailable_reason || '无法退款'
+                row.unavailable_reason || t('无法退款')
               ),
           },
         ]}
@@ -109,8 +115,9 @@ export function Refunds() {
       {selected && (
         <div className="form-panel">
           <p className="full-width">
-            确认退回订单 {selected.trade_no} 的未使用额度？预计到账{' '}
-            {paymentAmount(selected.refund_amount_minor, 'cny')}。处理中会暂扣相关额度。
+            {t('确认退回订单')} {selected.trade_no} {t('的未使用额度？预计到账')}{' '}
+            {paymentAmount(selected.refund_amount_minor, 'cny')}
+            {t('。处理中会暂扣相关额度。')}
           </p>
           <Button
             variant="danger"
@@ -119,20 +126,25 @@ export function Refunds() {
               create.mutate({ order_type: selected.order_type, trade_no: selected.trade_no })
             }
           >
-            {create.isPending ? '提交中…' : create.isError ? '重试该订单退款' : '确认申请退款'}
+            {create.isPending
+              ? t('提交中…')
+              : create.isError
+                ? t('重试该订单退款')
+                : t('确认申请退款')}
           </Button>
           <Button variant="quiet" disabled={create.isPending} onClick={() => setSelected(null)}>
-            取消
+            {t('取消')}
           </Button>
         </div>
       )}
       {result && (
         <div className="section" role="status">
           <p>
-            {refundState(result.status)} · {paymentAmount(result.refund_amount_minor, 'cny')}
+            {t(refundState(result.status))} · {paymentAmount(result.refund_amount_minor, 'cny')}
           </p>
           <p>
-            退款编号：<code>{result.refund_no}</code>
+            {t('退款编号：')}
+            <code>{result.refund_no}</code>
           </p>
           {result.message && <p>{result.message}</p>}
           {result.status === 'processing' && (
@@ -141,7 +153,7 @@ export function Refunds() {
               disabled={sync.isPending}
               onClick={() => sync.mutate(result.refund_no)}
             >
-              {sync.isPending ? '查询中…' : '查询支付平台结果'}
+              {sync.isPending ? t('查询中…') : t('查询支付平台结果')}
             </Button>
           )}
         </div>
@@ -155,7 +167,7 @@ export function Refunds() {
       >
         <Field name="refund-number" label="查询已提交退款编号" required maxLength={128} />
         <Button type="submit" variant="quiet" disabled={sync.isPending}>
-          {sync.isPending ? '查询中…' : '查询退款'}
+          {sync.isPending ? t('查询中…') : t('查询退款')}
         </Button>
       </form>
     </section>

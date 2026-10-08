@@ -2,6 +2,7 @@ package routing
 
 import (
 	"sort"
+	"time"
 
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
@@ -42,11 +43,26 @@ func (b *planBuilder) has(credID int64) bool {
 // cooling reports when a credential becomes usable for this model (0 = now).
 func (b *planBuilder) cooling(ch *catalog.Channel, credID int64) int64 {
 	model := ch.UpstreamModel(b.req.Model)
-	return max(b.p.cool.until(coolKey{cred: credID}, b.now), b.p.cool.until(coolKey{cred: credID, model: model}, b.now))
+	return max(b.p.cool.until(coolKey{cred: credID}, b.now), b.p.cool.until(coolKey{cred: credID, model: model}, b.now), b.hardCooling(ch, credID))
+}
+
+// Configured pool cooldowns and auth/model-unavailable failures are hard exclusions.
+// The all-cooling availability probe only bypasses ordinary global backoff.
+func (b *planBuilder) hardCooling(ch *catalog.Channel, credID int64) int64 {
+	model := ch.UpstreamModel(b.req.Model)
+	until := max(b.p.cool.until(coolKey{cred: credID, hard: true}, b.now), b.p.cool.until(coolKey{cred: credID, model: model, hard: true}, b.now))
+	if pool, ok := b.snap.Market.Pools[b.group]; ok && pool.FailureCooldownSeconds > 0 {
+		until = max(until, b.p.cool.until(coolKey{cred: ch.ID, model: model, pool: b.group}, b.now))
+	}
+	return until
 }
 
 func (b *planBuilder) add(ch *catalog.Channel, cred catalog.Credential) {
 	group, factor := b.targetPricing(ch)
+	poolGroup, poolCooldown := "", time.Duration(0)
+	if pool, ok := b.snap.Market.Pools[b.group]; ok {
+		poolGroup, poolCooldown = b.group, time.Duration(pool.FailureCooldownSeconds)*time.Second
+	}
 	selection := b.officialSelections[ch.ID]
 	if b.officialUsedDomains != nil {
 		b.officialUsedDomains[b.officialDomain(ch)] = true
@@ -67,6 +83,7 @@ func (b *planBuilder) add(ch *catalog.Channel, cred catalog.Credential) {
 		Fingerprint: gateway.CredentialFingerprint{UserAgent: cred.Fingerprint.UserAgent, TLSProfile: cred.Fingerprint.TLSProfile},
 		Scope:       ch.Scope, OwnerUserID: ch.OwnerUserID, Group: group, MultiplierPPM: factor,
 		RoutePoolID: selection.PoolID, ProcurementCostMultiplier: selection.CostMultiplier,
+		PersonalPoolGroup: poolGroup, PoolFailureCooldown: poolCooldown,
 	})
 }
 
@@ -156,7 +173,7 @@ func (b *planBuilder) fallbackCooling() {
 	for _, t := range b.idx.tiers {
 		for _, e := range t.entries {
 			for _, c := range e.ch.Credentials {
-				if !b.has(c.ID) && b.usable(e.ch, c) {
+				if !b.has(c.ID) && b.usable(e.ch, c) && b.hardCooling(e.ch, c.ID) == 0 {
 					all = append(all, cand{e.ch, c, b.cooling(e.ch, c.ID)})
 				}
 			}

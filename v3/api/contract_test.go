@@ -51,7 +51,7 @@ func TestContractCoversDeclaredDomainRoutes(t *testing.T) {
 			t.Errorf("%s declares %s without a generated operation", source, pattern)
 		}
 	}
-	for _, domain := range []string{"identity", "catalogcontrol", "commerce", "marketplace", "audit", "community", "channelmarket", "control", "security"} {
+	for _, domain := range []string{"identity", "catalogcontrol", "commerce", "marketplace", "audit", "community", "channelmarket", "control", "security", "desktop", "incentives", "adminops", "notifications"} {
 		err := filepath.WalkDir(filepath.Join("..", "internal", domain), func(path string, entry os.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -78,7 +78,7 @@ func TestContractCoversDeclaredDomainRoutes(t *testing.T) {
 					if ok && (selector.Sel.Name == "Handle" || selector.Sel.Name == "HandleFunc") && len(n.Args) > 0 {
 						literal, _ = n.Args[0].(*ast.BasicLit)
 					}
-					if name, ok := n.Fun.(*ast.Ident); ok && name.Name == "register" && len(n.Args) > 0 {
+					if name, ok := n.Fun.(*ast.Ident); ok && (name.Name == "register" || name.Name == "bind") && len(n.Args) > 0 {
 						literal, _ = n.Args[0].(*ast.BasicLit)
 					}
 				case *ast.KeyValueExpr:

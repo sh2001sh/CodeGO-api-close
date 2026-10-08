@@ -11,8 +11,9 @@ import (
 )
 
 type refundLot struct {
-	trade     string
-	remaining credits.Micro
+	trade        string
+	remaining    credits.Micro
+	subscription int64
 }
 
 type refundQuerier interface {
@@ -28,6 +29,7 @@ func walletRefundLots(ctx context.Context, q refundQuerier, account int64) (map[
 	if err != nil {
 		return nil, err
 	}
+	imported := cursor > 0
 	rows, err := q.Query(ctx, `SELECT amount,balance_after,kind,operation_id,metadata FROM v3_billing.ledger_entries WHERE account_id=$1 AND id>$2 ORDER BY id`, account, cursor)
 	if err != nil {
 		return nil, err
@@ -44,8 +46,10 @@ func walletRefundLots(ctx context.Context, q refundQuerier, account int64) (map[
 		if addErr != nil || next != after {
 			return nil, ErrRefundUnavailable
 		}
-		if lots, err = applyRefundLotMovement(lots, amount, balance, next, kind, operation, meta); err != nil {
-			return nil, err
+		if imported {
+			if lots, err = applyRefundLotMovement(lots, amount, balance, next, kind, operation, meta); err != nil {
+				return nil, err
+			}
 		}
 		balance = next
 	}
@@ -68,6 +72,9 @@ func walletRefundLots(ctx context.Context, q refundQuerier, account int64) (map[
 			}
 		}
 	}
+	if err = nativeRefundLots(ctx, q, account, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -76,7 +83,10 @@ func walletRefundLots(ctx context.Context, q refundQuerier, account int64) (map[
 // own lot first and then falls through to generic FIFO consumption.
 func applyRefundLotMovement(lots []refundLot, amount, balanceBefore, next credits.Micro, kind, operation string, meta []byte) ([]refundLot, error) {
 	var metadata struct {
-		TradeNo string `json:"refund_trade_no"`
+		TradeNo        string `json:"refund_trade_no"`
+		Source         string `json:"source"`
+		SubscriptionID int64  `json:"subscription_id"`
+		Revocation     string `json:"conversion_revocation_operation"`
 	}
 	if err := json.Unmarshal(meta, &metadata); err != nil {
 		return nil, err
@@ -107,7 +117,11 @@ func applyRefundLotMovement(lots []refundLot, amount, balanceBefore, next credit
 				}
 			}
 			if !restored {
-				lots = append(lots, refundLot{trade: trade, remaining: grant})
+				lot := refundLot{trade: trade, remaining: grant}
+				if metadata.Source == "subscription_conversion" {
+					lot.subscription = metadata.SubscriptionID
+				}
+				lots = append(lots, lot)
 			}
 		}
 	} else if amount < 0 {
@@ -115,6 +129,20 @@ func applyRefundLotMovement(lots []refundLot, amount, balanceBefore, next credit
 			return nil, ErrRefundUnavailable
 		}
 		debit := -amount
+		if metadata.Revocation != "" {
+			for i := range lots {
+				if metadata.SubscriptionID <= 0 || lots[i].subscription != metadata.SubscriptionID {
+					continue
+				}
+				removed := min(debit, lots[i].remaining)
+				lots[i].remaining -= removed
+				debit -= removed
+			}
+			if debit != 0 {
+				return nil, ErrRefundUnavailable
+			}
+			return lots, nil
+		}
 		// Refunds consume their own grant first. Any chargeback beyond its
 		// unused grant becomes normal account debt/FIFO consumption.
 		if trade == "" && strings.HasPrefix(operation, "order:refund:") {

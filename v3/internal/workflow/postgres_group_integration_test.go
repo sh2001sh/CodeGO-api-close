@@ -58,12 +58,18 @@ func taskGroupRepository(t *testing.T) *workflow.PostgresRepository {
 		t.Fatal(err)
 	}
 	if !exists {
-		sql, err := migrations.Read("20260930193000_workflow.sql")
+		names, err := migrations.Files()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = tx.Exec(ctx, sql); err != nil {
-			t.Fatal(err)
+		for _, name := range names {
+			sql, readErr := migrations.Read(name)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if _, err = tx.Exec(ctx, sql); err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
 		}
 	}
 	return &workflow.PostgresRepository{Pool: tx}

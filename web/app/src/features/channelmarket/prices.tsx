@@ -1,3 +1,4 @@
+import { useTranslation } from '../../lib/i18n'
 import { DataTable } from '../../components/data-table'
 import type { Schema } from '../../lib/types'
 
@@ -8,6 +9,7 @@ function value(price: Schema['JSONValue'], key: string): string {
 }
 
 export function MarketPrices(props: { prices: Schema['JSONValue'] }) {
+  const { t } = useTranslation()
   const rows =
     props.prices && typeof props.prices === 'object' && !Array.isArray(props.prices)
       ? Object.entries(props.prices).map(([model, price]) => ({ model, price }))
@@ -21,7 +23,8 @@ export function MarketPrices(props: { prices: Schema['JSONValue'] }) {
         { label: '模型', render: (row) => row.model },
         {
           label: '计费方式',
-          render: (row) => (value(row.price, 'billing_mode') === 'per_call' ? '按次' : '按 tokens'),
+          render: (row) =>
+            value(row.price, 'billing_mode') === 'per_call' ? t('按次') : t('按 tokens'),
         },
         {
           label: '输入 credits / 百万 tokens',

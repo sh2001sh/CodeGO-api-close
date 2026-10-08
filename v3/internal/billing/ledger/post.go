@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,7 +27,7 @@ type dedupKey struct {
 // Marketplace progress precedes subscription state, which precedes income
 // hooks and account balances. Blind-box subscription grants use that same
 // ordering, preventing a ledger worker and an opening from locking inversely.
-func postWithMarketplace(ctx context.Context, pool *pgxpool.Pool, batch []event, bad []deadLetter, recorder UsageRecorder, hooks ...UsageHook) (postResult, error) {
+func postWithMarketplaceBatch(ctx context.Context, pool *pgxpool.Pool, batch []event, bad []deadLetter, recorder UsageRecorder, batchHook UsageBatchHook, hooks ...UsageHook) (postResult, error) {
 	var res postResult
 	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 		fresh, err := claimFreshCharges(ctx, tx, batch, &res, &bad)
@@ -38,6 +39,23 @@ func postWithMarketplace(ctx context.Context, pool *pgxpool.Pool, batch []event,
 		}
 		// Domain state/progress locks precede account locks, matching commerce
 		// and marketplace business transactions. Dedup makes callbacks replay safe.
+		if batchHook != nil {
+			fields := make([]map[string]string, 0, len(fresh))
+			debitAccounts := make([]int64, 0, len(fresh))
+			for _, e := range fresh {
+				if e.amount != 0 {
+					debitAccounts = append(debitAccounts, e.accountID)
+				}
+				if e.fields[billing.FieldModel] != "" && e.fields["funding_part"] != "secondary" {
+					fields = append(fields, e.fields)
+				}
+			}
+			if len(fields) > 0 {
+				if err := batchHook(ctx, tx, fields, debitAccounts); err != nil {
+					return fmt.Errorf("ledger: batch usage callback: %w", err)
+				}
+			}
+		}
 		if err := runUsageHooks(ctx, tx, fresh, hooks); err != nil {
 			return err
 		}
@@ -84,14 +102,32 @@ func claimFreshCharges(ctx context.Context, tx pgx.Tx, batch []event, res *postR
 }
 
 // recordMarketplaceAndSubscriptionUsage records marketplace model usage for
-// each primary-funding event with a model, then applies the batch's
-// subscription model usage deltas.
+// primary-funding events by numeric user ID, preserving each user's event
+// order. Marketplace holds that user's zero-hour state before card/profile
+// locks, so all consumers must visit users in the same order. Financial events
+// retain their original order. Subscription state follows marketplace state.
 func recordMarketplaceAndSubscriptionUsage(ctx context.Context, tx pgx.Tx, recorder UsageRecorder, fresh []event) error {
+	if recorder == nil {
+		return recordSubscriptionModelUsageTx(ctx, tx, fresh)
+	}
+	type callback struct {
+		user   int64
+		fields map[string]string
+	}
+	callbacks := make([]callback, 0, len(fresh))
 	for _, e := range fresh {
 		if e.fields[billing.FieldModel] == "" || e.fields["funding_part"] == "secondary" {
 			continue
 		}
-		if err := recordMarketplaceUsage(ctx, tx, recorder, e.fields); err != nil {
+		user, err := strconv.ParseInt(e.fields[billing.FieldUserID], 10, 64)
+		if err != nil || user <= 0 {
+			return fmt.Errorf("ledger: invalid usage user %q", e.fields[billing.FieldUserID])
+		}
+		callbacks = append(callbacks, callback{user: user, fields: e.fields})
+	}
+	sort.SliceStable(callbacks, func(i, j int) bool { return callbacks[i].user < callbacks[j].user })
+	for _, c := range callbacks {
+		if err := recordMarketplaceUsage(ctx, tx, recorder, c.fields); err != nil {
 			return err
 		}
 	}

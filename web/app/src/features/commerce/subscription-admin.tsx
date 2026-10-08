@@ -1,9 +1,15 @@
+import { useTranslation } from '../../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap } from '../../lib/api'
 import type { Schema } from '../../lib/types'
 import { resourceOptions } from '../../lib/queries'
 import { credits, date } from '../../lib/format'
+import {
+  frozenSubscriptionPlan,
+  subscriptionPolicy,
+  subscriptionPolicyLabel,
+} from '../../lib/subscription-policy'
 import { DataTable } from '../../components/data-table'
 import { Button, ErrorMessage, Field, Loading, Status } from '../../components/ui'
 import { errorFrom, positiveID } from './amounts'
@@ -32,6 +38,7 @@ type Action = {
 }
 
 export function SubscriptionAdmin(props: { plans: Schema['Plan'][] }) {
+  const { t } = useTranslation()
   const [userID, setUserID] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [action, setAction] = useState<Action | null>(null)
@@ -68,7 +75,7 @@ export function SubscriptionAdmin(props: { plans: Schema['Plan'][] }) {
         : '删除订阅'
   return (
     <section className="section">
-      <h2>用户订阅管理</h2>
+      <h2>{t('用户订阅管理')}</h2>
       <form
         className="form-panel"
         onSubmit={(event) => {
@@ -89,7 +96,7 @@ export function SubscriptionAdmin(props: { plans: Schema['Plan'][] }) {
       >
         <Field name="subscription-user-id" label="用户编号" required placeholder="输入用户编号" />
         <Button type="submit" disabled={list.isFetching}>
-          查询用户订阅
+          {t('查询用户订阅')}
         </Button>
       </form>
       <ErrorMessage error={error ?? list.error ?? mutation.error} />
@@ -107,10 +114,12 @@ export function SubscriptionAdmin(props: { plans: Schema['Plan'][] }) {
           {action && (
             <div className="form-panel">
               <p className="full-width">
-                确认{operationLabel}（编号 {String(action.subscription.id)}）？
+                {t('确认')}
+                {operationLabel}
+                {t('（编号')} {String(action.subscription.id)}）？
                 {action.kind === 'reset'
-                  ? '周期用量会归零，服务器将根据套餐规则重新发放可用额度。'
-                  : '剩余额度将清零，正在结算的消费会先完成。'}
+                  ? t('周期用量会归零，服务器将根据套餐规则重新发放可用额度。')
+                  : t('剩余额度将清零，正在结算的消费会先完成。')}
               </p>
               <Button
                 variant={action.kind === 'reset' ? 'primary' : 'danger'}
@@ -118,10 +127,10 @@ export function SubscriptionAdmin(props: { plans: Schema['Plan'][] }) {
                 onClick={() => mutation.mutate(action)}
               >
                 {mutation.isPending
-                  ? '处理中…'
+                  ? t('处理中…')
                   : mutation.isError
-                    ? `重试${operationLabel}`
-                    : `确认${operationLabel}`}
+                    ? t('重试') + String(operationLabel)
+                    : t('确认') + String(operationLabel)}
               </Button>
               {!mutation.isError && (
                 <Button
@@ -129,7 +138,7 @@ export function SubscriptionAdmin(props: { plans: Schema['Plan'][] }) {
                   disabled={mutation.isPending}
                   onClick={() => setAction(null)}
                 >
-                  取消
+                  {t('取消')}
                 </Button>
               )}
             </div>
@@ -143,10 +152,14 @@ export function SubscriptionAdmin(props: { plans: Schema['Plan'][] }) {
               {
                 label: '套餐',
                 render: (row) =>
-                  props.plans.find((plan) => String(plan.id) === String(row.plan_id))?.name ??
-                  String(row.plan_id),
+                  frozenSubscriptionPlan(row, props.plans)?.name ?? String(row.plan_id),
               },
               { label: '余额', render: (row) => credits(row.balance), numeric: true },
+              {
+                label: '规则',
+                render: (row) =>
+                  row.converted_at ? t('已转余额 · 永久不能刷新') : t(subscriptionPolicyLabel(row)),
+              },
               {
                 label: '总额度 / 已使用',
                 render: (row) => `${credits(row.total_credits)} / ${credits(row.used_credits)}`,
@@ -157,6 +170,7 @@ export function SubscriptionAdmin(props: { plans: Schema['Plan'][] }) {
               },
               { label: '状态', render: (row) => <Status value={row.state} /> },
               { label: '到期时间', render: (row) => date(row.expires_at) },
+              { label: '保留福利截止', render: (row) => date(row.benefits_until) },
               { label: '下次重置', render: (row) => date(row.next_reset_at) },
               {
                 label: '操作',
@@ -164,31 +178,36 @@ export function SubscriptionAdmin(props: { plans: Schema['Plan'][] }) {
                   <div className="row-actions">
                     <Button
                       variant="quiet"
-                      disabled={!!action || !!editing}
+                      disabled={!!action || !!editing || !!row.converted_at}
                       onClick={() => setEditing(row)}
                     >
-                      编辑
+                      {t('编辑')}
                     </Button>
                     <Button
                       variant="quiet"
-                      disabled={!!action || !!editing || row.state !== 'active'}
+                      disabled={
+                        !!action ||
+                        !!editing ||
+                        row.state !== 'active' ||
+                        subscriptionPolicy(row) === 'standard_v2'
+                      }
                       onClick={() => open(row, 'reset')}
                     >
-                      重置额度
+                      {t('重置额度')}
                     </Button>
                     <Button
                       variant="danger"
                       disabled={!!action || !!editing || row.state !== 'active'}
                       onClick={() => open(row, 'invalidate')}
                     >
-                      使其失效
+                      {t('使其失效')}
                     </Button>
                     <Button
                       variant="danger"
                       disabled={!!action || !!editing}
                       onClick={() => open(row, 'delete')}
                     >
-                      删除
+                      {t('删除')}
                     </Button>
                   </div>
                 ),

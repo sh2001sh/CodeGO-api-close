@@ -1,3 +1,4 @@
+import { useTranslation } from '../../lib/i18n'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { api, unwrap } from '../../lib/api'
 import { resourceOptions } from '../../lib/queries'
@@ -7,6 +8,7 @@ import { date } from '../../lib/format'
 import { MarketForm, text, factor, integer } from './form'
 
 export function OwnerAccess(props: { id: string; internalID: number | string | bigint }) {
+  const { t } = useTranslation()
   const client = useQueryClient()
   const params = { path: { id: props.id } }
   const blocks = useQuery(
@@ -76,7 +78,7 @@ export function OwnerAccess(props: { id: string; internalID: number | string | b
   })
   return (
     <section className="section">
-      <h2>用户访问与专属倍率</h2>
+      <h2>{t('用户访问与专属倍率')}</h2>
       <ErrorMessage
         error={
           block.error ??
@@ -101,7 +103,7 @@ export function OwnerAccess(props: { id: string; internalID: number | string | b
         <Field name="multiplier-user" label="用户 ID" required />
         <Field name="user-multiplier" label="专属倍率" defaultValue="1" required />
         <label>
-          <input type="checkbox" name="clear" /> 恢复公开倍率
+          <input type="checkbox" name="clear" /> {t('恢复公开倍率')}
         </label>
       </MarketForm>
       <DataTable
@@ -118,7 +120,7 @@ export function OwnerAccess(props: { id: string; internalID: number | string | b
         ]}
       />
       <details className="section">
-        <summary>批量调整用户倍率</summary>
+        <summary>{t('批量调整用户倍率')}</summary>
         <MarketForm
           pending={batch.isPending}
           onSubmit={(fields) => {
@@ -139,7 +141,7 @@ export function OwnerAccess(props: { id: string; internalID: number | string | b
           <Field name="batch-users" label="用户 ID（逗号分隔）" required />
           <Field name="batch-multiplier" label="批量专属倍率" required defaultValue="1" />
           <label>
-            <input type="checkbox" name="batch-clear" /> 全部恢复公开倍率
+            <input type="checkbox" name="batch-clear" /> {t('全部恢复公开倍率')}
           </label>
         </MarketForm>
       </details>
@@ -169,14 +171,14 @@ export function OwnerAccess(props: { id: string; internalID: number | string | b
                   disabled={block.isPending}
                   onClick={() => block.mutate({ user_id: BigInt(row.user_id), blocked: false })}
                 >
-                  解除封禁
+                  {t('解除封禁')}
                 </Button>
               ),
             },
           ]}
         />
       )}
-      <h3 className="section">限时倍率</h3>
+      <h3 className="section">{t('限时倍率')}</h3>
       <MarketForm
         pending={addTime.isPending}
         submit="添加限时倍率"
@@ -217,7 +219,7 @@ export function OwnerAccess(props: { id: string; internalID: number | string | b
                   disabled={deleteTime.isPending}
                   onClick={() => deleteTime.mutate(row.id)}
                 >
-                  删除规则
+                  {t('删除规则')}
                 </Button>
               ),
             },
@@ -229,6 +231,7 @@ export function OwnerAccess(props: { id: string; internalID: number | string | b
 }
 
 export function OwnerBargains() {
+  const { t } = useTranslation()
   const client = useQueryClient()
   const bargains = useSuspenseQuery(
     resourceOptions('market-bargains', (signal) =>
@@ -247,7 +250,7 @@ export function OwnerBargains() {
   })
   return (
     <section className="section">
-      <h2>议价申请</h2>
+      <h2>{t('议价申请')}</h2>
       <ErrorMessage error={mutation.error} />
       <DataTable
         rows={bargains}
@@ -266,14 +269,14 @@ export function OwnerBargains() {
                   disabled={mutation.isPending || row.status !== 'pending'}
                   onClick={() => mutation.mutate({ id: row.id, accept: true })}
                 >
-                  接受
+                  {t('接受')}
                 </Button>
                 <Button
                   variant="danger"
                   disabled={mutation.isPending || row.status !== 'pending'}
                   onClick={() => mutation.mutate({ id: row.id, accept: false })}
                 >
-                  拒绝
+                  {t('拒绝')}
                 </Button>
               </div>
             ),

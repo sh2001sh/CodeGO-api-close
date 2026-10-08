@@ -25,4 +25,15 @@ logs
 /web/default/dist
 /web/classic/node_modules
 /web/classic/dist
+/web/app/node_modules
+/web/app/dist
+/web/app/test-results
+/web/app/test-results-*
+/web/app/output
+/web/app/tests/zz-*
+/.env*
+/v3/.*-contract.md
+/web/app/playwright-report
+/v3/bench/.bin
+/.tmp-*
 !THIRD-PARTY-LICENSES.md

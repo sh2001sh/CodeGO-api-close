@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/sh2001sh/new-api/v3/cmd/internal/boot"
+	"github.com/sh2001sh/new-api/v3/internal/audit"
 	"github.com/sh2001sh/new-api/v3/internal/billing"
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
 	"github.com/sh2001sh/new-api/v3/internal/credentials"
@@ -25,6 +26,7 @@ type nativeJobs struct {
 	workflow *workflow.Handler
 	live     *live.Handler
 	close    func()
+	requests *audit.RequestRecorder
 }
 
 // nativeDeps are the shared pieces both reconcilers use.
@@ -35,6 +37,7 @@ type nativeDeps struct {
 	resolve  func(ctx context.Context, channel, credential int64) (gateway.Target, error)
 	registry map[string]gateway.Provider
 	log      *slog.Logger
+	requests *audit.RequestRecorder
 }
 
 func newNativeJobs(deps *boot.Deps, settler *billing.Settler, current func() *catalog.Snapshot, log *slog.Logger) (*nativeJobs, error) {
@@ -45,7 +48,15 @@ func newNativeJobs(deps *boot.Deps, settler *billing.Settler, current func() *ca
 		transports.CloseIdle()
 	}
 	clients := boot.TargetClients(credentialTransports, transports)
+	requests := audit.NewRequestRecorder(context.Background(), deps.PG.Pool, log)
+	succeeded := false
+	defer func() {
+		if !succeeded {
+			requests.Close()
+		}
+	}()
 	n := nativeDeps{deps: deps, settler: settler, clients: clients, log: log,
+		requests: requests,
 		registry: providers.Registry(clients),
 		resolve: func(ctx context.Context, channel, credential int64) (gateway.Target, error) {
 			return deps.ResolveTarget(ctx, channel, credential)
@@ -53,7 +64,7 @@ func newNativeJobs(deps *boot.Deps, settler *billing.Settler, current func() *ca
 
 	workflowJobs, err := workflow.NewReconciler(workflow.Config{
 		Settler: billing.NewWorkflowSettler(settler), Repository: &workflow.PostgresRepository{Pool: deps.PG.Pool},
-		ResolveTarget: n.resolve, Clients: clients, Logger: log,
+		ResolveTarget: n.resolve, Clients: clients, Logger: log, Requests: requests,
 	})
 	if err != nil {
 		closeTransports()
@@ -64,7 +75,9 @@ func newNativeJobs(deps *boot.Deps, settler *billing.Settler, current func() *ca
 		closeTransports()
 		return nil, err
 	}
-	return &nativeJobs{workflow: workflowJobs, live: background, close: func() {
+	succeeded = true
+	return &nativeJobs{workflow: workflowJobs, live: background, requests: requests, close: func() {
+		requests.Close() // caller joins reconcilers before closing native services
 		closeTransports()
 		if err := files.Close(); err != nil {
 			log.Error("close background file storage", "err", err)
@@ -91,7 +104,7 @@ func (n nativeDeps) backgroundReconciler(current func() *catalog.Snapshot) (*liv
 	background, err := live.New(live.Config{
 		Auth:    identity.New(n.deps.PG.Pool, n.deps.Redis, identity.Config{}, n.log),
 		Planner: routing.New(func() *catalog.Snapshot { return nil }, routing.Config{}),
-		Settler: n.settler, Limits: limits.New(n.deps.Redis, limits.Config{}), Providers: n.registry,
+		Settler: n.settler, Limits: limits.New(n.deps.Redis, limits.Config{}), Providers: n.registry, Requests: n.requests,
 		Resolve: n.resolve, Repository: locators, BackgroundJobs: jobs, Clients: n.clients,
 		BackgroundBilling: billing.NewBackgroundSettler(n.settler, jobs),
 		TargetPolicy:      sensitiveWordPolicy(current, n.log),

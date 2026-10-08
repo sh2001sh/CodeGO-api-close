@@ -1,0 +1,36 @@
+/* Styles owned by the analytics workstream. Use tokens from tokens.css only. */
+
+.analytics-filter-bar {
+  align-items: end;
+}
+
+.analytics-chart {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.analytics-chart-svg {
+  display: block;
+  width: 100%;
+  height: 180px;
+}
+.analytics-chart-bar {
+  fill: var(--accent);
+  opacity: 0.85;
+}
+
+.analytics-attempt-timeline {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.analytics-attempt-timeline > li {
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}

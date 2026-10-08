@@ -27,7 +27,7 @@ func walletFixture(t *testing.T) (*commerce.Service, *pgxpool.Pool, *time.Time) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = pool.Exec(context.Background(), `UPDATE v3_identity.users SET external_id=CASE WHEN id=1 THEN 'SEND23' ELSE 'RECV23' END,display_name=CASE WHEN id=1 THEN 'Sender' ELSE 'Recipient' END,password_hash=$1,email='sender@example.test' WHERE id IN(1,2)`, string(hash))
+	_, err = pool.Exec(context.Background(), `UPDATE v3_identity.users SET external_id=CASE WHEN id=1 THEN 'SEND23' ELSE 'RECV23' END,display_name=CASE WHEN id=1 THEN 'Sender' ELSE 'Recipient' END,password_hash=$1,email=CASE WHEN id=1 THEN 'sender@example.test' ELSE 'recipient@example.test' END WHERE id IN(1,2)`, string(hash))
 	if err != nil {
 		t.Fatal(err)
 	}

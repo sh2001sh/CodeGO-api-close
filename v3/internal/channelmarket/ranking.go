@@ -3,6 +3,8 @@ package channelmarket
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -30,7 +32,7 @@ type rankingMetric struct {
 	score                                       float64
 }
 
-// RefreshRankings uses persisted usage only. Unmeasured latency/throughput stays
+// RefreshRankings uses persisted request outcomes and billing. Unmeasured latency/throughput stays
 // absent rather than manufacturing samples for an empty channel.
 func (s *Service) RefreshRankings(ctx context.Context) (int, error) {
 	count := 0
@@ -60,13 +62,26 @@ func (s *Service) RefreshRankings(ctx context.Context) (int, error) {
 // loadRankingMetricsTx aggregates each market group's usage over the last
 // 24 hours and computes its Wilson success score.
 func loadRankingMetricsTx(ctx context.Context, tx pgx.Tx, now time.Time) ([]rankingMetric, error) {
-	rows, e := tx.Query(ctx, `SELECT g.id,g.channel_id,g.source_label,g.multiplier_ppm,
-	count(l.id),count(l.id) FILTER(WHERE l.terminal IN ('completed','Completed','completed_no_usage','CompletedNoUsage')),
+	rows, e := tx.Query(ctx, `WITH usage AS (
+	SELECT channel_id,user_id,request_id,sum(amount) AS amount,max(cached_tokens) AS cached_tokens,max(prompt_tokens) AS prompt_tokens,
+	bool_or(terminal IN ('success','succeeded','completed','Completed','completed_no_usage','CompletedNoUsage')) AS successful
+	FROM v3_billing.usage_logs WHERE created_at>=$1 AND created_at<=$2 GROUP BY channel_id,user_id,request_id),
+	requests AS (
+	SELECT a.final_channel_id AS channel_id,a.user_id,a.request_id,
+	coalesce(u.amount,0) AS amount,coalesce(u.cached_tokens,0) AS cached_tokens,coalesce(u.prompt_tokens,0) AS prompt_tokens,
+	a.status IN ('success','succeeded') AS successful
+	FROM v3_audit.request_audits a LEFT JOIN usage u ON u.channel_id=a.final_channel_id AND u.request_id=a.request_id
+	WHERE a.started_at>=$1 AND a.started_at<=$2 AND a.completed_at<=$2 AND a.counted_in_success_rate
+	UNION ALL
+	SELECT u.channel_id,u.user_id,u.request_id,u.amount,u.cached_tokens,u.prompt_tokens,u.successful FROM usage u
+	WHERE NOT EXISTS(SELECT 1 FROM v3_audit.request_audits a WHERE a.request_id=u.request_id))
+	SELECT g.id,g.channel_id,g.source_label,g.multiplier_ppm,
+	count(l.request_id),count(l.request_id) FILTER(WHERE l.successful),
 	count(DISTINCT l.user_id),coalesce(round(avg(l.amount)),0)::bigint,
 	coalesce(sum(l.cached_tokens)::numeric/nullif(sum(l.prompt_tokens),0),0)::float8,
 	ARRAY(SELECT model FROM v3_catalog.channel_models WHERE channel_id=g.channel_id ORDER BY model)
-	FROM v3_channelmarket.groups g LEFT JOIN v3_billing.usage_logs l ON l.channel_id=g.channel_id AND l.created_at>$1
-	WHERE g.deleted_at IS NULL GROUP BY g.id ORDER BY g.id`, now.Add(-24*time.Hour))
+	FROM v3_channelmarket.groups g LEFT JOIN requests l ON l.channel_id=g.channel_id
+	WHERE g.deleted_at IS NULL GROUP BY g.id ORDER BY g.id`, now.Add(-24*time.Hour), now)
 	if e != nil {
 		return nil, e
 	}
@@ -132,108 +147,154 @@ type buildCandidate struct {
 }
 
 func (s *Service) BuildPool(ctx context.Context, user int64, id string) (RoutePool, error) {
-	p, config, build, err := s.loadPoolAutoBuildTx(ctx, user, id)
-	if err != nil {
-		return p, err
-	}
-	candidates, err := s.scoreBuildCandidatesTx(ctx, user, build)
-	if err != nil {
-		return p, err
-	}
-	candidates = selectBuildCandidates(candidates, build)
-	p.Members = []PoolMember{}
-	for i, c := range candidates {
-		p.Members = append(p.Members, PoolMember{c.group, i})
-	}
-	p.Config, err = finalizeAutoBuild(config, &build, s.cfg.Now())
-	if err != nil {
-		return p, err
-	}
-	return s.SavePool(ctx, user, p)
+	p, _, err := s.buildPool(ctx, user, id, false)
+	return p, err
 }
 
-// loadPoolAutoBuildTx locates the user's pool by id and parses its
-// auto_build config, applying the same defaults as the original inline code.
-func (s *Service) loadPoolAutoBuildTx(ctx context.Context, user int64, id string) (RoutePool, map[string]json.RawMessage, autoBuild, error) {
-	pools, err := s.Pools(ctx, user)
-	if err != nil {
-		return RoutePool{}, nil, autoBuild{}, err
-	}
+// Lock the pool for the entire build so concurrent workers and owner edits
+// cannot overwrite each other's settings or member selection.
+func (s *Service) buildPool(ctx context.Context, user int64, id string, dueOnly bool) (RoutePool, bool, error) {
 	var p RoutePool
-	found := false
-	for _, pool := range pools {
-		if pool.ID == id {
-			p = pool
-			found = true
-			break
+	built := false
+	var resultErr error
+	var failureConfig json.RawMessage
+	err := s.transaction(ctx, func(tx pgx.Tx) error {
+		var maximum int64
+		var internal string
+		e := tx.QueryRow(ctx, `SELECT id,owner_user_id,name,internal_group_name,strategy,max_attempts,failure_cooldown_seconds,max_multiplier_ppm,config FROM v3_channelmarket.route_pools WHERE id=$1 AND owner_user_id=$2 FOR UPDATE`, id, user).Scan(&p.ID, &p.OwnerUserID, &p.Name, &internal, &p.Strategy, &p.MaxAttempts, &p.FailureCooldownSeconds, &maximum, &p.Config)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if e != nil {
+			return e
+		}
+		p.MaxMultiplier, p.TokenGroup = json.Number(formatFactor(maximum)), internal
+		failureConfig = append(json.RawMessage(nil), p.Config...)
+		var config map[string]json.RawMessage
+		if json.Unmarshal(p.Config, &config) != nil {
+			return ErrInvalid
+		}
+		if len(config["auto_build"]) == 0 {
+			config["auto_build"] = json.RawMessage(`{}`)
+		}
+		build, e := parseAutoBuild(config["auto_build"], true)
+		if e != nil {
+			return e
+		}
+		now := s.cfg.Now().UTC()
+		if dueOnly && (!build.Enabled || (build.Next != nil && build.Next.After(now))) {
+			return nil
+		}
+		candidates, e := scoreBuildCandidatesTx(ctx, tx, user, build, maximum, now)
+		if e != nil {
+			return e
+		}
+		if len(candidates) == 0 {
+			// A temporary lack of candidates must not erase an otherwise useful
+			// pool or its API Key bindings. The worker will retry later.
+			build.LastError = "No eligible groups match the selected models and multiplier limit"
+			next := now.Add(15 * time.Minute)
+			build.Next = &next
+			config["auto_build"], e = json.Marshal(build)
+			if e == nil {
+				p.Config, e = json.Marshal(config)
+			}
+			if e != nil {
+				return e
+			}
+			if _, e = tx.Exec(ctx, `UPDATE v3_channelmarket.route_pools SET config=$3 WHERE id=$1 AND owner_user_id=$2`, id, user, p.Config); e != nil {
+				return e
+			}
+			resultErr = ErrConflict
+			return nil
+		}
+		candidates = selectBuildCandidates(candidates, build)
+		p.Members = make([]PoolMember, 0, len(candidates))
+		for i, c := range candidates {
+			p.Members = append(p.Members, PoolMember{GroupID: c.group, Priority: i})
+		}
+		p.Config, e = finalizeAutoBuild(config, &build, now)
+		if e != nil {
+			return e
+		}
+		_, catalogPool, e := upsertPoolRowTx(ctx, tx, user, p, maximum, false)
+		if e != nil {
+			return e
+		}
+		if e = syncPoolMembersTx(ctx, tx, user, p, maximum, internal, catalogPool, now); e != nil {
+			return e
+		}
+		p.AutoBuild = config["auto_build"]
+		built = true
+		return nil
+	})
+	if err != nil && p.ID != "" {
+		// Do not persist database diagnostics in owner-visible JSON.
+		if recordErr := s.recordPoolBuildFailure(ctx, user, id, failureConfig); recordErr != nil {
+			err = errors.Join(err, recordErr)
 		}
 	}
-	if !found {
-		return p, nil, autoBuild{}, ErrNotFound
-	}
-	var config map[string]json.RawMessage
-	if json.Unmarshal(p.Config, &config) != nil {
-		return p, nil, autoBuild{}, ErrInvalid
-	}
-	var build autoBuild
-	if raw := config["auto_build"]; len(raw) > 0 {
-		if json.Unmarshal(raw, &build) != nil {
-			return p, nil, autoBuild{}, ErrInvalid
-		}
-	}
-	if build.Size <= 0 || build.Size > 10 {
-		build.Size = 3
-	}
-	if build.Model != "" {
-		build.Models = append(build.Models, build.Model)
-	}
-	return p, config, build, nil
+	return p, built, errors.Join(err, resultErr)
 }
 
-// scoreBuildCandidatesTx scores every channel group the user can see against
-// the auto-build weighting, skipping groups that don't serve a required model.
-func (s *Service) scoreBuildCandidatesTx(ctx context.Context, user int64, build autoBuild) ([]buildCandidate, error) {
-	channels, err := s.List(ctx, Actor{UserID: user}, false)
+// ANY selected model may be served by a member, matching the original pool;
+// the gateway filters each member again against the actual requested model.
+func scoreBuildCandidatesTx(ctx context.Context, tx pgx.Tx, user int64, build autoBuild, maximum int64, now time.Time) ([]buildCandidate, error) {
+	rows, err := tx.Query(ctx, `SELECT g.id,
+	coalesce(u.multiplier_ppm,least(g.multiplier_ppm,coalesce((SELECT min(w.multiplier_ppm) FROM v3_channelmarket.time_range_multipliers w WHERE w.channel_id=c.id AND w.starts_at<=$2 AND w.ends_at>$2),g.multiplier_ppm))),
+	ARRAY(SELECT model FROM v3_catalog.channel_models WHERE channel_id=c.id ORDER BY model),
+	coalesce(r.wilson_success_rate,0),coalesce(r.cache_hit_rate,0),coalesce(r.request_count,0),coalesce(r.avg_consumer_micro,0)
+	FROM v3_channelmarket.groups g JOIN v3_catalog.channels c ON c.id=g.channel_id
+	LEFT JOIN v3_channelmarket.user_multipliers u ON u.channel_id=c.id AND u.user_id=$1
+	LEFT JOIN LATERAL(SELECT * FROM v3_channelmarket.ranking_snapshots WHERE group_id=g.id AND window_hours=24 AND ranking_version='v3-usage' AND calculated_at>=$2::timestamptz-interval '1 hour' AND calculated_at<=$2::timestamptz+interval '5 minutes' ORDER BY calculated_at DESC LIMIT 1) r ON true
+	WHERE g.deleted_at IS NULL AND g.lifecycle_status='active' AND c.status='enabled'
+	AND EXISTS(SELECT 1 FROM v3_catalog.channel_credentials k WHERE k.channel_id=c.id AND k.status='enabled')
+	AND (g.visibility='public' OR g.owner_user_id=$1 OR EXISTS(SELECT 1 FROM v3_channelmarket.group_access a WHERE a.group_id=g.id AND a.user_id=$1))
+	AND NOT EXISTS(SELECT 1 FROM v3_channelmarket.channel_user_blocks b WHERE b.channel_id=c.id AND b.user_id=$1)
+	UNION ALL
+	SELECT 'official:'||g.name,round(g.multiplier*1000000)::bigint,
+	ARRAY(SELECT DISTINCT cm.model FROM v3_catalog.channels c JOIN v3_catalog.channel_groups cg ON cg.channel_id=c.id JOIN v3_catalog.channel_models cm ON cm.channel_id=c.id WHERE cg.group_name=g.name AND c.scope='official' AND c.status='enabled' AND EXISTS(SELECT 1 FROM v3_catalog.channel_credentials k WHERE k.channel_id=c.id AND k.status='enabled') ORDER BY cm.model),
+	0::double precision,0::double precision,0::bigint,0::bigint
+	FROM v3_catalog.groups g WHERE EXISTS(SELECT 1 FROM v3_identity.allowed_groups($1) a WHERE a=g.name)`, user, now)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	var candidates []buildCandidate
-	for _, c := range channels {
-		allowed := len(build.Models) == 0
-		for _, needed := range build.Models {
-			for _, m := range c.Models {
-				if strings.EqualFold(m, needed) {
-					allowed = true
-				}
-			}
-		}
-		if !allowed {
-			continue
-		}
-		var success, cache, ttft float64
+	for rows.Next() {
+		var id string
+		var factor int64
+		var models []string
+		var success, cache float64
 		var requests, avg int64
-		err = s.pool.QueryRow(ctx, `SELECT coalesce(r.wilson_success_rate,0),coalesce(r.cache_hit_rate,0),coalesce(r.avg_ttft_ms,0),coalesce(r.request_count,0),coalesce(r.avg_consumer_micro,0) FROM (SELECT 1) d LEFT JOIN LATERAL(SELECT * FROM v3_channelmarket.ranking_snapshots WHERE group_id=$1 ORDER BY calculated_at DESC LIMIT 1) r ON true`, c.GroupID).Scan(&success, &cache, &ttft, &requests, &avg)
-		if err != nil {
+		if err = rows.Scan(&id, &factor, &models, &success, &cache, &requests, &avg); err != nil {
 			return nil, err
 		}
-		if build.ConsumerWeight+build.SuccessWeight+build.TTFTWeight+build.CacheWeight == 0 {
-			build.ConsumerWeight = 25
-			build.SuccessWeight = 35
-			build.TTFTWeight = 20
-			build.CacheWeight = 20
+		if len(models) == 0 || !matchesPoolModels(models, build.Models) || (maximum > 0 && factor > maximum) {
+			continue
 		}
 		cost := float64(0)
-		if avg > 0 {
+		if requests > 0 && avg >= 0 {
 			cost = 1 / (1 + float64(avg)/1000000)
 		}
-		latency := float64(0)
-		if ttft > 0 {
-			latency = 1 / (1 + ttft/1000)
-		}
-		score := cost*float64(build.ConsumerWeight) + success*float64(build.SuccessWeight) + latency*float64(build.TTFTWeight) + cache*float64(build.CacheWeight)
-		candidates = append(candidates, buildCandidate{c.GroupID, score, c.MultiplierPPM, requests})
+		score := cost*float64(build.ConsumerWeight) + success*float64(build.SuccessWeight) + cache*float64(build.CacheWeight)
+		candidates = append(candidates, buildCandidate{id, score, factor, requests})
 	}
-	return candidates, nil
+	return candidates, rows.Err()
+}
+
+func matchesPoolModels(models, required []string) bool {
+	if len(required) == 0 {
+		return true
+	}
+	for _, needed := range required {
+		for _, model := range models {
+			if strings.EqualFold(model, needed) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // selectBuildCandidates ranks candidates by score and, when there are more
@@ -271,21 +332,12 @@ func selectBuildCandidates(candidates []buildCandidate, build autoBuild) []build
 // build metadata, and re-marshals the pool config with the updated auto_build
 // and last_built_at entries.
 func finalizeAutoBuild(config map[string]json.RawMessage, build *autoBuild, now time.Time) (json.RawMessage, error) {
-	if build.Interval <= 0 {
-		build.Interval = 60
+	now = now.UTC()
+	build.Next = nil
+	if build.Enabled {
+		next := nextPoolBuild(*build, now)
+		build.Next = &next
 	}
-	next := now.Add(time.Duration(build.Interval) * time.Minute)
-	if build.Schedule == "daily" {
-		clock, e := time.Parse("15:04", build.DailyTime)
-		if e != nil {
-			return nil, ErrInvalid
-		}
-		next = time.Date(now.Year(), now.Month(), now.Day(), clock.Hour(), clock.Minute(), 0, 0, now.Location())
-		if !next.After(now) {
-			next = next.AddDate(0, 0, 1)
-		}
-	}
-	build.Next = &next
 	build.LastBuild = &now
 	build.LastError = ""
 	payload, err := json.Marshal(build)
@@ -307,7 +359,7 @@ func (s *Service) RebuildPools(ctx context.Context, limit int) (int, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 10
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id,owner_user_id FROM v3_channelmarket.route_pools WHERE config->'auto_build'->>'enabled'='true' AND (config->'auto_build'->>'next_build_at' IS NULL OR (config->'auto_build'->>'next_build_at')::timestamptz<=$1) ORDER BY id LIMIT $2`, s.cfg.Now(), limit)
+	rows, err := s.pool.Query(ctx, `SELECT id,owner_user_id,config->'auto_build' FROM v3_channelmarket.route_pools WHERE config->'auto_build'->>'enabled'='true' ORDER BY config->'auto_build'->>'next_build_at' NULLS FIRST,id`)
 	if err != nil {
 		return 0, err
 	}
@@ -318,20 +370,38 @@ func (s *Service) RebuildPools(ctx context.Context, limit int) (int, error) {
 	var items []item
 	for rows.Next() {
 		var i item
-		if err = rows.Scan(&i.id, &i.user); err != nil {
+		var raw []byte
+		if err = rows.Scan(&i.id, &i.user, &raw); err != nil {
 			rows.Close()
 			return 0, err
 		}
+		var build autoBuild
+		if json.Unmarshal(raw, &build) == nil && build.Next != nil && build.Next.After(s.cfg.Now()) {
+			continue
+		}
 		items = append(items, i)
+		if len(items) == limit {
+			break
+		}
 	}
 	rows.Close()
 	if err = rows.Err(); err != nil {
 		return 0, err
 	}
-	for i, item := range items {
-		if _, err = s.BuildPool(ctx, item.user, item.id); err != nil {
-			return i, err
+	count := 0
+	var failures []error
+	for _, item := range items {
+		if _, built, e := s.buildPool(ctx, item.user, item.id, true); e != nil {
+			failures = append(failures, fmt.Errorf("pool %s: %w", item.id, e))
+		} else if built {
+			count++
 		}
 	}
-	return len(items), nil
+	return count, errors.Join(failures...)
+}
+
+func (s *Service) recordPoolBuildFailure(ctx context.Context, user int64, id string, expected json.RawMessage) error {
+	next := s.cfg.Now().UTC().Add(15 * time.Minute)
+	_, err := s.pool.Exec(ctx, `UPDATE v3_channelmarket.route_pools SET config=jsonb_set(config,'{auto_build}',coalesce(config->'auto_build','{}')||jsonb_build_object('last_error','Automatic pool update failed; retry scheduled','next_build_at',$3::timestamptz)) WHERE id=$1 AND owner_user_id=$2 AND config=$4`, id, user, next, expected)
+	return err
 }

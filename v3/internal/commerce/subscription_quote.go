@@ -76,6 +76,9 @@ func (s *Service) quotePackageCheckout(ctx context.Context, id int64) (Order, st
 		if err = s.ApplyCheckoutDiscountTx(ctx, tx, &o); err != nil {
 			return err
 		}
+		if err = s.preparePaidOrderTx(ctx, tx, &o); err != nil {
+			return err
+		}
 		_, err = tx.Exec(ctx, `UPDATE v3_commerce.package_checkouts SET state='checkout',resolved_action=$2,quoted_used=$3,quoted_remaining=$4,preserve_remaining=$5,bonus_credits=$6 WHERE order_id=$1`, id, resolved, int64(used), int64(remaining), preserve, int64(bonus))
 		return err
 	})
@@ -156,7 +159,7 @@ func (s *Service) loadPackageQuoteUsageTx(ctx context.Context, tx pgx.Tx, o Orde
 	if used, err = used.Add(spent); err != nil {
 		return
 	}
-	p, err = scanPlan(tx.QueryRow(ctx, `SELECT `+planColumns+` FROM v3_commerce.plans WHERE id=$1`, planID))
+	p, err = subscriptionPlan(ctx, tx, target)
 	if err != nil {
 		return
 	}

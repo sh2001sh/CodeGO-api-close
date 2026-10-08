@@ -2,7 +2,7 @@
 -- Sources are ordered subscriptions then wallet. ARGV: amount,allowance,expires,ttl,request,account IDs.
 -- Admission and every source hold are atomic; insufficient total funds never
 -- leave a partial subscription reservation behind.
-if ARGV[1] == 'source-v1' then return reserveSource() end
+if ARGV[1] == 'source-v1' or ARGV[1] == 'source-v2' then return reserveSource() end
 if redis.call('EXISTS', KEYS[1]) == 1 then return {-3} end
 local count = (#KEYS - 3) / 4
 local budgetIndex = tonumber(ARGV[6+count] or '0')

@@ -1,3 +1,4 @@
+import { useTranslation } from '../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { api, unwrap } from '../lib/api'
@@ -27,6 +28,7 @@ export const invoicesOptions = (page = 1, all = false, status = '') =>
   )
 
 export default function InvoicesPage() {
+  const { t } = useTranslation()
   const user = useSuspenseQuery(sessionOptions()).data
   const eligible = useSuspenseQuery(eligibleInvoicesOptions()).data
   useSuspenseQuery(invoicesOptions())
@@ -79,12 +81,12 @@ export default function InvoicesPage() {
               void list.refetch()
             }}
           >
-            刷新
+            {t('刷新')}
           </Button>
         }
       />
       <ErrorMessage error={create.error ?? review.error} />
-      {create.isSuccess && <p role="status">发票申请已提交。</p>}
+      {create.isSuccess && <p role="status">{t('发票申请已提交。')}</p>}
       {!all && (
         <InvoiceForm
           key={submitted}
@@ -94,7 +96,7 @@ export default function InvoicesPage() {
         />
       )}
       <section className="section">
-        <h2>{all ? '全部发票申请' : '我的发票申请'}</h2>
+        <h2>{all ? t('全部发票申请') : t('我的发票申请')}</h2>
         <div className="filters">
           {admin && (
             <Button
@@ -105,11 +107,11 @@ export default function InvoicesPage() {
                 setEditing(null)
               }}
             >
-              {all ? '我的申请' : '管理全部申请'}
+              {all ? t('我的申请') : t('管理全部申请')}
             </Button>
           )}
           <label className="field" htmlFor="invoice-filter">
-            <span>状态</span>
+            <span>{t('状态')}</span>
             <select
               id="invoice-filter"
               value={status}
@@ -118,10 +120,10 @@ export default function InvoicesPage() {
                 setPage(1)
               }}
             >
-              <option value="">全部</option>
-              <option value="pending">待处理</option>
-              <option value="issued">已开票</option>
-              <option value="rejected">已拒绝</option>
+              <option value="">{t('全部')}</option>
+              <option value="pending">{t('待处理')}</option>
+              <option value="issued">{t('已开票')}</option>
+              <option value="rejected">{t('已拒绝')}</option>
             </select>
           </label>
         </div>
@@ -152,7 +154,11 @@ export default function InvoicesPage() {
                 </>
               ),
             },
-            { label: '订单', render: (row) => `${row.order_title}（${row.order_count} 笔）` },
+            {
+              label: '订单',
+              render: (row) =>
+                String(row.order_title) + '（' + String(row.order_count) + t(' 笔）'),
+            },
             {
               label: '金额',
               render: (row) => invoicePayment(row.order_amount_minor, row.currency),
@@ -190,7 +196,7 @@ export default function InvoicesPage() {
                             setEditing(row)
                           }}
                         >
-                          处理
+                          {t('处理')}
                         </Button>
                       ) : (
                         '—'
@@ -200,21 +206,23 @@ export default function InvoicesPage() {
               : []),
           ]}
         />
-        <nav className="pagination" aria-label="发票分页">
+        <nav className="pagination" aria-label={t('发票分页')}>
           <Button
             variant="quiet"
             disabled={page <= 1 || list.isFetching}
             onClick={() => setPage(page - 1)}
           >
-            上一页
+            {t('上一页')}
           </Button>
-          <span>第 {page} 页</span>
+          <span>
+            {t('第')} {page} {t('页')}
+          </span>
           <Button
             variant="quiet"
             disabled={!list.data || BigInt(page * 20) >= BigInt(list.data.total) || list.isFetching}
             onClick={() => setPage(page + 1)}
           >
-            下一页
+            {t('下一页')}
           </Button>
         </nav>
       </section>

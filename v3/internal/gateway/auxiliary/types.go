@@ -57,6 +57,7 @@ type Config struct {
 	Authorizer       gateway.Authorizer
 	Planner          gateway.Planner
 	Settler          gateway.Settler
+	Requests         gateway.RequestRecorder
 	Limits           gateway.LeaseController
 	AuthFailures     gateway.AuthFailureController
 	ValidateRequest  func(gateway.Principal, string, *http.Request) error

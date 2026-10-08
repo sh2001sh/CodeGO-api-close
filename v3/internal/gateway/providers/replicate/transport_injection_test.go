@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,6 +20,22 @@ import (
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+type pinnedDownloadTransport struct {
+	t    *testing.T
+	base http.RoundTripper
+}
+
+func (p pinnedDownloadTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return p.base.RoundTrip(r)
+}
+
+func (p pinnedDownloadTransport) PublicImageTransport(host string, address netip.Addr) (http.RoundTripper, error) {
+	if host != "8.8.8.8" || address != netip.MustParseAddr("8.8.8.8") {
+		p.t.Errorf("unexpected public pin: %s %s", host, address)
+	}
+	return p.base, nil
+}
 
 func TestInjectedTransportCoversCreatePollAndBase64Download(t *testing.T) {
 	var creates, polls, downloads int
@@ -37,8 +54,8 @@ func TestInjectedTransportCoversCreatePollAndBase64Download(t *testing.T) {
 			if req.Header.Get("Authorization") != "Bearer test-key" {
 				t.Error("missing poll key")
 			}
-			body = `{"id":"job1","status":"succeeded","output":"https://cdn.example.invalid/output.png"}`
-		case req.URL.Host == "cdn.example.invalid":
+			body = `{"id":"job1","status":"succeeded","output":"https://8.8.8.8/output.png"}`
+		case req.URL.Host == "8.8.8.8":
 			downloads++
 			if req.Header.Get("Authorization") != "" || req.Header.Get("Cookie") != "" {
 				t.Error("credential leaked to image CDN")
@@ -49,7 +66,7 @@ func TestInjectedTransportCoversCreatePollAndBase64Download(t *testing.T) {
 		}
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
 	})
-	p := Provider{PollInterval: time.Millisecond}.WithTransport(base)
+	p := Provider{PollInterval: time.Millisecond}.WithTransport(pinnedDownloadTransport{t: t, base: base})
 	request := imageRequest(`{"prompt":"hello","response_format":"b64_json"}`)
 	chosen := target("https://api.example.invalid")
 	chosen.ProxyURL = "http://proxy.example.invalid" // The injected base already owns the channel proxy.

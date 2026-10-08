@@ -171,6 +171,9 @@ func (s *UserRefunds) insertUserRefundTx(ctx context.Context, tx pgx.Tx, p inser
 		if e != nil {
 			return record, e
 		}
+		if e = verifyUserRefundReservationTx(ctx, tx, p); e != nil {
+			return record, e
+		}
 	}
 	if p.sub > 0 {
 		if _, e = tx.Exec(ctx, `UPDATE v3_commerce.subscriptions SET state='canceled',ended_at=$2 WHERE id=$1`, p.sub, s.now()); e != nil {

@@ -7,6 +7,7 @@ import type { User, Schema } from '../lib/types'
 import { DataTable } from '../components/data-table'
 import { Button, ErrorMessage, Field, PageHeader, Status } from '../components/ui'
 import { BalanceAdjustment } from '../components/balance-adjustment'
+import { AdminTwoFactor } from '../features/admin-two-factor'
 
 export default function UsersPage() {
   const { t } = useTranslation()
@@ -46,6 +47,7 @@ export default function UsersPage() {
         }
       />
       {adjusting && <BalanceAdjustment onClose={() => setAdjusting(false)} />}
+      <AdminTwoFactor />
       <ErrorMessage error={save.error} />
       {editing && (
         <form

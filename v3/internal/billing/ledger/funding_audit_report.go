@@ -20,6 +20,7 @@ type FundingEconomicsSource struct {
 }
 
 type FundingDailyEconomics struct {
+	UnpricedRequests  int64                    `json:"unpriced_requests"`
 	Date              string                   `json:"date"`
 	RecognizedRevenue credits.Micro            `json:"recognized_revenue_micro"`
 	RecognizedCost    credits.Micro            `json:"recognized_cost_micro"`
@@ -39,6 +40,9 @@ func DailyFundingEconomics(ctx context.Context, pool *pgxpool.Pool, day time.Tim
 	local := day.In(location)
 	start := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, location)
 	result := FundingDailyEconomics{Date: start.Format("2006-01-02"), Sources: []FundingEconomicsSource{}}
+	if err := pool.QueryRow(ctx, `SELECT count(DISTINCT request_id) FROM v3_billing.funding_source_usage WHERE settled_at >= $1 AND settled_at < $2 AND procurement_cost_amount IS NULL`, start.UTC(), start.AddDate(0, 0, 1).UTC()).Scan(&result.UnpricedRequests); err != nil {
+		return result, err
+	}
 	rows, err := pool.Query(ctx, dailyFundingEconomicsQuery, start.UTC(), start.AddDate(0, 0, 1).UTC())
 	if err != nil {
 		return result, err
@@ -49,7 +53,7 @@ func DailyFundingEconomics(ctx context.Context, pool *pgxpool.Pool, day time.Tim
 		if err != nil {
 			return result, err
 		}
-		if entry.Amount == 0 {
+		if entry.Amount == 0 && entry.Revenue == 0 && entry.Cost == 0 {
 			continue
 		}
 		entry.Profit = entry.Revenue - entry.Cost
@@ -71,16 +75,32 @@ const dailyFundingEconomicsQuery = `WITH economics AS (
 ), allocated AS (
  SELECT a.request_id,a.source,a.amount,a.revenue_multiplier_ppm,e.procurement_cost_multiplier_ppm
  FROM economics e JOIN v3_billing.funding_allocations a ON a.request_id=e.request_id
+ WHERE NOT EXISTS(SELECT 1 FROM v3_billing.funding_source_usage f WHERE f.request_id=e.request_id)
 ), pieces AS (
  SELECT source,amount,revenue_multiplier_ppm,procurement_cost_multiplier_ppm FROM allocated
  UNION ALL
  SELECT CASE WHEN e.billing_source='wallet' THEN 'legacy_unattributed' ELSE 'subscription' END,
  e.actual_amount-coalesce((SELECT sum(a.amount) FROM allocated a WHERE a.request_id=e.request_id),0),
  CASE WHEN e.billing_source='wallet' THEN 0 ELSE e.revenue_multiplier_ppm END,e.procurement_cost_multiplier_ppm FROM economics e
+ WHERE NOT EXISTS(SELECT 1 FROM v3_billing.funding_source_usage f WHERE f.request_id=e.request_id)
+), source_pieces AS (
+ SELECT source,amount,amount::numeric*revenue_multiplier_ppm/1000000 AS revenue,amount::numeric*procurement_cost_multiplier_ppm/1000000 AS cost FROM pieces
+ UNION ALL
+ SELECT CASE WHEN f.revenue_multiplier_ppm IS NULL THEN 'legacy_unattributed' ELSE 'subscription' END,f.amount,
+ f.amount::numeric*coalesce(f.revenue_multiplier_ppm,0)/1000000,coalesce(f.procurement_cost_amount,0)
+ FROM v3_billing.funding_source_usage f JOIN economics e USING(request_id) WHERE f.policy_version<>'wallet'
+ UNION ALL
+ SELECT a.source,a.amount,a.amount::numeric*a.revenue_multiplier_ppm/1000000,
+ coalesce(f.procurement_cost_amount,0)::numeric*a.amount/nullif(f.amount,0)
+ FROM v3_billing.funding_source_usage f JOIN economics e USING(request_id)
+ JOIN v3_billing.funding_allocations a ON a.request_id=f.request_id AND a.account_id=f.account_id WHERE f.policy_version='wallet'
+ UNION ALL
+ SELECT 'other',f.amount,0,coalesce(f.procurement_cost_amount,0) FROM v3_billing.funding_source_usage f JOIN economics e USING(request_id)
+ WHERE f.policy_version='wallet' AND NOT EXISTS(SELECT 1 FROM v3_billing.funding_allocations a WHERE a.request_id=f.request_id AND a.account_id=f.account_id)
 )
- SELECT source,sum(amount)::text,round(sum(amount::numeric*revenue_multiplier_ppm)/1000000)::text,
- round(sum(amount::numeric*procurement_cost_multiplier_ppm)/1000000)::text,bool_or(amount<0)
- FROM pieces GROUP BY source`
+ SELECT source,sum(amount)::text,round(sum(revenue))::text,
+ round(sum(cost))::text,bool_or(amount<0)
+ FROM source_pieces GROUP BY source`
 
 // fundingRowScanner is satisfied by pgx.Rows.
 type fundingRowScanner interface {

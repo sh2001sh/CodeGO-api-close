@@ -35,18 +35,20 @@ func (t Terminal) String() string {
 
 // Outcome is what Finalize hands to billing and audit.
 type Outcome struct {
-	Terminal  Terminal
-	Delivered bool  // at least one data event reached the client
-	Usage     Usage // zero when Charge is false
-	Charge    bool  // false means release the whole reservation
-	Target    *Target
-	Err       *UpstreamError // last upstream error, if any
+	Terminal   Terminal
+	Delivered  bool  // at least one data event reached the client
+	Usage      Usage // zero when Charge is false
+	Charge     bool  // false means release the whole reservation
+	Target     *Target
+	Err        *UpstreamError // last upstream error, if any
+	TTFT       time.Duration  // final streaming attempt: upstream send to first genuine output
+	Generation time.Duration  // first genuine output to upstream stream termination; excludes billing
 }
 
 // decide maps what happened on the final attempt to the terminal state and
 // billing action. It is the only place that makes this decision.
 func decide(f finish) Outcome {
-	out := Outcome{Delivered: f.delivered, Err: f.err}
+	out := Outcome{Delivered: f.delivered, Err: f.err, TTFT: f.ttft, Generation: f.generation}
 	switch {
 	case f.timedOut:
 		out.Terminal = TerminalTimeout
@@ -88,6 +90,7 @@ func decide(f finish) Outcome {
 // finish is the raw observation of one attempt, fed to decide.
 type finish struct {
 	ttft       time.Duration // first upstream data event, separate from full relay duration
+	generation time.Duration // streaming output window, measured before finalization
 	delivered  bool
 	usage      *Usage // upstream-reported
 	estimate   Usage  // local estimate of what was delivered

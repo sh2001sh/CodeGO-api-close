@@ -35,9 +35,17 @@ func (h *Handler) finalizeBackgroundJob(parent context.Context, job *BackgroundJ
 		target = &gateway.Target{ChannelID: job.ChannelID, CredentialID: job.CredentialID}
 	}
 	out.Target = target
-	if err := h.cfg.BackgroundBilling.Finalize(ctx, req, job.Reservation, out); err != nil {
+	if job.TargetGroup != "" {
+		copyTarget := *target
+		copyTarget.Group = job.TargetGroup
+		out.Target = &copyTarget
+	}
+	req.PersistedAttempts = job.AttemptsCount
+	err := h.cfg.BackgroundBilling.Finalize(ctx, req, job.Reservation, out)
+	if err != nil {
 		return err
 	}
+	gateway.RecordRequest(h.cfg.Requests, req, out, true)
 	job.Billed = true
 	return h.cfg.BackgroundJobs.Save(ctx, *job)
 }

@@ -69,6 +69,17 @@ func (s *Server) RequireAdmin(next http.Handler) http.Handler {
 	return s.authorize(next, true)
 }
 
+func (s *Server) RequireRoot(next http.Handler) http.Handler {
+	return s.RequireAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		principal, ok := r.Context().Value(principalContextKey{}).(Principal)
+		if !ok || !principal.Root {
+			Fail(w, http.StatusForbidden, "forbidden", "需要根管理员权限")
+			return
+		}
+		next.ServeHTTP(w, r)
+	}))
+}
+
 func (s *Server) authorize(next http.Handler, admin bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p, err := s.cfg.Authenticate(r)

@@ -67,6 +67,12 @@ func (c *Controller) Acquire(ctx context.Context, req *gateway.Request, t gatewa
 	if !enabled(req, t) {
 		return nil
 	}
+	// Bound the lease by the admitted request's entire lifetime, rather than
+	// the Redis operation timeout. Realtime sessions outlive ordinary relays.
+	ttl := c.cfg.LeaseTTL
+	if deadline, ok := ctx.Deadline(); ok {
+		ttl = max(ttl, time.Until(deadline)+time.Minute)
+	}
 	ctx, cancel := context.WithTimeout(ctx, c.cfg.RedisTimeout)
 	defer cancel()
 	var now int64
@@ -74,7 +80,7 @@ func (c *Controller) Acquire(ctx context.Context, req *gateway.Request, t gatewa
 		now = c.cfg.Now().UnixMilli()
 	}
 	result, err := c.rdb.Eval(ctx, acquireLua, leaseKeys(req, t), req.ID, now,
-		c.cfg.LeaseTTL.Milliseconds(), req.Principal.MaxConcurrency, t.MaxConcurrency,
+		ttl.Milliseconds(), req.Principal.MaxConcurrency, t.MaxConcurrency,
 		t.CredentialMaxConcurrency, t.MaxUserConcurrency, req.Principal.RequestsPerMinute).Int()
 	if err != nil {
 		return commandError("acquire", err)

@@ -119,10 +119,16 @@ func (s *Service) replaySubscriptionOperation(ctx context.Context, key string, i
 		return s.UpdateSubscription(ctx, id, actor, request)
 	case "conversion":
 		var request struct {
-			RequestID string `json:"request_id"`
-			Percent   int    `json:"percent"`
+			RequestID     string `json:"request_id"`
+			Percent       int    `json:"percent"`
+			WalletQuoteID string `json:"wallet_quote_id"`
+			AcceptedTerms bool   `json:"accepted_terms"`
 		}
 		if err := json.Unmarshal(payload, &request); err != nil {
+			return err
+		}
+		if request.WalletQuoteID != "" {
+			_, err := s.ConfirmWalletConversion(ctx, actor, request.WalletQuoteID, request.RequestID, request.AcceptedTerms)
 			return err
 		}
 		_, err := s.ConvertSubscription(ctx, actor, id, request.Percent, request.RequestID)

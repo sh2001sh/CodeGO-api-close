@@ -125,7 +125,7 @@ func TestZhipuMediaDownloadsBase64WithoutProviderCredential(t *testing.T) {
 	}))
 	defer server.Close()
 	data := `{"data":[{"image_url":"` + server.URL + `/image.png?signature=cdn-signature"}]}`
-	response, err := mediaAdapters()["zhipu_4v"].Decode(context.Background(), &gateway.Request{}, gateway.Target{Secret: "native-secret"}, Input{Operation: Images}, mediaTestResponse(data))
+	response, err := mediaAdapters()["zhipu_4v"].Decode(context.Background(), &gateway.Request{}, gateway.Target{BaseURL: server.URL, Secret: "native-secret"}, Input{Operation: Images}, mediaTestResponse(data))
 	if err != nil {
 		t.Fatal(err)
 	}

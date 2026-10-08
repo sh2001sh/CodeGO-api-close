@@ -1,3 +1,4 @@
+import { useTranslation } from '../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { api, unwrap } from '../lib/api'
@@ -8,10 +9,10 @@ import { DataTable } from '../components/data-table'
 import { Button, ErrorMessage, Field, Loading, PageHeader, Status } from '../components/ui'
 import { errorFrom, positiveID } from '../features/commerce/amounts'
 
-function redemptionBenefit(code: Schema['RedemptionCode']) {
+function redemptionBenefit(code: Schema['RedemptionCode'], t: (key: string) => string) {
   if (code.redeem_type === 'subscription')
-    return `订阅 · ${code.plan_title || `套餐 ${code.plan_id}`}`
-  if (code.redeem_type === 'blind_box') return `盲盒 × ${code.blind_box_quantity}`
+    return `${t('订阅')} · ${code.plan_title || `${t('套餐')} ${code.plan_id}`}`
+  if (code.redeem_type === 'blind_box') return `${t('盲盒')} × ${code.blind_box_quantity}`
   return credits(code.credits)
 }
 
@@ -29,6 +30,7 @@ export const redemptionsOptions = (before = '') =>
   )
 
 export default function RedemptionsPage() {
+  const { t } = useTranslation()
   useSuspenseQuery(redemptionsOptions())
   const [before, setBefore] = useState('')
   const [error, setError] = useState<Error | null>(null)
@@ -68,13 +70,13 @@ export default function RedemptionsPage() {
         title="兑换码管理"
         action={
           <Button variant="quiet" disabled={list.isFetching} onClick={() => void list.refetch()}>
-            刷新
+            {t('刷新')}
           </Button>
         }
       />
       <ErrorMessage error={error ?? issue.error ?? revoke.error ?? plans.error} />
       <section className="section">
-        <h2>发行兑换码</h2>
+        <h2>{t('发行兑换码')}</h2>
         <form
           className="form-panel"
           onSubmit={(event) => {
@@ -126,7 +128,7 @@ export default function RedemptionsPage() {
         >
           <Field name="redemption-name" label="名称" required maxLength={200} />
           <label className="field" htmlFor="redemption-type">
-            <span>兑换类型</span>
+            <span>{t('兑换类型')}</span>
             <select
               id="redemption-type"
               value={redeemType}
@@ -138,9 +140,9 @@ export default function RedemptionsPage() {
                 }
               }}
             >
-              <option value="credits">钱包额度</option>
-              <option value="subscription">订阅套餐</option>
-              <option value="blind_box">盲盒</option>
+              <option value="credits">{t('钱包额度')}</option>
+              <option value="subscription">{t('订阅套餐')}</option>
+              <option value="blind_box">{t('盲盒')}</option>
             </select>
           </label>
           {redeemType === 'credits' && (
@@ -148,14 +150,14 @@ export default function RedemptionsPage() {
           )}
           {redeemType === 'subscription' && (
             <label className="field" htmlFor="redemption-plan">
-              <span>兑换套餐</span>
+              <span>{t('兑换套餐')}</span>
               <select
                 id="redemption-plan"
                 name="redemption-plan"
                 required
                 disabled={plans.isPending}
               >
-                <option value="">{plans.isPending ? '正在加载套餐…' : '请选择套餐'}</option>
+                <option value="">{plans.isPending ? t('正在加载套餐…') : t('请选择套餐')}</option>
                 {(plans.data ?? []).map((plan) => (
                   <option key={String(plan.id)} value={String(plan.id)}>
                     {plan.name}
@@ -176,12 +178,12 @@ export default function RedemptionsPage() {
             }
             type="submit"
           >
-            {issue.isPending ? '发行中…' : '发行兑换码'}
+            {issue.isPending ? t('发行中…') : t('发行兑换码')}
           </Button>
         </form>
         {issued?.key && (
           <div className="section" role="status">
-            <p>兑换码仅在发行时显示一次，请立即保存。</p>
+            <p>{t('兑换码仅在发行时显示一次，请立即保存。')}</p>
             <code className="secret-value">{issued.key}</code>
             <div className="row-actions">
               <Button
@@ -195,10 +197,10 @@ export default function RedemptionsPage() {
                   }
                 }}
               >
-                {copied ? '已复制' : '复制兑换码'}
+                {copied ? t('已复制') : t('复制兑换码')}
               </Button>
               <Button variant="quiet" onClick={() => setIssued(null)}>
-                已保存，关闭
+                {t('已保存，关闭')}
               </Button>
             </div>
           </div>
@@ -207,7 +209,9 @@ export default function RedemptionsPage() {
       {revoking && (
         <section className="section">
           <p>
-            撤销兑换码“{revoking.name}”（{redemptionBenefit(revoking)}）后将无法兑换。
+            {t('撤销兑换码“')}
+            {revoking.name}”（{redemptionBenefit(revoking, t)}
+            {t('）后将无法兑换。')}
           </p>
           <div className="row-actions">
             <Button
@@ -215,10 +219,10 @@ export default function RedemptionsPage() {
               disabled={revoke.isPending}
               onClick={() => revoke.mutate(revoking.id)}
             >
-              确认撤销
+              {t('确认撤销')}
             </Button>
             <Button variant="quiet" disabled={revoke.isPending} onClick={() => setRevoking(null)}>
-              取消
+              {t('取消')}
             </Button>
           </div>
         </section>
@@ -231,7 +235,7 @@ export default function RedemptionsPage() {
         empty="暂无兑换码。填写上方表单发行第一张。"
         columns={[
           { label: '名称', render: (row) => row.name },
-          { label: '兑换权益', render: redemptionBenefit },
+          { label: '兑换权益', render: (row) => redemptionBenefit(row, t) },
           {
             label: '状态',
             render: (row) => (
@@ -255,7 +259,7 @@ export default function RedemptionsPage() {
                     setRevoking(row)
                   }}
                 >
-                  撤销
+                  {t('撤销')}
                 </Button>
               ) : (
                 '—'
@@ -263,16 +267,16 @@ export default function RedemptionsPage() {
           },
         ]}
       />
-      <nav className="pagination" aria-label="兑换码分页">
+      <nav className="pagination" aria-label={t('兑换码分页')}>
         <Button variant="quiet" disabled={!before || list.isFetching} onClick={() => setBefore('')}>
-          返回首页
+          {t('返回首页')}
         </Button>
         <Button
           variant="quiet"
           disabled={list.isFetching || (list.data?.length ?? 0) < 50}
           onClick={() => setBefore(String(list.data?.at(-1)?.id ?? ''))}
         >
-          下一页
+          {t('下一页')}
         </Button>
       </nav>
     </>

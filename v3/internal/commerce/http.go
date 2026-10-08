@@ -27,6 +27,7 @@ func (s *Service) Register(mux *http.ServeMux, authenticate Authenticate) {
 	h.registerInvoices(mux)
 	h.registerSubscriptionLifecycle(mux)
 	h.registerCashBoxes(mux)
+	h.registerRedesign(mux)
 	mux.HandleFunc("GET /api/commerce/orders", h.authorized(false, h.orders))
 	mux.HandleFunc("POST /api/commerce/orders", h.authorized(false, h.create))
 	mux.HandleFunc("GET /api/commerce/orders/{trade_no}", h.authorized(false, h.order))

@@ -11,13 +11,12 @@ import (
 )
 
 type entitlementsData struct {
-	rows     map[string][]commerceRow
-	refs     map[string]map[int64]commerceRow
-	deferred map[string]int64
+	rows map[string][]commerceRow
+	refs map[string]map[int64]commerceRow
 }
 
 func loadEntitlements(ctx context.Context, source pgx.Tx, sources map[string]string) (*entitlementsData, error) {
-	d := &entitlementsData{rows: map[string][]commerceRow{}, refs: map[string]map[int64]commerceRow{}, deferred: map[string]int64{}}
+	d := &entitlementsData{rows: map[string][]commerceRow{}, refs: map[string]map[int64]commerceRow{}}
 	names := []string{"users", "user_subscriptions", "subscription_plans", "blind_box_open_records", "blind_box_orders", "top_ups", "subscription_orders"}
 	for _, contract := range entitlementContracts {
 		names = append(names, contract.source)
@@ -29,10 +28,6 @@ func loadEntitlements(ctx context.Context, source pgx.Tx, sources map[string]str
 		rows, err := loadRows(ctx, source, sources[name])
 		if err != nil {
 			return nil, fmt.Errorf("legacy: load entitlement %s: %w", name, err)
-		}
-		if deferredResetHistory(name) {
-			d.deferred[name] = int64(len(rows))
-			continue
 		}
 		d.refs[name] = map[int64]commerceRow{}
 		for _, raw := range rows {
@@ -93,9 +88,6 @@ func (d *entitlementsData) validate(report *Report) {
 		report.Amounts = map[string]string{}
 	}
 	d.reportExcludedAudits(report)
-	for name, count := range d.deferred {
-		report.Counts["deferred_game_history."+name] = count
-	}
 	for _, contract := range entitlementContracts {
 		report.Counts[contract.source] = int64(len(d.rows[contract.source]))
 		ids := map[int64]bool{}

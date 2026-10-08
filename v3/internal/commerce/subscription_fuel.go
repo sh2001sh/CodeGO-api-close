@@ -24,7 +24,7 @@ type FuelQuote struct {
 
 func quoteFuel(p Plan, id int64, amount credits.Micro, end time.Time) (FuelQuote, error) {
 	q := FuelQuote{SubscriptionID: id, PlanID: p.ID, Credits: amount, Currency: p.Currency, ExpiresAt: end, MinCredits: p.FuelMinCredits, CreditStep: p.FuelCreditStep}
-	if !p.FuelEnabled || (p.PlanType != "monthly" && p.DurationUnit != "month") || p.FuelUnitPriceMicro <= 0 || p.FuelMinCredits <= 0 || p.FuelCreditStep <= 0 || amount < p.FuelMinCredits || amount%p.FuelCreditStep != 0 {
+	if p.PolicyVersion == PolicyStandardV2 || !p.FuelEnabled || (p.PlanType != "monthly" && p.DurationUnit != "month") || p.FuelUnitPriceMicro <= 0 || p.FuelMinCredits <= 0 || p.FuelCreditStep <= 0 || amount < p.FuelMinCredits || amount%p.FuelCreditStep != 0 {
 		return q, ErrInvalid
 	}
 	numerator := new(big.Int).Mul(big.NewInt(int64(amount)), big.NewInt(p.FuelUnitPriceMicro))
@@ -51,7 +51,7 @@ func (s *Service) QuoteSubscriptionFuel(ctx context.Context, user, id int64, amo
 	if err != nil {
 		return FuelQuote{}, err
 	}
-	p, err := scanPlan(s.pool.QueryRow(ctx, `SELECT `+planColumns+` FROM v3_commerce.plans WHERE id=$1`, plan))
+	p, err := subscriptionPlan(ctx, s.pool, id)
 	if err != nil {
 		return FuelQuote{}, err
 	}
@@ -82,7 +82,7 @@ func (s *Service) CreateSubscriptionFuel(ctx context.Context, in CreateOrder) (O
 		if err := s.checkPackagePending(ctx, tx, in.TargetSubscriptionID); err != nil {
 			return err
 		}
-		p, err := scanPlan(tx.QueryRow(ctx, `SELECT `+planColumns+` FROM v3_commerce.plans WHERE id=$1 FOR SHARE`, plan))
+		p, err := subscriptionPlan(ctx, tx, in.TargetSubscriptionID)
 		if err != nil {
 			return err
 		}
@@ -94,7 +94,7 @@ func (s *Service) CreateSubscriptionFuel(ctx context.Context, in CreateOrder) (O
 		if err != nil {
 			return err
 		}
-		o = Order{Selection: in.Selection, UserID: in.UserID, PlanID: &p.ID, Provider: in.Provider, Kind: "subscription", PurchaseType: "fuel", TargetSubscriptionID: in.TargetSubscriptionID, FuelExpiresAt: &end, Credits: q.Credits, AmountMinor: q.AmountMinor, Currency: q.Currency, PeriodSeconds: p.PeriodSeconds, ResetPeriod: "never", GroupBuyTarget: 3, GroupBuyLifetimeSeconds: 86400, TradeNo: trade, CreatedAt: s.cfg.Now(), ExpiresAt: s.cfg.Now().Add(s.cfg.OrderTTL)}
+		o = Order{PolicyVersion: p.PolicyVersion, PlanSnapshot: p, Selection: in.Selection, UserID: in.UserID, PlanID: &p.ID, Provider: in.Provider, Kind: "subscription", PurchaseType: "fuel", TargetSubscriptionID: in.TargetSubscriptionID, FuelExpiresAt: &end, Credits: q.Credits, AmountMinor: q.AmountMinor, Currency: q.Currency, PeriodSeconds: p.PeriodSeconds, ResetPeriod: "never", GroupBuyTarget: 3, GroupBuyLifetimeSeconds: 86400, TradeNo: trade, CreatedAt: s.cfg.Now(), ExpiresAt: s.cfg.Now().Add(s.cfg.OrderTTL)}
 		o, err = s.insertOrderTx(ctx, tx, o, 0, true)
 		return err
 	})
@@ -154,7 +154,7 @@ func (s *Service) applySubscriptionFuelTx(ctx context.Context, tx pgx.Tx, o Orde
 			return err
 		}
 	}
-	_, err = tx.Exec(ctx, `UPDATE v3_commerce.subscriptions SET total_credits=$2 WHERE id=$1`, o.TargetSubscriptionID, int64(total))
+	_, err = tx.Exec(ctx, `UPDATE v3_commerce.subscriptions SET total_credits=$2,recognized_revenue_credits=CASE WHEN recognized_revenue_credits IS NULL OR $3::bigint IS NULL THEN NULL ELSE recognized_revenue_credits+$3 END WHERE id=$1`, o.TargetSubscriptionID, int64(total), o.RecognizedRevenueCredits)
 	if err != nil {
 		return err
 	}

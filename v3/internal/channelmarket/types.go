@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
+	"github.com/sh2001sh/new-api/v3/internal/community"
 )
 
 // Decimal values are parsed exactly before entering fixed point pricing.
@@ -31,6 +32,8 @@ func multiplier(number json.Number) (int64, error) {
 type CreateRequest struct {
 	Provider                         string          `json:"provider_type"`
 	Name                             string          `json:"name,omitempty"`
+	Remark                           string          `json:"remark,omitempty"`
+	Tags                             []string        `json:"tags,omitempty"`
 	SourceLabel                      string          `json:"source_label"`
 	BaseURL                          string          `json:"base_url"`
 	APIKey                           string          `json:"api_key"`
@@ -51,6 +54,11 @@ type CreateRequest struct {
 }
 
 func (r *CreateRequest) validate() (int64, error) {
+	var err error
+	r.Tags, err = normalizeGroupTags(r.Tags)
+	if err != nil {
+		return 0, err
+	}
 	if err := r.validateScalarFields(); err != nil {
 		return 0, err
 	}
@@ -77,7 +85,7 @@ func (r *CreateRequest) validateScalarFields() error {
 	default:
 		return ErrInvalid
 	}
-	if r.Provider == "" || len(r.Provider) > 64 || r.APIKey == "" || len(r.APIKey) > 131072 || len(r.Models) == 0 || len(r.Models) > 1000 || r.MaxConcurrency < 0 || r.UserMaxConcurrency < 0 || len(r.Name) > 255 || len(r.SourceLabel) > 40 {
+	if r.Provider == "" || len(r.Provider) > 64 || r.APIKey == "" || len(r.APIKey) > 131072 || len(r.Models) == 0 || len(r.Models) > 1000 || r.MaxConcurrency < 0 || r.UserMaxConcurrency < 0 || len(r.SourceLabel) > 40 {
 		return ErrInvalid
 	}
 	if r.AutoProbeIntervalMinutes < 0 || r.AutoProbeIntervalMinutes > 1440 || len(r.AutoProbeModel) > 255 || len(r.Maintenance) > 64 {
@@ -157,14 +165,25 @@ func safeSettings(r CreateRequest) (json.RawMessage, error) {
 	if err = json.Unmarshal(data, &fields); err != nil {
 		return nil, err
 	}
-	for _, key := range []string{"api_key", "base_url", "model_prices", "declared_models", "multiplier", "visibility", "name", "source_label", "provider_type"} {
+	for _, key := range []string{"api_key", "base_url", "model_prices", "declared_models", "multiplier", "visibility", "name", "remark", "source_label", "provider_type"} {
 		delete(fields, key)
+	}
+	// omitempty must not turn an explicit empty tag list into a no-op merge.
+	fields["tags"], err = json.Marshal(r.Tags)
+	if err != nil {
+		return nil, err
 	}
 	return json.Marshal(fields)
 }
 
 // ChannelView is safe for owners and public users: no base URL or credential.
 type ChannelPolicy struct {
+	Tags                             []string    `json:"tags,omitempty"`
+	SubmittedName                    string      `json:"submitted_name,omitempty"`
+	Remark                           string      `json:"remark,omitempty"`
+	SubmittedRemark                  *string     `json:"submitted_remark,omitempty"`
+	NameStatus                       string      `json:"name_status,omitempty"`
+	NameReviewReason                 string      `json:"name_review_reason,omitempty"`
 	ModelConsistencyStatus           string      `json:"model_consistency_status"`
 	SubmittedSourceLabel             string      `json:"submitted_source_label"`
 	SourceLabelStatus                string      `json:"source_label_status"`
@@ -183,47 +202,63 @@ type ChannelPolicy struct {
 	AutoProbeLastStatus              string      `json:"auto_probe_last_status,omitempty"`
 }
 type ChannelView struct {
+	Rating community.PublicRating `json:"rating"`
 	ChannelPolicy
 	VerificationView
-	ID                string          `json:"id"`
-	InternalChannelID int64           `json:"internal_channel_id"`
-	OwnerUserID       int64           `json:"owner_user_id"`
-	GroupID           string          `json:"group_id"`
-	PublicSlug        string          `json:"public_slug"`
-	Name              string          `json:"system_display_name"`
-	Provider          string          `json:"provider_type"`
-	SourceLabel       string          `json:"approved_source_label"`
-	Models            []string        `json:"declared_models"`
-	Prices            json.RawMessage `json:"model_prices"`
-	MultiplierPPM     int64           `json:"multiplier_ppm"`
-	Multiplier        json.Number     `json:"multiplier"`
-	Visibility        string          `json:"visibility"`
-	Status            string          `json:"lifecycle_status"`
-	Verification      string          `json:"verification_status"`
-	Reason            string          `json:"last_review_reason"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
+	Shop                *ShopReference               `json:"shop,omitempty"`
+	ID                  string                       `json:"id"`
+	InternalChannelID   int64                        `json:"internal_channel_id"`
+	OwnerUserID         int64                        `json:"owner_user_id"`
+	GroupID             string                       `json:"group_id"`
+	RoutingGroup        string                       `json:"routing_group"`
+	PublicSlug          string                       `json:"public_slug"`
+	Name                string                       `json:"system_display_name"`
+	Provider            string                       `json:"provider_type"`
+	SourceLabel         string                       `json:"approved_source_label"`
+	Models              []string                     `json:"declared_models"`
+	Prices              json.RawMessage              `json:"model_prices"`
+	EffectivePrices     map[string]*PublicModelPrice `json:"effective_model_prices"`
+	Quality             *GroupQuality                `json:"quality,omitempty"`
+	RecentBucketSeconds int64                        `json:"recent_request_bucket_seconds"`
+	RecentRequests      []RecentRequestBucket        `json:"recent_request_series"`
+	MultiplierPPM       int64                        `json:"multiplier_ppm"`
+	Multiplier          json.Number                  `json:"multiplier"`
+	Visibility          string                       `json:"visibility"`
+	Status              string                       `json:"lifecycle_status"`
+	Verification        string                       `json:"verification_status"`
+	Reason              string                       `json:"last_review_reason"`
+	CreatedAt           time.Time                    `json:"created_at"`
+	UpdatedAt           time.Time                    `json:"updated_at"`
 }
 
-const channelColumns = `g.public_channel_id,c.id,c.owner_user_id,g.id,g.public_slug,g.display_name,c.provider,g.source_label,
+const channelColumns = `g.public_channel_id,c.id,c.owner_user_id,g.id,g.internal_group_name,g.public_slug,g.display_name,c.provider,g.source_label,
 ARRAY(SELECT model FROM v3_catalog.channel_models WHERE channel_id=c.id ORDER BY model),g.model_prices,g.multiplier_ppm,
 g.visibility,g.lifecycle_status,g.verification_status,g.review_reason,g.created_at,g.updated_at,coalesce(c.settings->'market','{}'),c.max_concurrency,c.max_user_concurrency,
-coalesce((SELECT jsonb_build_object('id',v.id,'stage',v.stage,'detector_version',v.detector_version,'started_at',v.started_at,'completed_at',v.completed_at,'results',v.results) FROM v3_channelmarket.verification_runs v WHERE v.channel_id=c.id AND v.trigger<>'auto_probe' ORDER BY v.created_at DESC,v.id DESC LIMIT 1),'{}')`
+coalesce((SELECT jsonb_build_object('id',v.id,'stage',v.stage,'detector_version',v.detector_version,'started_at',v.started_at,'completed_at',v.completed_at,'results',v.results) FROM v3_channelmarket.verification_runs v WHERE v.channel_id=c.id AND v.trigger<>'auto_probe' ORDER BY v.created_at DESC,v.id DESC LIMIT 1),'{}'),
+coalesce((SELECT jsonb_agg(jsonb_build_object('Model',p.model,'Mode',p.mode,'InputPerMTok',p.input_per_mtok,'OutputPerMTok',p.output_per_mtok,'CacheReadPerMTok',p.cache_read_per_mtok,'CacheWritePerMTok',p.cache_write_per_mtok,'PerRequest',p.per_request,'Rules',p.rules)) FROM v3_catalog.model_prices p WHERE p.model IN (SELECT model FROM v3_catalog.channel_models WHERE channel_id=c.id)),'[]'),
+(SELECT jsonb_build_object('window_hours',r.window_hours,'rank',r.rank,'score',r.score,'success_rate',CASE WHEN r.request_count>0 THEN r.raw_success_rate END,'wilson_success_rate',CASE WHEN r.request_count>0 THEN r.wilson_success_rate END,'cache_hit_rate',CASE WHEN r.cache_hit_rate>0 THEN r.cache_hit_rate END,'request_count',r.request_count,'average_charge_micro',CASE WHEN r.request_count>0 THEN r.avg_consumer_micro END,'observing',r.observing,'calculated_at',r.calculated_at) FROM v3_channelmarket.ranking_snapshots r WHERE r.group_id=g.id AND r.window_hours=24 AND r.ranking_version='v3-usage' ORDER BY r.calculated_at DESC LIMIT 1)`
 const channelFrom = ` FROM v3_channelmarket.groups g JOIN v3_catalog.channels c ON c.id=g.channel_id `
 
 type scanner interface{ Scan(...any) error }
 
 func scanChannel(row scanner) (ChannelView, error) {
 	var c ChannelView
-	var policy, verification []byte
+	var policy, verification, basePrices, quality []byte
 	var maximum, userMaximum int
-	err := row.Scan(&c.ID, &c.InternalChannelID, &c.OwnerUserID, &c.GroupID, &c.PublicSlug, &c.Name, &c.Provider, &c.SourceLabel, &c.Models, &c.Prices, &c.MultiplierPPM, &c.Visibility, &c.Status, &c.Verification, &c.Reason, &c.CreatedAt, &c.UpdatedAt, &policy, &maximum, &userMaximum, &verification)
+	err := row.Scan(&c.ID, &c.InternalChannelID, &c.OwnerUserID, &c.GroupID, &c.RoutingGroup, &c.PublicSlug, &c.Name, &c.Provider, &c.SourceLabel, &c.Models, &c.Prices, &c.MultiplierPPM, &c.Visibility, &c.Status, &c.Verification, &c.Reason, &c.CreatedAt, &c.UpdatedAt, &policy, &maximum, &userMaximum, &verification, &basePrices, &quality)
 	if err == nil {
 		err = json.Unmarshal(policy, &c.ChannelPolicy)
 		c.MaxConcurrency = maximum
 		c.UserMaxConcurrency = userMaximum
+		c.Tags = visibleProviderTags(c.Tags)
 		if err == nil {
 			c.VerificationView, err = parseVerificationView(verification)
+		}
+		if err == nil {
+			c.EffectivePrices, err = effectiveModelPrices(c, basePrices)
+		}
+		if err == nil {
+			c.Quality, err = parseGroupQuality(quality)
 		}
 	}
 	if c.Provider == "openai" {

@@ -9,7 +9,7 @@ import (
 	"github.com/sh2001sh/new-api/v3/internal/marketplace"
 )
 
-func (s *Service) applyRedemptionTx(ctx context.Context, tx pgx.Tx, user int64, operation string, result *RedemptionResult) error {
+func (s *Service) applyRedemptionTx(ctx context.Context, tx pgx.Tx, user int64, operation string, result *RedemptionResult, snapshot Plan) error {
 	switch result.RedeemType {
 	case "credits":
 		account, err := walletTx(ctx, tx, user)
@@ -20,7 +20,7 @@ func (s *Service) applyRedemptionTx(ctx context.Context, tx pgx.Tx, user int64, 
 		return err
 	case "subscription":
 		result.Credits = 0
-		return s.redeemSubscriptionTx(ctx, tx, user, operation, result)
+		return s.redeemSubscriptionTx(ctx, tx, user, operation, result, snapshot)
 	case "blind_box":
 		result.Credits = 0
 		return s.redeemBoxesTx(ctx, tx, user, operation, result)
@@ -29,12 +29,16 @@ func (s *Service) applyRedemptionTx(ctx context.Context, tx pgx.Tx, user int64, 
 	}
 }
 
-func (s *Service) redeemSubscriptionTx(ctx context.Context, tx pgx.Tx, user int64, operation string, result *RedemptionResult) error {
+func (s *Service) redeemSubscriptionTx(ctx context.Context, tx pgx.Tx, user int64, operation string, result *RedemptionResult, snapshot Plan) error {
 	var locked int64
 	if err := tx.QueryRow(ctx, `SELECT id FROM v3_identity.users WHERE id=$1 FOR UPDATE`, user).Scan(&locked); err != nil {
 		return err
 	}
-	p, err := scanPlan(tx.QueryRow(ctx, `SELECT `+planColumns+` FROM v3_commerce.plans WHERE id=$1 FOR SHARE`, result.PlanID))
+	p := snapshot
+	var err error
+	if p.ID == 0 {
+		p, err = scanPlan(tx.QueryRow(ctx, `SELECT `+planColumns+` FROM v3_commerce.plans WHERE id=$1 FOR SHARE`, result.PlanID))
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -50,15 +54,14 @@ func (s *Service) redeemSubscriptionTx(ctx context.Context, tx pgx.Tx, user int6
 			return ErrStateConflict
 		}
 	}
-	o := Order{UserID: user, PlanID: &p.ID, Credits: p.Credits, PeriodCredits: p.PeriodCredits, PeriodSeconds: p.PeriodSeconds,
+	o := Order{PolicyVersion: p.PolicyVersion, PlanSnapshot: p, UserID: user, PlanID: &p.ID, Credits: p.Credits, PeriodCredits: p.PeriodCredits, PeriodSeconds: p.PeriodSeconds,
 		ResetPeriod: p.ResetPeriod, ResetCustomSeconds: p.ResetCustomSeconds, TradeNo: operation,
 		DurationUnit: p.DurationUnit, DurationValue: p.DurationValue, CustomSeconds: p.CustomSeconds,
 		LegacyPeriodic: p.PeriodCredits == 0 && p.ResetPeriod != "never"}
 	if err = s.grantSubscription(ctx, tx, o); err != nil {
 		return err
 	}
-	if err = tx.QueryRow(ctx, `UPDATE v3_commerce.subscriptions SET source='redemption',model_limits=p.model_limits
-	 FROM v3_commerce.plans p WHERE reward_operation=$1 AND p.id=v3_commerce.subscriptions.plan_id RETURNING v3_commerce.subscriptions.id`, operation).Scan(&result.UserSubscriptionID); err != nil {
+	if err = tx.QueryRow(ctx, `UPDATE v3_commerce.subscriptions SET source='redemption' WHERE reward_operation=$1 RETURNING v3_commerce.subscriptions.id`, operation).Scan(&result.UserSubscriptionID); err != nil {
 		return err
 	}
 	result.PlanTitle = p.Name

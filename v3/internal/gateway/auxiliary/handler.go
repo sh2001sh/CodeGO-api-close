@@ -80,11 +80,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-Id", req.ID)
 	in, err := h.parse(w, r, req)
 	if err != nil {
-		writeError(w, err)
+		h.rejectRequest(w, req, err)
 		return
 	}
 	if err = h.authorize(r, req); err != nil {
-		writeError(w, err)
+		h.rejectRequest(w, req, err)
 		return
 	}
 	if h.cfg.RequestGuard != nil {
@@ -93,18 +93,23 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if !errors.As(err, &denied) {
 				err = failure(http.StatusServiceUnavailable, "request_guard_unavailable", "request admission is temporarily unavailable")
 			}
-			writeError(w, err)
+			h.rejectRequest(w, req, err)
 			return
 		}
 	}
 	targets, err := h.cfg.Planner.Plan(r.Context(), req)
 	if err != nil || len(targets) == 0 {
-		writeError(w, failure(503, "no_available_channel", "no channel available for this model"))
+		var refusal *gateway.UpstreamError
+		if errors.As(err, &refusal) {
+			h.rejectRequest(w, req, refusal)
+			return
+		}
+		h.rejectRequest(w, req, failure(503, "no_available_channel", "no channel available for this model"))
 		return
 	}
 	req.Targets = targets
 	if denied := h.targetPolicyFailure(req, targets[0]); denied != nil {
-		writeError(w, denied)
+		h.rejectRequest(w, req, denied)
 		return
 	}
 	if in.Operation == Compact {
@@ -115,15 +120,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, gateway.ErrInsufficientCredits) {
 			status, code, message = 402, "insufficient_credits", "not enough credits"
 		}
-		writeError(w, failure(status, code, message))
+		h.rejectRequest(w, req, failure(status, code, message))
 		return
 	}
 	out := h.execute(w, r, req, in)
 	ctx, cancel := context.WithTimeout(context.Background(), h.cfg.FinalizeTimeout)
 	defer cancel()
-	if err := h.cfg.Settler.Finalize(ctx, req, out); err != nil {
+	err = h.cfg.Settler.Finalize(ctx, req, out)
+	if err != nil {
 		h.cfg.Logger.Error("auxiliary finalize failed", "request_id", req.ID, "terminal", out.Terminal.String(), "err", err)
 	}
+	gateway.RecordRequest(h.cfg.Requests, req, out, err == nil)
 }
 
 func (h *Handler) authorize(r *http.Request, req *gateway.Request) error {

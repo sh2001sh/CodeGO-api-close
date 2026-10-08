@@ -32,8 +32,10 @@ func (b *planBuilder) usable(ch *catalog.Channel, cred catalog.Credential) bool 
 	if !marketGroup && !personalPool && !b.cardFallback && b.snap.AccountProfiles[user].RequiresCardChannel(now) && !ch.MultiplierCardUserEnabled {
 		return false
 	}
-	if pool, ok := b.snap.Market.Pools[b.group]; ok && pool.OwnerUserID != user {
-		return false
+	if pool, ok := b.snap.Market.Pools[b.group]; ok {
+		if pool.OwnerUserID != user || !b.poolMemberSupports(pool, ch) {
+			return false
+		}
 	}
 	if group, ok := b.snap.Market.Groups[b.group]; ok && !group.Allows(user) {
 		return false
@@ -59,6 +61,40 @@ func (b *planBuilder) usable(ch *catalog.Channel, cred catalog.Credential) bool 
 		return false
 	}
 	return factor >= 0
+}
+
+// Catalog user pools use a wildcard entry to project their members. That
+// entry is not a claim that every member supports every requested model.
+func (b *planBuilder) poolMemberSupports(pool catalog.MarketPoolPolicy, ch *catalog.Channel) bool {
+	group, _ := b.targetPricing(ch)
+	member := false
+	for _, m := range pool.Members {
+		name := m.CatalogGroupName
+		if name == "" && strings.HasPrefix(m.GroupID, "official:") {
+			name = strings.TrimPrefix(m.GroupID, "official:")
+		}
+		if name == group {
+			member = true
+			break
+		}
+	}
+	if !member {
+		return false
+	}
+	return b.memberGroupSupports(group, ch.ID)
+}
+
+func (b *planBuilder) memberGroupSupports(group string, channelID int64) bool {
+	routes := b.snap.Routes[group][b.req.Model]
+	if len(routes) == 0 {
+		routes = b.snap.Routes[group]["*"]
+	}
+	for _, route := range routes {
+		if route.ChannelID == channelID {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *planBuilder) officialDomain(ch *catalog.Channel) string {
@@ -100,7 +136,7 @@ func (b *planBuilder) targetPricing(ch *catalog.Channel) (string, int64) {
 				continue
 			}
 			for _, membership := range ch.Groups {
-				if membership == name && b.allowsGroup(name) {
+				if membership == name && b.allowsGroup(name) && b.memberGroupSupports(name, ch.ID) {
 					return name, int64(math.Round(b.snap.Groups[name].Multiplier * 1000000))
 				}
 			}

@@ -1,0 +1,85 @@
+/* Styles owned by the public workstream. Use tokens from tokens.css only. */
+
+/* ---------- Status page ---------- */
+.status-updated {
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+.status-group-list {
+  display: grid;
+  gap: var(--space-4);
+}
+.status-group {
+  margin: 0;
+}
+.status-model-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.status-model-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-block: var(--space-2);
+  border-bottom: 1px solid var(--divider);
+}
+.status-model-row:last-child {
+  border-bottom: 0;
+}
+.status-model-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.status-model-error {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+/* ---------- Download page ---------- */
+.download-platform-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block: var(--space-5);
+}
+.download-platform-tabs .filter-option {
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.download-platform-tabs .filter-option small {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+  font-size: 10px;
+  font-weight: 600;
+}
+.download-asset-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.download-asset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--divider);
+}
+.download-asset-row:last-child {
+  border-bottom: 0;
+}

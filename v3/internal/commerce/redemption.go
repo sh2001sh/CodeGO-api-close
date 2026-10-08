@@ -44,8 +44,8 @@ func (s *Service) IssueTypedRedemption(ctx context.Context, in IssueRedemptionIn
 	key := "cg_" + hex.EncodeToString(random[:])
 	digest := sha256.Sum256([]byte(key))
 	result = RedemptionCode{Name: in.Name, Credits: in.Credits, State: "active", ExpiresAt: in.ExpiresAt, Key: key, RedeemType: in.RedeemType, PlanID: in.PlanID, PlanTitle: in.PlanTitle, BlindBoxQuantity: in.BlindBoxQuantity}
-	err := s.pool.QueryRow(ctx, `INSERT INTO v3_commerce.redemption_codes(code_hash,name,credits,expires_at,redeem_type,plan_id,plan_title,blind_box_quantity) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-		digest[:], in.Name, int64(in.Credits), in.ExpiresAt, in.RedeemType, in.PlanID, in.PlanTitle, in.BlindBoxQuantity).Scan(&result.ID)
+	err := s.pool.QueryRow(ctx, `INSERT INTO v3_commerce.redemption_codes(code_hash,name,credits,expires_at,redeem_type,plan_id,plan_title,blind_box_quantity,plan_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+		digest[:], in.Name, int64(in.Credits), in.ExpiresAt, in.RedeemType, in.PlanID, in.PlanTitle, in.BlindBoxQuantity, in.PlanSnapshot).Scan(&result.ID)
 	return result, err
 }
 
@@ -66,8 +66,9 @@ func (s *Service) RedeemTyped(ctx context.Context, userID int64, key string) (Re
 		var claimed *int64
 		var expires *time.Time
 		var saved []byte
-		err := tx.QueryRow(ctx, `SELECT id,credits,state,claimed_by,expires_at,redeem_type,plan_id,plan_title,blind_box_quantity,redeem_result FROM v3_commerce.redemption_codes WHERE code_hash=$1 AND deleted_at IS NULL FOR UPDATE`, digest[:]).
-			Scan(&id, &result.Credits, &state, &claimed, &expires, &result.RedeemType, &result.PlanID, &result.PlanTitle, &result.BlindBoxQuantity, &saved)
+		var snapshot Plan
+		err := tx.QueryRow(ctx, `SELECT id,credits,state,claimed_by,expires_at,redeem_type,plan_id,plan_title,blind_box_quantity,redeem_result,plan_snapshot FROM v3_commerce.redemption_codes WHERE code_hash=$1 AND deleted_at IS NULL FOR UPDATE`, digest[:]).
+			Scan(&id, &result.Credits, &state, &claimed, &expires, &result.RedeemType, &result.PlanID, &result.PlanTitle, &result.BlindBoxQuantity, &saved, &snapshot)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -80,7 +81,7 @@ func (s *Service) RedeemTyped(ctx context.Context, userID int64, key string) (Re
 		if state != "active" || (expires != nil && !expires.After(s.cfg.Now())) {
 			return ErrStateConflict
 		}
-		if err = s.applyRedemptionTx(ctx, tx, userID, fmt.Sprintf("redemption:%d", id), &result); err != nil {
+		if err = s.applyRedemptionTx(ctx, tx, userID, fmt.Sprintf("redemption:%d", id), &result, snapshot); err != nil {
 			return err
 		}
 		tag, err := tx.Exec(ctx, `UPDATE v3_commerce.redemption_codes SET state='used',claimed_by=$2,claimed_at=$3,redeem_result=$4 WHERE id=$1 AND state='active'`, id, userID, s.cfg.Now(), result)

@@ -11,13 +11,13 @@ import (
 
 func (m *Importer) checkOptions(ctx context.Context, target pgx.Tx, options map[string]string, prices map[string]catalog.Price, report *Report) error {
 	for key, value := range options {
-		encoded := []byte(value)
-		if !json.Valid(encoded) {
-			encoded, _ = json.Marshal(value)
+		encoded, err := m.sourceOption(value)
+		if err != nil {
+			return err
 		}
 		var plaintext, ciphertext []byte
 		var sensitive bool
-		err := target.QueryRow(ctx, `SELECT value,ciphertext,sensitive FROM v3_platform.settings WHERE key=$1`, key).Scan(&plaintext, &ciphertext, &sensitive)
+		err = target.QueryRow(ctx, `SELECT value,ciphertext,sensitive FROM v3_platform.settings WHERE key=$1`, key).Scan(&plaintext, &ciphertext, &sensitive)
 		if err == pgx.ErrNoRows {
 			checkIssue(report, "setting", 0, "an imported setting is missing")
 			continue

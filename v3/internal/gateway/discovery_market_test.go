@@ -47,12 +47,13 @@ func TestModelDiscoveryUsesCurrentMarketplaceAndPoolPolicies(t *testing.T) {
 	}
 	group.Allowed[7] = true
 	snap.Routes["personal-pool"] = snap.Routes["market-group"]
-	snap.Market.Pools = map[string]catalog.MarketPoolPolicy{"personal-pool": {OwnerUserID: 8}}
+	members := []catalog.MarketPoolMember{{GroupID: "market:2", CatalogGroupName: "market-group"}}
+	snap.Market.Pools = map[string]catalog.MarketPoolPolicy{"personal-pool": {OwnerUserID: 8, Members: members}}
 	f.auth.principal.Group = "personal-pool"
 	if ids := discoveryIDs(t, f.get("/v1/models", discoveryBearer)); len(ids) != 0 {
 		t.Fatalf("foreign pool leaked: %v", ids)
 	}
-	snap.Market.Pools["personal-pool"] = catalog.MarketPoolPolicy{OwnerUserID: 7}
+	snap.Market.Pools["personal-pool"] = catalog.MarketPoolPolicy{OwnerUserID: 7, Members: members}
 	if ids := discoveryIDs(t, f.get("/v1/models", discoveryBearer)); !reflect.DeepEqual(ids, []string{"market-model"}) {
 		t.Fatalf("own pool unavailable: %v", ids)
 	}

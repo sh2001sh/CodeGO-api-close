@@ -1,3 +1,4 @@
+import { useTranslation } from '../../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap } from '../../lib/api'
@@ -7,6 +8,7 @@ import { Button, ErrorMessage, Field } from '../../components/ui'
 import { errorFrom, transferAmounts } from './amounts'
 
 export function TransferForm(props: { overview: Schema['WalletOverview'] }) {
+  const { t } = useTranslation()
   const [error, setError] = useState<Error | null>(null)
   const [draft, setDraft] = useState<Schema['WalletTransferInput'] | null>(null)
   const [recipient, setRecipient] = useState<Schema['WalletRecipient'] | null>(null)
@@ -40,14 +42,15 @@ export function TransferForm(props: { overview: Schema['WalletOverview'] }) {
   const fee = draft ? (BigInt(draft.amount_micro) * BigInt(overview.fee_bps) + 9999n) / 10000n : 0n
   return (
     <section className="section">
-      <h2>转账</h2>
+      <h2>{t('转账')}</h2>
       <p className="muted">
-        最低 {credits(overview.min_micro)}，金额按该单位递增；手续费 {overview.fee_bps / 100}%
-        ，由付款人承担。
+        {t('最低')} {credits(overview.min_micro)}
+        {t('，金额按该单位递增；手续费')} {overview.fee_bps / 100}
+        {t('% ，由付款人承担。')}
       </p>
-      {!overview.security.password_set && <p>先在下方设置支付密码，再向其他用户转账。</p>}
-      {locked && <p role="alert">支付密码已临时锁定。</p>}
-      {send.isSuccess && <p role="status">转账成功。</p>}
+      {!overview.security.password_set && <p>{t('先在下方设置支付密码，再向其他用户转账。')}</p>}
+      {locked && <p role="alert">{t('支付密码已临时锁定。')}</p>}
+      {send.isSuccess && <p role="status">{t('转账成功。')}</p>}
       <ErrorMessage error={error ?? lookup.error ?? send.error} />
       {!recipient && (
         <form
@@ -69,7 +72,9 @@ export function TransferForm(props: { overview: Schema['WalletOverview'] }) {
               if (amount.amount < BigInt(overview.min_micro))
                 throw new Error('转账金额低于最低额度')
               if (amount.amount % BigInt(overview.min_micro) !== 0n)
-                throw new Error(`转账金额需按 ${credits(overview.min_micro)} 递增`)
+                throw new Error(
+                  t('转账金额需按 {amount} 递增', { amount: credits(overview.min_micro) }),
+                )
               if (amount.total > BigInt(overview.balance))
                 throw new Error('余额不足以支付金额和手续费')
               setDraft({
@@ -98,32 +103,33 @@ export function TransferForm(props: { overview: Schema['WalletOverview'] }) {
             type="submit"
             disabled={!overview.security.password_set || lookup.isPending || locked}
           >
-            {lookup.isPending ? '核对中…' : '核对收款人'}
+            {lookup.isPending ? t('核对中…') : t('核对收款人')}
           </Button>
         </form>
       )}
       {recipient && draft && (
         <div className="form-panel">
           <p className="full-width">
-            确认向 <strong>{recipient.display_name_masked}</strong>（{recipient.external_id}）转账。
+            {t('确认向')} <strong>{recipient.display_name_masked}</strong>（{recipient.external_id}
+            {t('）转账。')}
           </p>
           <dl>
             <div>
-              <dt>转账金额</dt>
+              <dt>{t('转账金额')}</dt>
               <dd>{credits(draft.amount_micro)}</dd>
             </div>
             <div>
-              <dt>手续费</dt>
+              <dt>{t('手续费')}</dt>
               <dd>{credits(fee)}</dd>
             </div>
             <div>
-              <dt>合计扣款</dt>
+              <dt>{t('合计扣款')}</dt>
               <dd>{credits(BigInt(draft.amount_micro) + fee)}</dd>
             </div>
           </dl>
           {send.isError && (
             <label className="field" htmlFor="retry-payment-password">
-              <span>支付密码</span>
+              <span>{t('支付密码')}</span>
               <input
                 id="retry-payment-password"
                 type="password"
@@ -135,7 +141,7 @@ export function TransferForm(props: { overview: Schema['WalletOverview'] }) {
           )}
           <div className="row-actions">
             <Button disabled={send.isPending || locked} onClick={() => send.mutate(draft)}>
-              {send.isPending ? '转账中…' : send.isError ? '重试同一笔转账' : '确认转账'}
+              {send.isPending ? t('转账中…') : send.isError ? t('重试同一笔转账') : t('确认转账')}
             </Button>
             {!send.isError && (
               <Button
@@ -146,13 +152,13 @@ export function TransferForm(props: { overview: Schema['WalletOverview'] }) {
                   setRecipient(null)
                 }}
               >
-                返回修改
+                {t('返回修改')}
               </Button>
             )}
           </div>
           {send.isError && (
             <p className="muted full-width">
-              可更正支付密码后重试。收款人、金额和请求编号保持一致，请勿重复创建转账。
+              {t('可更正支付密码后重试。收款人、金额和请求编号保持一致，请勿重复创建转账。')}
             </p>
           )}
         </div>

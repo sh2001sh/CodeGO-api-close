@@ -6,11 +6,14 @@ import (
 	"time"
 )
 
-// coolKey scopes a cooldown to a credential (model == "") or to one
-// credential/upstream-model pair (plan §3 error-scoped cooldowns).
+// coolKey scopes global cooldowns to a credential or credential/model pair.
+// A nonempty pool instead scopes a user-configured cooldown to that pool's
+// channel/model pair; hard marks auth/model-unavailable failures that cannot be probed.
 type coolKey struct {
 	cred  int64
 	model string
+	pool  string
+	hard  bool
 }
 
 type coolState struct {

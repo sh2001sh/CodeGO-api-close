@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { test, expect } from '@playwright/test'
+import { prepareRealStack } from './real-stack-helper'
 
 const url = process.env.V3_REAL_URL
 const clientID = process.env.V3_REAL_OIDC_CLIENT_ID
@@ -8,17 +9,12 @@ test.skip(
   !url || !clientID || !redirectURI,
   'Real OIDC requires the explicitly configured isolated issuer and registered local callback',
 )
+test.beforeEach(async ({ page }) => prepareRealStack(page))
 
 test('real OIDC issuer resumes authorization after password login and preserves NodeBB state', async ({
   page,
 }) => {
-  if (
-    !url ||
-    !/^http:\/\/(localhost|127\.0\.0\.1):1808[34]$/.test(url) ||
-    !clientID ||
-    !redirectURI ||
-    new URL(redirectURI).origin !== url
-  )
+  if (!url || !clientID || !redirectURI || new URL(redirectURI).origin !== url)
     throw new Error(
       'Real OIDC must use the selected isolated local stack and a registered callback on the same test origin',
     )
@@ -28,6 +24,7 @@ test('real OIDC issuer resumes authorization after password login and preserves 
   await page.getByLabel('用户名', { exact: true }).fill(username)
   await page.getByLabel('邮箱', { exact: true }).fill(`${username}@example.test`)
   await page.getByLabel('密码', { exact: true }).fill(password)
+  await page.getByRole('checkbox', { name: /我已阅读并同意/ }).check()
   await page.getByRole('button', { name: '注册', exact: true }).click()
   await expect(page.getByRole('heading', { name: '仪表板', exact: true })).toBeVisible()
   await page.context().clearCookies()

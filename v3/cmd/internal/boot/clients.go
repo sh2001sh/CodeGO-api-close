@@ -30,7 +30,7 @@ func TargetClients(identity *credentials.TransportPool, transports *httpx.Pool) 
 			return nil, err
 		}
 		if target.Scope == "marketplace" {
-			return httpx.MarketClient(client)
+			return transports.MarketClient(target.CredentialID, client)
 		}
 		return client, nil
 	}

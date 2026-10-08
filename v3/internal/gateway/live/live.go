@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
+	"golang.org/x/net/websocket"
 )
 
 type Resolver func(context.Context, int64, int64) (gateway.Target, error)
@@ -43,6 +44,7 @@ type Config struct {
 	Auth              gateway.Authorizer
 	Planner           gateway.Planner
 	Settler           gateway.Settler
+	Requests          gateway.RequestRecorder
 	Limits            gateway.LeaseController
 	Providers         map[string]gateway.Provider
 	Resolve           Resolver
@@ -118,20 +120,7 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request) (gateway.Pri
 		writeError(w, 429, "authentication_limited", "authentication is temporarily limited")
 		return gateway.Principal{}, false
 	}
-	key := ""
-	if value := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(value), "bearer ") {
-		key = strings.TrimSpace(value[7:])
-	}
-	// Realtime browser clients convey credentials in a protocol token.
-	if key == "" {
-		for _, value := range strings.Split(r.Header.Get("Sec-WebSocket-Protocol"), ",") {
-			value = strings.TrimSpace(value)
-			if strings.HasPrefix(value, "openai-insecure-api-key.") {
-				key = strings.TrimPrefix(value, "openai-insecure-api-key.")
-				break
-			}
-		}
-	}
+	key := websocketAPIKey(r)
 	if key == "" {
 		if h.cfg.AuthFailures != nil {
 			h.cfg.AuthFailures.Failed(address)
@@ -158,6 +147,43 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request) (gateway.Pri
 	return p, true
 }
 
+func websocketAPIKey(r *http.Request) string {
+	key := ""
+	if value := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(value), "bearer ") {
+		key = strings.TrimSpace(value[7:])
+	}
+	// Realtime browser clients convey credentials in a protocol token.
+	if key == "" {
+		for _, value := range strings.Split(r.Header.Get("Sec-WebSocket-Protocol"), ",") {
+			value = strings.TrimSpace(value)
+			if strings.HasPrefix(value, "openai-insecure-api-key.") {
+				key = strings.TrimPrefix(value, "openai-insecure-api-key.")
+				break
+			}
+		}
+	}
+	return key
+}
+
+// Socket credentials are rechecked before admitting new work. A principal
+// captured at handshake may have been revoked or had its policy changed.
+func (h *Handler) authorizeSocket(ctx context.Context, conn *websocket.Conn, r *http.Request, model string) (gateway.Principal, bool) {
+	p, err := h.cfg.Auth.Authorize(ctx, websocketAPIKey(r))
+	if err != nil || p.UserID <= 0 || p.KeyID <= 0 {
+		status := 401
+		if errors.Is(err, gateway.ErrAuthUnavailable) {
+			status = 503
+		}
+		_ = socketError(conn, status, "authentication_failed", "API key cannot be authorized")
+		return gateway.Principal{}, false
+	}
+	if err := h.validatePolicy(p, model, r); err != nil {
+		_ = socketError(conn, 403, "request_not_permitted", err.Error())
+		return gateway.Principal{}, false
+	}
+	return p, true
+}
+
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -173,11 +199,18 @@ func requestID() string {
 }
 
 func (h *Handler) finalize(req *gateway.Request, out gateway.Outcome) {
+	_ = h.finalizeResult(req, out)
+}
+
+func (h *Handler) finalizeResult(req *gateway.Request, out gateway.Outcome) error {
 	ctx, cancel := context.WithTimeout(context.Background(), h.cfg.FinalizeTimeout)
 	defer cancel()
-	if err := h.cfg.Settler.Finalize(ctx, req, out); err != nil {
+	err := h.cfg.Settler.Finalize(ctx, req, out)
+	if err != nil {
 		h.cfg.Logger.Error("live finalization failed", "request_id", req.ID, "err", err)
 	}
+	gateway.RecordRequest(h.cfg.Requests, req, out, err == nil)
+	return err
 }
 
 func (h *Handler) reserve(w http.ResponseWriter, r *http.Request, req *gateway.Request) bool {

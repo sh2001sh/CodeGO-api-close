@@ -1,3 +1,4 @@
+import { useTranslation } from '../../lib/i18n'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap } from '../../lib/api'
@@ -35,6 +36,7 @@ export const securityOptions = (
 }
 
 export function MarketSecurity(props: { admin?: boolean }) {
+  const { t } = useTranslation()
   const client = useQueryClient()
   const [status, setStatus] = useState<ReviewStatus | ''>('unreviewed')
   const [page, setPage] = useState(1)
@@ -59,19 +61,19 @@ export function MarketSecurity(props: { admin?: boolean }) {
     ? '/api/marketplace/admin/security-audit/events/export'
     : '/api/marketplace/security-audit/events/export'
   return (
-    <section className="section" aria-label="安全审计">
+    <section className="section" aria-label={t('安全审计')}>
       <div className="page-header">
-        <h2>安全审计</h2>
+        <h2>{t('安全审计')}</h2>
         <a
           className="button button-quiet"
           href={`${exportPath}?${new URLSearchParams(status ? { review_status: status } : {})}`}
           download
         >
-          导出筛选结果
+          {t('导出筛选结果')}
         </a>
       </div>
       <label className="field filters" htmlFor="audit-filter">
-        <span>审核状态</span>
+        <span>{t('审核状态')}</span>
         <select
           id="audit-filter"
           value={status}
@@ -80,16 +82,16 @@ export function MarketSecurity(props: { admin?: boolean }) {
             setPage(1)
           }}
         >
-          <option value="unreviewed">待审核</option>
-          <option value="acknowledged">已确认</option>
-          <option value="resolved">已处理</option>
-          <option value="false_positive">误报</option>
-          <option value="">全部</option>
+          <option value="unreviewed">{t('待审核')}</option>
+          <option value="acknowledged">{t('已确认')}</option>
+          <option value="resolved">{t('已处理')}</option>
+          <option value="false_positive">{t('误报')}</option>
+          <option value="">{t('全部')}</option>
         </select>
       </label>
       <ErrorMessage error={resolve.error ?? list.error} />
       {list.isFetching && <Loading />}
-      {resolve.isSuccess && <p role="status">审核已保存。</p>}
+      {resolve.isSuccess && <p role="status">{t('审核已保存。')}</p>}
       {review && (
         <form
           className="form-panel section"
@@ -98,9 +100,11 @@ export function MarketSecurity(props: { admin?: boolean }) {
             resolve.mutate(review)
           }}
         >
-          <p className="full-width">审核事件 {review.id}</p>
+          <p className="full-width">
+            {t('审核事件')} {review.id}
+          </p>
           <label className="field" htmlFor="audit-review-status">
-            <span>审核结果</span>
+            <span>{t('审核结果')}</span>
             <select
               id="audit-review-status"
               value={review.review_status}
@@ -108,14 +112,14 @@ export function MarketSecurity(props: { admin?: boolean }) {
                 setReview({ ...review, review_status: knownStatus(event.target.value) })
               }
             >
-              <option value="unreviewed">待审核</option>
-              <option value="acknowledged">已确认</option>
-              <option value="resolved">已处理</option>
-              <option value="false_positive">误报</option>
+              <option value="unreviewed">{t('待审核')}</option>
+              <option value="acknowledged">{t('已确认')}</option>
+              <option value="resolved">{t('已处理')}</option>
+              <option value="false_positive">{t('误报')}</option>
             </select>
           </label>
           <label className="field full-width" htmlFor="audit-review-note">
-            <span>审核备注</span>
+            <span>{t('审核备注')}</span>
             <textarea
               id="audit-review-note"
               rows={3}
@@ -125,10 +129,10 @@ export function MarketSecurity(props: { admin?: boolean }) {
             />
           </label>
           <Button type="submit" disabled={resolve.isPending}>
-            保存审核
+            {t('保存审核')}
           </Button>
           <Button variant="quiet" disabled={resolve.isPending} onClick={() => setReview(null)}>
-            取消
+            {t('取消')}
           </Button>
         </form>
       )}
@@ -158,32 +162,32 @@ export function MarketSecurity(props: { admin?: boolean }) {
                   })
                 }}
               >
-                审核
+                {t('审核')}
               </Button>
             ),
           },
         ]}
       />
-      <nav className="pagination" aria-label="安全审计分页">
+      <nav className="pagination" aria-label={t('安全审计分页')}>
         <Button
           variant="quiet"
           disabled={page === 1 || list.isFetching}
           onClick={() => setPage(page - 1)}
         >
-          上一页
+          {t('上一页')}
         </Button>
         <span>
-          第 {page} 页，共 {String(list.data?.total ?? 0)} 条
+          {t('第')} {page} {t('页，共')} {String(list.data?.total ?? 0)} {t('条')}
         </span>
         <Button
           variant="quiet"
           disabled={list.isFetching || BigInt(page) * 20n >= BigInt(list.data?.total ?? 0)}
           onClick={() => setPage(page + 1)}
         >
-          下一页
+          {t('下一页')}
         </Button>
         <Button variant="quiet" disabled={list.isFetching} onClick={() => void list.refetch()}>
-          刷新
+          {t('刷新')}
         </Button>
       </nav>
     </section>

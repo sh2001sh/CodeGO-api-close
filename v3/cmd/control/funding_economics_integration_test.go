@@ -21,7 +21,7 @@ func verifyFundingEconomicsAssembly(t *testing.T, pool *pgxpool.Pool, call apiCa
 	path := "/api/billing/funding-economics?day=2026-10-01"
 	call("GET", path, "", "", 401)
 	call("GET", path, admin, "", 403)
-	w := call("POST", "/api/user/register", "", `{"username":"financial_user","password":"strong-password"}`, 200)
+	w := call("POST", "/api/user/register", "", `{"username":"financial_user","password":"strong-password","accepted_terms_version":"2026-10-07","accepted_privacy_version":"2026-10-07","agreement_locale":"en"}`, 200)
 	var registered struct {
 		Data identity.Session `json:"data"`
 	}

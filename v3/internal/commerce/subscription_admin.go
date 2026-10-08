@@ -19,32 +19,10 @@ func (s *Service) SetPlanEnabled(ctx context.Context, id int64, enabled bool) er
 	return err
 }
 
-// Purchased plans remain available to receipts and history. Deletion disables
-// those plans; an unused plan can be removed safely.
+// Deletion retires a plan from sale while preserving all issued benefits and
+// history, including unclaimed codes that do not have an order/subscription yet.
 func (s *Service) DeletePlan(ctx context.Context, id int64) error {
-	if id <= 0 {
-		return ErrInvalid
-	}
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		var found int64
-		if err := tx.QueryRow(ctx, `SELECT id FROM v3_commerce.plans WHERE id=$1 FOR UPDATE`, id).Scan(&found); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrNotFound
-			}
-			return err
-		}
-		var used bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_commerce.orders WHERE plan_id=$1)
-		 OR EXISTS(SELECT 1 FROM v3_commerce.subscriptions WHERE plan_id=$1)`, id).Scan(&used); err != nil {
-			return err
-		}
-		if used {
-			_, err := tx.Exec(ctx, `UPDATE v3_commerce.plans SET enabled=false WHERE id=$1`, id)
-			return err
-		}
-		_, err := tx.Exec(ctx, `DELETE FROM v3_commerce.plans WHERE id=$1`, id)
-		return err
-	})
+	return s.SetPlanEnabled(ctx, id, false)
 }
 
 func validOperation(operation string) bool {
@@ -97,7 +75,7 @@ func (s *Service) BindSubscription(ctx context.Context, user, plan int64, operat
 				return ErrStateConflict
 			}
 		}
-		o := Order{UserID: user, PlanID: &p.ID, Credits: p.Credits, PeriodSeconds: p.PeriodSeconds, TradeNo: key,
+		o := Order{PolicyVersion: p.PolicyVersion, PlanSnapshot: p, UserID: user, PlanID: &p.ID, Credits: p.Credits, PeriodSeconds: p.PeriodSeconds, TradeNo: key,
 			PeriodCredits: p.PeriodCredits, ResetPeriod: p.ResetPeriod, ResetCustomSeconds: p.ResetCustomSeconds, LegacyPeriodic: p.PeriodCredits == 0 && p.ResetPeriod != "never", DurationUnit: p.DurationUnit, DurationValue: p.DurationValue, CustomSeconds: p.CustomSeconds}
 		if err = s.grantSubscription(ctx, tx, o); err != nil {
 			return err

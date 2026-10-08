@@ -75,6 +75,15 @@ func NewWalletRecovery(pool *pgxpool.Pool, sender WalletEmailSender, cfg WalletR
 
 const walletEmailPurpose = "wallet_transfer_password"
 
+func (s *EmailWalletRecovery) Available(ctx context.Context) (bool, error) {
+	if sender, ok := s.sender.(interface {
+		Available(context.Context) (bool, error)
+	}); ok {
+		return sender.Available(ctx)
+	}
+	return true, nil
+}
+
 func (s *EmailWalletRecovery) codeHash(uid int64, email, code string, salt []byte) []byte {
 	h := hmac.New(sha256.New, s.cfg.Key)
 	_, _ = h.Write([]byte(walletEmailPurpose))
@@ -148,6 +157,13 @@ func (s *EmailWalletRecovery) reserveWalletRecoveryCodeTx(ctx context.Context, u
 func (s *EmailWalletRecovery) Send(ctx context.Context, uid int64) (string, error) {
 	if uid <= 0 {
 		return "", ErrInvalid
+	}
+	available, err := s.Available(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !available {
+		return "", ErrWalletEmailUnavailable
 	}
 	random, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
 	if err != nil {

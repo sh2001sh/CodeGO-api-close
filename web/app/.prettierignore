@@ -3,7 +3,11 @@ bun.lock
 dist
 node_modules
 .playwright-cli/
-output/playwright/
+output/
+.impeccable/
+test-results*/
+tests/zz-*
+*.tsbuildinfo
 .*-task.md
 .*-handoff.md
 .*-followup.md

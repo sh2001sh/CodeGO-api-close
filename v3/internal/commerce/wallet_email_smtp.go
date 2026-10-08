@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/mail"
 	"net/smtp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,6 +22,7 @@ type SMTPWalletConfig struct {
 	Password    string
 	From        string
 	ImplicitTLS bool
+	LoginAuth   bool
 	Timeout     time.Duration
 }
 
@@ -35,11 +37,18 @@ func NewSMTPWalletSender(cfg SMTPWalletConfig) (*SMTPWalletSender, error) {
 	if err != nil || host == "" || port == "" || strings.ContainsAny(cfg.Address+cfg.Username+cfg.From, "\r\n") {
 		return nil, ErrInvalid
 	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return nil, ErrInvalid
+	}
 	from, err := mail.ParseAddress(cfg.From)
 	if err != nil {
 		return nil, ErrInvalid
 	}
 	if (cfg.Username == "") != (cfg.Password == "") {
+		return nil, ErrInvalid
+	}
+	if cfg.LoginAuth && cfg.Username == "" {
 		return nil, ErrInvalid
 	}
 	if cfg.Timeout == 0 {
@@ -52,14 +61,24 @@ func NewSMTPWalletSender(cfg SMTPWalletConfig) (*SMTPWalletSender, error) {
 }
 
 func (s *SMTPWalletSender) SendWalletRecovery(ctx context.Context, email, code string) (result error) {
-	to, err := mail.ParseAddress(email)
-	if err != nil || strings.ContainsAny(email, "\r\n") || len(code) != 6 {
+	if len(code) != 6 {
 		return ErrInvalid
 	}
 	for _, c := range code {
 		if c < '0' || c > '9' {
 			return ErrInvalid
 		}
+	}
+	return s.SendAccountEmail(ctx, email, "CodeGo 支付密码恢复验证码", fmt.Sprintf("CodeGo payment password recovery code: %s\nThis code expires shortly. Do not share it with anyone.\n", code))
+}
+
+// SendAccountEmail uses the same verified TLS transport for account verification
+// and password recovery. Neither caller can inject an email header.
+func (s *SMTPWalletSender) SendAccountEmail(ctx context.Context, email, subject, text string) (result error) {
+	defer func() { result = s.safeSMTPError(result) }()
+	to, err := mail.ParseAddress(email)
+	if err != nil || strings.ContainsAny(email+subject, "\r\n\x00") || subject == "" || len(subject) > 200 || len(text) > 64*1024 {
+		return ErrInvalid
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
 	defer cancel()
@@ -78,7 +97,8 @@ func (s *SMTPWalletSender) SendWalletRecovery(ctx context.Context, email, code s
 	if err != nil {
 		return err
 	}
-	body := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\nCodeGo payment password recovery code: %s\r\nThis code expires shortly. Do not share it with anyone.\r\n", s.from.String(), to.String(), mime.QEncoding.Encode("UTF-8", "CodeGo 支付密码恢复验证码"), code)
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", "\r\n")
+	body := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n%s", s.from.String(), to.String(), mime.QEncoding.Encode("UTF-8", subject), text)
 	_, err = writer.Write([]byte(body))
 	closeErr := writer.Close()
 	if err != nil || closeErr != nil {
@@ -126,7 +146,7 @@ func (s *SMTPWalletSender) dialAuthenticatedClient(ctx context.Context) (*smtp.C
 		}
 	}
 	if s.cfg.Username != "" {
-		if err = client.Auth(smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.host)); err != nil {
+		if err = client.Auth(s.smtpAuth()); err != nil {
 			return client, cleanup, err
 		}
 	}

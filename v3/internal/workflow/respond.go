@@ -31,6 +31,9 @@ func (h *Handler) respond(w http.ResponseWriter, r *http.Request, t Task, submit
 		if t.Status == "completed" {
 			data["completed_at"] = t.UpdatedAt.Unix()
 			data["url"] = "/v1/videos/" + t.ID + "/content"
+			if t.Historical {
+				data["url"] = t.URL
+			}
 		}
 		if t.Status == "failed" {
 			data["error"] = map[string]string{"code": "task_failed", "message": t.Error}
@@ -50,9 +53,13 @@ func taskDTO(t Task) map[string]any {
 	if len(t.Data) > 0 && json.Unmarshal(t.Data, &data) == nil {
 		rewriteID(data, t.UpstreamID, t.ID)
 	}
+	url := "/v1/videos/" + t.ID + "/content"
+	if t.Historical {
+		url = t.URL
+	}
 	return map[string]any{"task_id": t.ID, "platform": t.Provider, "model": t.Model, "action": t.Action,
 		"status": t.Status, "fail_reason": t.Error, "data": data, "created_at": t.CreatedAt.Unix(),
-		"updated_at": t.UpdatedAt.Unix(), "result_url": "/v1/videos/" + t.ID + "/content"}
+		"updated_at": t.UpdatedAt.Unix(), "result_url": url}
 }
 
 func rewriteID(v any, upstream, public string) {

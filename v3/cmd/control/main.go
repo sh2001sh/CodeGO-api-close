@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,8 +23,19 @@ func main() {
 	flag.Parse()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	if err := run(ctx, log, *addr, *assets); err != nil {
+	log, closeLog, err := boot.ProcessLogger("control", os.Getenv("V3_LOG_DIR"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "control logging:", err)
+		os.Exit(1)
+	}
+	err = run(ctx, log, *addr, *assets)
+	if closeErr := closeLog(); closeErr != nil {
+		fmt.Fprintln(os.Stderr, "control logging close:", closeErr)
+		if err == nil {
+			err = closeErr
+		}
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "control:", err)
 		os.Exit(1)
 	}
@@ -45,7 +57,7 @@ func run(ctx context.Context, log *slog.Logger, addr, assets string) error {
 	}
 	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 90 * time.Second,
-		MaxHeaderBytes: 64 << 10}
+		MaxHeaderBytes: 64 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
 	errorsCh := make(chan error, 1)
 	go func() { errorsCh <- server.ListenAndServe() }()
 	log.Info("control listening", "addr", addr)

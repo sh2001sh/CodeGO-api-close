@@ -66,7 +66,7 @@ func socketError(conn *websocket.Conn, status int, code, message string) error {
 }
 
 func (h *Handler) serveResponsesWebSocket(w http.ResponseWriter, r *http.Request) {
-	principal, ok := h.authorize(w, r)
+	_, ok := h.authorize(w, r)
 	if !ok {
 		return
 	}
@@ -82,7 +82,7 @@ func (h *Handler) serveResponsesWebSocket(w http.ResponseWriter, r *http.Request
 		state := &responseState{}
 		var pinned *gateway.Target
 		for ctx.Err() == nil {
-			if h.handleResponsesWebSocketTurn(ctx, conn, r, principal, state, &pinned) {
+			if h.handleResponsesWebSocketTurn(ctx, conn, r, state, &pinned) {
 				return
 			}
 		}
@@ -93,7 +93,7 @@ func (h *Handler) serveResponsesWebSocket(w http.ResponseWriter, r *http.Request
 // WebSocket session: invalid or policy-rejected frames are reported over the socket and the
 // caller should keep looping; a receive failure, prewarm send failure, or a terminal/timeout
 // outcome from executing the turn means the connection is done and the caller must return.
-func (h *Handler) handleResponsesWebSocketTurn(ctx context.Context, conn *websocket.Conn, r *http.Request, principal gateway.Principal, state *responseState, pinned **gateway.Target) (done bool) {
+func (h *Handler) handleResponsesWebSocketTurn(ctx context.Context, conn *websocket.Conn, r *http.Request, state *responseState, pinned **gateway.Target) (done bool) {
 	var frame wireFrame
 	if err := frameCodec.Receive(conn, &frame); err != nil {
 		return true
@@ -107,9 +107,9 @@ func (h *Handler) handleResponsesWebSocketTurn(ctx context.Context, conn *websoc
 		}
 		return socketError(conn, status, code, err.Error()) != nil
 	}
-	if err := h.validatePolicy(principal, gjson.GetBytes(turn.body, "model").Str, r); err != nil {
-		_ = socketError(conn, 403, "request_not_permitted", err.Error())
-		return false
+	principal, ok := h.authorizeSocket(ctx, conn, r, gjson.GetBytes(turn.body, "model").Str)
+	if !ok {
+		return true
 	}
 	if handled, done := h.sendWebSocketPrewarm(conn, state, turn); handled {
 		return done

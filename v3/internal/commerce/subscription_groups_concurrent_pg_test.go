@@ -4,12 +4,77 @@ package commerce_test
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/sh2001sh/new-api/v3/internal/commerce"
 )
+
+func TestPaymentWaitsForUserBeforeOrderNotification(t *testing.T) {
+	s, pool, _ := newService(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	p := subscriptionGroupPlan(t, s, pool, "vip")
+	o := create(t, s, p.ID)
+	blocker, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = blocker.Rollback(context.Background()) }()
+	if _, err = blocker.Exec(ctx, `SELECT id FROM v3_identity.users WHERE id=1 FOR UPDATE`); err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() { result <- s.Fulfill(ctx, "test", payment(o)) }()
+	// Observe the real blocked statement. The paid-order trigger inserts an
+	// inbox row and takes an FK KEY SHARE lock; it must run only after the
+	// user's lifecycle lock, otherwise concurrent callbacks deadlock upgrading.
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for {
+		var query string
+		err = pool.QueryRow(ctx, `SELECT query FROM pg_stat_activity
+		 WHERE datname=current_database() AND pid<>pg_backend_pid()
+		 AND wait_event_type='Lock' LIMIT 1`).Scan(&query)
+		if err == nil {
+			if !strings.HasPrefix(query, "SELECT id FROM v3_identity.users WHERE id=$1 FOR UPDATE") {
+				t.Fatalf("payment reached notification before locking user: %s", query)
+			}
+			break
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatal(err)
+		}
+		select {
+		case err = <-result:
+			t.Fatalf("payment did not wait for user: %v", err)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-tick.C:
+		}
+	}
+	if err = blocker.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = <-result; err != nil {
+		t.Fatal(err)
+	}
+	var grants, notices int
+	var state string
+	if err = pool.QueryRow(ctx, `SELECT state,
+	 (SELECT count(*) FROM v3_commerce.subscriptions WHERE order_id=$1),
+	 (SELECT count(*) FROM v3_identity.notifications WHERE dedupe_key='order:'||$1::text||':paid')
+	 FROM v3_commerce.orders WHERE id=$1`, o.ID).Scan(&state, &grants, &notices); err != nil {
+		t.Fatal(err)
+	}
+	if state != "paid" || grants != 1 || notices != 1 {
+		t.Fatalf("payment did not commit benefit and notice together: state=%s grants=%d notices=%d", state, grants, notices)
+	}
+}
 
 func TestSubscriptionGroupsExpirationAndNewPaymentsShareUserLockOrder(t *testing.T) {
 	s, pool, now := newService(t)

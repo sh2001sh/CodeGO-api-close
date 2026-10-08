@@ -1,21 +1,15 @@
-name: Deploy production
+name: Legacy v2 production deployment (manual)
 
 on:
-  workflow_run:
-    workflows:
-      - Publish Docker image (Multi-arch)
-    types:
-      - completed
   workflow_dispatch:
+    inputs:
+      legacy_revision:
+        description: 'Exact legacy v2 commit to deploy; this workflow must never deploy the v3 branch'
+        required: true
+        type: string
 
 jobs:
   deploy:
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main'
-      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,7 +18,10 @@ jobs:
       - name: Check out built revision
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ inputs.legacy_revision }}
+      - name: Resolve explicitly selected legacy revision
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Resolve deploy configuration
         id: config
@@ -98,7 +95,7 @@ jobs:
           PRODUCTION_DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
           PRODUCTION_DEPLOY_SERVICE: ${{ secrets.PRODUCTION_DEPLOY_SERVICE }}
           PRODUCTION_DEPLOY_POST_COMMAND: ${{ secrets.PRODUCTION_DEPLOY_POST_COMMAND }}
-          DEPLOY_COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          DEPLOY_COMMIT_SHA: ${{ steps.revision.outputs.sha }}
         run: |
           set -euo pipefail
           port="${PRODUCTION_DEPLOY_PORT:-22}"
@@ -161,7 +158,7 @@ jobs:
         shell: bash
         env:
           PRODUCTION_PUBLIC_BASE_URL: ${{ secrets.PRODUCTION_PUBLIC_BASE_URL }}
-          DEPLOY_COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          DEPLOY_COMMIT_SHA: ${{ steps.revision.outputs.sha }}
         run: |
           set -euo pipefail
           base_url="${PRODUCTION_PUBLIC_BASE_URL:-https://codegoai.com}"

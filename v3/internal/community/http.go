@@ -3,7 +3,6 @@ package community
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,7 +12,11 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/community/v1/sellers", s.auth(http.HandlerFunc(s.sellersHTTP)))
 	mux.Handle("GET /api/community/v1/members/{sub}", s.auth(http.HandlerFunc(s.memberHTTP)))
 	mux.Handle("GET /api/community/v1/members/{sub}/channels", s.auth(http.HandlerFunc(s.channelsHTTP)))
-	mux.Handle("PUT /api/community/v1/channels/{id}/rating", s.auth(http.HandlerFunc(s.ratingHTTP)))
+	mux.Handle("PUT /api/community/v1/channels/{id}/rating", s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusGone)
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "code": "RATING_MOVED", "message": "Submit ratings in the CodeGo marketplace using your session"})
+	})))
 }
 
 func (s *Service) Handler() http.Handler {
@@ -87,24 +90,6 @@ func (s *Service) sellersHTTP(w http.ResponseWriter, r *http.Request) {
 	bridgeResult(w, result, err)
 }
 
-func (s *Service) ratingHTTP(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	defer func() { _ = r.Body.Close() }()
-	d := json.NewDecoder(r.Body)
-	d.DisallowUnknownFields()
-	var request RatingRequest
-	if err := d.Decode(&request); err != nil {
-		bridgeError(w, ErrInvalidRating)
-		return
-	}
-	if err := d.Decode(new(any)); !errors.Is(err, io.EOF) {
-		bridgeError(w, ErrInvalidRating)
-		return
-	}
-	result, err := s.RateChannel(r.Context(), r.PathValue("id"), request)
-	bridgeResult(w, result, err)
-}
-
 func bridgeResult(w http.ResponseWriter, data any, err error) {
 	if err != nil {
 		bridgeError(w, err)
@@ -140,6 +125,8 @@ func bridgeError(w http.ResponseWriter, err error) {
 		status, code, message = 403, "MEMBER_INACTIVE", "Community member is inactive"
 	case errors.Is(err, ErrSelfRating):
 		status, code, message = 403, "SELF_RATING_FORBIDDEN", "Channel owners cannot rate their own channels"
+	case errors.Is(err, ErrUsageRequired):
+		status, code, message = 403, "RATING_USAGE_REQUIRED", "Use this service before leaving a rating"
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

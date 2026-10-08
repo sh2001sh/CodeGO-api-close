@@ -113,6 +113,7 @@ func TestEntitlementsRejectPendingMismatchOverflowAndUnknownParticipant(t *testi
 		{"subscription_lucky_rewards", "participation_type", `"unknown"`},
 		{"subscription_lucky_rewards", "user_id", `7`},
 		{"subscription_reset_opportunity_accounts", "available_total", `2`},
+		{"subscription_reset_opportunity_accounts", "last_used_month", `"2023-10"`},
 		{"subscription_lucky_rewards", "final_reward_quota", fmt.Sprint(math.MaxInt64/2 + 1)},
 	} {
 		t.Run(test.table+test.field, func(t *testing.T) {

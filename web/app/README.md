@@ -1,6 +1,6 @@
 # CodeGo v3 前端
 
-React 19、TanStack Router / Query、Base UI、Tailwind、Rsbuild 独立应用。保留 new-api 与 QuantumNous 的项目标识，沿用铜色和纸面配色。
+React 19、TanStack Router / Query、Base UI、Tailwind、Rsbuild 独立应用。对外品牌为 CodeGo AI（CodeGo AI Limited / 码高智能有限公司），采用中性界面，铜色仅作品牌点缀。
 
 ```sh
 bun install --frozen-lockfile
@@ -18,7 +18,21 @@ bun run test:e2e
 
 控制面规范位于 `v3/api/openapi.json`，生成到 `src/lib/api.generated.ts`；`check:api` 检查生成物是否过期。生成脚本保留 int64 精度并生成请求整数路径；不要直接运行 openapi-typescript 覆盖输出。客户端使用生成的路径和操作类型，API Key / 用户 ID / 支付金额 / credits 超出 JavaScript 安全整数时保持精确字符串或 BigInt。金额按 micro credits 整数处理，支付金额遵守币种的 0、2 或 3 位小数。语言包与页面按需加载；取数使用 queryOptions 和路由 loader。
 
-21 个页面涵盖登录、注册、个人资料与通行密钥、仪表板、API Key、钱包与订阅购买/续期/升级/燃料/额度转换/退款、订单、使用日志、渠道、用户、系统设置、拼团、盲盒、社区、渠道市场、我的渠道、市场审核、钱包转账、发票、兑换码与套餐管理。社区浏览器请求使用登录会话接口，服务间密钥不进入前端。
+公开站点（`/`、`/models`、`/docs`、`/status` 及政策、支持页面）使用 `components/site-layout.tsx`；登录后的控制台使用 `components/shell.tsx`，包含分组侧栏、⌘K / Ctrl+K 命令面板和移动端导航抽屉。控制台的全部页面在 `src/lib/navigation.ts` 中统一登记，侧栏和命令面板都从这里读取。新增页面时，须同时在 `router.tsx` 注册路由，并在 `navigation.ts` 登记。社区是顶栏外链；桌面下载与设置入口暂时退役。
+
+样式分层：
+
+- `src/styles/tokens.css`：设计令牌，浅色与深色两套。
+- `base.css`
+- `components.css`
+- `shell.css`
+- `pages.css`
+- `marketing.css`
+- `area-*.css`：各业务区域的样式，只能引用令牌。
+
+UI 原语从 `components/ui.tsx` 导出，具体实现位于 `components/primitives/`。确认操作使用 `confirmAction()`，不要使用 `window.confirm`。主题和语言偏好保存在 localStorage（`codego.theme` / `codego.locale`）；`index.html` 会在首次绘制前应用主题，以避免闪烁。英文文案按区域拆分在 `src/locales/en-*.ts` 中，由 `en.ts` 合并。
+
+Playground 和连通性测试在同源下调用网关 `/v1/*`。开发服务把 `/v1` 转发到 `V3_GATEWAY_URL`，默认值为 `127.0.0.1:3001`。
 
 默认浏览器测试使用明确标为测试的 API fixture，检查桌面、移动视口及客户端失败重试流程。真实容器测试使用独立的 `real-stack.spec.ts`，不拦截 API；仅允许本地隔离验收容器的 18083 端口。先按 `v3/deploy/compose.test.yaml` 构建并启动整套容器，再运行：
 

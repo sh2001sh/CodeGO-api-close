@@ -27,6 +27,7 @@ func TestMigratedRatingIsVisibleAndUpdatingPreservesLegacyIdentity(t *testing.T)
 		}
 	}
 	s := New(pool, Config{ServiceSecret: testServiceSecret})
+	recordRealUsage(t, pool, 8, 13, "sync", true)
 	channels, err := s.ListChannels(ctx, "ABC234", ChannelQuery{ViewerSubject: "DEF567"})
 	if err != nil || len(channels.Items) != 1 || channels.Items[0].RatingCount != 1 || channels.Items[0].AverageScore != 10 || channels.Items[0].ViewerStars != 5 {
 		t.Fatalf("historical channel rating %+v %v", channels, err)

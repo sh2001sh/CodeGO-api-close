@@ -8,7 +8,8 @@ import (
 )
 
 func readMarketRankings(ctx context.Context, tx pgx.Tx, groups map[string]MarketGroupPolicy, names map[string]string) error {
-	rows, err := tx.Query(ctx, `SELECT DISTINCT ON(group_id) group_id,score,request_count,observing FROM v3_channelmarket.ranking_snapshots
+	rows, err := tx.Query(ctx, `SELECT DISTINCT ON(group_id) group_id,score,request_count,observing,
+	 calculated_at BETWEEN now()-interval '1 hour' AND now()+interval '5 minutes' FROM v3_channelmarket.ranking_snapshots
 	 WHERE window_hours=24 AND ranking_version IN ('v3-usage','marketplace-v7-consumer-cost') ORDER BY group_id,calculated_at DESC,id DESC`)
 	if err != nil {
 		return err
@@ -18,13 +19,13 @@ func readMarketRankings(ctx context.Context, tx pgx.Tx, groups map[string]Market
 		var id string
 		var score float64
 		var requests int64
-		var observing bool
-		if err = rows.Scan(&id, &score, &requests, &observing); err != nil {
+		var observing, fresh bool
+		if err = rows.Scan(&id, &score, &requests, &observing, &fresh); err != nil {
 			return err
 		}
 		if name, exists := names[id]; exists {
 			group := groups[name]
-			group.Score, group.HasScore = score, requests > 0 && !observing && !math.IsNaN(score) && !math.IsInf(score, 0)
+			group.Score, group.HasScore = score, fresh && requests > 0 && !observing && !math.IsNaN(score) && !math.IsInf(score, 0)
 			groups[name] = group
 		}
 	}
@@ -32,14 +33,14 @@ func readMarketRankings(ctx context.Context, tx pgx.Tx, groups map[string]Market
 }
 
 func readMarketPools(ctx context.Context, tx pgx.Tx, pools map[string]MarketPoolPolicy) error {
-	rows, err := tx.Query(ctx, `SELECT internal_group_name,owner_user_id,max_multiplier_ppm,max_attempts,strategy FROM v3_channelmarket.route_pools ORDER BY id`)
+	rows, err := tx.Query(ctx, `SELECT internal_group_name,owner_user_id,max_multiplier_ppm,max_attempts,failure_cooldown_seconds,strategy FROM v3_channelmarket.route_pools ORDER BY id`)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var name string
 		var pool MarketPoolPolicy
-		if err = rows.Scan(&name, &pool.OwnerUserID, &pool.MaxMultiplierPPM, &pool.MaxAttempts, &pool.Strategy); err != nil {
+		if err = rows.Scan(&name, &pool.OwnerUserID, &pool.MaxMultiplierPPM, &pool.MaxAttempts, &pool.FailureCooldownSeconds, &pool.Strategy); err != nil {
 			rows.Close()
 			return err
 		}

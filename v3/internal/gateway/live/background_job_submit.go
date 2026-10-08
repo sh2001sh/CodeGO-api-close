@@ -87,6 +87,7 @@ func (h *Handler) sendBackgroundSubmitRequest(ctx context.Context, job *Backgrou
 	}
 	client.Transport = gateway.OverrideProviderTransport(provider, wire, client.Transport)
 	job.Status = "submitting"
+	job.AttemptsCount++
 	if err := h.cfg.BackgroundJobs.Save(ctx, *job); err != nil {
 		_ = upstream.Body.Close()
 		return nil, err, true

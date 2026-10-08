@@ -25,7 +25,7 @@ func TestCompileMarketPermissionsAndWire(t *testing.T) {
 	mustExec(t, pool, `INSERT INTO v3_channelmarket.user_multipliers(channel_id,user_id,multiplier_ppm) VALUES(1,2,750000)`)
 	start := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
 	mustExec(t, pool, `INSERT INTO v3_channelmarket.time_range_multipliers(id,channel_id,starts_at,ends_at,multiplier_ppm) VALUES('win',1,$1,$2,500000)`, start, start.Add(2*time.Hour))
-	mustExec(t, pool, `INSERT INTO v3_channelmarket.route_pools(id,owner_user_id,name,internal_group_name,max_attempts,max_multiplier_ppm,strategy) VALUES('p1',2,'pool','pool',2,1000000,'score')`)
+	mustExec(t, pool, `INSERT INTO v3_channelmarket.route_pools(id,owner_user_id,name,internal_group_name,max_attempts,max_multiplier_ppm,failure_cooldown_seconds,strategy) VALUES('p1',2,'pool','pool',2,1000000,45,'score')`)
 	mustExec(t, pool, `INSERT INTO v3_channelmarket.route_pool_members(pool_id,group_id) VALUES('p1','m1')`)
 	mustExec(t, pool, `INSERT INTO v3_channelmarket.ranking_snapshots(id,group_id,window_hours,ranking_version,rank,score,request_count,observing,calculated_at)
 	 VALUES('old','m1',24,'marketplace-v7-consumer-cost',1,95,1,true,$1),('latest','m1',24,'v3-usage',1,81,100,false,$2)`, start, start.Add(time.Minute))
@@ -53,7 +53,7 @@ func TestCompileMarketPermissionsAndWire(t *testing.T) {
 	if !group.Allows(1) || !group.Allows(2) || group.Allows(3) || !policy.Blocked[2] || policy.Factor(2, time.Now()) != 750000 || policy.Factor(3, time.Now()) != 500000 || poolPolicy.MaxAttempts != 2 || len(poolPolicy.GroupIDs) != 1 || poolPolicy.MaxMultiplierPPM != 1000000 {
 		t.Fatal("market permission/multiplier projection lost during compile/wire")
 	}
-	if policy.CreditPolicy != "marketplace_subscription_and_universal" || !group.HasScore || group.Score != 81 || poolPolicy.Strategy != "score" || len(poolPolicy.Members) != 1 || poolPolicy.Members[0].CatalogGroupName != "market" {
+	if policy.CreditPolicy != "marketplace_subscription_and_universal" || !group.HasScore || group.Score != 81 || poolPolicy.Strategy != "score" || poolPolicy.FailureCooldownSeconds != 45 || len(poolPolicy.Members) != 1 || poolPolicy.Members[0].CatalogGroupName != "market" {
 		t.Fatal("credit policy/current ranking/pool strategy/member identity was lost in compile/wire")
 	}
 	if price := policy.ModelPrices["gpt-4"]; price.PerRequest != 2 || price.Rules["money_quantum"] != json.Number("2") {
@@ -68,5 +68,15 @@ func TestCompileMarketPermissionsAndWire(t *testing.T) {
 	}
 	if p := loaded.AccountProfiles[2]; p.KeyBudgetAccounts[10] != 20 || len(p.AllowedGroups) == 0 || len(p.AutoGroups) == 0 {
 		t.Fatal("account authorization/key-budget profile lost")
+	}
+	for _, when := range []string{"now()-interval '61 minutes'", "now()+interval '6 minutes'"} {
+		mustExec(t, pool, `UPDATE v3_channelmarket.ranking_snapshots SET calculated_at=`+when)
+		stale, e := Compile(context.Background(), pool, dec)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if stale.Market.Groups["market"].HasScore {
+			t.Fatalf("invalid ranking time %s was trusted by score routing", when)
+		}
 	}
 }

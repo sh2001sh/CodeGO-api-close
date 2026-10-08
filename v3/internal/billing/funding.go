@@ -45,14 +45,15 @@ func (s *Settler) reserveFunding(ctx context.Context, req *gateway.Request, h *h
 	if err != nil {
 		return err
 	}
-	args := []any{int64(h.amount), int64(s.cfg.OverdraftAllowance), s.cfg.Now().Add(s.cfg.ReservationExpiry).UnixMilli(),
-		(s.cfg.ReservationExpiry + reservationGrace).Milliseconds(), req.ID}
+	lifetime := s.reservationLifetime(ctx)
+	args := []any{int64(h.amount), int64(s.cfg.OverdraftAllowance), s.cfg.Now().Add(lifetime).UnixMilli(),
+		(lifetime + reservationGrace).Milliseconds(), req.ID}
 	for _, p := range h.funding {
 		args = append(args, p.account)
 	}
 	args = append(args, budgetIndex)
 	if h.sourceMode {
-		args, err = s.sourceReserveArgs(req, h, budgetIndex)
+		args, err = s.sourceReserveArgs(ctx, req, h, budgetIndex)
 		if err != nil {
 			return fmt.Errorf("%w: source quote: %v", gateway.ErrBillingUnavailable, err)
 		}

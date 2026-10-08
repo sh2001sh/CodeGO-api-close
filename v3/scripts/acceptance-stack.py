@@ -18,6 +18,8 @@ import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from acceptance_restored import verify_restored, verify_live_status
+from acceptance_subscription_v2 import verify_subscription_v2
 
 
 class Upstream(BaseHTTPRequestHandler):
@@ -38,8 +40,20 @@ class Upstream(BaseHTTPRequestHandler):
             return
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
         if self.path.endswith("/responses"):
-            payload = {"id": "resp_fixture", "object": "response", "status": "completed", "model": body["model"], "output": [{"id": "msg_fixture", "type": "message", "status": "completed", "role": "assistant", "content": [{"type": "output_text", "text": "mock-ok", "annotations": []}]}], "usage": {"input_tokens": 2, "output_tokens": 3, "total_tokens": 5}}
+            payload = {"id": f"resp_fixture_{Upstream.calls}", "object": "response", "status": "completed", "model": body["model"], "output": [{"id": "msg_fixture", "type": "message", "status": "completed", "role": "assistant", "content": [{"type": "output_text", "text": "mock-ok", "annotations": []}]}], "usage": {"input_tokens": 2, "output_tokens": 3, "total_tokens": 5}}
             self.send_response(200)
+            if body.get("stream"):
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                events = [
+                    {"type": "response.created", "sequence_number": 0, "response": {"id": payload["id"], "status": "in_progress", "output": []}},
+                    {"type": "response.output_text.delta", "sequence_number": 1, "delta": "mock-ok", "response_id": payload["id"]},
+                    {"type": "response.completed", "sequence_number": 2, "response": payload},
+                ]
+                for event in events:
+                    self.wfile.write(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode())
+                self.wfile.flush()
+                return
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps(payload).encode())
@@ -143,7 +157,9 @@ def main():
         check("anonymous identity rejected", request("/api/user/self"), 401)
         suffix = secrets.token_hex(4)
         username, password = "accept_" + suffix, secrets.token_urlsafe(24)
-        registration = {"username": username, "password": password}
+        policies = check("published current policy versions", request("/api/policies/current"))["data"]
+        agreements = {"accepted_terms_version": policies["version"], "accepted_privacy_version": policies["version"], "agreement_locale": "en"}
+        registration = {"username": username, "password": password, **agreements}
         session = check("register and issue session", request("/api/user/register", "POST", registration, origin=args.url))["data"]
         token, user_id = session["access_token"], session["user"]["id"]
         check("duplicate registration rejected", request("/api/user/register", "POST", registration), 409)
@@ -154,7 +170,7 @@ def main():
         key = check("create scoped API key", request("/api/token/", "POST", {"name": "acceptance", "allowed_models": ["acceptance-chat"]}, token=token, origin=args.url))["data"]
         raw_key, key_id = key["key"], key["id"]
         check("forged group rejected", request("/api/token/", "POST", {"name": "forged", "group": "admin"}, token=token), 403)
-        other = check("register second owner", request("/api/user/register", "POST", {"username": "other_" + suffix, "password": password}))["data"]
+        other = check("register second owner", request("/api/user/register", "POST", {"username": "other_" + suffix, "password": password, **agreements}))["data"]
         check("API key ownership enforced", request(f"/api/token/{key_id}/key", token=other["access_token"]), 404)
         wallet = check("wallet created", request("/api/billing/balance", token=token))["data"]["account_id"]
         adjustment = {"account_id": wallet, "amount_micro": 1000000, "operation_id": "accept-" + suffix, "reason": "isolated acceptance fixture"}
@@ -326,6 +342,7 @@ def main():
         assert event_id.encode() in exported and b"9007199254740993" in exported and b"private-fixture" not in exported
         reviewed = check("review retained string audit ID", request("/api/marketplace/admin/security-audit/events/" + event_id, "PATCH", {"review_status": "resolved", "review_note": "fixture reviewed"}, token=token, origin=args.url))["data"]
         assert reviewed["id"] == event_id and reviewed["review_status"] == "resolved"
+        verify_live_status(request, check, sql, session, raw_key, chat, args.url)
         check("delete key", request(f"/api/token/{key_id}", "DELETE", token=token, origin=args.url))
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
@@ -336,6 +353,8 @@ def main():
         check("deleted key invalidated at gateway", rejected, 401)
         check("delete IP scoped key", request(f"/api/token/{ip_key['id']}", "DELETE", token=token, origin=args.url))
         check("delete fixture channel", request(f"/api/catalog/channels/{channel_result['data']['id']}", "DELETE", token=token, origin=args.url))
+        verify_restored(request, check, sql, session, other, suffix, args.url)
+        verify_subscription_v2(request, check, sql, session, other, suffix, args.url)
         refreshed = check("refresh session", request("/api/user/refresh", "POST", {"refresh_token": session["refresh_token"]}))["data"]
         check("refresh token replay rejected", request("/api/user/refresh", "POST", {"refresh_token": session["refresh_token"]}), 401)
         check("logout", request("/api/user/logout", "POST", token=refreshed["access_token"]))

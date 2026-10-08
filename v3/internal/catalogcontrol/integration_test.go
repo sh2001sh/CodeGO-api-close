@@ -142,6 +142,10 @@ func TestCatalogControlIntegration(t *testing.T) {
 		t.Fatal("pool member missing")
 	}
 	call("PUT", "/api/catalog/route-pools", `{"group":"default","model":"test-model","strategy":"round_robin","enabled":true,"members":[{"channel_id":1,"weight":1},{"channel_id":1,"weight":1}]}`, 400)
+	var settingsBaseline int64
+	if err = pool.QueryRow(ctx, `SELECT COALESCE(max(id),0) FROM v3_platform.cache_invalidation_outbox`).Scan(&settingsBaseline); err != nil {
+		t.Fatal(err)
+	}
 	call("PUT", "/api/settings/SystemName", `{"value":"CodeGo"}`, 200)
 	call("PUT", "/api/settings/OIDCClientSecret", `{"value":"hidden-secret"}`, 200)
 	call("PUT", "/api/settings/arbitrary", `{"value":"first","sensitive":true}`, 200)
@@ -176,9 +180,25 @@ func TestCatalogControlIntegration(t *testing.T) {
 	if snap.Groups["precise"].Multiplier != 1.123456 {
 		t.Fatalf("group multiplier rounded early: %v", snap.Groups["precise"].Multiplier)
 	}
-	var invalidations int
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM v3_platform.cache_invalidation_outbox WHERE entity='settings'`).Scan(&invalidations); err != nil || invalidations != 4 {
-		t.Fatalf("settings invalidations %d: %v", invalidations, err)
+	rows, err := pool.Query(ctx, `SELECT entity_id,count(*) FROM v3_platform.cache_invalidation_outbox WHERE entity='settings' AND id>$1 GROUP BY entity_id`, settingsBaseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidations := make(map[string]int)
+	for rows.Next() {
+		var key string
+		var count int
+		if err = rows.Scan(&key, &count); err != nil {
+			t.Fatal(err)
+		}
+		invalidations[key] = count
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(invalidations) != 3 || invalidations["SystemName"] != 1 || invalidations["OIDCClientSecret"] != 1 || invalidations["arbitrary"] != 2 {
+		t.Fatalf("settings invalidations after baseline %d: %v", settingsBaseline, invalidations)
 	}
 	call("PUT", "/api/option/", `{"key":"Enabled","value":true}`, 200)
 	w = call("GET", "/api/option/", "", 200)

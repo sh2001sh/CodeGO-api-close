@@ -17,7 +17,7 @@ import (
 func verifyTypedRedemptionAssembly(t *testing.T, pool *pgxpool.Pool, call apiCall, admin string) {
 	t.Helper()
 	ctx := context.Background()
-	w := call("POST", "/api/user/register", "", `{"username":"redemption_user","password":"strong-password"}`, 200)
+	w := call("POST", "/api/user/register", "", `{"username":"redemption_user","password":"strong-password","accepted_terms_version":"2026-10-07","accepted_privacy_version":"2026-10-07","agreement_locale":"en"}`, 200)
 	var session struct {
 		Data identity.Session `json:"data"`
 	}

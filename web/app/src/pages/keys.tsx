@@ -1,167 +1,129 @@
 import { useState } from 'react'
-import { useMutation, useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Plus, Trash2 } from 'lucide-react'
-import { api, unwrap } from '../lib/api'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
+import { Link, useSearch } from '@tanstack/react-router'
 import { keysOptions } from '../lib/queries'
-import { date } from '../lib/format'
 import { useTranslation } from '../lib/i18n'
-import { DataTable } from '../components/data-table'
-import { Button, ErrorMessage, PageHeader, Status } from '../components/ui'
+import { Button, ErrorMessage, PageHeader, Drawer } from '../components/ui'
 import { KeyForm } from '../components/key-form'
-import type { APIKey, Schema } from '../lib/types'
+import { useKeyActions } from '../features/keys/use-key-actions'
+import { KeyFilterBar, KeyBatchBar } from '../features/keys/filter-bar'
+import { KeyTable } from '../features/keys/key-table'
+import { AvailableModelsDialog } from '../features/keys/available-models-dialog'
+import { ConnectivityTestDialog } from '../features/keys/connectivity-test'
+import { ClientConfigDialog } from '../features/keys/client-config-dialog'
+import type { APIKey } from '../lib/types'
 
 export default function KeysPage() {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const { data } = useSuspenseQuery(keysOptions())
+  const requested = useSearch({ from: '/_authenticated/keys' })
+  const keys = useSuspenseQuery(keysOptions()).data ?? []
+  const actions = useKeyActions(keys)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<APIKey | null>(null)
-  const [secret, setSecret] = useState('')
+  const [modelsFor, setModelsFor] = useState<APIKey | null>(null)
+  const [testingFor, setTestingFor] = useState<APIKey | null>(null)
+  const [configFor, setConfigFor] = useState<APIKey | null>(null)
   const [copyError, setCopyError] = useState<Error | null>(null)
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['keys'] })
-  const create = useMutation({
-    mutationFn: (body: Schema['KeyInput']) =>
-      api.POST('/api/token/', { body }).then((result) => unwrap(result)),
-    onSuccess: (key) => {
-      setSecret(key.key)
-      setCreating(false)
-      void refresh()
-    },
-  })
-  const remove = useMutation({
-    mutationFn: (id: APIKey['id']) =>
-      api.DELETE('/api/token/{id}', { params: { path: { id: String(id) } } }),
-    onSuccess: refresh,
-  })
-  const update = useMutation({
-    mutationFn: (key: APIKey) =>
-      api.PUT('/api/token/', {
-        body: {
-          ...key,
-          status: key.status === 'active' ? 'disabled' : 'active',
-        },
-      }),
-    onSuccess: refresh,
-  })
-  const edit = useMutation({
-    mutationFn: (body: Schema['KeyInput']) => api.PUT('/api/token/', { body }),
-    onSuccess: () => {
-      setEditing(null)
-      void refresh()
-    },
-  })
-  const reveal = useMutation({
-    mutationFn: (id: APIKey['id']) =>
-      api
-        .POST('/api/token/{id}/key', { params: { path: { id: String(id) } } })
-        .then((result) => unwrap(result)),
-    onSuccess: (value) => setSecret(value.key),
-  })
-  const copy = async () => {
+  const { filters, selection, create, remove, update, edit, reveal } = actions
+
+  const copySecret = async () => {
     try {
-      await navigator.clipboard.writeText(secret)
+      await navigator.clipboard.writeText(actions.secret)
       setCopyError(null)
     } catch {
       setCopyError(new Error('复制失败，请手动复制'))
     }
   }
+
   return (
     <>
       <PageHeader
         title="API Key"
         action={
-          <Button onClick={() => setCreating(!creating)}>
+          <Button onClick={() => setCreating(true)}>
             <Plus size={16} aria-hidden />
             {t('创建')}
           </Button>
         }
       />
+      {requested.group && (
+        <p className="notice">
+          {t('创建 Key 后返回所选分组完成绑定。')}{' '}
+          <Link to="/channel-market" search={{ group: requested.group }}>
+            {t('返回所选分组')}
+          </Link>
+        </p>
+      )}
       <ErrorMessage
         error={
           remove.error ?? update.error ?? edit.error ?? reveal.error ?? create.error ?? copyError
         }
       />
-      {secret && (
+      {actions.secret && (
         <section className="secret-panel" aria-live="polite">
           <span>{t('新 API Key')}</span>
-          <code>{secret}</code>
-          <Button variant="quiet" onClick={copy}>
-            <Copy size={16} aria-hidden />
+          <code>{actions.secret}</code>
+          <Button variant="quiet" onClick={copySecret}>
             {t('复制')}
           </Button>
-          <Button variant="quiet" onClick={() => setSecret('')}>
+          <Button variant="quiet" onClick={() => actions.setSecret('')}>
             {t('关闭')}
           </Button>
         </section>
       )}
+
+      <KeyFilterBar
+        search={filters.search}
+        onSearchChange={filters.setSearch}
+        statusFilter={filters.statusFilter}
+        onStatusChange={filters.setStatusFilter}
+      />
+      <KeyBatchBar
+        total={filters.filtered.length}
+        selectedCount={selection.selected.size}
+        allSelected={selection.selected.size === filters.filtered.length}
+        pending={actions.batchPending}
+        onToggleAll={selection.toggleAll}
+        onEnable={() => actions.batchSetStatus('active')}
+        onDisable={() => actions.batchSetStatus('disabled')}
+        onDelete={() => void actions.batchDelete()}
+      />
+      <ErrorMessage error={actions.batchError} />
+
       {creating && (
-        <KeyForm
-          pending={create.isPending}
-          onSave={(body) => create.mutate(body)}
-          onCancel={() => setCreating(false)}
-        />
+        <Drawer open onOpenChange={(open) => !open && setCreating(false)} title="创建 API Key">
+          <KeyForm
+            pending={create.isPending}
+            onSave={(body) => create.mutate(body, { onSuccess: () => setCreating(false) })}
+            onCancel={() => setCreating(false)}
+          />
+        </Drawer>
       )}
       {editing && (
-        <KeyForm
-          key={editing.id}
-          apiKey={editing}
-          pending={edit.isPending}
-          onSave={(body) => edit.mutate(body)}
-          onCancel={() => setEditing(null)}
-        />
+        <Drawer open onOpenChange={(open) => !open && setEditing(null)} title="编辑 API Key">
+          <KeyForm
+            key={editing.id}
+            apiKey={editing}
+            pending={edit.isPending}
+            onSave={(body) => edit.mutate(body, { onSuccess: () => setEditing(null) })}
+            onCancel={() => setEditing(null)}
+          />
+        </Drawer>
       )}
-      <DataTable
-        rows={data ?? []}
-        rowKey={(row) => row.id}
-        empty="暂无 API Key，创建后即可调用模型"
-        columns={[
-          { label: '名称', render: (row) => row.name },
-          { label: '密钥', render: (row) => <code>{row.key_prefix}…</code> },
-          { label: '状态', render: (row) => <Status value={row.status} /> },
-          { label: '创建时间', render: (row) => date(row.created_at) },
-          { label: '到期时间', render: (row) => date(row.expires_at) },
-          {
-            label: '操作',
-            render: (row) => (
-              <div className="row-actions">
-                <Button
-                  variant="quiet"
-                  onClick={() => {
-                    setCreating(false)
-                    setEditing(row)
-                  }}
-                >
-                  {t('编辑')}
-                </Button>
-                <Button
-                  variant="quiet"
-                  disabled={reveal.isPending}
-                  onClick={() => reveal.mutate(row.id)}
-                >
-                  {t('查看密钥')}
-                </Button>
-                <Button
-                  variant="quiet"
-                  disabled={update.isPending}
-                  onClick={() => update.mutate(row)}
-                >
-                  {t(row.status === 'active' ? '停用' : '启用')}
-                </Button>
-                <Button
-                  variant="danger"
-                  aria-label={`${t('删除')} ${row.name}`}
-                  disabled={remove.isPending}
-                  onClick={() => {
-                    if (window.confirm(t('删除后无法恢复，确认删除？'))) remove.mutate(row.id)
-                  }}
-                >
-                  <Trash2 size={16} aria-hidden />
-                </Button>
-              </div>
-            ),
-          },
-        ]}
+
+      <KeyTable
+        rows={filters.filtered}
+        actions={actions}
+        onEdit={setEditing}
+        onShowModels={setModelsFor}
+        onTest={setTestingFor}
+        onConfig={setConfigFor}
       />
+
+      <AvailableModelsDialog apiKey={modelsFor} onClose={() => setModelsFor(null)} />
+      <ConnectivityTestDialog apiKey={testingFor} onClose={() => setTestingFor(null)} />
+      <ClientConfigDialog apiKey={configFor} onClose={() => setConfigFor(null)} />
     </>
   )
 }

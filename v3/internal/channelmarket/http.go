@@ -15,12 +15,20 @@ type Authenticate func(*http.Request) (Actor, error)
 type endpoint func(http.ResponseWriter, *http.Request, Actor)
 
 func (s *Service) Register(mux *http.ServeMux, auth Authenticate) {
+	s.RegisterOwnerAnalyticsHTTP(mux, auth)
+	s.RegisterInsightsHTTP(mux, auth)
 	public := map[string]endpoint{
-		"GET /api/marketplace/groups": s.httpGroups, "GET /api/marketplace/models": s.httpModels,
+		"GET /api/marketplace/shops":      s.httpShops,
+		"GET /api/marketplace/shops/{id}": s.httpShop,
+		"GET /api/public/models":          s.httpPublicModels,
+		"GET /api/marketplace/groups":     s.httpGroups, "GET /api/marketplace/models": s.httpModels,
 		"GET /api/marketplace/group-status": s.httpGroups, "GET /api/marketplace/groups/{slug}": s.httpGroup,
 		"GET /api/marketplace/groups/{slug}/model-status": s.httpGroup, "GET /api/marketplace/multiplier-trends": s.httpTrends,
 	}
 	private := map[string]endpoint{
+		"GET /api/marketplace/route-pools/group-options":                     s.httpPoolGroupOptions,
+		"GET /api/marketplace/shop/mine":                                     s.httpMyShop,
+		"PATCH /api/marketplace/shop/mine":                                   s.httpUpdateShop,
 		"GET /api/marketplace/channels/{id}/user-usage/{userId}/time-series": s.httpUsageSeries,
 		"GET /api/marketplace/security-audit/events/export":                  s.httpExportSecurity,
 		"POST /api/marketplace/channels/{id}/batch-welfare":                  s.httpWelfare,
@@ -49,6 +57,8 @@ func (s *Service) Register(mux *http.ServeMux, auth Authenticate) {
 		"GET /api/marketplace/security-audit/events": s.httpSecurity, "PATCH /api/marketplace/security-audit/events/{id}": s.httpResolveSecurity,
 	}
 	admin := map[string]endpoint{
+		"GET /api/marketplace/admin/shops":                        s.httpAdminShops,
+		"POST /api/marketplace/admin/shops/{id}/review":           s.httpReviewShop,
 		"GET /api/marketplace/admin/security-audit/events/export": s.httpExportSecurity,
 		"POST /api/marketplace/admin/channels/{id}/test/failed":   s.httpVerify, "POST /api/marketplace/admin/channels/{id}/models/remove-failed": s.httpRemoveModel, "POST /api/marketplace/admin/channels/{id}/verification/pause": s.httpPauseVerify,
 		"GET /api/marketplace/admin/channels": s.httpMine, "PATCH /api/marketplace/admin/channels/{id}": s.httpUpdate, "DELETE /api/marketplace/admin/channels/{id}": s.httpTransition,
@@ -133,6 +143,14 @@ func (s *Service) result(w http.ResponseWriter, data any, err error) {
 	}
 	var p *pgconn.PgError
 	switch {
+	case errors.Is(err, ErrInvalidShopName):
+		fail(w, 400, "invalid_shop_name", "店铺名称须为 2–40 个字符，不得包含联系方式、链接、广告、违规内容或冒充平台身份；留空恢复系统名称")
+	case errors.Is(err, ErrInvalidShopDescription):
+		fail(w, 400, "invalid_shop_description", "店铺介绍限 200 个字符，不得包含联系方式、链接、广告、违规内容或冒充平台身份")
+	case errors.Is(err, ErrInvalidRemark):
+		fail(w, 400, "invalid_group_remark", "公开备注限 200 个字符，不得包含联系方式、链接、广告或冒充平台身份")
+	case errors.Is(err, ErrInvalidName):
+		fail(w, 400, "invalid_group_name", "分组名称须为 2–40 个字符，不得包含联系方式、链接、广告或冒充平台身份；留空使用系统名称")
 	case errors.Is(err, ErrInvalid):
 		fail(w, 400, "invalid_value", "参数无效")
 	case errors.Is(err, ErrNotFound):

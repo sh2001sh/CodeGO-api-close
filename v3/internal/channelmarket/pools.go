@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -43,11 +46,22 @@ func (s *Service) SavePool(ctx context.Context, user int64, p RoutePool) (RouteP
 	p.OwnerUserID = user
 	p.TokenGroup = "pool_" + p.ID
 	err = s.transaction(ctx, func(tx pgx.Tx) error {
+		var previous json.RawMessage
+		if !create {
+			if e := tx.QueryRow(ctx, `SELECT config FROM v3_channelmarket.route_pools WHERE id=$1 AND owner_user_id=$2 FOR UPDATE`, p.ID, user).Scan(&previous); errors.Is(e, pgx.ErrNoRows) {
+				return ErrNotFound
+			} else if e != nil {
+				return e
+			}
+		}
+		if e := preserveAutoBuildMetadata(&p, previous, s.cfg.Now()); e != nil {
+			return e
+		}
 		internal, catalogPool, e := upsertPoolRowTx(ctx, tx, user, p, maximum, create)
 		if e != nil {
 			return e
 		}
-		return syncPoolMembersTx(ctx, tx, user, p, maximum, internal, catalogPool)
+		return syncPoolMembersTx(ctx, tx, user, p, maximum, internal, catalogPool, s.cfg.Now())
 	})
 	return p, err
 }
@@ -57,7 +71,8 @@ func (s *Service) SavePool(ctx context.Context, user int64, p RoutePool) (RouteP
 // max-multiplier factor alongside the normalized pool.
 func normalizePoolInput(user int64, p RoutePool) (RoutePool, int64, error) {
 	p = mergeLegacyPoolConfig(p)
-	if user <= 0 || strings.TrimSpace(p.Name) == "" || len(p.Name) > 64 || len(p.Members) > 100 {
+	p.Name = strings.TrimSpace(p.Name)
+	if user <= 0 || p.Name == "" || utf8.RuneCountInString(p.Name) > 64 || len(p.Members) > 100 {
 		return p, 0, ErrInvalid
 	}
 	if p.Strategy == "" {
@@ -72,8 +87,22 @@ func normalizePoolInput(user int64, p RoutePool) (RoutePool, int64, error) {
 	if p.MaxAttempts < 1 || p.MaxAttempts > 32 || p.FailureCooldownSeconds < 0 || p.FailureCooldownSeconds > 3600 {
 		return p, 0, ErrInvalid
 	}
+	seen := make(map[string]bool, len(p.Members))
+	for _, m := range p.Members {
+		if m.GroupID == "" || len(m.GroupID) > 255 || m.Priority < 0 || m.Priority > 1000 || seen[m.GroupID] {
+			return p, 0, ErrInvalid
+		}
+		seen[m.GroupID] = true
+	}
 	var maximum int64
-	if p.MaxMultiplier != "" && p.MaxMultiplier != "0" {
+	if p.MaxMultiplier == "" {
+		p.MaxMultiplier = "0"
+	}
+	rational, ok := new(big.Rat).SetString(string(p.MaxMultiplier))
+	if !ok || rational.Sign() < 0 || !json.Valid([]byte(p.MaxMultiplier)) {
+		return p, 0, ErrInvalid
+	}
+	if rational.Sign() > 0 {
 		var e error
 		maximum, e = multiplier(p.MaxMultiplier)
 		if e != nil {
@@ -96,7 +125,9 @@ func mergeLegacyPoolConfig(p RoutePool) RoutePool {
 			p.Members = append(p.Members, PoolMember{GroupID: id, Priority: priority})
 		}
 	}
-	if len(p.Config) == 0 {
+	// A round-tripped pool already has canonical routing fields. Legacy JSON
+	// must not override a user's edits with stale copies of those fields.
+	if len(p.Config) == 0 || p.Strategy != "" || p.MaxAttempts != 0 {
 		return p
 	}
 	var config struct {
@@ -132,14 +163,32 @@ func normalizePoolAutoBuildConfig(p RoutePool) (RoutePool, error) {
 	if e := json.Unmarshal(p.Config, &object); e != nil || object == nil {
 		return p, ErrInvalid
 	}
-	if len(p.AutoBuild) == 0 {
-		return p, nil
+	raw := object["auto_build"]
+	// Validate the nested representation even when the canonical field is present.
+	if len(raw) > 0 {
+		if _, e := parseAutoBuild(raw, false); e != nil {
+			return p, e
+		}
 	}
-	var build autoBuild
-	if json.Unmarshal(p.AutoBuild, &build) != nil || build.Size < 0 || build.Size > 10 || build.Interval < 0 || build.Interval > 1440 {
-		return p, ErrInvalid
+	if len(p.AutoBuild) > 0 {
+		raw = p.AutoBuild
 	}
-	object["auto_build"] = p.AutoBuild
+	if len(raw) > 0 {
+		build, e := parseAutoBuild(raw, false)
+		if e != nil {
+			return p, e
+		}
+		object["auto_build"], e = json.Marshal(build)
+		if e != nil {
+			return p, e
+		}
+		p.AutoBuild = object["auto_build"]
+	}
+	delete(object, "last_built_at")
+	// Legacy routing input is consumed once; callers edit the top-level fields.
+	for _, key := range []string{"strategy", "max_attempts", "failure_cooldown_seconds", "max_multiplier"} {
+		delete(object, key)
+	}
 	var e error
 	p.Config, e = json.Marshal(object)
 	if e != nil {
@@ -183,7 +232,7 @@ func upsertPoolRowTx(ctx context.Context, tx pgx.Tx, user int64, p RoutePool, ma
 
 // syncPoolMembersTx replaces the pool's member rows (both the channelmarket
 // and catalog-facing tables) to match p.Members exactly.
-func syncPoolMembersTx(ctx context.Context, tx pgx.Tx, user int64, p RoutePool, maximum int64, internal string, catalogPool int64) error {
+func syncPoolMembersTx(ctx context.Context, tx pgx.Tx, user int64, p RoutePool, maximum int64, internal string, catalogPool int64, now time.Time) error {
 	if _, e := tx.Exec(ctx, `DELETE FROM v3_channelmarket.route_pool_members WHERE pool_id=$1`, p.ID); e != nil {
 		return e
 	}
@@ -197,12 +246,12 @@ func syncPoolMembersTx(ctx context.Context, tx pgx.Tx, user int64, p RoutePool, 
 		}
 		seen[m.GroupID] = true
 		if strings.HasPrefix(m.GroupID, "official:") {
-			if e := addOfficialPoolMemberTx(ctx, tx, user, p.ID, catalogPool, m); e != nil {
+			if e := addOfficialPoolMemberTx(ctx, tx, user, p.ID, catalogPool, maximum, m); e != nil {
 				return e
 			}
 			continue
 		}
-		if e := addOwnedPoolMemberTx(ctx, tx, user, p.ID, catalogPool, maximum, m); e != nil {
+		if e := addOwnedPoolMemberTx(ctx, tx, user, p.ID, catalogPool, maximum, m, now); e != nil {
 			return e
 		}
 	}
@@ -212,10 +261,12 @@ func syncPoolMembersTx(ctx context.Context, tx pgx.Tx, user int64, p RoutePool, 
 // addOfficialPoolMemberTx wires an "official:<group>" member into both the
 // channelmarket pool and the catalog pool, after confirming the owner is
 // allowed to use that official group.
-func addOfficialPoolMemberTx(ctx context.Context, tx pgx.Tx, user int64, poolID string, catalogPool int64, m PoolMember) error {
+func addOfficialPoolMemberTx(ctx context.Context, tx pgx.Tx, user int64, poolID string, catalogPool, maximum int64, m PoolMember) error {
 	group := strings.TrimPrefix(m.GroupID, "official:")
 	var allowed bool
-	if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_identity.allowed_groups($1) allowed WHERE allowed=$2)`, user, group).Scan(&allowed); e != nil {
+	if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_catalog.groups g WHERE g.name=$2 AND ($3=0 OR round(g.multiplier*1000000)::bigint<=$3)
+	AND EXISTS(SELECT 1 FROM v3_identity.allowed_groups($1) a WHERE a=$2)
+	AND EXISTS(SELECT 1 FROM v3_catalog.channels c JOIN v3_catalog.channel_groups cg ON cg.channel_id=c.id WHERE c.scope='official' AND c.status='enabled' AND cg.group_name=$2 AND EXISTS(SELECT 1 FROM v3_catalog.channel_models cm WHERE cm.channel_id=c.id) AND EXISTS(SELECT 1 FROM v3_catalog.channel_credentials k WHERE k.channel_id=c.id AND k.status='enabled')))`, user, group, maximum).Scan(&allowed); e != nil {
 		return e
 	}
 	if !allowed {
@@ -224,18 +275,20 @@ func addOfficialPoolMemberTx(ctx context.Context, tx pgx.Tx, user int64, poolID 
 	if _, e := tx.Exec(ctx, `INSERT INTO v3_channelmarket.route_pool_members(pool_id,group_id,catalog_group_name,priority) VALUES($1,$2,$3,$4)`, poolID, m.GroupID, group, m.Priority); e != nil {
 		return e
 	}
-	_, e := tx.Exec(ctx, `INSERT INTO v3_catalog.route_pool_members(pool_id,channel_id,priority) SELECT $1,c.id,$3 FROM v3_catalog.channels c JOIN v3_catalog.channel_groups cg ON cg.channel_id=c.id WHERE c.scope='official' AND cg.group_name=$2 ON CONFLICT(pool_id,channel_id) DO UPDATE SET priority=greatest(v3_catalog.route_pool_members.priority,EXCLUDED.priority)`, catalogPool, group, -m.Priority)
+	_, e := tx.Exec(ctx, `INSERT INTO v3_catalog.route_pool_members(pool_id,channel_id,priority) SELECT $1,c.id,$3 FROM v3_catalog.channels c JOIN v3_catalog.channel_groups cg ON cg.channel_id=c.id WHERE c.scope='official' AND c.status='enabled' AND cg.group_name=$2 AND EXISTS(SELECT 1 FROM v3_catalog.channel_models cm WHERE cm.channel_id=c.id) AND EXISTS(SELECT 1 FROM v3_catalog.channel_credentials k WHERE k.channel_id=c.id AND k.status='enabled') ON CONFLICT(pool_id,channel_id) DO UPDATE SET priority=greatest(v3_catalog.route_pool_members.priority,EXCLUDED.priority)`, catalogPool, group, -m.Priority)
 	return e
 }
 
 // addOwnedPoolMemberTx wires a user-owned channel group member into both the
 // channelmarket pool and the catalog pool, enforcing the max-multiplier cap.
-func addOwnedPoolMemberTx(ctx context.Context, tx pgx.Tx, user int64, poolID string, catalogPool, maximum int64, m PoolMember) error {
+func addOwnedPoolMemberTx(ctx context.Context, tx pgx.Tx, user int64, poolID string, catalogPool, maximum int64, m PoolMember, now time.Time) error {
 	if e := accessible(ctx, tx, user, m.GroupID); e != nil {
 		return e
 	}
 	var channel, factor int64
-	if e := tx.QueryRow(ctx, `SELECT channel_id,multiplier_ppm FROM v3_channelmarket.groups WHERE id=$1`, m.GroupID).Scan(&channel, &factor); e != nil {
+	if e := tx.QueryRow(ctx, `SELECT g.channel_id,coalesce(u.multiplier_ppm,least(g.multiplier_ppm,coalesce((SELECT min(multiplier_ppm) FROM v3_channelmarket.time_range_multipliers w WHERE w.channel_id=g.channel_id AND w.starts_at<=$3 AND w.ends_at>$3),g.multiplier_ppm))) FROM v3_channelmarket.groups g JOIN v3_catalog.channels c ON c.id=g.channel_id LEFT JOIN v3_channelmarket.user_multipliers u ON u.channel_id=g.channel_id AND u.user_id=$2 WHERE g.id=$1 AND c.status='enabled' AND EXISTS(SELECT 1 FROM v3_catalog.channel_models cm WHERE cm.channel_id=g.channel_id) AND EXISTS(SELECT 1 FROM v3_catalog.channel_credentials k WHERE k.channel_id=c.id AND k.status='enabled')`, m.GroupID, user, now).Scan(&channel, &factor); errors.Is(e, pgx.ErrNoRows) {
+		return ErrNotFound
+	} else if e != nil {
 		return e
 	}
 	if maximum > 0 && factor > maximum {
@@ -266,6 +319,12 @@ func (s *Service) Pools(ctx context.Context, user int64) ([]RoutePool, error) {
 		}
 		p.MaxMultiplier = json.Number(formatFactor(maximum))
 		p.TokenGroup = "pool_" + p.ID
+		var config map[string]json.RawMessage
+		if err = json.Unmarshal(p.Config, &config); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		p.AutoBuild = config["auto_build"]
 		pools = append(pools, p)
 	}
 	rows.Close()
@@ -306,7 +365,7 @@ func (s *Service) DeletePool(ctx context.Context, user int64, id string) error {
 			return e
 		}
 		var bound bool
-		if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_identity.api_keys WHERE group_name=$1)`, internal).Scan(&bound); e != nil {
+		if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_identity.api_keys WHERE group_name=$1 AND deleted_at IS NULL)`, internal).Scan(&bound); e != nil {
 			return e
 		}
 		if bound {
@@ -324,7 +383,7 @@ func (s *Service) DeletePool(ctx context.Context, user int64, id string) error {
 }
 func (s *Service) BindPoolToken(ctx context.Context, user int64, pool string, key int64) error {
 	return s.transaction(ctx, func(tx pgx.Tx) error {
-		tag, e := tx.Exec(ctx, `UPDATE v3_identity.api_keys SET group_name=p.internal_group_name FROM v3_channelmarket.route_pools p WHERE p.id=$1 AND p.owner_user_id=$2 AND v3_identity.api_keys.id=$3 AND v3_identity.api_keys.user_id=$2 AND v3_identity.api_keys.status='active'`, pool, user, key)
+		tag, e := tx.Exec(ctx, `UPDATE v3_identity.api_keys SET group_name=p.internal_group_name FROM v3_channelmarket.route_pools p WHERE p.id=$1 AND p.owner_user_id=$2 AND v3_identity.api_keys.id=$3 AND v3_identity.api_keys.user_id=$2 AND v3_identity.api_keys.status='active' AND v3_identity.api_keys.deleted_at IS NULL`, pool, user, key)
 		if e == nil && tag.RowsAffected() != 1 {
 			return ErrNotFound
 		}

@@ -105,13 +105,14 @@ func auditNoObligationSQL(ctx context.Context, tx pgx.Tx, sources map[string]str
 func requestOperationRequestSQL(key string) string {
 	return `CASE WHEN starts_with(` + key + `,'entry:subscription:') THEN split_part(` + key + `,':',3)
 	 WHEN starts_with(` + key + `,'subscription:') THEN split_part(` + key + `,':',2)
-	 WHEN starts_with(` + key + `,'entry:relay:wallet:') OR starts_with(` + key + `,'entry:relay:subscription:') THEN split_part(` + key + `,':',4)
-	 WHEN starts_with(` + key + `,'relay:wallet:') OR starts_with(` + key + `,'relay:subscription:') THEN split_part(` + key + `,':',3) END`
+	 WHEN starts_with(` + key + `,'entry:relay:wallet:') OR starts_with(` + key + `,'entry:relay:claude_wallet:') OR starts_with(` + key + `,'entry:relay:subscription:') THEN split_part(` + key + `,':',4)
+	 WHEN starts_with(` + key + `,'relay:wallet:') OR starts_with(` + key + `,'relay:claude_wallet:') OR starts_with(` + key + `,'relay:subscription:') THEN split_part(` + key + `,':',3) END`
 }
 
 func requestOperationPrefixesSQL(alias string) string {
 	return `ARRAY['entry:subscription:'||` + alias + `.request_id||':','subscription:'||` + alias + `.request_id||':',
 	 'entry:relay:wallet:'||` + alias + `.request_id||':','relay:wallet:'||` + alias + `.request_id||':',
+	 'entry:relay:claude_wallet:'||` + alias + `.request_id||':','relay:claude_wallet:'||` + alias + `.request_id||':',
 	 'entry:relay:subscription:'||` + alias + `.request_id||':','relay:subscription:'||` + alias + `.request_id||':']`
 }
 

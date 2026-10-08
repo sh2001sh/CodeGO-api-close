@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -37,6 +38,177 @@ func seedArchivedSourceContracts(t *testing.T, source *pgxpool.Pool) {
 	 INSERT INTO migration_source.wallet_quota_conversions VALUES(1,7,'completed','standard_to_claude',400,100,400,0,400,500);`)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+type archivedEvidenceCaptureTx struct {
+	pgx.Tx
+	query string
+}
+
+func (tx *archivedEvidenceCaptureTx) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
+	if strings.HasPrefix(query, "WITH archived_execution_parents AS MATERIALIZED") {
+		tx.query = query
+	}
+	return tx.Tx.Query(ctx, query, args...)
+}
+
+func TestArchivedExecutionEvidencePreservesEveryOriginalParentAndChildGuard(t *testing.T) {
+	source, _, _ := importTestDB(t)
+	seedProjectionDrain(t, source)
+	for _, mutation := range []string{
+		"",
+		`UPDATE gateway.execution_attempts SET execution_id=''`,
+		`UPDATE gateway.execution_attempts SET execution_id=NULL`,
+		`UPDATE gateway.execution_attempts SET execution_id='missing'`,
+		`UPDATE gateway.route_plans SET route_plan_id=''`,
+		`UPDATE gateway.route_plans SET request_id=NULL`,
+		`UPDATE gateway.route_plans SET request_id='wrong-request'`,
+		`UPDATE gateway.usage_evidence SET execution_id=NULL`,
+		`UPDATE gateway.usage_evidence SET request_id='wrong-request'`,
+		`UPDATE gateway.usage_evidence SET actual_amount=99`,
+		`UPDATE gateway.request_executions SET user_id=8`,
+		`UPDATE gateway.request_executions SET token_id=12`,
+		`UPDATE gateway.request_executions SET actual_amount=24`,
+		`UPDATE billing.settlements SET delta_amount=-6`,
+		`UPDATE billing.reservations SET status='open' WHERE reservation_id='stale-reservation'`,
+		`INSERT INTO billing.reservations VALUES('other-open','stale-request','wallet-7',1,'open')`,
+	} {
+		t.Run(mutation, func(t *testing.T) {
+			ctx := context.Background()
+			tx, err := source.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback(ctx) }()
+			if mutation != "" {
+				if _, err = tx.Exec(ctx, mutation); err != nil {
+					t.Fatal(err)
+				}
+			}
+			sources, err := discoverSources(ctx, tx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			predicate, err := executionDrainSQL(ctx, tx, sources, "execution")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := map[string]int64{}
+			for _, name := range []string{"execution_attempts", "route_plans", "usage_evidence"} {
+				field, linked := "execution_id", ""
+				if name == "route_plans" {
+					field = "route_plan_id"
+				}
+				if name != "execution_attempts" {
+					linked = " AND child.request_id IS NOT DISTINCT FROM execution.request_id"
+				}
+				if name == "usage_evidence" {
+					linked += " AND child.actual_amount IS NOT DISTINCT FROM execution.actual_amount"
+				}
+				// Compare against the previous correlated contract, including its
+				// exact per-child existential semantics, under the same snapshot.
+				var count int64
+				err = tx.QueryRow(ctx, `SELECT count(*) FROM `+sources["gateway_"+name]+` child
+				 WHERE COALESCE(child.`+field+`,'')='' OR NOT EXISTS(SELECT 1 FROM `+sources["gateway_request_executions"]+` execution
+				 WHERE execution.`+field+`=child.`+field+` AND (`+predicate+`)`+linked+`)`).Scan(&count)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want["unproven_execution_evidence.gateway_"+name] = count
+			}
+			r := Report{Counts: map[string]int64{}}
+			if err = validateArchivedExecutionEvidence(ctx, tx, sources, map[string]bool{}, &r); err != nil {
+				t.Fatal(err)
+			}
+			for name, count := range want {
+				if r.Counts[name] != count {
+					t.Fatalf("guard changed %s=%d want=%d mutation=%s", name, r.Counts[name], count, mutation)
+				}
+			}
+			if (mutation == "") != (len(r.Issues) == 0) {
+				t.Fatalf("unsafe evidence admitted or valid evidence refused: %+v", r)
+			}
+		})
+	}
+}
+
+func TestArchivedExecutionEvidenceClassifiesParentsOnceAndSpillsBoundedly(t *testing.T) {
+	source, _, _ := importTestDB(t)
+	seedArchivedSourceContracts(t, source)
+	ctx := context.Background()
+	_, err := source.Exec(ctx, `
+	 INSERT INTO gateway.request_executions SELECT 'execution-'||g,'request-'||g,'plan-'||g,'settled' FROM generate_series(2,40000) g;
+	 INSERT INTO gateway.request_executions SELECT * FROM gateway.request_executions WHERE execution_id='execution-1';
+	 INSERT INTO gateway.execution_attempts SELECT 'attempt-'||g,'execution-'||g,'provider_completed' FROM generate_series(2,40000) g;
+	 INSERT INTO gateway.route_plans SELECT 'plan-'||g,'request-'||g,'recorded' FROM generate_series(2,40000) g;
+	 INSERT INTO gateway.usage_evidence SELECT 'evidence-'||g,'execution-'||g,'request-'||g,10 FROM generate_series(2,40000) g;
+	 INSERT INTO gateway.execution_attempts VALUES('missing','absent','recorded'),('empty','','recorded');
+	 INSERT INTO gateway.route_plans VALUES('absent','absent','recorded'),('','request-1','recorded');
+	 INSERT INTO gateway.usage_evidence VALUES('missing','absent','absent',10),('empty','','request-1',10);
+	 ANALYZE gateway.request_executions; ANALYZE gateway.execution_attempts; ANALYZE gateway.route_plans; ANALYZE gateway.usage_evidence;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := source.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SET LOCAL work_mem='64kB'`); err != nil {
+		t.Fatal(err)
+	}
+	sources, err := discoverSources(ctx, tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capture := &archivedEvidenceCaptureTx{Tx: tx}
+	r := Report{Counts: map[string]int64{}}
+	if err = validateArchivedExecutionEvidence(ctx, capture, sources, map[string]bool{}, &r); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"execution_attempts", "route_plans", "usage_evidence"} {
+		if r.Counts["archived_source_history.gateway_"+name] != 40002 || r.Counts["unproven_execution_evidence.gateway_"+name] != 2 {
+			t.Fatalf("duplicate parent multiplied child counts or unsafe identifier accepted: %+v", r.Counts)
+		}
+	}
+	var planJSON []byte
+	if err = tx.QueryRow(ctx, `EXPLAIN(ANALYZE,BUFFERS,FORMAT JSON)`+capture.query).Scan(&planJSON); err != nil {
+		t.Fatal(err)
+	}
+	var plan []map[string]any
+	if err = json.Unmarshal(planJSON, &plan); err != nil {
+		t.Fatal(err)
+	}
+	var parents, antiJoins, spills int
+	var inspect func(map[string]any)
+	inspect = func(node map[string]any) {
+		if node["Relation Name"] == "request_executions" {
+			parents++
+			if node["Actual Loops"] != float64(1) || node["Actual Rows"] != float64(40001) {
+				t.Fatalf("parent classification repeated: %v", node)
+			}
+		}
+		if node["Node Type"] == "Hash Join" && node["Join Type"] == "Anti" {
+			antiJoins++
+		}
+		if node["Node Type"] == "Hash" {
+			if node["Hash Batches"].(float64) > 1 {
+				spills++
+			}
+			if node["Peak Memory Usage"].(float64) > 1024 {
+				t.Fatalf("hash work exceeded 1 MiB at work_mem=64 KiB: %v", node)
+			}
+		}
+		if children, ok := node["Plans"].([]any); ok {
+			for _, child := range children {
+				inspect(child.(map[string]any))
+			}
+		}
+	}
+	inspect(plan[0]["Plan"].(map[string]any))
+	if parents != 1 || antiJoins != 3 || spills != 3 {
+		t.Fatalf("bounded reuse plan parents=%d anti_joins=%d spilled_hashes=%d", parents, antiJoins, spills)
 	}
 }
 

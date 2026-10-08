@@ -109,9 +109,13 @@ func TestProjectionUnknownRejectsAnyTraceableObligationOrUnknownShape(t *testing
 		`UPDATE billing.ledger_entries SET idempotency_key='subscription:rejected-request:未識別操作' WHERE entry_id='unlinked-token-adjustment'`,
 		`CREATE TABLE billing.outbox_events(aggregate_id text,payload jsonb,idempotency_key text); INSERT INTO billing.outbox_events VALUES('other','{}','outbox:subscription:rejected-request:未識別操作')`,
 	}
-	for _, prefix := range []string{"entry:subscription:", "subscription:", "entry:relay:wallet:", "relay:wallet:", "entry:relay:subscription:", "relay:subscription:"} {
+	for _, prefix := range []string{"entry:subscription:", "subscription:", "entry:relay:wallet:", "relay:wallet:", "entry:relay:claude_wallet:", "relay:claude_wallet:", "entry:relay:subscription:", "relay:subscription:"} {
 		mutations = append(mutations, `UPDATE billing.ledger_entries SET idempotency_key='`+prefix+`rejected-request:reserve-extra:42' WHERE entry_id='unlinked-token-adjustment'`)
 		mutations = append(mutations, `CREATE TABLE billing.outbox_events(aggregate_id text,payload jsonb,idempotency_key text); INSERT INTO billing.outbox_events VALUES('other','{}','outbox:`+prefix+`rejected-request:settle:reservation')`)
+	}
+	for _, prefix := range []string{"entry:relay:claude_wallet:", "relay:claude_wallet:"} {
+		mutations = append(mutations, `UPDATE billing.ledger_entries SET idempotency_key='`+prefix+`rejected-request:未識別操作' WHERE entry_id='unlinked-token-adjustment'`)
+		mutations = append(mutations, `CREATE TABLE billing.outbox_events(aggregate_id text,payload jsonb,idempotency_key text); INSERT INTO billing.outbox_events VALUES('other','{}','outbox:`+prefix+`rejected-request:未識別操作')`)
 	}
 	for _, field := range []string{"request_id", "reference_id", "usage_evidence_id"} {
 		mutations = append(mutations, `CREATE TABLE billing.outbox_events(aggregate_id text,payload jsonb,idempotency_key text); INSERT INTO billing.outbox_events VALUES('other','{"`+field+`":"rejected-request"}','other')`)
@@ -253,6 +257,51 @@ func TestProjectionTerminalEvidenceCannotOverrideFinancialOrProviderConflicts(t 
 				}
 				if err = tx.QueryRow(ctx, unknownObligationQuery(t, tx, `WHERE request_id='rejected-request'`)).Scan(&safe); err != nil || safe {
 					t.Fatalf("terminal evidence hid conflicting obligation mutation=%s safe=%t err=%v", mutation, safe, err)
+				}
+			})
+		}
+	}
+}
+
+func TestProjectionUnknownLegacyClaudePrefixesMatchRequestLiterally(t *testing.T) {
+	source, _, _ := importTestDB(t)
+	seedUnknownObligation(t, source)
+	for _, prefix := range []string{"entry:relay:claude_wallet:", "relay:claude_wallet:"} {
+		for _, outbox := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/outbox=%t", prefix, outbox), func(t *testing.T) {
+				ctx := context.Background()
+				tx, err := source.Begin(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = tx.Rollback(ctx) }()
+				if _, err = tx.Exec(ctx, `UPDATE gateway.request_audits SET request_id='literal%_id' WHERE request_id='rejected-request'`); err != nil {
+					t.Fatal(err)
+				}
+				update := `UPDATE billing.ledger_entries SET idempotency_key=$1 WHERE entry_id='unlinked-token-adjustment'`
+				if outbox {
+					if _, err = tx.Exec(ctx, `CREATE TABLE billing.outbox_events(aggregate_id text,payload jsonb,idempotency_key text); INSERT INTO billing.outbox_events VALUES('other','{}','other')`); err != nil {
+						t.Fatal(err)
+					}
+					prefix = "outbox:" + prefix
+					update = `UPDATE billing.outbox_events SET idempotency_key=$1`
+				}
+				for _, boundary := range []struct {
+					key  string
+					safe bool
+				}{
+					{prefix + "literalXXid:reserve", true},
+					{strings.Replace(prefix, "claude_wallet:", "claude_wallet_other:", 1) + "literal%_id:reserve", true},
+					{prefix + "literal%_id:reserve", false},
+					{prefix + "literal%_id:未識別操作", false},
+				} {
+					if _, err = tx.Exec(ctx, update, boundary.key); err != nil {
+						t.Fatal(err)
+					}
+					var safe bool
+					if err = tx.QueryRow(ctx, unknownObligationQuery(t, tx, `WHERE request_id='literal%_id'`)).Scan(&safe); err != nil || safe != boundary.safe {
+						t.Fatalf("legacy literal boundary key=%s safe=%t want=%t err=%v", boundary.key, safe, boundary.safe, err)
+					}
 				}
 			})
 		}

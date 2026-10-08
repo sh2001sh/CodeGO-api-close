@@ -61,6 +61,14 @@ func validateArchivedExecutionEvidence(ctx context.Context, source pgx.Tx, sourc
 			return err
 		}
 	}
+	var checks, columns []string
+	selected := map[string]bool{}
+	selectColumn := func(column string) {
+		if !selected[column] {
+			columns = append(columns, "execution."+column)
+			selected[column] = true
+		}
+	}
 	for _, name := range []string{"execution_attempts", "route_plans", "usage_evidence"} {
 		table := sources["gateway_"+name]
 		if table == "" {
@@ -86,8 +94,10 @@ func validateArchivedExecutionEvidence(ctx context.Context, source pgx.Tx, sourc
 		if name == "route_plans" {
 			field = "route_plan_id"
 		}
+		selectColumn(field)
 		linked := ""
 		if name != "execution_attempts" {
+			selectColumn("request_id")
 			linked = " AND child.request_id IS NOT DISTINCT FROM execution.request_id"
 		}
 		if name == "usage_evidence" {
@@ -96,20 +106,41 @@ func validateArchivedExecutionEvidence(ctx context.Context, source pgx.Tx, sourc
 				return err
 			}
 			if full {
+				selectColumn("actual_amount")
 				linked += " AND child.actual_amount IS NOT DISTINCT FROM execution.actual_amount"
 			}
 		}
+		// Put the identifier check inside NOT EXISTS, keeping this a hashable
+		// anti join even when the classified parents exceed work_mem. An outer
+		// OR instead makes PostgreSQL run the parent proof for every child.
+		checks = append(checks, `SELECT 'gateway_`+name+`'::text, count(*) FROM `+table+` child
+			WHERE NOT EXISTS(SELECT 1 FROM archived_execution_parents execution
+			WHERE execution.`+field+`=child.`+field+` AND COALESCE(child.`+field+`,'')<>''`+linked+`)`)
+	}
+	if len(checks) == 0 {
+		return nil
+	}
+	// Evaluate the unchanged canonical ownership/funding proof once per
+	// parent, then reuse only these narrow identifiers for all three trees.
+	// PostgreSQL bounds the working set with work_mem and may spill to disk;
+	// no source-sized Go map or full execution payload is retained.
+	rows, err := source.Query(ctx, `WITH archived_execution_parents AS MATERIALIZED
+		(SELECT `+strings.Join(columns, ",")+` FROM `+parent+` execution WHERE (`+parentDrained+`))
+		`+strings.Join(checks, " UNION ALL "))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
 		var unsettled int64
-		if err := source.QueryRow(ctx, `SELECT count(*) FROM `+table+` child
-			WHERE COALESCE(child.`+field+`,'')='' OR NOT EXISTS(
-			SELECT 1 FROM `+parent+` execution WHERE execution.`+field+`=child.`+field+`
-			AND (`+parentDrained+`)`+linked+`)`).Scan(&unsettled); err != nil {
+		if err = rows.Scan(&name, &unsettled); err != nil {
 			return err
 		}
-		report.Counts["unproven_execution_evidence.gateway_"+name] = unsettled
+		report.Counts["unproven_execution_evidence."+name] = unsettled
 		if unsettled > 0 {
-			report.Issues = append(report.Issues, Issue{"gateway_" + name, 0, "unproven_execution_evidence", "execution evidence has a missing identifier, absent parent or no proven terminal funding; drain and reconcile the source first"})
+			report.Issues = append(report.Issues, Issue{name, 0, "unproven_execution_evidence", "execution evidence has a missing identifier, absent parent or no proven terminal funding; drain and reconcile the source first"})
 		}
 	}
-	return nil
+	return rows.Err()
 }

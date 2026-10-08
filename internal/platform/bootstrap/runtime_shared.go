@@ -92,7 +92,7 @@ func startOptionSyncLoop() {
 func startDiagnostics() {
 	if os.Getenv("ENABLE_PPROF") == "true" {
 		gopool.Go(func() {
-			log.Println(http.ListenAndServe("0.0.0.0:8005", nil))
+			log.Println(http.ListenAndServe("127.0.0.1:8005", nil))
 		})
 		platformobservability.StartPprofCPUMonitor()
 		platformobservability.SysLog("pprof enabled")

@@ -30,6 +30,7 @@ type RequestBodySnapshot struct {
 	Raw                []byte          `json:"-"`
 	Model              string          `json:"model"`
 	Stream             *bool           `json:"stream"`
+	Background         *bool           `json:"background"`
 	StreamOptions      json.RawMessage `json:"stream_options"`
 	ServiceTier        json.RawMessage `json:"service_tier"`
 	Store              json.RawMessage `json:"store"`

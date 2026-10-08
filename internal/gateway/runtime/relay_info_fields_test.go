@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/sh2001sh/new-api/dto"
@@ -63,4 +65,17 @@ func TestRemoveDisabledFieldsRemovesConfiguredFields(t *testing.T) {
 	escaped, err := RemoveDisabledFields([]byte(`{"\u0073ervice_tier":"priority"}`), dto.ChannelOtherSettings{}, false)
 	require.NoError(t, err)
 	require.NotContains(t, string(escaped), "service_tier")
+}
+
+func TestRemoveDisabledFieldsPreservesLargeNestedInput(t *testing.T) {
+	input := strings.Repeat("large conversation context ", 20_000)
+	body := []byte(`{"model":"gpt-5","input":[{"role":"user","content":"` + input + `","service_tier":"nested"}],"\u0073ervice_tier":"priority","stream_options":{"include_obfuscation":false,"include_usage":true}}`)
+	result, err := RemoveDisabledFields(body, dto.ChannelOtherSettings{}, false)
+	require.NoError(t, err)
+	var decoded map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(result, &decoded))
+	require.NotContains(t, decoded, "service_tier")
+	require.Contains(t, string(decoded["input"]), `"service_tier":"nested"`)
+	require.Contains(t, string(decoded["input"]), input)
+	require.JSONEq(t, `{"include_usage":true}`, string(decoded["stream_options"]))
 }

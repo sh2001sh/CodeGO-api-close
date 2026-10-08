@@ -28,30 +28,35 @@ const backgroundEventPollInterval = 250 * time.Millisecond
 // ResponsesCreate routes ordinary requests through the synchronous relay and
 // persists background requests before starting their asynchronous execution.
 func ResponsesCreate(c *gin.Context) {
-	var request dto.OpenAIResponsesRequest
-	if err := platformhttpx.UnmarshalBodyReusable(c, &request); err != nil {
+	snapshot, err := platformhttpx.GetRequestBodySnapshot(c)
+	if err != nil {
 		respondRelayError(c, types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry()))
 		return
 	}
-	if request.Background == nil || !*request.Background {
-		session := attachResponsesHTTPWebSocket(c, &request)
+	if snapshot.Background == nil || !*snapshot.Background {
+		session := attachResponsesHTTPWebSocket(c, snapshot.Model, snapshot.Stream)
 		if session != nil {
 			defer session.Close()
 		}
 		relayRequest(c, types.RelayFormatOpenAIResponses)
 		return
 	}
+	var request dto.OpenAIResponsesRequest
+	if err := platformhttpx.UnmarshalBodyReusable(c, &request); err != nil {
+		respondRelayError(c, types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry()))
+		return
+	}
 	createResponsesBackground(c, &request)
 }
 
-func attachResponsesHTTPWebSocket(c *gin.Context, request *dto.OpenAIResponsesRequest) *responsesws.Session {
-	if c == nil || request == nil || request.Stream == nil || !*request.Stream {
+func attachResponsesHTTPWebSocket(c *gin.Context, model string, stream *bool) *responsesws.Session {
+	if c == nil || stream == nil || !*stream {
 		return nil
 	}
 	channelID := httpctx.GetContextKeyInt(c, constant.ContextKeyChannelId)
 	keyIndex := httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
 	channel, err := gatewaystore.LoadChannelByID(channelID, true)
-	if err != nil || channel == nil || !channel.ChannelInfo.ResponsesCapabilities.SupportsWebSocketFor(request.Model, keyIndex) {
+	if err != nil || channel == nil || !channel.ChannelInfo.ResponsesCapabilities.SupportsWebSocketFor(model, keyIndex) {
 		return nil
 	}
 	session := responsesws.NewSession()

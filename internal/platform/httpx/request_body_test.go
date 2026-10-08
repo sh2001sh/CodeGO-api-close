@@ -52,7 +52,7 @@ func TestUnmarshalBodyReusableFastJSONRejectsTrailingData(t *testing.T) {
 
 func TestGetRequestBodySnapshotCachesRoutingMetadata(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	raw := []byte(`{"model":"gpt-5","stream":true,"prompt_cache_key":"conversation-1","tools":[{"type":"function"}]}`)
+	raw := []byte(`{"model":"gpt-5","stream":true,"background":true,"prompt_cache_key":"conversation-1","tools":[{"type":"function"}]}`)
 	request := httptest.NewRequest("POST", "/v1/responses", bytes.NewReader(raw))
 	request.Header.Set("Content-Type", "application/json")
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -67,6 +67,8 @@ func TestGetRequestBodySnapshotCachesRoutingMetadata(t *testing.T) {
 	require.Equal(t, "gpt-5", first.Model)
 	require.NotNil(t, first.Stream)
 	require.True(t, *first.Stream)
+	require.NotNil(t, first.Background)
+	require.True(t, *first.Background)
 	require.NotEmpty(t, first.Tools)
 }
 

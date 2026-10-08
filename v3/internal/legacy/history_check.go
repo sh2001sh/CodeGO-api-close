@@ -177,6 +177,7 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 				return err
 			}
 			putHistoryDates(p, map[string]historyTime{"created_at": a.CreatedAt, "updated_at": a.UpdatedAt, "started_at": a.StartedAt, "completed_at": a.CompletedAt})
+			p["completed_at"], _ = json.Marshal(a.completedDate())
 			return check("v3_audit", "request_audits", "request_id", a.RequestID, p)
 		}},
 		{"request_attempt_audits", func(raw json.RawMessage, _ bool) error {

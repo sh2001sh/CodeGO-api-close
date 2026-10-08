@@ -109,9 +109,15 @@ type statusStats struct {
 
 func (s *Service) statusStats(r *http.Request, uid, start, end int64) (statusStats, error) {
 	out := statusStats{map[statusKey][2]int64{}, map[string][2]int64{}}
-	rows, err := s.pool.Query(r.Context(), availableModels+`SELECT a.group_name,a.model,(extract(epoch FROM a.started_at)::bigint/1800)*1800,count(*),count(*) FILTER(WHERE a.status='success')
+	rows, err := s.pool.Query(r.Context(), availableModels+`, requests AS (
+	 SELECT a.group_name,a.model,a.started_at,a.status IN ('success','succeeded') AS successful
 	 FROM v3_audit.request_audits a WHERE a.started_at>=$2 AND a.started_at<$3 AND a.counted_in_success_rate
-	 AND EXISTS(SELECT 1 FROM available av WHERE av.group_name=a.group_name AND av.model=a.model) GROUP BY 1,2,3`, uid, time.Unix(start, 0), time.Unix(end, 0))
+	 UNION ALL
+	 SELECT a.group_name,l.model,min(l.created_at),bool_or(l.terminal IN ('success','succeeded','completed','Completed','completed_no_usage','CompletedNoUsage'))
+	 FROM v3_billing.usage_logs l JOIN v3_audit.request_audits a ON a.request_id=l.request_id AND a.status='historical_unknown'
+	 WHERE l.created_at>=$2 AND l.created_at<$3 GROUP BY a.group_name,l.model,l.request_id
+	 ) SELECT a.group_name,a.model,(extract(epoch FROM a.started_at)::bigint/1800)*1800,count(*),count(*) FILTER(WHERE a.successful)
+	 FROM requests a WHERE EXISTS(SELECT 1 FROM available av WHERE av.group_name=a.group_name AND av.model=a.model) GROUP BY 1,2,3`, uid, time.Unix(start, 0), time.Unix(end, 0))
 	if err != nil {
 		return out, err
 	}

@@ -18,8 +18,6 @@ func validateSourceState(ctx context.Context, source pgx.Tx, sources map[string]
 		{"reservations", "billing_reservations", "status", []string{"settled", "released", "expired"}},
 		{"settlements", "billing_settlements", "status", []string{"completed", "rejected"}},
 		{"outbox_events", "billing_outbox_events", "status", []string{"published"}},
-		{"request_executions", "gateway_request_executions", "status", []string{"settled"}},
-		{"request_audits", "gateway_request_audits", "status", []string{"succeeded", "failed", "rejected", "cancelled"}},
 		{"responses_background_jobs", "gateway_responses_background_jobs", "status", []string{"completed", "failed", "cancelled"}},
 		{"tasks", "tasks", "status", []string{"SUCCESS", "FAILURE"}},
 		{"task_workflows", "workflow_task_workflows", "status", []string{"succeeded", "failed", "timeout"}},
@@ -42,6 +40,9 @@ func validateSourceState(ctx context.Context, source pgx.Tx, sources map[string]
 		if pending > 0 {
 			report.Issues = append(report.Issues, Issue{guard.alias, 0, "source_work_pending", "finish or cancel pending source work before stopping writers"})
 		}
+	}
+	if err := validateProjectionDrains(ctx, source, sources, report); err != nil {
+		return err
 	}
 	if sources["accounts"] == "" {
 		return nil

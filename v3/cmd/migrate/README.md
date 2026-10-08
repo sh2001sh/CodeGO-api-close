@@ -62,7 +62,41 @@ the frozen v2 backup from native current state:
 
 | Source | Contract and report |
 | --- | --- |
-| `gateway.execution_attempts`, `gateway.route_plans`, `gateway.usage_evidence` | Old Temporal settlement evidence, not routing configuration. Every row must refer to a settled `request_executions` parent; missing identifiers, missing parents and unsettled parents block application. Counts use `archived_source_history.gateway_*`. Keep the original execution trees in the v2 backup. Current accounting/audit reads use imported ledger, logs and request audits; these child records never replay settlement. Flat `gateway_*` table names follow the same contract. |
+| `gateway.execution_attempts`, `gateway.route_plans`, `gateway.usage_evidence` | Old post-settlement Temporal evidence, not routing configuration. Every row needs a settled parent or a parent whose existing canonical request/account/reservation/settlement ownership, per-reservation amount identity and total funding debit prove completion. Subscription additional reservations are summed by request and funding account; raw execution/usage quota is distinct from the funding debit after scaling or caps. Present raw evidence must agree with its execution; terminal billable audit or the single replacement consumption log must agree with the total funding debit. Missing identifiers, conflicting links/amounts and orphan children block application. Counts use `archived_source_history.gateway_*` and `archived_projection_diagnostics.gateway_request_executions`. Original execution trees remain in the v2 backup; no money is replayed. Flat `gateway_*` names follow the same contract. |
+
+An old `in_flight` audit is only admitted when canonical funding is terminal
+with matching ownership and no pending provider work, durable final refusal /
+terminal background evidence proves no-money completion, or the frozen source
+proves no traceable request obligation. The last branch requires `billable=false`
+and zero quota; an existing user and its API key; no reservation, reverse
+settlement usage reference, ledger reference (including unknown/NULL reference
+types), v2 subscription/wallet operation prefix, execution/usage/economics,
+funding allocation, subscription pre-consume, provider task/workflow/background
+or billing outbox reference. Present unknown schemas and malformed evidence
+block this branch. Reverse financial checks are materialized set operations,
+not an unindexed full-table scan for each audit. The target status is
+`historical_unknown`, excluded from audit success scoring; original amounts and
+missing completion time remain unchanged. This status does not suppress the
+independent usage-log fallback. An old date or zero global reserved balance
+alone never admits an unknown record. Source records are never rewritten.
+
+V2 finite API-key adjustments use token references and random operation IDs,
+without a request link. The migration preserves the current key budget and
+requires agreement with its canonical account snapshot; it cannot establish
+whether a particular unknown HTTP request previously debited/refunded that
+budget. It never infers or replays a compensating adjustment from unknown HTTP.
+
+Before applying the offline import, independently verify actual Temporal
+executions are closed after stopping all source writers and schedulers. Paginate
+the real namespace's Running visibility results and describe their exact runs:
+visibility can still list a completed run. Expired retention does not prove an
+old HTTP outcome. This operational freeze check is required in addition to the
+database drain contract; `-offline` must not be used while source work continues.
+
+The source's published billing outbox is routinely purged after 72 hours, and
+request economics is optional when no procurement multiplier is configured.
+Missing old outbox/economics projections do not undo canonical settlements;
+present pending outbox entries still block the import.
 | `balance_blind_box_simulation_sessions`, `balance_blind_box_simulation_batches` | Stored temporary simulation sessions/results were retired in v2. They never created real wallet credits, real prizes or real pity state. Counts use `archived_source_history`; even an old active simulation grants no v3 entitlement. The native simulator starts from its own current rules. |
 | `community_resources` | The GitHub-contribution submission/review feature and its routes were removed in v2 before this rebuild. Original submissions, reviews and reward evidence stay in the v2 backup, counted as `archived_source_history.community_resources`. This is separate from the retained NodeBB identity/rating bridge. Already credited rewards remain represented by canonical wallet/funding facts; no reward is reissued and no pending submission is treated as a payout. |
 | `quota_data` | Old hourly usage read projection, counted as `rebuilt_read_projections.quota_data`. Native reports compute from imported detailed usage facts. Older rollups beyond the retained detailed-log range remain in the source backup; they are not a wallet balance or an additional usage debit. |

@@ -58,7 +58,7 @@ func attachRecentRequests(ctx context.Context, queryer recentQueryer, groups []C
 	SELECT l.channel_id,l.request_id,min(l.created_at),bool_or(l.terminal IN ('success','succeeded','completed','Completed','completed_no_usage','CompletedNoUsage'))
 	FROM v3_billing.usage_logs l
 	WHERE l.channel_id=ANY($1::bigint[]) AND l.created_at>=$2 AND l.created_at<=$3
-	AND NOT EXISTS(SELECT 1 FROM v3_audit.request_audits a WHERE a.request_id=l.request_id)
+	AND NOT EXISTS(SELECT 1 FROM v3_audit.request_audits a WHERE a.request_id=l.request_id AND a.status<>'historical_unknown')
 	GROUP BY l.channel_id,l.request_id)
 	SELECT channel_id,extract(epoch FROM date_bin('1 hour',observed_at,'1970-01-01 00:00:00+00'::timestamptz))::bigint AS bucket,
 	count(*)::bigint,count(*) FILTER(WHERE successful)::bigint

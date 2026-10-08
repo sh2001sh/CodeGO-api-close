@@ -46,12 +46,20 @@ func validateArchivedSourceContracts(ctx context.Context, source pgx.Tx, sources
 
 // v2's Temporal settlement projections are not routing configuration. Native
 // settlement and audit history comes from the imported ledger/log/audit facts.
-// Retain the detailed old execution tree in the source backup only after its
-// parent is settled; an orphan cannot prove that financial work was drained.
+// Retain the detailed old execution tree after proving its parent's funding
+// terminal, even when its post-settlement projection never finished.
 func validateArchivedExecutionEvidence(ctx context.Context, source pgx.Tx, sources map[string]string, known map[string]bool, report *Report) error {
 	parent := sources["gateway_request_executions"]
 	if parent == "" {
 		parent = sources["request_executions"]
+	}
+	parentDrained := "FALSE"
+	if parent != "" {
+		var err error
+		parentDrained, err = executionDrainSQL(ctx, source, sources, "execution")
+		if err != nil {
+			return err
+		}
 	}
 	for _, name := range []string{"execution_attempts", "route_plans", "usage_evidence"} {
 		table := sources["gateway_"+name]
@@ -78,16 +86,29 @@ func validateArchivedExecutionEvidence(ctx context.Context, source pgx.Tx, sourc
 		if name == "route_plans" {
 			field = "route_plan_id"
 		}
+		linked := ""
+		if name != "execution_attempts" {
+			linked = " AND child.request_id IS NOT DISTINCT FROM execution.request_id"
+		}
+		if name == "usage_evidence" {
+			full, err := projectionColumns(ctx, source, parent, "actual_amount")
+			if err != nil {
+				return err
+			}
+			if full {
+				linked += " AND child.actual_amount IS NOT DISTINCT FROM execution.actual_amount"
+			}
+		}
 		var unsettled int64
 		if err := source.QueryRow(ctx, `SELECT count(*) FROM `+table+` child
 			WHERE COALESCE(child.`+field+`,'')='' OR NOT EXISTS(
 			SELECT 1 FROM `+parent+` execution WHERE execution.`+field+`=child.`+field+`
-			AND execution.status='settled')`).Scan(&unsettled); err != nil {
+			AND (`+parentDrained+`)`+linked+`)`).Scan(&unsettled); err != nil {
 			return err
 		}
 		report.Counts["unproven_execution_evidence.gateway_"+name] = unsettled
 		if unsettled > 0 {
-			report.Issues = append(report.Issues, Issue{"gateway_" + name, 0, "unproven_execution_evidence", "execution evidence has a missing identifier, absent parent or no settled parent; drain and reconcile the source first"})
+			report.Issues = append(report.Issues, Issue{"gateway_" + name, 0, "unproven_execution_evidence", "execution evidence has a missing identifier, absent parent or no proven terminal funding; drain and reconcile the source first"})
 		}
 	}
 	return nil

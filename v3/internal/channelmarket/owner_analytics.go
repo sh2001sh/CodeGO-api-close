@@ -208,7 +208,7 @@ func ownerAnalyticsQuery(a Actor, f OwnerAnalyticsFilter, channels []int64) (str
  bool_or(l.terminal IN ('success','succeeded','completed','Completed','completed_no_usage','CompletedNoUsage')) FILTER(WHERE ` + usageRange + `) AS successful
  FROM v3_billing.usage_logs l
  WHERE l.channel_id=ANY(` + channelIDs + `::bigint[])
- AND NOT EXISTS(SELECT 1 FROM v3_audit.request_audits a WHERE a.request_id=l.request_id)
+ AND NOT EXISTS(SELECT 1 FROM v3_audit.request_audits a WHERE a.request_id=l.request_id AND a.status<>'historical_unknown')
  GROUP BY l.channel_id,l.request_id
 ), requests AS (
  SELECT a.final_channel_id AS channel_id,a.request_id,a.user_id,a.model,a.started_at AS timestamp,

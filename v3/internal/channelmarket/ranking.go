@@ -74,7 +74,7 @@ func loadRankingMetricsTx(ctx context.Context, tx pgx.Tx, now time.Time) ([]rank
 	WHERE a.started_at>=$1 AND a.started_at<=$2 AND a.completed_at<=$2 AND a.counted_in_success_rate
 	UNION ALL
 	SELECT u.channel_id,u.user_id,u.request_id,u.amount,u.cached_tokens,u.prompt_tokens,u.successful FROM usage u
-	WHERE NOT EXISTS(SELECT 1 FROM v3_audit.request_audits a WHERE a.request_id=u.request_id))
+	WHERE NOT EXISTS(SELECT 1 FROM v3_audit.request_audits a WHERE a.request_id=u.request_id AND a.status<>'historical_unknown'))
 	SELECT g.id,g.channel_id,g.source_label,g.multiplier_ppm,
 	count(l.request_id),count(l.request_id) FILTER(WHERE l.successful),
 	count(DISTINCT l.user_id),coalesce(round(avg(l.amount)),0)::bigint,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -50,7 +51,21 @@ func decodeHistoryRequestAudit(raw json.RawMessage) (historyRequestAudit, error)
 		return a, fmt.Errorf("request audit amount overflows micro-credits")
 	}
 	a.Amount = int64(amount)
+	if a.Status == "in_flight" {
+		// Source drain validation separately proves the funding/provider work
+		// terminal. It cannot recover the missing historical HTTP outcome. Keep
+		// source amounts and times verbatim and exclude it from success scoring.
+		a.Status = "historical_unknown"
+		a.CountedInSuccessRate = false
+	}
 	return a, nil
+}
+
+func (a historyRequestAudit) completedDate() time.Time {
+	if a.Status == "historical_unknown" {
+		return a.CompletedAt.UTC()
+	}
+	return historyDate(a.CompletedAt)
 }
 
 type historyAttemptAudit struct {
@@ -92,7 +107,7 @@ func (m *Importer) importHistoryRequestAudits(ctx context.Context, target pgx.Tx
 			return err
 		}
 		columns := []string{"request_id", "trace_id", "user_id", "key_id", "model", "group_name", "protocol", "request_type", "status", "counted_in_success_rate", "billable", "amount", "prompt_tokens", "completion_tokens", "final_channel_id", "attempts_count", "retry_count", "status_code", "error_code", "started_at", "completed_at", "created_at", "updated_at"}
-		values := []any{a.RequestID, a.TraceID, a.UserID, a.KeyID, a.Model, a.Group, a.Protocol, a.RequestType, a.Status, a.CountedInSuccessRate, a.Billable, a.Amount, a.PromptTokens, a.CompletionTokens, a.FinalChannelID, a.AttemptsCount, a.RetryCount, a.StatusCode, a.ErrorCode, historyDate(a.StartedAt), historyDate(a.CompletedAt), historyDate(a.CreatedAt), historyDate(a.UpdatedAt)}
+		values := []any{a.RequestID, a.TraceID, a.UserID, a.KeyID, a.Model, a.Group, a.Protocol, a.RequestType, a.Status, a.CountedInSuccessRate, a.Billable, a.Amount, a.PromptTokens, a.CompletionTokens, a.FinalChannelID, a.AttemptsCount, a.RetryCount, a.StatusCode, a.ErrorCode, historyDate(a.StartedAt), a.completedDate(), historyDate(a.CreatedAt), historyDate(a.UpdatedAt)}
 		return requests.add(historyFields(columns, values))
 	})
 	if err != nil {

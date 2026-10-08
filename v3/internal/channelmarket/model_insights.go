@@ -45,7 +45,7 @@ const modelObservationsSQL = `WITH observations AS (
  0::bigint,''::text,NULL::bigint,NULL::bigint,NULL::bigint
  FROM v3_billing.usage_logs l
  WHERE l.channel_id=$1 AND l.model=$2 AND l.created_at>=$3 AND l.created_at<=$4
- AND NOT EXISTS(SELECT 1 FROM v3_audit.request_audits a WHERE a.request_id=l.request_id)
+ AND NOT EXISTS(SELECT 1 FROM v3_audit.request_audits a WHERE a.request_id=l.request_id AND a.status<>'historical_unknown')
  GROUP BY l.request_id,l.user_id)
 `
 

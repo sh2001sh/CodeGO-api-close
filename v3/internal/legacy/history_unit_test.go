@@ -154,6 +154,50 @@ func TestHistoryTimestampsBothLegacyFormats(t *testing.T) {
 	}
 }
 
+func TestHistoryTimestampPostgresSecondOffsetsPreserveInstants(t *testing.T) {
+	for _, tc := range []struct {
+		input, utc string
+	}{
+		{"0001-01-01T08:05:43+08:05:43", "0001-01-01T00:00:00Z"},
+		{"0001-01-01T00:53:28+00:53:28", "0001-01-01T00:00:00Z"},
+		{"1900-01-01T08:05:43.123456+08:05:43", "1900-01-01T00:00:00.123456Z"},
+		{"1883-11-18T12:03:58-04:56:02", "1883-11-18T17:00:00Z"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			var tm historyTime
+			if err := json.Unmarshal([]byte(`"`+tc.input+`"`), &tm); err != nil {
+				t.Fatal(err)
+			}
+			if tm.Format(time.RFC3339Nano) != tc.utc || tm.Location() != time.UTC {
+				t.Fatalf("timestamp changed: %v; want %s in UTC", tm.Time, tc.utc)
+			}
+			// time.Time's JSON encoding drops offset seconds. UTC normalization
+			// must preserve the instant through the import/check JSON round trip.
+			encoded, err := json.Marshal(tm.Time)
+			if err != nil || string(encoded) != `"`+tc.utc+`"` {
+				t.Fatalf("timestamp JSON changed: %s, %v", encoded, err)
+			}
+			if tc.utc == "0001-01-01T00:00:00Z" && !tm.IsZero() {
+				t.Fatal("original unset Go timestamp lost its zero-time meaning")
+			}
+		})
+	}
+	for _, raw := range []string{
+		`"1900-02-30T08:05:43+08:05:43"`,
+		`"1900-01-01T08:05:43+08:05:99"`,
+		`"1900-01-01T08:05:43+08:05:60"`,
+		`"1900-01-01T08:05:43+08:60:43"`,
+		`"1900-01-01T08:05:43+24:05:43"`,
+		`"1900-01-01T08:05:43+08:05:43junk"`,
+		`"infinity"`, `"-infinity"`, `"unknown"`,
+	} {
+		var tm historyTime
+		if err := json.Unmarshal([]byte(raw), &tm); err == nil {
+			t.Fatalf("invalid timestamp accepted: %s", raw)
+		}
+	}
+}
+
 func TestHistoryRetiredAccountKindsAndOriginalUnitReporting(t *testing.T) {
 	for _, kind := range []string{"gpt_wallet", "points", "point_wallet", "bonus_quota", "blind_box_credits", "wallet"} {
 		raw, _ := json.Marshal(map[string]any{"account_id": "old", "owner_type": "user", "account_type": kind,

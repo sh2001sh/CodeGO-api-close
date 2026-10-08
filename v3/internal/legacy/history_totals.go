@@ -22,7 +22,8 @@ func verifyHistoryTotals(ctx context.Context, target pgx.Tx, d *historyData, rep
 		{"ledger_entries", "v3_billing.historical_entries", "", "amount"},
 		{"logs", "v3_audit.events", "", "amount"},
 		{"request_audits", "v3_audit.request_audits", "", "amount"},
-		{"request_attempt_audits", "v3_audit.request_attempt_audits", "", ""},
+		{"request_attempt_audits_linked", "v3_audit.request_attempt_audits", "", ""},
+		{"orphan_request_attempt_history", "v3_audit.orphan_request_attempt_history", "", ""},
 	} {
 		var count int64
 		query := "SELECT count(*)"

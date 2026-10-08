@@ -200,11 +200,12 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 			if err := source.QueryRow(ctx, `SELECT count(*) FROM `+sources["request_attempt_audits"]+` a LEFT JOIN `+sources["request_audits"]+` r ON r.request_id=a.request_id WHERE r.request_id IS NULL`).Scan(&orphans); err != nil {
 				return nil, err
 			}
-			if orphans > 0 {
-				d.recordIssue(Issue{"request_attempt_audit", 0, "missing_request_audit", fmt.Sprintf("%d request attempt rows have no parent request audit", orphans)})
-			}
+			// Preserve every orphan's complete source record in a separate
+			// archive. Native attempts retain their live parent constraint.
+			d.counts["orphan_request_attempt_history"] = orphans
 		}
 	}
+	d.counts["request_attempt_audits_linked"] = d.counts["request_attempt_audits"] - d.counts["orphan_request_attempt_history"]
 	return d, nil
 }
 

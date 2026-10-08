@@ -30,6 +30,34 @@ func walkHistory(ctx context.Context, source pgx.Tx, table string, visit func(js
 	return rows.Err()
 }
 
+// Classify against the same source snapshot without retaining request IDs in
+// memory. Missing historical parents never become invented live audits.
+func walkHistoryAttempts(ctx context.Context, source pgx.Tx, attempts, requests string, visit func(json.RawMessage, bool) error) error {
+	if attempts == "" {
+		return nil
+	}
+	if requests == "" {
+		return fmt.Errorf("legacy: attempt history requires the source request audit table")
+	}
+	rows, err := source.Query(ctx, `SELECT to_jsonb(a),r.request_id IS NULL FROM `+attempts+` a
+	 LEFT JOIN `+requests+` r ON r.request_id=a.request_id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw json.RawMessage
+		var orphan bool
+		if err = rows.Scan(&raw, &orphan); err != nil {
+			return err
+		}
+		if err = visit(raw, orphan); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 // Duplicate usage request IDs are qualified only within the same timestamp and
 // user, matching the target usage uniqueness constraint. PostgreSQL can spill
 // the grouping/join to disk; no per-log duplicate map lives in the importer.
@@ -79,9 +107,25 @@ func (t *historyTime) UnmarshalJSON(b []byte) error {
 	}
 	parsed, err := time.Parse(time.RFC3339Nano, encoded)
 	if err != nil {
+		// PostgreSQL emits historical local-mean-time offsets with seconds,
+		// including Go's year-1 unset timestamps in Asia/Shanghai. Keep the
+		// instant rather than rejecting valid source timestamptz values.
+		parsed, err = time.Parse("2006-01-02T15:04:05.999999999-07:00:00", encoded)
+		if err == nil {
+			// time.Parse permits 60 in zone minutes/seconds and hour 24.
+			// PostgreSQL's second-resolution offsets use normalized fields.
+			offset := encoded[len(encoded)-9:]
+			if offset[1:3] > "23" || offset[4:6] > "59" || offset[7:9] > "59" {
+				return fmt.Errorf("invalid historical timestamp")
+			}
+		}
+	}
+	if err != nil {
 		return fmt.Errorf("invalid historical timestamp")
 	}
-	t.Time = parsed
+	// Go's JSON timestamp formatter only writes minute-resolution offsets.
+	// Normalize before import/check serialization to avoid losing seconds.
+	t.Time = parsed.UTC()
 	return nil
 }
 

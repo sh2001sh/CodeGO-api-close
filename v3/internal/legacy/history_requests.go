@@ -117,10 +117,14 @@ func (m *Importer) importHistoryRequestAudits(ctx context.Context, target pgx.Tx
 		return err
 	}
 	attempts := historyImportBatch(ctx, target, "v3_audit", "request_attempt_audits", "attempt_id")
-	err = walkHistory(ctx, d.source, d.sources["request_attempt_audits"], func(raw json.RawMessage) error {
+	orphans := historyImportBatch(ctx, target, "v3_audit", "orphan_request_attempt_history", "attempt_id")
+	err = walkHistoryAttempts(ctx, d.source, d.sources["request_attempt_audits"], d.sources["request_audits"], func(raw json.RawMessage, orphan bool) error {
 		a, err := decodeHistoryAttemptAudit(raw)
 		if err != nil {
 			return err
+		}
+		if orphan {
+			return orphans.add(map[string]any{"attempt_id": a.AttemptID, "request_id": a.RequestID, "source_record": raw})
 		}
 		columns := []string{"attempt_id", "request_id", "attempt_no", "retry_index", "channel_id", "model", "fault_domain", "request_type", "status", "success", "status_code", "failure_class", "stage", "started_at", "completed_at", "duration_ms", "created_at"}
 		values := []any{a.AttemptID, a.RequestID, a.AttemptNo, a.RetryIndex, a.ChannelID, a.Model, a.FaultDomain, a.RequestType, a.Status, a.Success, a.StatusCode, a.FailureClass, a.Stage, historyDate(a.StartedAt), historyDate(a.CompletedAt), a.DurationMS, historyDate(a.CreatedAt)}
@@ -129,5 +133,8 @@ func (m *Importer) importHistoryRequestAudits(ctx context.Context, target pgx.Tx
 	if err != nil {
 		return err
 	}
-	return attempts.finish()
+	if err = attempts.finish(); err != nil {
+		return err
+	}
+	return orphans.finish()
 }

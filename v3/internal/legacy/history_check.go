@@ -180,10 +180,17 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 			p["completed_at"], _ = json.Marshal(a.completedDate())
 			return check("v3_audit", "request_audits", "request_id", a.RequestID, p)
 		}},
-		{"request_attempt_audits", func(raw json.RawMessage, _ bool) error {
+		{"request_attempt_audits", func(raw json.RawMessage, orphan bool) error {
 			a, err := decodeHistoryAttemptAudit(raw)
 			if err != nil {
 				return err
+			}
+			if orphan {
+				p, err := historyJSONProjection(map[string]any{"attempt_id": a.AttemptID, "request_id": a.RequestID, "source_record": raw}, nil, nil)
+				if err != nil {
+					return err
+				}
+				return check("v3_audit", "orphan_request_attempt_history", "attempt_id", a.AttemptID, p)
 			}
 			p, err := historyJSONProjection(a, map[string]string{"model_name": "model"}, nil)
 			if err != nil {
@@ -197,6 +204,8 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 		var err error
 		if c.name == "logs" {
 			err = walkHistoryLogs(ctx, d.source, d.sources[c.name], c.visit)
+		} else if c.name == "request_attempt_audits" {
+			err = walkHistoryAttempts(ctx, d.source, d.sources[c.name], d.sources["request_audits"], c.visit)
 		} else {
 			err = walkHistory(ctx, d.source, d.sources[c.name], func(raw json.RawMessage) error { return c.visit(raw, false) })
 		}

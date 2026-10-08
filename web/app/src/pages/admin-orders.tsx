@@ -10,6 +10,7 @@ import { DataTable } from '../components/data-table'
 import { Button, Drawer, PageHeader, Status, Tabs } from '../components/ui'
 import { OrderDetail } from '../features/commerce-admin/order-detail'
 import { PackagePaymentReviews } from '../features/commerce-admin/package-payment-reviews'
+import { useNotificationTranslation } from '../features/notifications/messages'
 
 type Order = Schema['Order']
 
@@ -93,9 +94,10 @@ function OrderList() {
 }
 
 export default function AdminOrdersPage() {
+  const { nt } = useNotificationTranslation()
   return (
     <>
-      <PageHeader title="订单审核" description="查看全部订单，并处理需要人工确认的套餐支付。" />
+      <PageHeader title="订单审核" description={nt('paymentReviewQueueDescription')} />
       <Tabs
         label="订单审核"
         items={[

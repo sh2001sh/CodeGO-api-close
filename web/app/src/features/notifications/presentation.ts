@@ -8,6 +8,12 @@ export function notificationPresentation(
   noReason: string,
 ): { title: NotificationMessage; body: NotificationMessage; parameters?: TranslationParameters } {
   const data = item.data ?? {}
+  if (item.kind === 'legacy_cash_box_payment_review')
+    return {
+      title: 'legacyCashBoxReview',
+      body: 'legacyCashBoxReviewBody',
+      parameters: { order: typeof data.trade_no === 'string' ? data.trade_no : '—' },
+    }
   if (item.kind === 'channel_review')
     return {
       title: data.status === 'approved' ? 'channelApproved' : 'channelRejected',

@@ -45,6 +45,9 @@ func (s *Service) HandleWebhook(ctx context.Context, provider string, header htt
 	if e.ID == "" || e.TradeNo == "" || !e.Paid {
 		return ErrInvalid
 	}
+	if handled, err := s.quarantineImportedCashBoxPayment(ctx, provider, e); handled || err != nil {
+		return err
+	}
 	return s.Fulfill(ctx, provider, e)
 }
 

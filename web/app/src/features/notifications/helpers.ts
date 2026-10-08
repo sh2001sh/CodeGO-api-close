@@ -20,6 +20,7 @@ export function notificationAction(value: unknown): string | undefined {
       '/channel-market',
       '/billing',
       '/orders',
+      '/admin/orders',
       '/wallet',
       '/my-channels',
       '/profile',

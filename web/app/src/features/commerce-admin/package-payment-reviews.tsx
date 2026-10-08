@@ -7,6 +7,7 @@ import { date } from '../../lib/format'
 import { paymentAmount } from '../../lib/commerce'
 import { DataTable } from '../../components/data-table'
 import { Button, Callout, confirmAction, ErrorMessage, Loading } from '../../components/ui'
+import { useNotificationTranslation } from '../notifications/messages'
 
 export const packagePaymentReviewsOptions = () =>
   resourceOptions('package-payment-reviews', (signal) =>
@@ -14,7 +15,7 @@ export const packagePaymentReviewsOptions = () =>
   )
 
 /**
- * Manual review queue for package payments the settlement pipeline could
+ * Manual review queue for payments the settlement pipeline could
  * not safely confirm. The backend only exposes one action here: resolve.
  * It succeeds only when the order is already in a verified refunded state
  * server-side, so this screen cannot invent a refund or grant credits —
@@ -22,6 +23,7 @@ export const packagePaymentReviewsOptions = () =>
  */
 export function PackagePaymentReviews() {
   const { t } = useTranslation()
+  const { nt } = useNotificationTranslation()
   const toast = useToast((s) => s.add)
   const client = useQueryClient()
   const reviews = useQuery(packagePaymentReviewsOptions())
@@ -49,9 +51,7 @@ export function PackagePaymentReviews() {
   return (
     <div className="section">
       <Callout tone="warning" title={t('人工审核')}>
-        {t(
-          '这里收录了支付结算流程无法自动确认的套餐订单。标记完成前，请先在支付渠道后台核实该笔退款是否已经处理；服务器只在订单已退款时接受标记。',
-        )}
+        {nt('paymentReviewQueueBody')}
       </Callout>
       <ErrorMessage error={reviews.error ?? resolve.error} />
       {reviews.isPending && <Loading />}

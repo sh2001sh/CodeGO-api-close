@@ -8,6 +8,7 @@ import { useTranslation } from '../lib/i18n'
 import { DataTable } from '../components/data-table'
 import { Button, ErrorMessage, PageHeader, Status } from '../components/ui'
 import { ReferralOrderTerms } from '../features/commerce/referral-order-terms'
+import { LegacyCashBoxReview } from '../features/commerce/legacy-cash-box-review'
 
 export default function OrdersPage() {
   const { t } = useTranslation()
@@ -75,7 +76,15 @@ export default function OrdersPage() {
         rowKey={(row) => row.id}
         columns={[
           { label: '订单号', render: (row) => <code>{row.trade_no}</code> },
-          { label: '状态', render: (row) => <Status value={row.state} /> },
+          {
+            label: '状态',
+            render: (row) => (
+              <>
+                <Status value={row.state} />
+                <LegacyCashBoxReview order={row} />
+              </>
+            ),
+          },
           {
             label: '支付金额',
             render: (row) => paymentAmount(row.amount_minor, row.currency),

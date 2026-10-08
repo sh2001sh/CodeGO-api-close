@@ -116,7 +116,7 @@ func (s *Service) CashBoxOrder(ctx context.Context, userID int64, trade string) 
 	var result CashBoxStatus
 	var amount int64
 	var currency string
-	err := s.pool.QueryRow(ctx, `SELECT o.trade_no,o.state,b.quantity,b.opened_count,o.amount_minor,o.currency,b.payment_method,o.provider,
+	err := s.pool.QueryRow(ctx, `SELECT o.trade_no,CASE WHEN o.fulfillment_state='requires_review' THEN 'requires_review' ELSE o.state END,b.quantity,b.opened_count,o.amount_minor,o.currency,b.payment_method,o.provider,
 	 extract(epoch FROM o.created_at)::bigint,coalesce(extract(epoch FROM b.completed_at)::bigint,0)
 	 FROM v3_commerce.orders o JOIN v3_marketplace.blind_box_orders b ON b.trade_no=o.trade_no
 	 WHERE o.user_id=$1 AND o.trade_no=$2 AND o.kind='blind_box'`, userID, trade).Scan(&result.TradeNo,

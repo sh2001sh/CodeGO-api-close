@@ -3,6 +3,7 @@ import { useTranslation } from '../../lib/i18n'
 import { credits, date } from '../../lib/format'
 import { paymentAmount } from '../../lib/commerce'
 import { Status } from '../../components/ui'
+import { LegacyCashBoxReview } from '../commerce/legacy-cash-box-review'
 
 type Order = Schema['Order']
 
@@ -24,7 +25,10 @@ export function OrderDetail(props: { order: Order }) {
       </div>
       <div>
         <dt>{t('履约状态')}</dt>
-        <dd>{o.fulfillment_state || '—'}</dd>
+        <dd>
+          {o.fulfillment_state || '—'}
+          <LegacyCashBoxReview order={o} />
+        </dd>
       </div>
       <div>
         <dt>{t('类型')}</dt>

@@ -49,9 +49,11 @@ func (s *Service) quarantineImportedCashBoxPayment(ctx context.Context, provider
 			return ErrPaymentMismatch
 		}
 		// Another first callback may have created the financial record while we
-		// waited on the original order row. Re-read under that shared row lock.
+		// waited on the original order row. This branch only verifies its
+		// immutable payment identity; locking it now would invert the financial
+		// order -> original cash order lock order used by replays and refunds.
 		if errors.Is(orderErr, ErrNotFound) {
-			o, orderErr = scanOrder(tx.QueryRow(ctx, `SELECT `+orderColumns+` FROM v3_commerce.orders WHERE trade_no=$1 FOR UPDATE`, e.TradeNo))
+			o, orderErr = scanOrder(tx.QueryRow(ctx, `SELECT `+orderColumns+` FROM v3_commerce.orders WHERE trade_no=$1`, e.TradeNo))
 		}
 		if orderErr == nil {
 			if o.PurchaseType != importedCashBoxReview || o.Kind != "blind_box" || o.UserID != userID || o.Provider != provider || o.Currency != currency || o.AmountMinor != amount {

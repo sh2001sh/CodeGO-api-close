@@ -5,10 +5,12 @@ package commerce_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sh2001sh/new-api/v3/internal/billing"
 	"github.com/sh2001sh/new-api/v3/internal/billing/ledger"
 	"github.com/sh2001sh/new-api/v3/internal/commerce"
@@ -126,6 +128,8 @@ func TestWholeWalletConversionConsentReplaySourcesAndNoReset(t *testing.T) {
 	if _, err := s.SavePlan(ctx, p); err != nil {
 		t.Fatal(err)
 	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	var wg sync.WaitGroup
 	errs := make(chan error, 12)
 	for range 12 {
@@ -159,6 +163,52 @@ func TestWholeWalletConversionConsentReplaySourcesAndNoReset(t *testing.T) {
 	}
 	if _, err := s.ConfirmWalletConversion(ctx, 1, q.QuoteID, "whole-other", true); !errors.Is(err, commerce.ErrStateConflict) {
 		t.Fatalf("repeat rights %v", err)
+	}
+}
+
+func TestWholeWalletConversionSingleConnectionAndDisabledReplay(t *testing.T) {
+	s, pool, now := newService(t)
+	p := monthlyPlan(t, s)
+	if err := s.Fulfill(context.Background(), "test", payment(create(t, s, p.ID))); err != nil {
+		t.Fatal(err)
+	}
+	sub := onlySubscription(t, s)
+	q := configureConversion(t, s, sub.ID, 1000, 1000000, 800000, nil)
+	config := pool.Config()
+	config.MaxConns = 1
+	limited, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(limited.Close)
+	s = commerce.New(limited, ledger.NewPoster(limited), []commerce.PaymentProvider{fakePayment{}}, commerce.Config{
+		Now: func() time.Time { return *now }, ReturnOrigins: []string{"https://site.test"},
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err = limited.Exec(ctx, `INSERT INTO v3_platform.settings(key,value) VALUES('SubscriptionClaudeConversionEnabled','false')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ConfirmWalletConversion(ctx, 1, q.QuoteID, "limited-denied", true); !errors.Is(err, commerce.ErrInvalid) {
+		t.Fatalf("disabled conversion with one connection: %v", err)
+	}
+	if _, err = limited.Exec(ctx, `UPDATE v3_platform.settings SET value='true' WHERE key='SubscriptionClaudeConversionEnabled'`); err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.ConfirmWalletConversion(ctx, 1, q.QuoteID, "limited-once", true)
+	if err != nil || first.State != "completed" || first.TargetCredits != 1000000 {
+		t.Fatalf("single-connection conversion=%+v err=%v", first, err)
+	}
+	if _, err = limited.Exec(ctx, `UPDATE v3_platform.settings SET value='false' WHERE key='SubscriptionClaudeConversionEnabled'`); err != nil {
+		t.Fatal(err)
+	}
+	replay, err := s.ConfirmWalletConversion(ctx, 1, q.QuoteID, "limited-once", true)
+	if err != nil || !reflect.DeepEqual(replay, first) {
+		t.Fatalf("disabled replay changed result=%+v err=%v", replay, err)
+	}
+	var count int
+	if err = limited.QueryRow(ctx, `SELECT count(*) FROM v3_commerce.subscription_wallet_conversions`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("conversion posted again count=%d err=%v", count, err)
 	}
 }
 

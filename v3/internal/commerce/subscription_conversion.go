@@ -61,7 +61,7 @@ func (s *Service) ConvertSubscription(ctx context.Context, user, id int64, perce
 		return result, ErrInvalid
 	}
 	key := "subscription-conversion:" + request
-	if err := s.allowSubscriptionConversion(ctx, user, id, key); err != nil {
+	if err := s.allowSubscriptionConversion(ctx, s.pool, user, id, key); err != nil {
 		return result, err
 	}
 	// Validate ownership before recording a recoverable, authorized intent.

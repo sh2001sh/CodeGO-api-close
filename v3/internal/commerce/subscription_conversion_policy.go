@@ -11,9 +11,9 @@ import (
 
 // A persisted intent keeps its original authorization when the operator later
 // disables new conversions. Recovery must still finish or replay that intent.
-func (s *Service) allowSubscriptionConversion(ctx context.Context, user, subscription int64, key string) error {
+func (s *Service) allowSubscriptionConversion(ctx context.Context, q rowQuerierCommerce, user, subscription int64, key string) error {
 	var authorized bool
-	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_commerce.subscription_operations
+	if err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_commerce.subscription_operations
 	 WHERE operation_id=$1 AND actor_id=$2 AND subscription_id=$3 AND kind='conversion')`, key, user, subscription).Scan(&authorized); err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func (s *Service) allowSubscriptionConversion(ctx context.Context, user, subscri
 	}
 	var raw []byte
 	var sensitive bool
-	err := s.pool.QueryRow(ctx, `SELECT value,sensitive FROM v3_platform.settings WHERE key='SubscriptionClaudeConversionEnabled'`).Scan(&raw, &sensitive)
+	err := q.QueryRow(ctx, `SELECT value,sensitive FROM v3_platform.settings WHERE key='SubscriptionClaudeConversionEnabled'`).Scan(&raw, &sensitive)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil // The source default allows conversion when no option exists.
 	}

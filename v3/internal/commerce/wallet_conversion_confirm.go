@@ -147,7 +147,9 @@ func (s *Service) authorizeWalletConversion(ctx context.Context, user int64, quo
 		if !valid {
 			return ErrStateConflict
 		}
-		if err = s.allowSubscriptionConversion(ctx, user, id, key); err != nil {
+		// Reuse this transaction's connection: competing user-row locks can
+		// occupy every other pool slot, leaving a nested acquisition stranded.
+		if err = s.allowSubscriptionConversion(ctx, tx, user, id, key); err != nil {
 			return err
 		}
 		if err = s.checkPackagePending(ctx, tx, id); err != nil {

@@ -23,6 +23,9 @@ func main() {
 	defer stop()
 	if err := run(ctx, os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "migrate:", err)
+		if errors.Is(err, legacy.ErrSourceDrainBlocked) {
+			os.Exit(3)
+		}
 		os.Exit(1)
 	}
 }
@@ -30,6 +33,13 @@ func main() {
 func run(ctx context.Context, args []string, output io.Writer) error {
 	command, apply, err := parseMigrateArgs(args)
 	if err != nil {
+		if len(args) > 0 && args[0] == "drain" {
+			report, _ := legacy.NewSourceDrainReport(legacy.SourceDrainOptions{})
+			report.ErrorCode = "invalid_drain_arguments"
+			if writeErr := json.NewEncoder(output).Encode(report); writeErr != nil {
+				return writeErr
+			}
+		}
 		return err
 	}
 	if command == "files" {
@@ -37,6 +47,9 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	}
 	if command == "background" {
 		return runBackground(ctx, apply, output)
+	}
+	if command == "drain" {
+		return runDrain(ctx, output)
 	}
 	pool, err := pg.Connect(ctx, pg.Config{DSN: os.Getenv("V3_PG_DSN"), MaxConns: 2})
 	if err != nil {
@@ -56,7 +69,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 // flags, returning the subcommand name and whether -apply was set.
 func parseMigrateArgs(args []string) (command string, apply bool, err error) {
 	if len(args) == 0 {
-		return "", false, errors.New("usage: migrate schema | files [-apply -offline] | background [-apply -offline] | import [-apply -offline] | check | ledger-check")
+		return "", false, errors.New("usage: migrate schema | drain | files [-apply -offline] | background [-apply -offline] | import [-apply -offline] | check | ledger-check")
 	}
 	flags := flag.NewFlagSet("migrate "+args[0], flag.ContinueOnError)
 	applyFlag := flags.Bool("apply", false, "commit the import; default is dry-run")
@@ -67,8 +80,11 @@ func parseMigrateArgs(args []string) (command string, apply bool, err error) {
 	if flags.NArg() != 0 {
 		return "", false, errors.New("unexpected arguments")
 	}
-	if args[0] != "schema" && args[0] != "files" && args[0] != "background" && args[0] != "import" && args[0] != "check" && args[0] != "ledger-check" {
-		return "", false, errors.New("unknown command; use schema, files, background, import, check or ledger-check")
+	if args[0] != "schema" && args[0] != "drain" && args[0] != "files" && args[0] != "background" && args[0] != "import" && args[0] != "check" && args[0] != "ledger-check" {
+		return "", false, errors.New("unknown command; use schema, drain, files, background, import, check or ledger-check")
+	}
+	if args[0] == "drain" && (*applyFlag || *offline) {
+		return "", false, errors.New("drain is source-only and accepts no apply or offline flags")
 	}
 	if *applyFlag && !*offline {
 		return "", false, errors.New("apply requires -offline after stopping all v2 writers")

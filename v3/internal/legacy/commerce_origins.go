@@ -25,11 +25,7 @@ func (d *commerceData) loadRefundOrigins(ctx context.Context, source pgx.Tx, sou
 		return nil
 	}
 	accounts := map[string]int64{}
-	rows, err := loadRows(ctx, source, sources["accounts"])
-	if err != nil {
-		return err
-	}
-	for _, raw := range rows {
+	err := walkHistory(ctx, source, sources["accounts"], func(raw json.RawMessage) error {
 		var account struct {
 			ID     string `json:"account_id"`
 			Owner  string `json:"owner_type"`
@@ -37,23 +33,35 @@ func (d *commerceData) loadRefundOrigins(ctx context.Context, source pgx.Tx, sou
 			Unit   string `json:"quota_unit"`
 			UserID int64  `json:"owner_id"`
 		}
-		if err = json.Unmarshal(raw, &account); err != nil {
+		if err := json.Unmarshal(raw, &account); err != nil {
 			return err
 		}
 		if account.Owner == "user" && account.Kind == "claude_wallet" && account.Unit == "quota" {
 			accounts[account.ID] = account.UserID
 		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	orders := map[string]commerceRow{}
 	for _, row := range d.rows["top_ups"] {
 		trade, _ := row.text("trade_no")
 		orders[trade] = row
 	}
-	rows, err = loadRows(ctx, source, table)
+	// Retain attribution errors for every paid lot, including foreign accounts
+	// and missing orders. Only source='topup' may create a refund origin; all
+	// unrelated request lots remain in PostgreSQL instead of a Go slice.
+	rows, err := source.Query(ctx, "SELECT to_jsonb(t) FROM "+table+" t WHERE source='topup'")
 	if err != nil {
 		return err
 	}
-	for _, raw := range rows {
+	defer rows.Close()
+	for rows.Next() {
+		var raw json.RawMessage
+		if err := rows.Scan(&raw); err != nil {
+			return err
+		}
 		var row struct {
 			Source    string `json:"source"`
 			Account   string `json:"account_id"`
@@ -63,9 +71,6 @@ func (d *commerceData) loadRefundOrigins(ctx context.Context, source pgx.Tx, sou
 		}
 		if err = json.Unmarshal(raw, &row); err != nil {
 			return err
-		}
-		if row.Source != "topup" {
-			continue
 		}
 		if !strings.HasPrefix(row.Key, "topup:") || !strings.HasSuffix(row.Key, ":unified") {
 			return fmt.Errorf("legacy: paid funding lot has unsupported topup attribution")
@@ -96,7 +101,7 @@ func (d *commerceData) loadRefundOrigins(ctx context.Context, source pgx.Tx, sou
 		}
 		d.refundOrigins = append(d.refundOrigins, commerceRefundOrigin{projection.values["id"].(int64), uid, int64(original), int64(remaining)})
 	}
-	return nil
+	return rows.Err()
 }
 
 func (d *commerceData) validateRefundOrigins(report *Report) {

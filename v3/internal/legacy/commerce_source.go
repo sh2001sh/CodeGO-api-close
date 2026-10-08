@@ -78,19 +78,8 @@ func loadCommerce(ctx context.Context, source pgx.Tx, sources map[string]string)
 		reservationTable = sources["reservations"]
 	}
 	if reservationTable != "" {
-		reservationRows, err := loadRows(ctx, source, reservationTable)
-		if err != nil {
+		if err := d.loadReservationStates(ctx, source, reservationTable); err != nil {
 			return nil, err
-		}
-		for _, raw := range reservationRows {
-			var row struct {
-				RequestID string `json:"request_id"`
-				Status    string `json:"status"`
-			}
-			if err = json.Unmarshal(raw, &row); err != nil {
-				return nil, err
-			}
-			d.reservationStates[row.RequestID] = append(d.reservationStates[row.RequestID], row.Status)
 		}
 	}
 	if sources["accounts"] == "" || sources["balance_snapshots"] == "" {

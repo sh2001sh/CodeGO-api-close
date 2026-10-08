@@ -50,16 +50,19 @@ func (d *commerceData) loadRenewableBonuses(ctx context.Context, source pgx.Tx, 
 	if ledgerTable == "" {
 		ledgerTable = sources["ledger_entries"]
 	}
-	grants, err := commerceRenewableRows(ctx, source, ledgerTable)
-	if err != nil {
-		return err
-	}
 	quotaPerUnit, err := commerceRenewableQuotaPerUnit(d.options)
 	if err != nil {
 		return err
 	}
-	d.renewableBonuses, err = commerceCycleBonuses(d.rows["user_subscriptions"], members, accounts, grants, now.Unix(), quotaPerUnit)
-	return err
+	cycle, err := commercePrepareCycleBonuses(d.rows["user_subscriptions"], members, accounts, now.Unix(), quotaPerUnit)
+	if err != nil {
+		return err
+	}
+	if err := cycle.walkDelayedGrants(ctx, source, ledgerTable, now.Unix()); err != nil {
+		return err
+	}
+	d.renewableBonuses = cycle.bonuses
+	return nil
 }
 
 func commerceRenewableQuotaPerUnit(options map[string]string) (string, error) {
@@ -77,20 +80,39 @@ func commerceRenewableQuotaPerUnit(options map[string]string) (string, error) {
 }
 
 func commerceRenewableRows(ctx context.Context, source pgx.Tx, table string) ([]commerceRow, error) {
-	rows, err := loadRows(ctx, source, table)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]commerceRow, len(rows))
-	for i, raw := range rows {
-		if err = json.Unmarshal(raw, &result[i]); err != nil {
-			return nil, fmt.Errorf("legacy: invalid group renewal source: %w", err)
+	var result []commerceRow
+	err := walkHistory(ctx, source, table, func(raw json.RawMessage) error {
+		var row commerceRow
+		if err := json.Unmarshal(raw, &row); err != nil {
+			return fmt.Errorf("legacy: invalid group renewal source: %w", err)
 		}
-	}
-	return result, nil
+		result = append(result, row)
+		return nil
+	})
+	return result, err
 }
 
 func commerceCycleBonuses(subscriptions, members, accounts, grants []commerceRow, before int64, quotaPerUnit string) (map[int64]*big.Int, error) {
+	cycle, err := commercePrepareCycleBonuses(subscriptions, members, accounts, before, quotaPerUnit)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range grants {
+		if err := cycle.addDelayedGrant(row, before); err != nil {
+			return nil, err
+		}
+	}
+	return cycle.bonuses, nil
+}
+
+type commerceBonusCycle struct {
+	subs        map[int64]commerceRow
+	bonuses     map[int64]*big.Int
+	oldMarkers  map[int64][]string
+	accountSubs map[string]int64
+}
+
+func commercePrepareCycleBonuses(subscriptions, members, accounts []commerceRow, before int64, quotaPerUnit string) (*commerceBonusCycle, error) {
 	subs := map[int64]commerceRow{}
 	for _, row := range subscriptions {
 		id, err := row.integer("id")
@@ -180,53 +202,100 @@ func commerceCycleBonuses(subscriptions, members, accounts, grants []commerceRow
 			accountSubs[account] = id
 		}
 	}
-	for _, row := range grants {
-		account, err := row.text("account_id")
-		if err != nil {
-			return nil, err
-		}
-		sub := accountSubs[account]
-		if len(oldMarkers[sub]) == 0 {
-			continue
-		}
-		reason, err := row.text("reason_code")
-		if err != nil {
-			return nil, err
-		}
-		key, err := row.text("idempotency_key")
-		if err != nil {
-			return nil, err
-		}
-		if reason != "subscription_bonus" || !strings.Contains(key, "group-buy:") {
-			continue
-		}
-		created, err := fundingTime(row, "created_at")
-		if err != nil {
-			return nil, err
-		}
-		start, err := subs[sub].integer("start_time")
-		if err != nil {
-			return nil, err
-		}
-		// Unix truncates fractional timestamps to the original source's second
-		// precision, equivalent to its exclusive before+1s SQL bound.
-		if created.Before(time.Unix(start, 0)) || created.Unix() > before {
-			continue
-		}
-		for _, marker := range oldMarkers[sub] {
-			if strings.Contains(key, marker) {
-				amount, err := row.integer("amount")
-				if err != nil {
-					return nil, err
-				}
-				if err = commerceAddRenewable(bonuses, sub, amount); err != nil {
-					return nil, err
-				}
-				break
+	return &commerceBonusCycle{subs, bonuses, oldMarkers, accountSubs}, nil
+}
+
+func (cycle *commerceBonusCycle) addDelayedGrant(row commerceRow, before int64) error {
+	account, err := row.text("account_id")
+	if err != nil {
+		return err
+	}
+	sub := cycle.accountSubs[account]
+	if len(cycle.oldMarkers[sub]) == 0 {
+		return nil
+	}
+	reason, err := row.text("reason_code")
+	if err != nil {
+		return err
+	}
+	key, err := row.text("idempotency_key")
+	if err != nil {
+		return err
+	}
+	if reason != "subscription_bonus" || !strings.Contains(key, "group-buy:") {
+		return nil
+	}
+	created, err := fundingTime(row, "created_at")
+	if err != nil {
+		return err
+	}
+	start, err := cycle.subs[sub].integer("start_time")
+	if err != nil {
+		return err
+	}
+	// The exclusive next-second SQL bound retains fractional source timestamps.
+	if created.Before(time.Unix(start, 0)) || created.Unix() > before {
+		return nil
+	}
+	for _, marker := range cycle.oldMarkers[sub] {
+		if strings.Contains(key, marker) {
+			amount, err := row.integer("amount")
+			if err != nil {
+				return err
 			}
+			return commerceAddRenewable(cycle.bonuses, sub, amount)
 		}
 	}
-	return bonuses, nil
+	return nil
+}
+
+func (cycle *commerceBonusCycle) walkDelayedGrants(ctx context.Context, source pgx.Tx, table string, before int64) error {
+	if table == "" {
+		return nil
+	}
+	accounts := make([]string, 0)
+	var earliest int64
+	for account, sub := range cycle.accountSubs {
+		if len(cycle.oldMarkers[sub]) == 0 {
+			continue
+		}
+		start, err := cycle.subs[sub].integer("start_time")
+		if err != nil {
+			return err
+		}
+		if len(accounts) == 0 || start < earliest {
+			earliest = start
+		}
+		accounts = append(accounts, account)
+	}
+	if len(accounts) == 0 {
+		return nil
+	}
+	// Filter before serializing source records: only delayed group credits on
+	// relevant subscription accounts can affect this allowance. The full ledger
+	// can contain tens of millions of unrelated entries and must stay in SQL.
+	query := "SELECT to_jsonb(t) FROM " + table + ` t WHERE account_id=ANY($1::text[])
+	 AND reason_code='subscription_bonus' AND strpos(idempotency_key,'group-buy:')>0
+	 AND created_at >= $2 AND created_at < $3`
+	rows, err := source.Query(ctx, query, accounts, time.Unix(earliest, 0).UTC(), time.Unix(before, 0).UTC().Add(time.Second))
+	if err != nil {
+		return fmt.Errorf("legacy: read delayed group renewal grants: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw json.RawMessage
+		if err := rows.Scan(&raw); err != nil {
+			return err
+		}
+		var row commerceRow
+		if err := json.Unmarshal(raw, &row); err != nil {
+			return fmt.Errorf("legacy: invalid group renewal grant: %w", err)
+		}
+		if err := cycle.addDelayedGrant(row, before); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 func commerceAddRenewable(bonuses map[int64]*big.Int, sub, amount int64) error {

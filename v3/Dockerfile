@@ -6,7 +6,8 @@ RUN go mod download
 COPY v3/ ./
 ARG SERVICE=gateway
 ENV GOMAXPROCS=2
-RUN case "$SERVICE" in gateway|control|worker|migrate) ;; *) exit 2 ;; esac && \
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    case "$SERVICE" in gateway|control|worker|migrate) ;; *) exit 2 ;; esac && \
     CGO_ENABLED=0 go build -p 1 -trimpath -ldflags='-s -w' -o /out/server "./cmd/$SERVICE"
 
 FROM alpine:3.22

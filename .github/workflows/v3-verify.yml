@@ -6,22 +6,26 @@ on:
       - 'v3/**'
       - 'web/app/**'
       - '.github/workflows/v3-verify.yml'
+      - '.dockerignore'
   push:
     paths:
       - 'v3/**'
       - 'web/app/**'
       - '.github/workflows/v3-verify.yml'
+      - '.dockerignore'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: v3-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
-    # The real PG/race suite alone exceeded 30 minutes locally. Include room
-    # for lint, migration checks and compilation without dropping coverage.
-    timeout-minutes: 90
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -31,8 +35,8 @@ jobs:
       - name: Download modules
         working-directory: v3
         run: go mod download
-      - name: Verify module boundaries, unit, lint, race and database behavior
-        run: bash v3/scripts/verify.sh boundaries test lint race integration pgtest atlas
+      - name: Verify module boundaries and unit behavior
+        run: bash v3/scripts/verify.sh boundaries test
       - name: Check generation
         run: |
           bash v3/scripts/generate.sh
@@ -40,6 +44,69 @@ jobs:
       - name: Build binaries
         working-directory: v3
         run: go build ./cmd/gateway ./cmd/control ./cmd/worker ./cmd/migrate
+
+  backend-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [lint, race, schema]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: v3/go.mod
+          cache: false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-v3-check-${{ matrix.check }}-${{ hashFiles('v3/go.sum') }}-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-v3-check-${{ matrix.check }}-${{ hashFiles('v3/go.sum') }}-
+      - name: Download modules
+        working-directory: v3
+        run: go mod download
+      - name: Verify ${{ matrix.check }}
+        env:
+          CHECK: ${{ matrix.check }}
+        run: |
+          if [ "$CHECK" = schema ]; then
+            bash v3/scripts/verify.sh pgtest atlas
+          else
+            bash v3/scripts/verify.sh "$CHECK"
+          fi
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      # Each shard owns its own PostgreSQL/Redis; package tests within it remain
+      # serial because fixtures recreate shared schemas and flush test Redis.
+      matrix:
+        shard: [commerce, ledger, market, core]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: v3/go.mod
+          cache: false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-v3-integration-${{ matrix.shard }}-${{ hashFiles('v3/go.sum') }}-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-v3-integration-${{ matrix.shard }}-${{ hashFiles('v3/go.sum') }}-
+      - name: Download modules
+        working-directory: v3
+        run: go mod download
+      - name: Verify real databases and race safety
+        env:
+          V3_INTEGRATION_SHARD: ${{ matrix.shard }}
+        run: bash v3/scripts/verify.sh integration
 
   frontend:
     runs-on: ubuntu-latest
@@ -66,7 +133,7 @@ jobs:
 
   images:
     # Only a revision that passed the real isolated stack can be published.
-    needs: [backend, frontend, acceptance]
+    needs: [backend, backend-checks, integration, frontend, browser, acceptance]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -96,6 +163,8 @@ jobs:
           file: ${{ matrix.service == 'web' && 'v3/deploy/Dockerfile.web' || 'v3/Dockerfile' }}
           build-args: SERVICE=${{ matrix.service }}
           platforms: linux/amd64
+          cache-from: type=gha,scope=v3-${{ matrix.service }}-amd64
+          cache-to: type=gha,mode=max,scope=v3-${{ matrix.service }}-amd64
           push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-rebuild' || startsWith(github.ref, 'refs/tags/')) }}
           tags: ghcr.io/sh2001sh/codego-api:${{ steps.image.outputs.tag }}-${{ matrix.service }}-amd64
           labels: |
@@ -108,6 +177,29 @@ jobs:
         run: |
           echo "Verified image: \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
           echo "Digest: \`$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+
+  browser:
+    needs: [frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install browser tests
+        working-directory: web/app
+        run: |
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
+      - name: Verify mock desktop and mobile workflows
+        working-directory: web/app
+        run: bun run test:e2e --grep-invert "real|zz-" --workers=2
+        env:
+          V3_REAL_URL: ''
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: codego-v3-mock-browser-failures
+          path: web/app/test-results
 
   acceptance:
     needs: [backend, frontend]
@@ -174,11 +266,6 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bunx playwright install --with-deps chromium
-      - name: Verify mock desktop and mobile workflows
-        working-directory: web/app
-        run: bun run test:e2e --grep-invert "real|zz-" --workers=2
-        env:
-          V3_REAL_URL: ''
       - name: Verify real desktop and mobile workflows against the isolated deployment
         working-directory: web/app
         run: |

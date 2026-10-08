@@ -5,7 +5,8 @@
 #   scripts/verify.sh              run every step
 #   scripts/verify.sh lint race    run selected steps
 #
-# Steps: boundaries test lint race integration pgtest atlas bench
+# Steps: boundaries test lint race integration integrationlist pgtest atlas bench
+# V3_INTEGRATION_SHARD=commerce|ledger|market|core isolates package groups.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -14,6 +15,9 @@ export GOMAXPROCS="${GOMAXPROCS:-2}"
 
 SRC="$(pwd -W 2>/dev/null || pwd)"
 MODCACHE="$(go env GOMODCACHE)"
+BUILD_CACHE="$(go env GOCACHE)"
+LINT_CACHE="${V3_LINT_CACHE:-$BUILD_CACHE/codego-lint}"
+mkdir -p "$BUILD_CACHE" "$LINT_CACHE"
 LINT_IMG=golangci/golangci-lint:v2.14.0
 ATLAS_IMG=arigaio/atlas:latest
 ATLAS_LINT_IMG=arigaio/atlas:0.37.0 # v0.38+ needs an Atlas login for migrate lint
@@ -32,8 +36,9 @@ trap cleanup EXIT
 
 go_in_docker() {
   docker run --rm -v "$SRC:/src/v3" -v "$MODCACHE:/go/pkg/mod:ro" -w /src/v3 \
+    -v "$BUILD_CACHE:/cache/go-build" -v "$LINT_CACHE:/cache/lint" \
     -e GOPROXY=off -e GOSUMDB=off -e 'GOFLAGS=-mod=mod -p=1' -e GOTOOLCHAIN=local -e "GOMAXPROCS=$GOMAXPROCS" \
-    -e GOLANGCI_LINT_CACHE=/tmp/lintcache "$LINT_IMG" "$@"
+    -e GOCACHE=/cache/go-build -e GOLANGCI_LINT_CACHE=/cache/lint "$LINT_IMG" "$@"
 }
 
 # start_pg NAME PORT VERSION: disposable PostgreSQL, removed on stop.
@@ -68,10 +73,32 @@ step_lint() {
 
 step_race() { go_in_docker go test -race -count=1 ./...; }
 
+integration_packages() {
+  local shard="${V3_INTEGRATION_SHARD:-all}" packages package group
+  case "$shard" in all|commerce|ledger|market|core) ;; *) echo "invalid integration shard: $shard" >&2; return 2 ;; esac
+  packages=$(go list -tags=pgintegration ./...)
+  while IFS= read -r package; do
+    case "$package" in
+      */internal/commerce|*/internal/incentives) group=commerce ;;
+      */internal/billing|*/internal/billing/*|*/internal/catalog|*/internal/catalogcontrol) group=ledger ;;
+      */internal/marketplace|*/internal/channelmarket) group=market ;;
+      *) group=core ;;
+    esac
+    if [ "$shard" = all ] || [ "$shard" = "$group" ]; then printf '%s\n' "$package"; fi
+  done <<< "$packages"
+}
+
+step_integrationlist() { integration_packages; }
+
 # Integration suites may drop schemas and flush Redis. Both services are
 # disposable and inaccessible from the host or production networks.
 step_integration() {
   local net="v3-verify-$$" pg="v3-verify-pg-$$" rd="v3-verify-redis-$$" ready=0
+  local selected
+  selected=$(integration_packages)
+  [ -n "$selected" ] || { echo 'integration shard has no packages' >&2; return 1; }
+  local -a packages
+  mapfile -t packages <<< "$selected"
   docker network create "$net" >/dev/null
   NETWORKS+=("$net")
   docker run -d --rm --name "$pg" --network "$net" \
@@ -93,6 +120,7 @@ step_integration() {
     docker exec "$pg" createdb -p 55497 -U postgres "$database"
   done
   docker run --rm --network "container:$pg" -v "$SRC:/src/v3" -v "$MODCACHE:/go/pkg/mod:ro" -w /src/v3 \
+    -v "$BUILD_CACHE:/cache/go-build" -e GOCACHE=/cache/go-build \
     -e GOPROXY=off -e GOSUMDB=off -e 'GOFLAGS=-mod=mod -p=1' -e GOTOOLCHAIN=local -e "GOMAXPROCS=$GOMAXPROCS" \
     -e "V3_TEST_PG_DSN=postgres://postgres:$PG_PASS@127.0.0.1:55497/v3test?sslmode=disable" \
     -e "V3_NOTIFICATIONS_TEST_PG_DSN=postgres://postgres:$PG_PASS@127.0.0.1:55497/notifications_test?sslmode=disable" \
@@ -105,7 +133,7 @@ step_integration() {
     -e "V3_TEST_REDIS_ADDR=$rd:6379" \
     -e "CODEGO_TEST_REDIS_ADDR=$rd:6379" \
     -e "V3_TEST_COMMERCE_REDIS_ADDR=$rd:6379" "$LINT_IMG" \
-    go test -race -tags=pgintegration -count=1 -p 1 -timeout=10m ./...
+    go test -race -tags=pgintegration -count=1 -p 1 -timeout=10m "${packages[@]}"
 }
 
 step_pgtest() {

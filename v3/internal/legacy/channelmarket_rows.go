@@ -83,7 +83,8 @@ func cmFactor(s string, allowZero bool) (int64, error) {
 	r.Mul(r, big.NewRat(1000000, 1))
 	q, rem := new(big.Int), new(big.Int)
 	q.QuoRem(r.Num(), r.Denom(), rem)
-	// Stored v2 factors have at most four decimal places. Reject precision loss.
+	// Live factor columns require integral PPM. Historical settlement metadata
+	// has a separate exact decimal projection; never round a routing price.
 	if rem.Sign() != 0 || !q.IsInt64() {
 		return 0, errors.New("multiplier cannot be represented exactly")
 	}

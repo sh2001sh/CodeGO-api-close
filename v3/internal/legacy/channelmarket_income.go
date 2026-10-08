@@ -223,6 +223,13 @@ func (d *channelMarketData) projectSettlement(r cmRow) (cmRecord, error) {
 
 	case "released", "forfeited":
 	case "reclaimed":
+		// V2's additive partial-reclaim migration left old fully reclaimed
+		// rows at the new column's default zero. Their terminal status means
+		// the full net was reclaimed; current nonzero conflicts still fail.
+		if reclaimed == 0 && r.text("reclaimed_amount") == "0" {
+			reclaimed = net
+			b.put("reclaimed_micro", reclaimed)
+		}
 		if reclaimed != net {
 			b.err = errors.New("fully reclaimed settlement amount differs from owner net")
 		}

@@ -161,6 +161,14 @@ func projectFundingEconomics(row commerceRow, p *fundingProjection) error {
 	}
 	switch p.values["billing_source"].(string) {
 	case "wallet", "subscription":
+	case "claude_wallet":
+		// Before v2 unified wallets, economics retained this funding label.
+		// Its canonical account already maps to the native wallet; amounts
+		// and funding origin allocations retain their exact projections.
+		if p.values["subscription_id"].(int64) != 0 {
+			return fmt.Errorf("legacy wallet economics cannot reference a subscription")
+		}
+		p.values["billing_source"] = "wallet"
 	default:
 		return fmt.Errorf("unsupported billing source in request economics")
 	}

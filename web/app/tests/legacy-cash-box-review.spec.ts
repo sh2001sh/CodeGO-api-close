@@ -19,7 +19,9 @@ const order = {
   paid_at: '2026-10-09T01:00:00Z',
 }
 
-test('legacy money receipt remains an explicit pending-benefits record in user history', async ({ page }) => {
+test('legacy money receipt remains an explicit pending-benefits record in user history', async ({
+  page,
+}) => {
   await fixtureAPI(page)
   await page.route('**/api/commerce/orders?*', (route) =>
     route.fulfill({ json: { success: true, data: [order] } }),
@@ -31,7 +33,9 @@ test('legacy money receipt remains an explicit pending-benefits record in user h
   await expect(page.getByRole('button', { name: '取消', exact: true })).toHaveCount(0)
 })
 
-test('administrator review shows original provider identity and money without claiming delivery', async ({ page }) => {
+test('administrator review shows original provider identity and money without claiming delivery', async ({
+  page,
+}) => {
   await fixtureAPI(page)
   await page.route('**/api/commerce/admin/orders?*', (route) =>
     route.fulfill({ json: { success: true, data: [order] } }),
@@ -40,16 +44,19 @@ test('administrator review shows original provider identity and money without cl
     route.fulfill({
       json: {
         success: true,
-        data: [{
-          order_id: 99,
-          user_id: 1,
-          trade_no: order.trade_no,
-          provider: 'epay',
-          amount_minor: 500,
-          currency: 'cny',
-          created_at: order.paid_at,
-          reason: 'Legacy cash blind-box payment received; provider transaction original-platform-id; 500 cny minor units. Original draw rights require manual verification; no wallet credits or inventory issued.',
-        }],
+        data: [
+          {
+            order_id: 99,
+            user_id: 1,
+            trade_no: order.trade_no,
+            provider: 'epay',
+            amount_minor: 500,
+            currency: 'cny',
+            created_at: order.paid_at,
+            reason:
+              'Legacy cash blind-box payment received; provider transaction original-platform-id; 500 cny minor units. Original draw rights require manual verification; no wallet credits or inventory issued.',
+          },
+        ],
       },
     }),
   )

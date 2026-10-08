@@ -42,6 +42,9 @@ func newContractFixture(t *testing.T) *contractFixture {
 	if dsn == "" || address == "" {
 		t.Skip("requires isolated V3_TEST_PG_DSN and V3_TEST_REDIS_ADDR")
 	}
+	// The Docker suite runs as root; runtime files must not pollute the checkout
+	// that later host-side source checks need to traverse.
+	t.Setenv("V3_FILES_DIR", t.TempDir())
 	t.Setenv("V3_BILLING_WAL_DIR", "off")
 	t.Setenv("V3_TRUSTED_PROXY_CIDRS", "")
 	ctx := context.Background()
@@ -140,6 +143,18 @@ func newContractFixture(t *testing.T) *contractFixture {
 	f.handler = handler
 	t.Cleanup(func() { cancel(); closeFn() })
 	return f
+}
+
+func TestProductionContractFixtureKeepsRuntimeFilesOutsideSource(t *testing.T) {
+	t.Setenv("V3_FILES_DIR", "")
+	t.Chdir(t.TempDir())
+	newContractFixture(t)
+	if _, err := os.Stat("files"); !os.IsNotExist(err) {
+		t.Fatalf("production fixture created runtime files in its working directory: %v", err)
+	}
+	if info, err := os.Stat(os.Getenv("V3_FILES_DIR")); err != nil || !info.IsDir() {
+		t.Fatalf("production fixture lacks isolated file storage: %v", err)
+	}
 }
 
 func (f *contractFixture) seed(t *testing.T, upstreams []*httptest.Server) {

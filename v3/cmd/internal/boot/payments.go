@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -36,6 +37,7 @@ type paymentSettings struct {
 	NotifyURL       string                           `json:"notify_url"`
 	PayCurrency     string                           `json:"pay_currency"`
 	PaymentType     string                           `json:"payment_type"`
+	PaymentTypes    []string                         `json:"payment_types"`
 	PayMethodType   string                           `json:"pay_method_type"`
 	PayMethodName   string                           `json:"pay_method_name"`
 	Sandbox         bool                             `json:"sandbox"`
@@ -56,6 +58,9 @@ func parsePaymentSettings(raw string) ([]paymentSettings, error) {
 		}
 		if p.RefundEnabled && p.Provider != "epay" {
 			return nil, errors.New("refund_enabled requires a refund-capable epay merchant")
+		}
+		if p.Provider != "epay" && p.PaymentTypes != nil {
+			return nil, errors.New("payment_types is supported only for epay")
 		}
 		seen[p.Provider] = true
 		if _, err := p.build("https://configuration-check.invalid", nil); err != nil {
@@ -85,10 +90,24 @@ func (p paymentSettings) build(publicURL string, buyerEmail func(context.Context
 		}
 	case "epay":
 		if !missing(p.MerchantID, p.Secret, p.BaseURL) && p.Currency == "cny" {
+			types := p.PaymentTypes
+			if types == nil {
+				types = []string{"alipay", "wxpay"}
+			}
+			seen := make(map[string]bool)
+			for _, method := range types {
+				if method == "" || len(method) > 32 || strings.Trim(method, "abcdefghijklmnopqrstuvwxyz0123456789_-") != "" || seen[method] {
+					return nil, errors.New("epay payment_types require unique nonempty cashier names")
+				}
+				seen[method] = true
+			}
+			if len(types) == 0 || (p.PaymentType != "" && !slices.Contains(types, p.PaymentType)) {
+				return nil, errors.New("epay default payment_type must belong to its nonempty payment_types")
+			}
 			if p.NotifyURL == "" {
 				callback = strings.TrimRight(publicURL, "/") + "/api/user/epay/notify"
 			}
-			return commerce.NewEpay(commerce.EpayConfig{MerchantID: p.MerchantID, Secret: p.Secret, BaseURL: p.BaseURL, NotifyURL: callback, PaymentType: p.PaymentType}), nil
+			return commerce.NewEpay(commerce.EpayConfig{MerchantID: p.MerchantID, Secret: p.Secret, BaseURL: p.BaseURL, NotifyURL: callback, PaymentType: p.PaymentType, PaymentTypes: types}), nil
 		}
 	case "creem":
 		if !missing(p.APIKey, p.WebhookSecret, p.ProductID) {

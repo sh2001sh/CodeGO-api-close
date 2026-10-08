@@ -4588,7 +4588,10 @@ type PasswordResetInput struct {
 type PaymentMethod struct {
 	CreditsPerMinor int64  `json:"credits_per_minor"`
 	Currency        string `json:"currency"`
-	Provider        string `json:"provider"`
+
+	// PaymentTypes Merchant-configured cashier choices for this provider. Omitted for providers without separate cashier choices; only listed values may be selected.
+	PaymentTypes *[]string `json:"payment_types,omitempty"`
+	Provider     string    `json:"provider"`
 }
 
 // PerformanceCleanupResult defines model for PerformanceCleanupResult.

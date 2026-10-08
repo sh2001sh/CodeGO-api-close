@@ -12,16 +12,21 @@ import (
 )
 
 type PaymentMethod struct {
-	Provider        string `json:"provider"`
-	Currency        string `json:"currency"`
-	CreditsPerMinor int64  `json:"credits_per_minor"`
+	Provider        string   `json:"provider"`
+	Currency        string   `json:"currency"`
+	CreditsPerMinor int64    `json:"credits_per_minor"`
+	PaymentTypes    []string `json:"payment_types,omitempty"`
 }
 
 func (s *Service) PaymentMethods() []PaymentMethod {
 	result := make([]PaymentMethod, 0, len(s.providers))
 	for name := range s.providers {
 		price := s.topupPrice(name)
-		result = append(result, PaymentMethod{name, price.Currency, int64(price.CreditsPerMinor)})
+		method := PaymentMethod{Provider: name, Currency: price.Currency, CreditsPerMinor: int64(price.CreditsPerMinor)}
+		if cashier, ok := s.providers[name].(interface{ PaymentTypes() []string }); ok {
+			method.PaymentTypes = cashier.PaymentTypes()
+		}
+		result = append(result, method)
 	}
 	slices.SortFunc(result, func(a, b PaymentMethod) int {
 		if a.Provider < b.Provider {
@@ -164,10 +169,10 @@ func (h *handler) resolveLegacyPayAction(provider string, subscription bool, inp
 	}
 	if len(h.s.cfg.ReturnOrigins) > 0 {
 		if input.SuccessURL == "" {
-			input.SuccessURL = h.s.cfg.ReturnOrigins[0] + "/console/topup?show_history=true"
+			input.SuccessURL = h.s.cfg.ReturnOrigins[0] + "/orders"
 		}
 		if input.CancelURL == "" {
-			input.CancelURL = h.s.cfg.ReturnOrigins[0] + "/console/topup"
+			input.CancelURL = h.s.cfg.ReturnOrigins[0] + "/wallet"
 		}
 	}
 	return action, purchaseType, nil
@@ -205,5 +210,5 @@ func (h *handler) paymentReturn(w http.ResponseWriter, r *http.Request) {
 		respond(w, nil, ErrProviderUnavailable)
 		return
 	}
-	http.Redirect(w, r, strings.TrimRight(h.s.cfg.ReturnOrigins[0], "/")+"/console/topup?show_history=true", http.StatusSeeOther)
+	http.Redirect(w, r, strings.TrimRight(h.s.cfg.ReturnOrigins[0], "/")+"/orders", http.StatusSeeOther)
 }

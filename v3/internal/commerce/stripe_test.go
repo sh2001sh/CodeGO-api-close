@@ -138,7 +138,7 @@ func TestBrowserPaymentReturnCannotChooseDestinationOrFulfill(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/subscription/epay/return?return_url=https://evil.test&trade_status=TRADE_SUCCESS", nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, r)
-	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "https://site.test/console/topup?show_history=true" {
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "https://site.test/orders" {
 		t.Fatalf("untrusted browser return=%d %s", w.Code, w.Header().Get("Location"))
 	}
 }

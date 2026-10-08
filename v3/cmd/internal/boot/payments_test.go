@@ -103,3 +103,27 @@ func TestSharedPaymentsServerProductQuotesAndStablecoinUnits(t *testing.T) {
 		}
 	}
 }
+
+func TestUnifiedEpayPricingPreservesConfiguredCashiersAndRefunds(t *testing.T) {
+	clearPaymentEnvironment(t)
+	t.Setenv("V3_PAYMENT_PROVIDERS", `[{"provider":"epay","currency":"cny","credits_per_minor":10000,"merchant_id":"merchant","secret":"sensitive-value","base_url":"https://cashier.test","payment_type":"wxpay","payment_types":["wxpay"],"refund_enabled":true}]`)
+	providers, prices, refunds, err := LoadPayments(nil, "https://site.test")
+	if err != nil || len(providers) != 1 || refunds == nil || prices["epay"].CreditsPerMinor != 10000 || prices["epay"].Currency != "cny" {
+		t.Fatal("unified Epay pricing or original refund adapter not configured")
+	}
+	types := providers[0].(*commerce.Epay).PaymentTypes()
+	if len(types) != 1 || types[0] != "wxpay" {
+		t.Fatal("merchant cashier whitelist expanded")
+	}
+	for _, config := range []string{
+		`"payment_types":[]`,
+		`"payment_types":["wxpay","wxpay"]`,
+		`"payment_types":["wxpay"],"payment_type":"alipay"`,
+		`"payment_types":["bad cashier"]`,
+	} {
+		t.Setenv("V3_PAYMENT_PROVIDERS", `[{"provider":"epay","currency":"cny","credits_per_minor":10000,"merchant_id":"merchant","secret":"sensitive-value","base_url":"https://cashier.test",`+config+`}]`)
+		if _, _, _, err := LoadPayments(nil, "https://site.test"); err == nil || strings.Contains(err.Error(), "sensitive-value") {
+			t.Fatal("invalid merchant cashier configuration accepted or credential exposed")
+		}
+	}
+}

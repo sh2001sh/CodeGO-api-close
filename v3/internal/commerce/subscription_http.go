@@ -157,7 +157,7 @@ func (h *handler) purchasePackage(w http.ResponseWriter, r *http.Request, a Acto
 	if body.RequestID == "" {
 		body.RequestID = r.Header.Get("Idempotency-Key")
 	}
-	result, err := h.s.Create(r.Context(), CreateOrder{UserID: a.UserID, PlanID: body.PlanID, Provider: body.Provider, SuccessURL: body.SuccessURL, CancelURL: body.CancelURL, PurchaseAction: action, TargetSubscriptionID: body.TargetSubscriptionID, RequestID: body.RequestID})
+	result, err := h.s.Create(r.Context(), CreateOrder{UserID: a.UserID, PlanID: body.PlanID, Provider: body.Provider, SuccessURL: body.SuccessURL, CancelURL: body.CancelURL, PurchaseAction: action, TargetSubscriptionID: body.TargetSubscriptionID, RequestID: body.RequestID, Selection: CheckoutSelection{PaymentMethod: body.PaymentMethod}})
 	respond(w, result, err)
 }
 

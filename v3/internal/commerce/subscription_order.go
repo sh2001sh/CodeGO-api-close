@@ -3,6 +3,7 @@ package commerce
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -18,6 +19,9 @@ func (s *Service) insertOrder(ctx context.Context, o Order, groupID int64) (Orde
 
 func (s *Service) insertOrderTx(ctx context.Context, tx pgx.Tx, o Order, groupID int64, ignoreLimit ...bool) (Order, error) {
 	if !o.Selection.validFor(o.Provider) {
+		return o, ErrInvalid
+	}
+	if cashier, ok := s.providers[o.Provider].(*Epay); ok && o.Selection.PaymentMethod != "" && o.Selection.PaymentMethod != "epay" && !slices.Contains(cashier.PaymentTypes(), o.Selection.PaymentMethod) {
 		return o, ErrInvalid
 	}
 	err := func() error {

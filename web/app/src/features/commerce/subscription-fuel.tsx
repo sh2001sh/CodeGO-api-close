@@ -9,6 +9,7 @@ import { followPayment, paymentAmount } from '../../lib/commerce'
 import { frozenSubscriptionPlan } from '../../lib/subscription-policy'
 import { Button, ErrorMessage, Field, Status } from '../../components/ui'
 import { decimalCredits, errorFrom, steppedMicroCredits } from './amounts'
+import { PaymentTypeField, selectedPaymentType } from './payment-type-field'
 
 type QuotedFuel = { body: Schema['SubscriptionFuelInput']; quote: Schema['FuelQuote'] }
 
@@ -25,6 +26,7 @@ export function SubscriptionFuel(props: {
   })
   const [target, setTarget] = useState('')
   const [provider, setProvider] = useState('')
+  const [paymentType, setPaymentType] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [quoted, setQuoted] = useState<QuotedFuel | null>(null)
   const subscription = eligible.find((sub) => String(sub.id) === target) ?? eligible[0]
@@ -71,6 +73,7 @@ export function SubscriptionFuel(props: {
                 subscription_id: subscription.id,
                 credits: amount,
                 provider: method.provider,
+                payment_method: selectedPaymentType(method, paymentType) || undefined,
                 success_url: `${window.location.origin}/orders`,
                 cancel_url: `${window.location.origin}/wallet`,
               })
@@ -114,6 +117,13 @@ export function SubscriptionFuel(props: {
               ))}
             </select>
           </label>
+          <PaymentTypeField
+            id="fuel-payment-type"
+            method={method}
+            value={paymentType}
+            onChange={setPaymentType}
+            disabled={quote.isPending}
+          />
           <Field
             name="fuel-credits"
             label="购买燃料 credits"

@@ -51747,6 +51747,16 @@
           "credits_per_minor": {
             "type": "integer",
             "format": "int64"
+          },
+          "payment_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true,
+            "x-omitempty": true,
+            "description": "Merchant-configured cashier choices for this provider. Omitted for providers without separate cashier choices; only listed values may be selected."
           }
         },
         "required": [

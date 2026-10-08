@@ -9048,6 +9048,8 @@ export interface components {
             currency: string;
             /** Format: int64 */
             credits_per_minor: number | string | bigint;
+            /** @description Merchant-configured cashier choices for this provider. Omitted for providers without separate cashier choices; only listed values may be selected. */
+            payment_types?: string[];
         };
         Plan: {
             /** @description Optional existing pricing group granted by this paid plan. Trimmed before validation; empty means no group change. */

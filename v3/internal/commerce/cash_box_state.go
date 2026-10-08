@@ -123,7 +123,17 @@ func (s *Service) CashBoxOrder(ctx context.Context, userID int64, trade string) 
 		&result.Status, &result.Quantity, &result.OpenedCount, &amount, &currency, &result.PaymentMethod, &result.PaymentProvider,
 		&result.CreateTime, &result.CompleteTime)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return result, ErrNotFound
+		// Imported closed V2 orders retain inventory/history in the marketplace
+		// table and have no new commerce checkout. Read only the same owner's
+		// original snapshot; this never recreates payment or grants inventory.
+		err = s.pool.QueryRow(ctx, `SELECT trade_no,status,quantity,opened_count,amount_minor,currency,payment_method,payment_provider,
+		 extract(epoch FROM created_at)::bigint,coalesce(extract(epoch FROM completed_at)::bigint,0)
+		 FROM v3_marketplace.blind_box_orders WHERE user_id=$1 AND trade_no=$2`, userID, trade).Scan(&result.TradeNo,
+			&result.Status, &result.Quantity, &result.OpenedCount, &amount, &currency, &result.PaymentMethod, &result.PaymentProvider,
+			&result.CreateTime, &result.CompleteTime)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return result, ErrNotFound
+		}
 	}
 	result.Money = currencyNumber(amount, currency)
 	switch result.Status {

@@ -85,3 +85,30 @@ func TestCheckoutSelectionRejectsCrossProviderAndInvalidValues(t *testing.T) {
 		t.Fatal("valid Waffo choice rejected")
 	}
 }
+
+func TestEpayCashierWhitelistRejectsUnknownAndDisabledChoices(t *testing.T) {
+	p := NewEpay(EpayConfig{MerchantID: "merchant", Secret: "test-secret", BaseURL: "https://cashier.test", NotifyURL: "https://site.test/notify", PaymentTypes: []string{"wxpay"}})
+	s := New(nil, nil, []PaymentProvider{p}, Config{})
+	for _, method := range []string{"alipay", "unknown_cashier"} {
+		_, err := s.checkout(context.Background(), Order{Provider: "epay", Currency: "cny", AmountMinor: 100, TradeNo: "trade", Selection: CheckoutSelection{PaymentMethod: method}}, "https://site.test/success", "")
+		if err != ErrInvalid {
+			t.Fatalf("disabled cashier accepted: %v", err)
+		}
+	}
+	methods := s.PaymentMethods()
+	if len(methods) != 1 || len(methods[0].PaymentTypes) != 1 || methods[0].PaymentTypes[0] != "wxpay" {
+		t.Fatal("advertised cashiers do not match operator whitelist")
+	}
+	methods[0].PaymentTypes[0] = "alipay"
+	if p.PaymentTypes()[0] != "wxpay" {
+		t.Fatal("cashier response mutated configured provider")
+	}
+	out, err := s.checkout(context.Background(), Order{Provider: "epay", Currency: "cny", AmountMinor: 100, TradeNo: "trade"}, "https://site.test/success", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := url.Parse(out.URL)
+	if err != nil || u.Query().Get("type") != "wxpay" {
+		t.Fatal("default cashier escaped configured whitelist")
+	}
+}

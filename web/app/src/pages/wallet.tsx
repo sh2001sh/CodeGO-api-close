@@ -15,6 +15,7 @@ import { AffiliateTransfer } from '../features/affiliate-transfer'
 import { SubscriptionActions } from '../features/commerce/subscription-actions'
 import { Refunds } from '../features/commerce/refunds'
 import { SubscriptionValues } from '../features/commerce/subscription-values'
+import { PaymentTypeField, selectedPaymentType } from '../features/commerce/payment-type-field'
 
 export default function WalletPage() {
   const { t } = useTranslation()
@@ -25,6 +26,7 @@ export default function WalletPage() {
     ),
   ).data
   const [provider, setProvider] = useState('')
+  const [paymentType, setPaymentType] = useState('')
   const method = methods.find((item) => item.provider === provider) ?? methods[0]
   const plans = useSuspenseQuery(
     resourceOptions('plans', (signal) =>
@@ -52,6 +54,9 @@ export default function WalletPage() {
     purchase.mutate({
       ...body,
       provider: method?.provider ?? '',
+      checkout_selection: {
+        payment_method: selectedPaymentType(method, paymentType) || undefined,
+      },
       success_url: `${window.location.origin}/orders`,
       cancel_url: `${window.location.origin}/wallet`,
     })
@@ -89,7 +94,7 @@ export default function WalletPage() {
       <section className="section wallet-topup" id="wallet-topup">
         <h2>{t('充值')}</h2>
         <label className="field" htmlFor="payment-provider">
-          <span>{t('支付方式')}</span>
+          <span>{t('支付渠道')}</span>
           <select
             id="payment-provider"
             value={method?.provider ?? ''}
@@ -104,6 +109,13 @@ export default function WalletPage() {
             ))}
           </select>
         </label>
+        <PaymentTypeField
+          id="wallet-payment-type"
+          method={method}
+          value={paymentType}
+          onChange={setPaymentType}
+          disabled={purchase.isPending}
+        />
         {method && (
           <p className="muted section">
             {t('每')}{' '}

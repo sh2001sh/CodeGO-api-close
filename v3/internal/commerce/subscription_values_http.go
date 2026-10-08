@@ -41,7 +41,7 @@ func (h *handler) purchaseFuel(w http.ResponseWriter, r *http.Request, a Actor) 
 	if body.Provider == "" {
 		body.Provider = body.PaymentMethod
 	}
-	result, err := h.s.CreateSubscriptionFuel(r.Context(), CreateOrder{UserID: a.UserID, TargetSubscriptionID: body.SubscriptionID, FuelCredits: body.Credits, Provider: body.Provider, SuccessURL: body.SuccessURL, CancelURL: body.CancelURL})
+	result, err := h.s.CreateSubscriptionFuel(r.Context(), CreateOrder{UserID: a.UserID, TargetSubscriptionID: body.SubscriptionID, FuelCredits: body.Credits, Provider: body.Provider, SuccessURL: body.SuccessURL, CancelURL: body.CancelURL, Selection: CheckoutSelection{PaymentMethod: body.PaymentMethod}})
 	respond(w, result, err)
 }
 func (h *handler) convertSubscription(w http.ResponseWriter, r *http.Request, a Actor) {

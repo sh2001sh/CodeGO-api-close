@@ -15,6 +15,7 @@ import {
 import { Button, ErrorMessage, Field, Loading, Status } from '../../components/ui'
 import { errorFrom, positiveID } from './amounts'
 import { ReferralOrderTerms } from './referral-order-terms'
+import { PaymentTypeField, selectedPaymentType } from './payment-type-field'
 
 export const subscriptionPreferenceOptions = () =>
   resourceOptions('subscription-preference', (signal) =>
@@ -32,6 +33,7 @@ export function SubscriptionActions(props: {
   const client = useQueryClient()
   const preference = useQuery(subscriptionPreferenceOptions())
   const [provider, setProvider] = useState('')
+  const [paymentType, setPaymentType] = useState('')
   const [target, setTarget] = useState('')
   const [purchase, setPurchase] = useState<Purchase | null>(null)
   const [error, setError] = useState<Error | null>(null)
@@ -94,6 +96,7 @@ export function SubscriptionActions(props: {
       body: {
         plan_id: plan.id,
         provider: method.provider,
+        payment_method: selectedPaymentType(method, paymentType) || undefined,
         target_subscription_id: action === 'purchase' ? undefined : current?.id,
         request_id: crypto.randomUUID(),
         success_url: `${window.location.origin}/orders`,
@@ -107,7 +110,7 @@ export function SubscriptionActions(props: {
       <ErrorMessage error={error ?? buy.error ?? savePreference.error ?? preference.error} />
       <div className="form-panel">
         <label className="field" htmlFor="subscription-provider">
-          <span>{t('支付方式')}</span>
+          <span>{t('支付渠道')}</span>
           <select
             id="subscription-provider"
             value={method?.provider ?? ''}
@@ -122,6 +125,13 @@ export function SubscriptionActions(props: {
             ))}
           </select>
         </label>
+        <PaymentTypeField
+          id="subscription-payment-type"
+          method={method}
+          value={paymentType}
+          onChange={setPaymentType}
+          disabled={!!purchase}
+        />
         <label className="field" htmlFor="subscription-target">
           <span>{t('需要续期或升级的订阅')}</span>
           <select

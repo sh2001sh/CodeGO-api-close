@@ -8,35 +8,48 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 )
 
 type EpayConfig struct {
-	MerchantID  string
-	Secret      string
-	BaseURL     string
-	NotifyURL   string
-	PaymentType string
+	MerchantID   string
+	Secret       string
+	BaseURL      string
+	NotifyURL    string
+	PaymentType  string
+	PaymentTypes []string
 }
 
 type Epay struct{ cfg EpayConfig }
 
 func NewEpay(cfg EpayConfig) *Epay {
+	if len(cfg.PaymentTypes) == 0 {
+		cfg.PaymentTypes = []string{"alipay", "wxpay"}
+	} else {
+		cfg.PaymentTypes = slices.Clone(cfg.PaymentTypes)
+	}
 	if cfg.PaymentType == "" {
-		cfg.PaymentType = "alipay"
+		cfg.PaymentType = cfg.PaymentTypes[0]
 	}
 	return &Epay{cfg: cfg}
 }
 
 func (*Epay) Name() string { return "epay" }
 
+// PaymentTypes advertises only the merchant-configured cashier choices.
+func (p *Epay) PaymentTypes() []string { return slices.Clone(p.cfg.PaymentTypes) }
+
 func (p *Epay) Checkout(_ context.Context, o Order, success, _ string) (Checkout, error) {
 	if p.cfg.MerchantID == "" || p.cfg.Secret == "" || p.cfg.NotifyURL == "" || p.cfg.BaseURL == "" {
 		return Checkout{}, ErrProviderUnavailable
 	}
 	if o.Currency != "cny" {
+		return Checkout{}, ErrInvalid
+	}
+	if !slices.Contains(p.cfg.PaymentTypes, p.cfg.PaymentType) {
 		return Checkout{}, ErrInvalid
 	}
 	values := url.Values{"pid": {p.cfg.MerchantID}, "type": {p.cfg.PaymentType}, "out_trade_no": {o.TradeNo},

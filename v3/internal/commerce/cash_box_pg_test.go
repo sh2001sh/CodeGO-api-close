@@ -53,6 +53,26 @@ func cashBoxCount(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) int
 	return count
 }
 
+func TestImportedClosedCashBoxOrderRemainsOwnerReadableWithoutNewCheckout(t *testing.T) {
+	s, _, pool, p := cashBoxFixture(t)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `INSERT INTO v3_marketplace.blind_box_orders
+	 (user_id,pool_id,trade_no,quantity,opened_count,amount_minor,currency,payment_method,payment_provider,source,status)
+	 VALUES(1,$1,'v2-closed-fixture',2,1,500,'cny','wxpay','epay','purchase','success')`, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	o, err := s.CashBoxOrder(ctx, 1, "v2-closed-fixture")
+	if err != nil || o.Status != "success" || o.Quantity != 2 || o.OpenedCount != 1 || string(o.Money) != "5.00" || o.PaymentMethod != "wxpay" {
+		t.Fatalf("original closed snapshot unavailable: %+v %v", o, err)
+	}
+	if _, err := s.CashBoxOrder(ctx, 2, "v2-closed-fixture"); !errors.Is(err, commerce.ErrNotFound) {
+		t.Fatal("foreign owner can read imported payment order")
+	}
+	if cashBoxCount(t, pool, `SELECT count(*) FROM v3_commerce.orders`) != 0 || cashBoxCount(t, pool, `SELECT count(*) FROM v3_marketplace.blind_box_items`) != 0 {
+		t.Fatal("historical read created payment or issued inventory")
+	}
+}
+
 func TestCashBoxPaymentsConcurrentVerifiedCallbacksGrantInventoryWithoutWallet(t *testing.T) {
 	s, _, pool, p := cashBoxFixture(t)
 	o := cashBoxCreate(t, s, p.ID, 3)

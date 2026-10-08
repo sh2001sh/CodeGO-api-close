@@ -110,6 +110,11 @@ func (s *Server) deleteChannel(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) writeChannel(ctx context.Context, tx pgx.Tx, c *Channel) error {
 	var err error
+	if c.ID != 0 {
+		if err = prepareMarketStatusTx(ctx, tx, c.ID, c.Status); err != nil {
+			return err
+		}
+	}
 	args := []any{c.Name, c.Provider, c.BaseURL, c.ProxyURL, c.Status, c.Scope, c.OwnerUserID, c.Priority, c.Weight, c.MaxConcurrency, c.MaxUserConcurrency, c.AutoDisable, c.MultiplierCardSupported, c.ModelMapping, c.ParamOverride, c.HeaderOverride, c.StatusCodeMapping, c.Settings, c.Tag, c.Remark}
 	if c.ID == 0 {
 		err = tx.QueryRow(ctx, `INSERT INTO v3_catalog.channels(name,provider,base_url,proxy_url,status,scope,owner_user_id,priority,weight,max_concurrency,max_user_concurrency,auto_disable,multiplier_card_supported,model_mapping,param_override,header_override,status_code_mapping,settings,tag,remark)
@@ -160,5 +165,5 @@ func (s *Server) writeChannel(ctx context.Context, tx pgx.Tx, c *Channel) error 
 			}
 		}
 	}
-	return nil
+	return syncMarketStatusTx(ctx, tx, c.ID)
 }

@@ -171,6 +171,10 @@ func fail(w http.ResponseWriter, status int, code, message string) {
 }
 
 func (s *Server) dbError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errMarketChannelNotReady) {
+		fail(w, http.StatusConflict, "market_channel_not_ready", "Marketplace channels must pass verification and approval before enabling")
+		return
+	}
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

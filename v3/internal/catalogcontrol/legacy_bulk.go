@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type legacyChannelBatch struct {
@@ -89,7 +91,42 @@ func (s *Server) legacySetTagStatus(w http.ResponseWriter, r *http.Request, stat
 		fail(w, 400, "invalid_tag", "A nonempty channel tag is required")
 		return
 	}
-	if _, err := s.pool.Exec(r.Context(), `UPDATE v3_catalog.channels SET status=$2 WHERE tag=$1`, req.Tag, status); err != nil {
+	err := pgx.BeginFunc(r.Context(), s.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(r.Context(), `SELECT id FROM v3_catalog.channels WHERE tag=$1 ORDER BY id`, req.Tag)
+		if err != nil {
+			return err
+		}
+		ids, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+		if err != nil {
+			return err
+		}
+		// All groups are locked in the same order as single-channel transitions.
+		rows, err = tx.Query(r.Context(), `SELECT channel_id FROM v3_channelmarket.groups
+			WHERE channel_id=ANY($1::bigint[]) ORDER BY id FOR UPDATE`, ids)
+		if err != nil {
+			return err
+		}
+		channels, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+		if err != nil {
+			return err
+		}
+		for _, id := range channels {
+			if err = prepareMarketStatusTx(r.Context(), tx, id, status); err != nil {
+				return err
+			}
+		}
+		// Newly tagged channels must not slip past the verification checks above.
+		if _, err = tx.Exec(r.Context(), `UPDATE v3_catalog.channels SET status=$2 WHERE id=ANY($1::bigint[])`, ids, status); err != nil {
+			return err
+		}
+		for _, id := range channels {
+			if err = syncMarketStatusTx(r.Context(), tx, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		s.dbError(w, err)
 		return
 	}

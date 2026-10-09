@@ -235,7 +235,9 @@ func ValidateOnlineCapture(ctx context.Context, tx pgx.Tx, runID string) (Online
 	if err != nil {
 		return r, err
 	}
-	rows, err := tx.Query(ctx, `SELECT name,relation_oid,keys,schema_fingerprint FROM v3_migration_capture.tables ORDER BY name`)
+	// Catalog name expressions inherit C collation; registry text otherwise
+	// follows the database locale and can reorder an unchanged source.
+	rows, err := tx.Query(ctx, `SELECT name,relation_oid,keys,schema_fingerprint FROM v3_migration_capture.tables ORDER BY name COLLATE "C"`)
 	if err != nil {
 		return r, err
 	}
@@ -449,7 +451,7 @@ func discoverOnlineCaptureTables(ctx context.Context, tx pgx.Tx) ([]OnlineCaptur
  'triggers',(SELECT jsonb_agg(jsonb_build_object('definition',pg_get_triggerdef(t.oid),'enabled',t.tgenabled,'function',pg_get_functiondef(t.tgfoid)) ORDER BY t.tgname) FROM pg_trigger t WHERE t.tgrelid=r.oid AND NOT t.tgisinternal AND t.tgname NOT IN('codego_online_capture_row','codego_online_capture_no_truncate','codego_online_capture_write_fence'))) ORDER BY rn.nspname,r.relname)
  FROM children ch JOIN pg_class r ON r.oid=ch.oid JOIN pg_namespace rn ON rn.oid=r.relnamespace))
  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind IN('r','p') AND NOT c.relispartition
- AND n.nspname NOT LIKE 'pg_%' AND n.nspname NOT LIKE 'v3_%' AND n.nspname<>'information_schema' ORDER BY n.nspname||'.'||c.relname`)
+ AND n.nspname NOT LIKE 'pg_%' AND n.nspname NOT LIKE 'v3_%' AND n.nspname<>'information_schema' ORDER BY (n.nspname||'.'||c.relname) COLLATE "C"`)
 	if err != nil {
 		return nil, err
 	}

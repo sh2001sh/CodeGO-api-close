@@ -140,7 +140,7 @@ func ReadHistoryWithArchive(ctx context.Context, pool, archive *pgxpool.Pool, us
 	if err != nil {
 		return page, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if len(accounts) == 0 {
 		return page, nil
 	}

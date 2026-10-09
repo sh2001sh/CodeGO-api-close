@@ -60,7 +60,9 @@ func (d *channelMarketData) projectMarketHistory(table string, r cmRow) (cmRecor
 		b.integer(r, "request_count", "request_count")
 		b.integer(r, "independent_consumers", "independent_consumers")
 		for _, key := range []string{"score", "raw_success_rate", "wilson_success_rate", "avg_ttft_ms", "attempt_ttft_p50_ms", "attempt_ttft_p95_ms", "e2e_ttft_p50_ms", "e2e_ttft_p95_ms", "avg_latency_ms", "avg_tps", "cache_hit_rate"} {
-			if len(r[key]) > 0 {
+			// V2's nullable float columns read as zero in its value fields.
+			// PostgreSQL emits explicit JSON null for older, unfilled columns.
+			if len(r[key]) > 0 && string(r[key]) != "null" {
 				b.put(key, r[key])
 			} else {
 				b.put(key, 0)

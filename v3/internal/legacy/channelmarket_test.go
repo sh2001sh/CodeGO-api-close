@@ -3,6 +3,7 @@ package legacy
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"math"
 	"strings"
@@ -18,6 +19,48 @@ func cmTestRow(t *testing.T, raw string) cmRow {
 		t.Fatal(err)
 	}
 	return row
+}
+
+func TestMarketInviteDigestEncodingsPreserveBytesAndRejectNoncanonicalInput(t *testing.T) {
+	digest := sha256.Sum256([]byte("legacy-invite-original-token"))
+	hexDigest := hex.EncodeToString(digest[:])
+	rawURL := base64.RawURLEncoding.EncodeToString(digest[:])
+	want := "\\x" + hexDigest
+	for _, value := range []string{hexDigest, strings.ToUpper(hexDigest), rawURL} {
+		got, err := cmInviteHash(value)
+		if err != nil || got != want {
+			t.Fatalf("invite digest bytes changed: got=%s err=%v", got, err)
+		}
+		d := cmUnitData(t)
+		d.rows["group_invites"] = []cmRow{cmTestRow(t, `{"id":91,"group_id":"g-201","created_by":7,"token_hash":"`+value+`"}`)}
+		d.prepare("")
+		if len(d.issues) != 0 {
+			t.Fatalf("valid invite encoding blocked projection: %+v", d.issues)
+		}
+		var projected bool
+		for _, record := range d.records {
+			if record.table == "v3_channelmarket.group_invites" {
+				projected = record.values["token_hash"] == want
+			}
+		}
+		if !projected {
+			t.Fatal("invite projection did not retain original SHA256 bytes")
+		}
+	}
+	// A loose decoder accepts B's nonzero padding bits as the same final byte.
+	// Strict canonical decoding must reject it rather than normalize the input.
+	noncanonical := strings.Repeat("A", 42) + "B"
+	if decoded, err := base64.RawURLEncoding.DecodeString(noncanonical); err != nil || len(decoded) != sha256.Size {
+		t.Fatal("noncanonical boundary did not exercise a decodable SHA256 digest")
+	}
+	for _, value := range []string{"", hexDigest[:62], hexDigest + "00", strings.Repeat("z", 64), rawURL[:42], rawURL + "A", rawURL + "=", rawURL + "\n", strings.Repeat("/", 42) + "8", noncanonical} {
+		if _, err := cmInviteHash(value); err == nil {
+			t.Fatalf("invalid invite digest accepted: %q", value)
+		}
+	}
+	if _, err := cmHex(rawURL); err == nil {
+		t.Fatal("non-invite SHA256 fields accepted Base64URL")
+	}
 }
 
 func TestMarketExactFactorAndSecretMigration(t *testing.T) {

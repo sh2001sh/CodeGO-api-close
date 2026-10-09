@@ -120,6 +120,22 @@ func cmHex(value string) (string, error) {
 	return "\\x" + hex.EncodeToString(b), nil
 }
 
+func cmInviteHash(value string) (string, error) {
+	if len(value) == sha256.Size*2 {
+		return cmHex(value)
+	}
+	// V2 invitations persist SHA256 bytes as canonical unpadded Base64URL.
+	// Other marketplace digest fields retain their hexadecimal-only contract.
+	if len(value) != base64.RawURLEncoding.EncodedLen(sha256.Size) {
+		return "", errors.New("expected SHA256 invite digest")
+	}
+	b, err := base64.RawURLEncoding.Strict().DecodeString(value)
+	if err != nil || len(b) != sha256.Size || base64.RawURLEncoding.EncodeToString(b) != value {
+		return "", errors.New("expected SHA256 invite digest")
+	}
+	return "\\x" + hex.EncodeToString(b), nil
+}
+
 type cmRecord struct {
 	table  string
 	keys   []string

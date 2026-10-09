@@ -23,7 +23,7 @@ func (d *channelMarketData) preparePermissions() {
 			b.err = errors.New("invite ID must be positive")
 		}
 		invites[id] = group
-		hash, err := cmHex(r.text("token_hash"))
+		hash, err := cmInviteHash(r.text("token_hash"))
 		if err != nil {
 			b.err = err
 		}

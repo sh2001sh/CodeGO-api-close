@@ -54,12 +54,12 @@ func TestOnlineBulkQueriesStayBoundedAndPreserveExactProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer read.Rollback(ctx)
+	defer func() { _ = read.Rollback(ctx) }()
 	write, err := target.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer write.Rollback(ctx)
+	defer func() { _ = write.Rollback(ctx) }()
 	if err := onlineAuthorize(ctx, write, opts.RunID); err != nil {
 		t.Fatal(err)
 	}

@@ -165,7 +165,17 @@ func (m *Importer) checkChannelMarket(ctx context.Context, target pgx.Tx, data *
 				issue("marketplace_channels", c.catalogID, "declared model missing: "+model)
 			}
 		}
-		if c.newCatalog {
+		if c.archiveParent {
+			var archived bool
+			if err = target.QueryRow(ctx, `SELECT status='disabled' AND base_url=''
+			 AND NOT EXISTS(SELECT 1 FROM v3_catalog.channel_credentials k WHERE k.channel_id=c.id)
+			 FROM v3_catalog.channels c WHERE id=$1`, c.catalogID).Scan(&archived); err != nil {
+				return err
+			}
+			if !archived {
+				issue("marketplace_channels", c.catalogID, "deleted gateway parent must remain disabled without URL or credentials")
+			}
+		} else if c.newCatalog {
 			decrypter, ok := m.crypto.(catalog.Decrypter)
 			if !ok {
 				return fmt.Errorf("legacy: target credential decrypter required for market check")

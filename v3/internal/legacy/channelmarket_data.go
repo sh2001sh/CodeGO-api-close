@@ -25,6 +25,7 @@ type cmChannel struct {
 	settings         json.RawMessage
 	group            cmRow
 	newCatalog       bool
+	archiveParent    bool
 }
 type channelMarketData struct {
 	source          pgx.Tx

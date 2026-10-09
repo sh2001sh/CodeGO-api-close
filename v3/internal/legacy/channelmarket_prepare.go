@@ -17,6 +17,18 @@ func (d *channelMarketData) prepare(sourceSecret string) {
 			maximum = id
 		}
 	}
+	// Deleted marketplace rows retain their original catalog IDs after v2
+	// removes the gateway parent. Reserve those IDs before allocating new ones.
+	for _, row := range d.rows["channels"] {
+		if id, err := row.integer("internal_channel_id"); err == nil && id > maximum {
+			maximum = id
+		}
+	}
+	groupsByChannel := map[string][]cmRow{}
+	for _, group := range d.rows["groups"] {
+		id := group.text("channel_id")
+		groupsByChannel[id] = append(groupsByChannel[id], group)
+	}
 	rows := append([]cmRow(nil), d.rows["channels"]...)
 	sort.Slice(rows, func(i, j int) bool { return rows[i].text("id") < rows[j].text("id") })
 	used := map[int64]string{}
@@ -40,6 +52,7 @@ func (d *channelMarketData) prepare(sourceSecret string) {
 			err = errors.New("negative internal channel ID")
 		}
 		newCatalog := catalogID == 0
+		archiveParent := false
 		if newCatalog {
 			if maximum == math.MaxInt64 {
 				err = errors.New("catalog ID overflow")
@@ -48,12 +61,20 @@ func (d *channelMarketData) prepare(sourceSecret string) {
 				catalogID = maximum
 			}
 		} else if d.internal[catalogID] == nil {
-			err = errors.New("internal channel missing from source gateway channels")
+			groups := groupsByChannel[id]
+			deleted, deleteErr := r.timestamp("deleted_at")
+			if catalogID > 0 && deleted != nil && deleteErr == nil && len(groups) == 1 {
+				groupDeleted, groupErr := groups[0].timestamp("deleted_at")
+				archiveParent = groupDeleted != nil && groupErr == nil
+			}
+			if !archiveParent {
+				err = errors.New("internal channel missing from source gateway channels")
+			}
 		}
 		if existing := used[catalogID]; existing != "" {
 			err = fmt.Errorf("internal channel %d belongs to both %s and %s", catalogID, existing, id)
 		}
-		c := &cmChannel{publicID: id, catalogID: catalogID, owner: owner, row: r, newCatalog: newCatalog}
+		c := &cmChannel{publicID: id, catalogID: catalogID, owner: owner, row: r, newCatalog: newCatalog, archiveParent: archiveParent}
 		switch rProvider(r.text("provider_type")) {
 		case "openai", "azure", "codex", "anthropic", "gemini":
 		default:

@@ -30,7 +30,24 @@ func (m *Importer) importChannelMarket(ctx context.Context, target pgx.Tx, data 
 		if _, err = target.Exec(ctx, `INSERT INTO v3_catalog.groups(name,description,multiplier) VALUES($1,$2,$3::numeric/1000000) ON CONFLICT(name) DO UPDATE SET description=EXCLUDED.description,multiplier=EXCLUDED.multiplier`, g.text("internal_group_name"), g.text("system_display_name"), factor); err != nil {
 			return err
 		}
-		if c.newCatalog {
+		if c.archiveParent {
+			// Preserve deleted history and its FKs without restoring a usable
+			// upstream or retaining any credential for the removed parent.
+			var archived bool
+			err := target.QueryRow(ctx, `SELECT scope='marketplace' AND owner_user_id=$2 AND status='disabled' AND base_url=''
+			 AND settings->'community'->>'id'=$3
+			 AND NOT EXISTS(SELECT 1 FROM v3_catalog.channel_credentials k WHERE k.channel_id=c.id)
+			 FROM v3_catalog.channels c WHERE id=$1`, c.catalogID, c.owner, id).Scan(&archived)
+			if errors.Is(err, pgx.ErrNoRows) {
+				_, err = target.Exec(ctx, `INSERT INTO v3_catalog.channels(id,name,provider,base_url,status,scope,owner_user_id,max_concurrency,max_user_concurrency,multiplier_card_supported,settings)
+				 VALUES($1,$2,$3,'','disabled','marketplace',$4,$5,$6,$7,$8)`, c.catalogID, g.text("system_display_name"), rProvider(c.row.text("provider_type")), c.owner, cmInt(c.row, "max_concurrency"), cmInt(c.row, "user_max_concurrency"), c.row.text("multiplier_card_supported") == "true", c.settings)
+			} else if err == nil && !archived {
+				err = errors.New("legacy: deleted marketplace parent conflicts with target channel")
+			}
+			if err != nil {
+				return err
+			}
+		} else if c.newCatalog {
 			sealed, err := m.crypto.Encrypt([]byte(c.credential))
 			if err != nil {
 				return err

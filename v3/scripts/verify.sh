@@ -6,7 +6,8 @@
 #   scripts/verify.sh lint race    run selected steps
 #
 # Steps: boundaries test lint race integration integrationlist pgtest atlas bench
-# V3_INTEGRATION_SHARD=commerce|ledger|market|core isolates package groups.
+# V3_INTEGRATION_SHARD=commerce|ledger|market|core|migration|migration-online
+# isolates package groups; the two migration suites have independent databases.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -75,16 +76,17 @@ step_race() { go_in_docker go test -race -count=1 ./...; }
 
 integration_packages() {
   local shard="${V3_INTEGRATION_SHARD:-all}" packages package group
-  case "$shard" in all|commerce|ledger|market|core) ;; *) echo "invalid integration shard: $shard" >&2; return 2 ;; esac
+  case "$shard" in all|commerce|ledger|market|core|migration|migration-online) ;; *) echo "invalid integration shard: $shard" >&2; return 2 ;; esac
   packages=$(go list -tags=pgintegration ./...)
   while IFS= read -r package; do
     case "$package" in
       */internal/commerce|*/internal/incentives) group=commerce ;;
       */internal/billing|*/internal/billing/*|*/internal/catalog|*/internal/catalogcontrol) group=ledger ;;
       */internal/marketplace|*/internal/channelmarket) group=market ;;
+      */internal/legacy) group=migration ;;
       *) group=core ;;
     esac
-    if [ "$shard" = all ] || [ "$shard" = "$group" ]; then printf '%s\n' "$package"; fi
+    if [ "$shard" = all ] || [ "$shard" = "$group" ] || { [ "$shard" = migration-online ] && [ "$group" = migration ]; }; then printf '%s\n' "$package"; fi
   done <<< "$packages"
 }
 
@@ -93,12 +95,25 @@ step_integrationlist() { integration_packages; }
 # Integration suites may drop schemas and flush Redis. Both services are
 # disposable and inaccessible from the host or production networks.
 step_integration() {
+  # Keep both halves under the same ten-minute limit, including local "all".
+  # The offline suite excludes exactly the tests selected by the online suite.
+  if [ "${V3_INTEGRATION_SHARD:-all}" = all ]; then
+    local shard
+    for shard in commerce ledger market core migration migration-online; do
+      ( export V3_INTEGRATION_SHARD="$shard"; CONTAINERS=(); NETWORKS=(); trap cleanup EXIT; step_integration )
+    done
+    return
+  fi
   local net="v3-verify-$$" pg="v3-verify-pg-$$" rd="v3-verify-redis-$$" ready=0
   local selected
   selected=$(integration_packages)
   [ -n "$selected" ] || { echo 'integration shard has no packages' >&2; return 1; }
-  local -a packages
+  local -a packages filters=()
   mapfile -t packages <<< "$selected"
+  case "$V3_INTEGRATION_SHARD" in
+    migration) filters=(-skip '^TestOnline') ;;
+    migration-online) filters=(-run '^TestOnline') ;;
+  esac
   docker network create "$net" >/dev/null
   NETWORKS+=("$net")
   docker run -d --rm --shm-size=256m --name "$pg" --network "$net" \
@@ -133,7 +148,7 @@ step_integration() {
     -e "V3_TEST_REDIS_ADDR=$rd:6379" \
     -e "CODEGO_TEST_REDIS_ADDR=$rd:6379" \
     -e "V3_TEST_COMMERCE_REDIS_ADDR=$rd:6379" "$LINT_IMG" \
-    go test -race -tags=pgintegration -count=1 -p 1 -timeout=10m "${packages[@]}"
+    go test -race -tags=pgintegration -count=1 -p 1 -timeout=10m "${filters[@]}" "${packages[@]}"
 }
 
 step_pgtest() {

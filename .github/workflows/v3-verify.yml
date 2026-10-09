@@ -86,7 +86,7 @@ jobs:
       # Each shard owns its own PostgreSQL/Redis; package tests within it remain
       # serial because fixtures recreate shared schemas and flush test Redis.
       matrix:
-        shard: [commerce, ledger, market, core]
+        shard: [commerce, ledger, market, core, migration, migration-online]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

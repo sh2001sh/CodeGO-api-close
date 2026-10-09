@@ -6,6 +6,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -209,5 +211,141 @@ func TestHistoryValidationRejectsOrphanBindingsAndLedgerOverflow(t *testing.T) {
 	if len(r.Issues) != 2 {
 		b, _ := json.Marshal(r)
 		t.Fatalf("unsafe history report=%s", b)
+	}
+}
+
+func TestHistoryWalkersPreserveOwnedJSONAndCallbackErrors(t *testing.T) {
+	source, _, _ := importTestDB(t)
+	historyFixture(t, source)
+	ctx := context.Background()
+	if _, err := source.Exec(ctx, `INSERT INTO gateway.request_attempt_audits
+	 (attempt_id,request_id,attempt_no,duration_ms) VALUES
+	 ('extra-linked','kept-request',2,9007199254740993),
+	 ('extra-orphan','missing-parent',1,9223372036854775806);
+	 UPDATE migration_source.logs SET id=9007199254740993 WHERE id=51`); err != nil {
+		t.Fatal(err)
+	}
+	payload := strings.Repeat("历史😀\n\"\\", 4096)
+	for _, table := range []string{"billing.ledger_entries", "migration_source.logs", "gateway.request_attempt_audits"} {
+		if _, err := source.Exec(ctx, "ALTER TABLE "+table+" ADD COLUMN scan_payload jsonb"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := source.Exec(ctx, "UPDATE "+table+` SET scan_payload=jsonb_build_object(
+		 'exact_int',9007199254740993::bigint,'text',$1::text,
+		 'nested',jsonb_build_array(null,true,jsonb_build_object('kept',$1::text)))`, payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tx, err := source.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	for _, tc := range []struct {
+		name, table, key string
+		flags            map[string]bool
+		walk             func(func(json.RawMessage, bool) error) error
+	}{
+		{"history", "billing.ledger_entries", "entry_id", nil, func(visit func(json.RawMessage, bool) error) error {
+			return walkHistory(ctx, tx, "billing.ledger_entries", func(raw json.RawMessage) error { return visit(raw, false) })
+		}},
+		{"logs", "migration_source.logs", "id", map[string]bool{"9007199254740993": true, "54": true}, func(visit func(json.RawMessage, bool) error) error {
+			return walkHistoryLogs(ctx, tx, "migration_source.logs", visit)
+		}},
+		{"attempts", "gateway.request_attempt_audits", "attempt_id", map[string]bool{`"extra-orphan"`: true}, func(visit func(json.RawMessage, bool) error) error {
+			return walkHistoryAttempts(ctx, tx, "gateway.request_attempt_audits", "gateway.request_audits", visit)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expected := map[string]string{}
+			rows, err := tx.Query(ctx, "SELECT to_jsonb(t)::text FROM "+tc.table+" t")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for rows.Next() {
+				var text string
+				if err := rows.Scan(&text); err != nil {
+					rows.Close()
+					t.Fatal(err)
+				}
+				var fields map[string]json.RawMessage
+				if err := json.Unmarshal([]byte(text), &fields); err != nil {
+					rows.Close()
+					t.Fatal(err)
+				}
+				expected[string(fields[tc.key])] = text
+			}
+			rows.Close()
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			retained := map[string]json.RawMessage{}
+			err = tc.walk(func(raw json.RawMessage, flag bool) error {
+				if len(raw) < 128*1024 {
+					t.Fatalf("large source payload not exercised: %d bytes", len(raw))
+				}
+				var fields map[string]json.RawMessage
+				if err := json.Unmarshal(raw, &fields); err != nil {
+					return err
+				}
+				key := string(fields[tc.key])
+				if string(raw) != expected[key] || flag != tc.flags[key] {
+					t.Fatalf("source JSON or classification changed for %s", key)
+				}
+				var got struct {
+					ExactInt int64             `json:"exact_int"`
+					Text     string            `json:"text"`
+					Nested   []json.RawMessage `json:"nested"`
+				}
+				if err := json.Unmarshal(fields["scan_payload"], &got); err != nil {
+					return err
+				}
+				var nested struct{ Kept string }
+				if len(got.Nested) != 3 || string(got.Nested[0]) != "null" || string(got.Nested[1]) != "true" {
+					t.Fatal("nested JSON changed")
+				}
+				if err := json.Unmarshal(got.Nested[2], &nested); err != nil {
+					return err
+				}
+				if got.ExactInt != 9007199254740993 || got.Text != payload || nested.Kept != payload {
+					t.Fatal("integer precision or non-ASCII payload changed")
+				}
+				retained[key] = raw
+				for savedKey, saved := range retained {
+					if string(saved) != expected[savedKey] {
+						t.Fatalf("retained JSON overwritten after Next: %s", savedKey)
+					}
+				}
+				return nil
+			})
+			if err != nil || len(retained) != len(expected) || len(retained) < 2 {
+				t.Fatalf("walker rows=%d expected=%d err=%v", len(retained), len(expected), err)
+			}
+			var unrelated string
+			if err := tx.QueryRow(ctx, "SELECT repeat('overwrite',40000)").Scan(&unrelated); err != nil {
+				t.Fatal(err)
+			}
+			for key, saved := range retained {
+				if string(saved) != expected[key] {
+					t.Fatalf("retained JSON overwritten after another query: %s", key)
+				}
+			}
+			callbackErr := errors.New("history callback failure")
+			calls := 0
+			if err := tc.walk(func(json.RawMessage, bool) error {
+				calls++
+				if calls == 2 {
+					return callbackErr
+				}
+				return nil
+			}); err != callbackErr || calls != 2 {
+				t.Fatalf("callback error changed: calls=%d err=%v", calls, err)
+			}
+			var one int
+			if err := tx.QueryRow(ctx, "SELECT 1").Scan(&one); err != nil || one != 1 {
+				t.Fatalf("transaction connection unusable after callback error: %d %v", one, err)
+			}
+			t.Logf("verified %d source rows, retained large JSON and callback error identity", len(retained))
+		})
 	}
 }

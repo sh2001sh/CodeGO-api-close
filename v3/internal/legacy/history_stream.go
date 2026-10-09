@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// Scan []byte for pgx's owned-copy fast path; RawMessage adds JSON decoding.
 func walkHistory(ctx context.Context, source pgx.Tx, table string, visit func(json.RawMessage) error) error {
 	if table == "" {
 		return nil
@@ -19,11 +20,11 @@ func walkHistory(ctx context.Context, source pgx.Tx, table string, visit func(js
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var raw json.RawMessage
+		var raw []byte
 		if err = rows.Scan(&raw); err != nil {
 			return err
 		}
-		if err = visit(raw); err != nil {
+		if err = visit(json.RawMessage(raw)); err != nil {
 			return err
 		}
 	}
@@ -46,12 +47,12 @@ func walkHistoryAttempts(ctx context.Context, source pgx.Tx, attempts, requests 
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var raw json.RawMessage
+		var raw []byte
 		var orphan bool
 		if err = rows.Scan(&raw, &orphan); err != nil {
 			return err
 		}
-		if err = visit(raw, orphan); err != nil {
+		if err = visit(json.RawMessage(raw), orphan); err != nil {
 			return err
 		}
 	}
@@ -77,12 +78,12 @@ func walkHistoryLogs(ctx context.Context, source pgx.Tx, table string, visit fun
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var raw json.RawMessage
+		var raw []byte
 		var duplicate bool
 		if err = rows.Scan(&raw, &duplicate); err != nil {
 			return err
 		}
-		if err = visit(raw, duplicate); err != nil {
+		if err = visit(json.RawMessage(raw), duplicate); err != nil {
 			return err
 		}
 	}

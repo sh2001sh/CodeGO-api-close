@@ -109,9 +109,15 @@ func (d *channelMarketData) preparePermissions() {
 			d.record(target, keys, b, r)
 		}
 	}
+	timeRangeKeys := map[string]bool{}
 	for _, r := range d.rows["time_range_multipliers"] {
 		b := cmBuild()
 		b.texts(r, "id", "label")
+		id := r.text("id")
+		if id == "" || timeRangeKeys[id] {
+			b.err = errors.New("time range ID must be nonempty and unique")
+		}
+		timeRangeKeys[id] = true
 		c, err := d.channel(r.text("channel_id"))
 		if err != nil {
 			b.err = err
@@ -126,12 +132,15 @@ func (d *channelMarketData) preparePermissions() {
 		if e != nil {
 			b.err = e
 		}
-		if end <= start {
-			b.err = errors.New("time range end must follow start")
-		}
 		b.put("starts_at", cmUnix(start))
 		b.put("ends_at", cmUnix(end))
 		b.exactFactor(r, "multiplier", "multiplier_ppm", false)
+		if end <= start && b.err == nil {
+			// V2 accepted these rows without a range check and never applied
+			// them in pricing. Preserve their full source rows in channel
+			// metadata; do not fabricate an active interval for the V3 table.
+			continue
+		}
 		d.record("v3_channelmarket.time_range_multipliers", []string{"id"}, b, r)
 	}
 	for _, r := range d.rows["bargain_requests"] {

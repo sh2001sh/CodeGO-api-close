@@ -151,6 +151,31 @@ func TestMarketMoneyBigintBoundary(t *testing.T) {
 	}
 }
 
+func TestMarketInactiveTimeRangesKeepValidation(t *testing.T) {
+	for _, fields := range []string{
+		`"id":"zero","start_timestamp":0,"end_timestamp":0,"multiplier":0`,
+		`"id":"inverted","start_timestamp":2,"end_timestamp":1,"multiplier":-1`,
+		`"id":"bad-integer","start_timestamp":"invalid","end_timestamp":0,"multiplier":0.07`,
+		`"id":"overflow","start_timestamp":9223372036854775808,"end_timestamp":0,"multiplier":0.07`,
+		`"id":"unknown-channel","channel_id":"missing","start_timestamp":0,"end_timestamp":0,"multiplier":0.07`,
+		`"id":"","start_timestamp":0,"end_timestamp":0,"multiplier":0.07`,
+	} {
+		d := cmUnitData(t)
+		d.rows["time_range_multipliers"] = []cmRow{cmTestRow(t, `{"channel_id":"public-not-numeric-201",`+fields+`}`)}
+		d.prepare("")
+		if len(d.issues) == 0 {
+			t.Fatalf("invalid inactive time range bypassed validation: %s", fields)
+		}
+	}
+	d := cmUnitData(t)
+	r := cmTestRow(t, `{"id":"duplicate","channel_id":"public-not-numeric-201","start_timestamp":0,"end_timestamp":0,"multiplier":0.07}`)
+	d.rows["time_range_multipliers"] = []cmRow{r, r}
+	d.prepare("")
+	if len(d.issues) == 0 {
+		t.Fatal("inactive time ranges bypassed source key uniqueness")
+	}
+}
+
 func TestMarketLegacyKeyBindingsRemainUsable(t *testing.T) {
 	d := cmUnitData(t)
 	d.keyBindings = []cmKeyBinding{{ID: 11, UserID: 8, Group: "market:auto"}}

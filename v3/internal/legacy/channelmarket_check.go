@@ -28,7 +28,7 @@ func (m *Importer) checkChannelMarket(ctx context.Context, target pgx.Tx, data *
 	issue := func(entity string, id int64, detail string) {
 		checkIssue(report, entity, id, detail)
 	}
-	expectedCounts := map[string]int64{}
+	expectedCounts := map[string]int64{"v3_channelmarket.time_range_multipliers": 0}
 	for _, r := range data.records {
 		fields, err := cmCheckFields(r)
 		if err != nil {
@@ -124,6 +124,21 @@ func (m *Importer) checkChannelMarket(ctx context.Context, target pgx.Tx, data *
 		var metadata map[string]json.RawMessage
 		if err = json.Unmarshal(storedSettings, &metadata); err != nil {
 			return err
+		}
+		var expectedSettings, expectedMarket map[string]json.RawMessage
+		if err = json.Unmarshal(c.settings, &expectedSettings); err != nil {
+			return err
+		}
+		if err = json.Unmarshal(expectedSettings["market"], &expectedMarket); err != nil {
+			return err
+		}
+		var inactiveMatched bool
+		if err = target.QueryRow(ctx, `SELECT settings #> '{market,legacy_inactive_time_range_multipliers}'
+ IS NOT DISTINCT FROM $2::jsonb FROM v3_catalog.channels WHERE id=$1`, c.catalogID, expectedMarket["legacy_inactive_time_range_multipliers"]).Scan(&inactiveMatched); err != nil {
+			return err
+		}
+		if !inactiveMatched {
+			issue("marketplace_time_range_multipliers", c.catalogID, "inactive legacy time range source rows differ")
 		}
 		if cardSupported != (c.row.text("multiplier_card_supported") == "true") {
 			issue("marketplace_channels", c.catalogID, "multiplier-card capability differs")

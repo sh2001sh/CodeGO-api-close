@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 )
 
 func (d *channelMarketData) prepareChannel(c *cmChannel) {
@@ -62,6 +63,21 @@ func (d *channelMarketData) prepareChannel(c *cmChannel) {
 	d.record("v3_channelmarket.groups", []string{"id"}, b, r)
 	settings := map[string]any{"community": map[string]any{"id": c.publicID, "slug": g.text("public_slug"), "name": g.text("system_display_name"), "visibility": g.text("visibility"), "lifecycle_status": lifecycle, "verification_status": verification}}
 	market := map[string]any{"public_channel_id": c.publicID, "group_id": g.text("id"), "multiplier_ppm": factor}
+	var inactiveTimeRanges []cmRow
+	for _, window := range d.rows["time_range_multipliers"] {
+		if window.text("channel_id") != c.publicID {
+			continue
+		}
+		start, startErr := window.integer("start_timestamp")
+		end, endErr := window.integer("end_timestamp")
+		if startErr == nil && endErr == nil && end <= start {
+			inactiveTimeRanges = append(inactiveTimeRanges, window)
+		}
+	}
+	if len(inactiveTimeRanges) > 0 {
+		sort.Slice(inactiveTimeRanges, func(i, j int) bool { return inactiveTimeRanges[i].text("id") < inactiveTimeRanges[j].text("id") })
+		market["legacy_inactive_time_range_multipliers"] = inactiveTimeRanges
+	}
 	for _, key := range []string{"submitted_source_label", "source_label_status", "source_label_review_reason", "model_consistency_status", "connectivity_test_status", "gpt56_mapping_status", "gpt56_mapping_level", "gpt56_mapping_trigger", "credential_tail", "credential_version", "max_concurrency", "user_max_concurrency", "qps", "maintenance_window", "sensitive_word_interception_enabled", "multiplier_card_supported", "multiplier_card_user_enabled", "auto_probe_enabled", "auto_probe_interval_minutes", "auto_probe_model", "auto_probe_last_status", "pelican_probe_enabled", "pelican_probe_daily_minute", "pelican_probe_model", "status"} {
 		if len(r[key]) > 0 {
 			market[key] = r[key]

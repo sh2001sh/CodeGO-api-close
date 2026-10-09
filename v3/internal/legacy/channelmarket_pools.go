@@ -58,6 +58,9 @@ func (d *channelMarketData) preparePools() {
 			b.put("catalog_group_name", nil)
 			if strings.HasPrefix(member, "official:") {
 				group := strings.TrimPrefix(member, "official:")
+				if strings.TrimSpace(group) == "" {
+					b.err = errors.New("official pool member group name required")
+				}
 				found := false
 				for _, c := range d.internal {
 					for _, g := range list(c.text("group")) {
@@ -66,10 +69,12 @@ func (d *channelMarketData) preparePools() {
 						}
 					}
 				}
-				if !found {
-					b.err = errors.New("official pool member has no source catalog group")
+				if found {
+					b.put("catalog_group_name", group)
 				}
-				b.put("catalog_group_name", group)
+				// V2 retains configured official names after their last gateway
+				// channel disappears. Preserve the member without inventing a
+				// catalog parent or activating a route for that missing group.
 			} else {
 				if _, err := d.group(member); err != nil {
 					b.err = err
@@ -174,6 +179,9 @@ func (d *channelMarketData) importRouting(ctx context.Context, tx pgx.Tx) error 
 			// Operational pools keep the source ascending ordinal; the catalog
 			// routes use the inverse convention, with larger values first.
 			priority := -member.values["priority"].(int64)
+			if strings.HasPrefix(member.values["group_id"].(string), "official:") && member.values["catalog_group_name"] == nil {
+				continue
+			}
 			if official, ok := member.values["catalog_group_name"].(string); ok {
 				if _, err := tx.Exec(ctx, `INSERT INTO v3_catalog.route_pool_members(pool_id,channel_id,priority) SELECT $1,c.channel_id,$3 FROM v3_catalog.channel_groups c WHERE c.group_name=$2 ON CONFLICT DO NOTHING`, pool, official, priority); err != nil {
 					return err

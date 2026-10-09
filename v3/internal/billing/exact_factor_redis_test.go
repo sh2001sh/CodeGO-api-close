@@ -58,8 +58,17 @@ func TestExactMarketReserveFinalizeRedisEvent(t *testing.T) {
 			if len(messages) != 1 {
 				t.Fatalf("exact event count=%d", len(messages))
 			}
-			frozen := messages[0][FieldMarketMultiplier].(string)
-			if frozen != req.Reserve.(*hold).targetPrices[targetPriceKey(req.Targets[0])].MultiplierPPMExact {
+			admittedFactor := req.Reserve.(*hold).targetPrices[targetPriceKey(req.Targets[0])].MultiplierPPMExact
+			if factor == "0" {
+				// A free wallet request retains its billing event, while the
+				// existing income contract omits zero-gross marketplace fields.
+				if admittedFactor != "0" || messages[0][FieldAmount] != "0" || messages[0][FieldMarketMultiplier] != nil {
+					t.Fatalf("true zero changed frozen pricing or charged income: %v", messages[0])
+				}
+				return
+			}
+			frozen, ok := messages[0][FieldMarketMultiplier].(string)
+			if !ok || frozen != admittedFactor {
 				t.Fatalf("Redis event lost frozen factor: %q", frozen)
 			}
 			if factor == "1e-14" && frozen == "0" {

@@ -95,7 +95,6 @@ func PriceForRequestExactPPM(usage gateway.Usage, p catalog.Price, multiplierPPM
 		return 0, err
 	}
 	var amount *big.Rat
-	err = nil
 	switch p.Mode {
 	case "per_token", "":
 		amount, err = tokenAmount(usage, p)

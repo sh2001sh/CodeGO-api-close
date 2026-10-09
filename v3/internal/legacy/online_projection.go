@@ -12,7 +12,7 @@ import (
 )
 
 func loadOnlineProjector(ctx context.Context, source, target pgx.Tx, sources map[string]string) (*onlineProjector, error) {
-	funding, err := loadFunding(ctx, source, sources)
+	funding, err := loadFundingDependencies(ctx, source, sources)
 	if err != nil {
 		return nil, err
 	}
@@ -61,10 +61,26 @@ func loadOnlineProjector(ctx context.Context, source, target pgx.Tx, sources map
 	if _, err = target.Exec(ctx, "UPDATE v3_migration_online.run SET dependencies=$1 WHERE singleton", dependencies); err != nil {
 		return nil, err
 	}
+	staged := onlineStageTx{Tx: target}
+	p.mappings, err = loadFundingAccountIndex(ctx, staged)
+	if err != nil {
+		return nil, err
+	}
+	reservedNew := false
 	reserve := func(owner string, id int64, kind string) error {
+		key := fundingAccountKey{owner, kind, id}
+		if _, exists := p.mappings[key]; exists {
+			return nil
+		}
 		_, err := target.Exec(ctx, `INSERT INTO v3_migration_online.account_ids(id,owner_type,owner_id,kind)
 		 SELECT nextval(pg_get_serial_sequence('v3_billing.accounts','id')),$1,$2,$3
 		 WHERE NOT EXISTS(SELECT 1 FROM v3_migration_online.account_ids WHERE owner_type=$1 AND owner_id=$2 AND kind=$3)`, owner, id, kind)
+		if err == nil {
+			// Mark this key until the actual IDs are reloaded below. User wallets
+			// also appear among historical accounts; reserve each only once.
+			p.mappings[key] = 0
+			reservedNew = true
+		}
 		return err
 	}
 	for id := range p.users {
@@ -88,10 +104,11 @@ func loadOnlineProjector(ctx context.Context, source, target pgx.Tx, sources map
 			}
 		}
 	}
-	staged := onlineStageTx{Tx: target}
-	p.mappings, err = loadFundingAccountIndex(ctx, staged)
-	if err != nil {
-		return nil, err
+	if reservedNew {
+		p.mappings, err = loadFundingAccountIndex(ctx, staged)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return p, nil
 }

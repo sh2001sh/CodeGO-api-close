@@ -14,6 +14,8 @@ import (
 type onlineInput struct{ key, raw json.RawMessage }
 type onlineMetrics map[string]*big.Int
 
+var onlineMetricFields = []string{"amount", "original_amount", "remaining_amount", "consumed_amount", "actual_amount", "consumer_micro", "gross_micro", "commission_micro", "fee_micro", "net_micro", "reclaimed_micro"}
+
 func (m onlineMetrics) add(name, value string, sign int64) error {
 	n, ok := new(big.Int).SetString(value, 10)
 	if !ok {
@@ -33,7 +35,7 @@ func (m onlineMetrics) row(table string, raw []byte, sign int64) error {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return err
 	}
-	for _, field := range []string{"amount", "original_amount", "remaining_amount", "consumed_amount", "actual_amount", "consumer_micro", "gross_micro", "commission_micro", "fee_micro", "net_micro", "reclaimed_micro"} {
+	for _, field := range onlineMetricFields {
 		value := fields[field]
 		if len(value) == 0 || string(value) == "null" {
 			continue
@@ -46,6 +48,71 @@ func (m onlineMetrics) row(table string, raw []byte, sign int64) error {
 		return m.add("market.pending."+string(fields["owner_user_id"]), string(fields["net_micro"]), sign)
 	}
 	return nil
+}
+
+// Projection values have already passed PostgreSQL's typed exact check. Encode
+// only the small numeric scalars for big.Int, never their unrelated metadata.
+func (m onlineMetrics) fields(table string, fields map[string]any, sign int64) error {
+	if err := m.add(table+".rows", "1", sign); err != nil {
+		return err
+	}
+	for _, field := range onlineMetricFields {
+		value, exists := fields[field]
+		if !exists || value == nil {
+			continue
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		if string(encoded) == "null" {
+			continue
+		}
+		if err := m.add(table+"."+field, string(encoded), sign); err != nil {
+			return err
+		}
+	}
+	if table == "v3_channelmarket.settlements" {
+		status, err := json.Marshal(fields["status"])
+		if err != nil {
+			return err
+		}
+		if string(status) == `"pending"` {
+			owner, err := json.Marshal(fields["owner_user_id"])
+			if err != nil {
+				return err
+			}
+			net, err := json.Marshal(fields["net_micro"])
+			if err != nil {
+				return err
+			}
+			return m.add("market.pending."+string(owner), string(net), sign)
+		}
+	}
+	return nil
+}
+
+// These are the complete numeric fields of the fixed online projection tables.
+// Returning them directly avoids serializing/toasting large content or metadata
+// a second time just to decrement a handful of counters.
+func onlineDeleteMetrics(table string) string {
+	var fields []string
+	switch table {
+	case "v3_billing.historical_entries", "v3_billing.usage_logs", "v3_audit.events", "v3_audit.request_audits", "v3_billing.funding_allocations":
+		fields = []string{"amount"}
+	case "v3_billing.funding_lots":
+		fields = []string{"original_amount", "remaining_amount"}
+	case "v3_channelmarket.settlements":
+		fields = []string{"consumer_micro", "gross_micro", "commission_micro", "fee_micro", "net_micro", "reclaimed_micro", "owner_user_id", "status"}
+	}
+	if len(fields) == 0 {
+		return "'{}'::jsonb"
+	}
+	parts := make([]string, 0, 2*len(fields))
+	for _, field := range fields {
+		parts = append(parts, "'"+field+"'", "h."+pgx.Identifier{field}.Sanitize())
+	}
+	return "jsonb_build_object(" + strings.Join(parts, ",") + ")"
 }
 func (m onlineMetrics) save(ctx context.Context, target pgx.Tx) error {
 	for name, value := range m {
@@ -73,7 +140,7 @@ func onlineDeleteRows(ctx context.Context, target pgx.Tx, table string, keys []s
 		conditions[i] = "h." + q + "=e." + q
 	}
 	stage := onlineStage(table)
-	rows, err := target.Query(ctx, "DELETE FROM "+stage+" h USING jsonb_populate_recordset(NULL::"+stage+",$1::jsonb)e WHERE "+strings.Join(conditions, " AND ")+" RETURNING to_jsonb(h)", data)
+	rows, err := target.Query(ctx, "DELETE FROM "+stage+" h USING jsonb_populate_recordset(NULL::"+stage+",$1::jsonb)e WHERE "+strings.Join(conditions, " AND ")+" RETURNING "+onlineDeleteMetrics(table), data)
 	if err != nil {
 		return err
 	}
@@ -92,8 +159,9 @@ func onlineDeleteRows(ctx context.Context, target pgx.Tx, table string, keys []s
 
 func onlineInsertRows(ctx context.Context, target pgx.Tx, table string, keys []string, values []map[string]any, metrics onlineMetrics) error {
 	start, bytes := 0, 2
+	var encodedRows [][]byte
 	for i, row := range values {
-		encoded, err := json.Marshal(row)
+		encoded, err := exactBulkEncodeRow(row)
 		if err != nil {
 			return err
 		}
@@ -101,24 +169,27 @@ func onlineInsertRows(ctx context.Context, target pgx.Tx, table string, keys []s
 			return fmt.Errorf("legacy: online encoded projection exceeds 64 MiB limit")
 		}
 		if i > start && (i-start == exactBulkRows || bytes+len(encoded)+1 > exactBulkBytes) {
-			if err = onlineInsertBatchRows(ctx, target, table, keys, values[start:i], metrics); err != nil {
+			if err = onlineInsertBatchRows(ctx, target, table, keys, values[start:i], encodedRows, metrics); err != nil {
 				return err
 			}
 			start, bytes = i, 2
+			clear(encodedRows)
+			encodedRows = encodedRows[:0]
 		}
+		encodedRows = append(encodedRows, encoded)
 		bytes += len(encoded) + 1
 	}
-	return onlineInsertBatchRows(ctx, target, table, keys, values[start:], metrics)
+	return onlineInsertBatchRows(ctx, target, table, keys, values[start:], encodedRows, metrics)
 }
 
-func onlineInsertBatchRows(ctx context.Context, target pgx.Tx, table string, keys []string, values []map[string]any, metrics onlineMetrics) error {
+func onlineInsertBatchRows(ctx context.Context, target pgx.Tx, table string, keys []string, values []map[string]any, encodedRows [][]byte, metrics onlineMetrics) error {
 	if len(values) == 0 {
 		return nil
 	}
 	// Typed recordset insertion uses the same numeric/bytea rules as the offline
 	// importer. Exact checks occur in this transaction before any event is acked.
 	parts := strings.Split(table, ".")
-	_, columns, data, err := exactBulkInput(parts[0], parts[1], keys, values)
+	_, columns, data, err := exactBulkEncodedInput(parts[0], parts[1], keys, values, encodedRows)
 	if err != nil {
 		return err
 	}
@@ -144,11 +215,7 @@ func onlineInsertBatchRows(ctx context.Context, target pgx.Tx, table string, key
 		}
 	}
 	for _, row := range values {
-		b, err := json.Marshal(row)
-		if err != nil {
-			return err
-		}
-		if err = metrics.row(table, b, 1); err != nil {
+		if err = metrics.fields(table, row, 1); err != nil {
 			return err
 		}
 	}

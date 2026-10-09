@@ -31,6 +31,16 @@ func fundingSource(sources map[string]string, name string) string {
 }
 
 func loadFunding(ctx context.Context, source pgx.Tx, sources map[string]string) (*fundingData, error) {
+	d, err := loadFundingDependencies(ctx, source, sources)
+	if err != nil {
+		return nil, err
+	}
+	return d, d.inspectDrains(ctx, source, sources)
+}
+
+// Online projection needs owner/account mappings while source queues remain
+// live. Final import still calls loadFunding and verifies every drain.
+func loadFundingDependencies(ctx context.Context, source pgx.Tx, sources map[string]string) (*fundingData, error) {
 	// Keep the source snapshot alive, but never materialize funding tables.
 	// Only the much smaller owner/account indexes are needed for projections.
 	d := &fundingData{source: source, sources: sources, accounts: map[string]historyAccount{}, users: map[int64]sourceUser{}, queues: map[string]int64{}}
@@ -56,7 +66,7 @@ func loadFunding(ctx context.Context, source pgx.Tx, sources map[string]string) 
 	if err != nil {
 		return nil, err
 	}
-	return d, d.inspectDrains(ctx, source, sources)
+	return d, nil
 }
 
 func (d *fundingData) walk(ctx context.Context, name string, visit func(commerceRow) error) error {

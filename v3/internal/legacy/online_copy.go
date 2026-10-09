@@ -332,14 +332,17 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 	if err != nil {
 		return r, err
 	}
-	if err = onlineRefreshAccounts(ctx, target, p); err != nil {
-		return r, err
-	}
 	capture, err := ValidateOnlineCapture(ctx, source, opts.RunID)
 	if err != nil {
 		return r, err
 	}
 	byName := map[string]onlineSpec{}
+	accountEvents := map[string]bool{}
+	for _, table := range capture.Tables {
+		if table.Relation == sources["accounts"] || table.Relation == sources["users"] {
+			accountEvents[table.Name] = true
+		}
+	}
 	for _, spec := range specs {
 		for _, table := range capture.Tables {
 			if table.Relation == spec.source {
@@ -352,6 +355,7 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 		return r, err
 	}
 	var ids []int64
+	refreshAccounts := false
 	eventBytes := 0
 	work := map[string]map[string]json.RawMessage{}
 	for rows.Next() {
@@ -371,6 +375,7 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 		}
 		eventBytes += len(key)
 		ids = append(ids, id)
+		refreshAccounts = refreshAccounts || accountEvents[name]
 		if spec, ok := byName[name]; ok {
 			if work[spec.name] == nil {
 				work[spec.name] = map[string]json.RawMessage{}
@@ -381,6 +386,13 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 	rows.Close()
 	if err = rows.Err(); err != nil {
 		return r, err
+	}
+	// Queue/log/ledger events do not alter historical account metadata. Keep
+	// unprocessed account events pending; their own bounded batch refreshes it.
+	if refreshAccounts {
+		if err = onlineRefreshAccounts(ctx, target, p); err != nil {
+			return r, err
+		}
 	}
 	// All dirty keys are bounded by the original event batch. Only derived
 	// attempt keys can be numerous; stream them twice from this same snapshot.

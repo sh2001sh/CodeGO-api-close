@@ -244,14 +244,6 @@ func onlineRebuildTotals(ctx context.Context, target pgx.Tx, specs []onlineSpec)
 		if table == "v3_billing.historical_accounts" {
 			continue
 		}
-		var count int64
-		if err := target.QueryRow(ctx, "SELECT count(*) FROM "+onlineStage(table)).Scan(&count); err != nil {
-			return err
-		}
-		if _, err := target.Exec(ctx, "INSERT INTO v3_migration_online.totals(name,value)VALUES($1,$2)", table+".rows", count); err != nil {
-			return err
-		}
-		parts := strings.Split(table, ".")
 		rows, err := target.Query(ctx, `SELECT attname FROM pg_attribute WHERE attrelid=$1::regclass AND attnum>0 AND NOT attisdropped AND attname=ANY($2::text[])`, onlineStage(table), []string{"amount", "original_amount", "remaining_amount", "consumed_amount", "actual_amount", "consumer_micro", "gross_micro", "commission_micro", "fee_micro", "net_micro", "reclaimed_micro"})
 		if err != nil {
 			return err
@@ -269,14 +261,15 @@ func onlineRebuildTotals(ctx context.Context, target pgx.Tx, specs []onlineSpec)
 		if err = rows.Err(); err != nil {
 			return err
 		}
+		// Count and all monetary fields share one aggregate scan. PostgreSQL
+		// numeric sums preserve values beyond int64 without a Go/float roundtrip.
+		aggregates := []string{"'rows'", "count(*)"}
 		for _, field := range fields {
-			var sum string
-			if err = target.QueryRow(ctx, "SELECT COALESCE(sum("+pgx.Identifier{field}.Sanitize()+"),0)::text FROM "+onlineStage(parts[0]+"."+parts[1])).Scan(&sum); err != nil {
-				return err
-			}
-			if _, err = target.Exec(ctx, "INSERT INTO v3_migration_online.totals(name,value)VALUES($1,$2::numeric)", table+"."+field, sum); err != nil {
-				return err
-			}
+			aggregates = append(aggregates, "'"+field+"'", "COALESCE(sum("+pgx.Identifier{field}.Sanitize()+"),0)")
+		}
+		query := "INSERT INTO v3_migration_online.totals(name,value) SELECT $1||'.'||metric.key,metric.value::numeric FROM (SELECT jsonb_build_object(" + strings.Join(aggregates, ",") + ") AS amounts FROM " + onlineStage(table) + ") summary CROSS JOIN LATERAL jsonb_each_text(summary.amounts) metric"
+		if _, err = target.Exec(ctx, query, table); err != nil {
+			return err
 		}
 	}
 	var logs bool

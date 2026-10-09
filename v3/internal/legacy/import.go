@@ -17,6 +17,7 @@ type Importer struct {
 	pool               *pgxpool.Pool
 	crypto             catalog.Encrypter
 	sourceCryptoSecret string
+	archiveLedger      bool
 }
 
 func NewImporter(source, target *pgxpool.Pool, crypto catalog.Encrypter) *Importer {
@@ -34,6 +35,7 @@ func (m *Importer) WithSourceCryptoSecret(secret string) *Importer {
 // be stopped. The source remains READ ONLY throughout; only the independent
 // target transaction writes and locks. All target rows commit together.
 func (m *Importer) Import(ctx context.Context, apply bool) (Report, error) {
+	ctx = m.historyContext(ctx)
 	r := Report{Issues: []Issue{}, UnmappedSources: []string{}, Counts: map[string]int64{}, Amounts: map[string]string{}, OpeningMicroCredits: "0"}
 	if m.source == nil || m.pool == nil || m.crypto == nil {
 		return r, errors.New("legacy: source, target and encrypter are required")
@@ -152,6 +154,9 @@ func (m *Importer) Import(ctx context.Context, apply bool) (Report, error) {
 		return r, err
 	}
 	if err = m.importHistory(ctx, target, data.history); err != nil {
+		return r, err
+	}
+	if err = importLedgerArchive(ctx, target, data.history.archive); err != nil {
 		return r, err
 	}
 	if err = m.importFunding(ctx, target, data.funding); err != nil {

@@ -98,7 +98,7 @@ func (m *Importer) importHistoryLedger(ctx context.Context, target pgx.Tx, d *hi
 	if err = accounts.finish(); err != nil {
 		return err
 	}
-	if onlineViewFrom(ctx) != nil {
+	if onlineViewFrom(ctx) != nil || ledgerHistoryArchived(ctx) {
 		return nil
 	}
 	entries := historyImportBatch(ctx, target, "v3_billing", "historical_entries", "entry_id")

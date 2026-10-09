@@ -56,6 +56,7 @@ func onlineHoldSourceFence(ctx context.Context, source *pgxpool.Pool) (*pgxpool.
 }
 
 func (m *Importer) FinalizeOnline(ctx context.Context, opts OnlineOptions) (Report, error) {
+	ctx = m.historyContext(ctx)
 	r := Report{Counts: map[string]int64{}, Amounts: map[string]string{}}
 	if opts.SourceAdmin == nil {
 		return r, errors.New("legacy: finalization requires source acknowledgement connection")

@@ -54,6 +54,11 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	if isOnlineCommand(command) {
 		return runOnline(ctx, command, apply, output)
 	}
+	if command == "import" || command == "check" {
+		if _, err := migrationLedgerArchive(); err != nil {
+			return err
+		}
+	}
 	pool, err := pg.Connect(ctx, pg.Config{DSN: os.Getenv("V3_PG_DSN"), MaxConns: 2})
 	if err != nil {
 		return err
@@ -105,6 +110,10 @@ func parseMigrateArgs(args []string) (command string, apply bool, err error) {
 // and writes its report as indented JSON before returning any import error,
 // so a partial report is still visible on failure.
 func runLegacyImport(ctx context.Context, command string, apply bool, pool *pgxpool.Pool, output io.Writer) error {
+	archiveLedger, err := migrationLedgerArchive()
+	if err != nil {
+		return err
+	}
 	crypto, err := catalog.NewAESGCMFromBase64(os.Getenv("V3_SECRET_KEY"))
 	if err != nil {
 		return err
@@ -122,7 +131,7 @@ func runLegacyImport(ctx context.Context, command string, apply bool, pool *pgxp
 	if sourceSecret == "" {
 		sourceSecret = os.Getenv("LEGACY_CRYPTO_SECRET")
 	}
-	importer := legacy.NewImporter(source.Pool, pool, crypto).WithSourceCryptoSecret(sourceSecret)
+	importer := legacy.NewImporter(source.Pool, pool, crypto).WithSourceCryptoSecret(sourceSecret).WithLedgerHistoryArchive(archiveLedger)
 	var report legacy.Report
 	var importErr error
 	if command == "check" {

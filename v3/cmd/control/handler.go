@@ -133,7 +133,7 @@ func (st *controlStack) buildIdentity() error {
 		st.mux.Handle(path, idHandler)
 	}
 	catalogcontrol.New(deps.PG.Pool, deps.Crypto, log).Register(st.mux, st.requireCatalogAdministrator)
-	st.srv.RegisterBilling(deps.PG.Pool, st.accounts, st.poster)
+	st.srv.RegisterBilling(deps.PG.Pool, st.accounts, st.poster, st.cfg.LedgerArchive)
 	return nil
 }
 

@@ -74,6 +74,10 @@ func encodeOnlineReport(output io.Writer, report any, operationErr error) error 
 }
 
 func runOnline(ctx context.Context, command string, apply bool, output io.Writer) error {
+	archiveLedger, err := migrationLedgerArchive()
+	if err != nil {
+		return err
+	}
 	runID, err := onlineRunID()
 	if err != nil {
 		return err
@@ -135,7 +139,7 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 	if secret == "" {
 		secret = os.Getenv("LEGACY_CRYPTO_SECRET")
 	}
-	importer := legacy.NewImporter(source.Pool, target.Pool, crypto).WithSourceCryptoSecret(secret)
+	importer := legacy.NewImporter(source.Pool, target.Pool, crypto).WithSourceCryptoSecret(secret).WithLedgerHistoryArchive(archiveLedger)
 	if command == "online-finalize" {
 		report, err := importer.FinalizeOnline(ctx, options)
 		return encodeOnlineReport(output, report, err)

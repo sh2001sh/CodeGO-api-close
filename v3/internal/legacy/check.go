@@ -11,6 +11,7 @@ import (
 // Run before enabling target writers: subsequent activity legitimately changes
 // current balances and business states. Both snapshots are strictly read-only.
 func (m *Importer) Check(ctx context.Context) (Report, error) {
+	ctx = m.historyContext(ctx)
 	r := Report{Issues: []Issue{}, Counts: map[string]int64{}, Amounts: map[string]string{}}
 	if m.source == nil || m.pool == nil || m.crypto == nil {
 		return r, errors.New("legacy: source, target and encrypter are required")
@@ -60,6 +61,7 @@ func (m *Importer) checkImportData(ctx context.Context, target pgx.Tx, data *imp
 		func() error { return m.checkCommerceRuntime(ctx, target, data.commerce, r) },
 		func() error { return m.checkChannelMarket(ctx, target, data.channelMarket, r) },
 		func() error { return m.checkHistory(ctx, target, data.history, r) },
+		func() error { return checkLedgerArchive(ctx, target, data.history.archive, r) },
 		func() error { return m.checkFunding(ctx, target, data.funding, r) },
 		func() error { return m.checkEntitlements(ctx, target, data.entitlements, r) },
 		func() error { return m.checkOIDCData(ctx, target, data.oidc, r) },

@@ -14,7 +14,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sh2001sh/new-api/v3/cmd/internal/boot"
+	"github.com/sh2001sh/new-api/v3/internal/billing/ledger"
 )
 
 func main() {
@@ -51,6 +53,19 @@ func run(ctx context.Context, log *slog.Logger, addr, assets string) error {
 		return err
 	}
 	defer deps.Close()
+	if cfg.LedgerArchiveDSN != "" {
+		cfg.LedgerArchive, err = openLedgerArchive(ctx, cfg.LedgerArchiveDSN)
+		if err != nil {
+			return err
+		}
+		defer cfg.LedgerArchive.Close()
+	}
+	archiveCtx, cancelArchive := context.WithTimeout(ctx, 10*time.Second)
+	err = ledger.ValidateHistoryArchive(archiveCtx, deps.PG.Pool, cfg.LedgerArchive)
+	cancelArchive()
+	if err != nil {
+		return err
+	}
 	handler, err := controlHandler(deps, cfg, assets, log)
 	if err != nil {
 		return err
@@ -74,4 +89,18 @@ func run(ctx context.Context, log *slog.Logger, addr, assets string) error {
 	err = server.Shutdown(shutdownCtx)
 	log.Info("control stopped")
 	return err
+}
+
+func openLedgerArchive(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		// A parsing error can contain the supplied secret-bearing DSN.
+		return nil, errors.New("V3_LEDGER_ARCHIVE_PG_DSN must be a valid PostgreSQL DSN")
+	}
+	cfg.MaxConns, cfg.MinConns = 4, 0
+	cfg.ConnConfig.ConnectTimeout = 5 * time.Second
+	cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
+	cfg.ConnConfig.RuntimeParams["statement_timeout"] = "10000"
+	cfg.ConnConfig.RuntimeParams["lock_timeout"] = "3000"
+	return pgxpool.NewWithConfig(ctx, cfg)
 }

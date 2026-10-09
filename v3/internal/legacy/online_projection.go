@@ -138,6 +138,9 @@ func (p *onlineProjector) project(ctx context.Context, spec onlineSpec, raw json
 	var err error
 	switch spec.name {
 	case "ledger_entries":
+		if ledgerHistoryArchived(ctx) {
+			return nil, nil
+		}
 		if p.history.retiredHistoryEntry(raw) {
 			return nil, nil
 		}

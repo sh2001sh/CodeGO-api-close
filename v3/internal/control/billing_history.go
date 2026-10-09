@@ -23,7 +23,7 @@ func (b *Billing) history(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
-	page, err := ledger.ReadHistory(r.Context(), b.pool, principal.UserID,
+	page, err := ledger.ReadHistoryWithArchive(r.Context(), b.pool, b.archive, principal.UserID,
 		r.URL.Query().Get("source_account_id"), r.URL.Query().Get("before"), limit)
 	if errors.Is(err, ledger.ErrHistoryQuery) {
 		Fail(w, 400, "invalid_cursor", "分页位置或账户无效")

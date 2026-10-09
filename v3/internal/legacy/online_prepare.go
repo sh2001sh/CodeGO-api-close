@@ -36,7 +36,8 @@ func onlineCaptureBindingHash(c OnlineCaptureReport) (string, error) {
 }
 
 func (m *Importer) PrepareOnline(ctx context.Context, opts OnlineOptions, apply bool) (OnlineReport, error) {
-	r := OnlineReport{RunID: opts.RunID, Phase: "preview", Tables: map[string]int64{}}
+	ctx = m.historyContext(ctx)
+	r := OnlineReport{RunID: opts.RunID, Phase: "preview", Tables: map[string]int64{}, LedgerHistoryMode: ledgerHistoryMode(ctx)}
 	if m.source == nil || m.pool == nil {
 		return r, errors.New("legacy: independent online source and target required")
 	}
@@ -76,6 +77,9 @@ func (m *Importer) PrepareOnline(ctx context.Context, opts OnlineOptions, apply 
 		return r, err
 	}
 	if prepared {
+		if err = onlineValidateLedgerHistoryMode(ctx, identityTx); err != nil {
+			return r, err
+		}
 		var runID, phase, identity string
 		if err = identityTx.QueryRow(ctx, "SELECT run_id,phase,target_identity FROM v3_migration_online.run WHERE singleton").Scan(&runID, &phase, &identity); err != nil {
 			return r, err
@@ -153,6 +157,9 @@ func (m *Importer) PrepareOnline(ctx context.Context, opts OnlineOptions, apply 
 		return r, err
 	}
 	if existing {
+		if err = onlineValidateLedgerHistoryMode(ctx, target); err != nil {
+			return r, err
+		}
 		var id, stored, phase string
 		if err = target.QueryRow(ctx, "SELECT run_id,capture_hash,phase FROM v3_migration_online.run WHERE singleton").Scan(&id, &stored, &phase); err != nil {
 			return r, err
@@ -177,7 +184,7 @@ func (m *Importer) PrepareOnline(ctx context.Context, opts OnlineOptions, apply 
 		}
 	}
 	_, err = target.Exec(ctx, `CREATE SCHEMA v3_migration_online;
-	 CREATE TABLE v3_migration_online.run(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),run_id text NOT NULL,capture_hash text NOT NULL,target_identity text NOT NULL,target_shape text NOT NULL DEFAULT '',object_names jsonb NOT NULL DEFAULT '[]',phase text NOT NULL,dependencies jsonb NOT NULL DEFAULT '{}',verified_at timestamptz);
+	 CREATE TABLE v3_migration_online.run(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),run_id text NOT NULL,capture_hash text NOT NULL,target_identity text NOT NULL,target_shape text NOT NULL DEFAULT '',object_names jsonb NOT NULL DEFAULT '[]',phase text NOT NULL,dependencies jsonb NOT NULL DEFAULT '{}',verified_at timestamptz,ledger_history_mode text NOT NULL CHECK(ledger_history_mode IN('copy','archive')));
 	 CREATE TABLE v3_migration_online.progress(name text PRIMARY KEY,cursor jsonb,complete boolean NOT NULL DEFAULT false,copied bigint NOT NULL DEFAULT 0);
 	 CREATE TABLE v3_migration_online.account_ids(id bigint PRIMARY KEY,owner_type text NOT NULL,owner_id bigint NOT NULL,kind text NOT NULL,UNIQUE(owner_type,owner_id,kind));
 	 CREATE TABLE v3_migration_online.totals(name text PRIMARY KEY,value numeric NOT NULL);
@@ -188,7 +195,7 @@ func (m *Importer) PrepareOnline(ctx context.Context, opts OnlineOptions, apply 
 	if err != nil {
 		return r, err
 	}
-	if _, err = target.Exec(ctx, "INSERT INTO v3_migration_online.run(run_id,capture_hash,target_identity,phase)VALUES($1,$2,$3,'copying')", opts.RunID, hash, targetIdentity); err != nil {
+	if _, err = target.Exec(ctx, "INSERT INTO v3_migration_online.run(run_id,capture_hash,target_identity,phase,ledger_history_mode)VALUES($1,$2,$3,'copying',$4)", opts.RunID, hash, targetIdentity, ledgerHistoryMode(ctx)); err != nil {
 		return r, err
 	}
 	var tables []string
@@ -336,6 +343,9 @@ func onlineAuthorize(ctx context.Context, target pgx.Tx, runID string) error {
 }
 
 func onlineBindings(ctx context.Context, source pgx.Tx, target pgx.Tx, runID string) (map[string]string, []onlineSpec, error) {
+	if err := onlineValidateLedgerHistoryMode(ctx, target); err != nil {
+		return nil, nil, err
+	}
 	capture, err := ValidateOnlineCapture(ctx, source, runID)
 	if err != nil {
 		return nil, nil, err

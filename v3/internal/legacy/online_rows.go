@@ -235,6 +235,9 @@ func onlineKeyFields(raw json.RawMessage) (map[string]any, error) {
 }
 
 func (p *onlineProjector) apply(ctx context.Context, spec onlineSpec, inputs []onlineInput) error {
+	if spec.name == "ledger_entries" && ledgerHistoryArchived(ctx) {
+		return nil
+	}
 	keys := make([]json.RawMessage, len(inputs))
 	for i, input := range inputs {
 		keys[i] = input.key
@@ -249,6 +252,9 @@ func (p *onlineProjector) apply(ctx context.Context, spec onlineSpec, inputs []o
 // between rows in different byte-bounded batches. Both share the caller's target
 // transaction; a later bad projection rolls back every earlier deletion.
 func (p *onlineProjector) delete(ctx context.Context, spec onlineSpec, sourceKeys []json.RawMessage) error {
+	if spec.name == "ledger_entries" && ledgerHistoryArchived(ctx) {
+		return nil
+	}
 	metrics := onlineMetrics{}
 	keys := make([]map[string]any, len(sourceKeys))
 	for i, key := range sourceKeys {
@@ -322,6 +328,9 @@ func (p *onlineProjector) delete(ctx context.Context, spec onlineSpec, sourceKey
 }
 
 func (p *onlineProjector) insert(ctx context.Context, spec onlineSpec, inputs []onlineInput) error {
+	if spec.name == "ledger_entries" && ledgerHistoryArchived(ctx) {
+		return nil
+	}
 	metrics := onlineMetrics{}
 	var logGroups []map[string]any
 	projected := map[string][]map[string]any{}
@@ -375,6 +384,9 @@ func (p *onlineProjector) insert(ctx context.Context, spec onlineSpec, inputs []
 }
 
 func (p *onlineProjector) replaceRetired(ctx context.Context, spec onlineSpec, input onlineInput, metrics onlineMetrics) error {
+	if spec.name == "ledger_entries" && ledgerHistoryArchived(ctx) {
+		return nil
+	}
 	var before []byte
 	err := p.target.QueryRow(ctx, "DELETE FROM v3_migration_online.retired_rows WHERE name=$1 AND row_key=$2 RETURNING metrics", spec.name, input.key).Scan(&before)
 	if err != nil && err != pgx.ErrNoRows {

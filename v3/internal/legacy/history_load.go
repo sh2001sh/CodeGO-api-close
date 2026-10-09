@@ -23,6 +23,7 @@ type historyData struct {
 	counts          map[string]int64
 	amounts         map[string]*big.Int
 	issues          []Issue
+	archive         *LedgerHistoryArchive
 }
 
 func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) (*historyData, error) {
@@ -156,6 +157,9 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 		{"request_attempt_audits", sources["request_attempt_audits"], func(raw json.RawMessage) error { _, err := decodeHistoryAttemptAudit(raw); return err }},
 	}
 	for _, load := range loads {
+		if load.name == "ledger_entries" && ledgerHistoryArchived(ctx) {
+			continue
+		}
 		if onlineViewFrom(ctx) != nil && historyOnlineLargeSource(load.name) {
 			continue
 		}
@@ -214,6 +218,13 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 		}
 	} else {
 		d.counts["request_attempt_audits_linked"] = d.counts["request_attempt_audits"] - d.counts["orphan_request_attempt_history"]
+	}
+	if ledgerHistoryArchived(ctx) {
+		var err error
+		d.archive, err = inspectLedgerArchive(ctx, source, sources["ledger_entries"])
+		if err != nil {
+			return nil, err
+		}
 	}
 	return d, nil
 }
@@ -289,6 +300,7 @@ func (d *historyData) recordIssue(issue Issue) {
 }
 
 func (d *historyData) validate(report *Report) {
+	report.LedgerHistoryArchive = d.archive
 	report.Issues = append(report.Issues, d.issues...)
 	if report.Counts == nil {
 		report.Counts = map[string]int64{}

@@ -39,15 +39,9 @@ type historyCursor struct {
 // metadata, operator identities and credentials never enter the response.
 func ReadHistory(ctx context.Context, pool *pgxpool.Pool, userID int64, source, before string, limit int) (HistoryPage, error) {
 	page := HistoryPage{Items: []HistoricalEntry{}}
-	if userID <= 0 || limit < 1 || limit > 200 || len(source) > 512 || len(before) > 1024 {
-		return page, ErrHistoryQuery
-	}
-	cursor := historyCursor{}
-	if before != "" {
-		raw, err := base64.RawURLEncoding.DecodeString(before)
-		if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Time.IsZero() || cursor.ID == "" {
-			return page, ErrHistoryQuery
-		}
+	cursor, err := parseHistoryQuery(userID, source, before, limit)
+	if err != nil {
+		return page, err
 	}
 	rows, err := pool.Query(ctx, `SELECT e.entry_id,e.source_account_id,e.amount,e.balance_after,e.entry_type,e.direction,e.reason_code,e.created_at
 	 FROM v3_billing.historical_entries e
@@ -72,6 +66,24 @@ func ReadHistory(ctx context.Context, pool *pgxpool.Pool, userID int64, source, 
 	if err := rows.Err(); err != nil {
 		return page, err
 	}
+	return paginateHistory(page, limit)
+}
+
+func parseHistoryQuery(userID int64, source, before string, limit int) (historyCursor, error) {
+	cursor := historyCursor{}
+	if userID <= 0 || limit < 1 || limit > 200 || len(source) > 512 || len(before) > 1024 {
+		return cursor, ErrHistoryQuery
+	}
+	if before != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(before)
+		if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Time.IsZero() || cursor.ID == "" {
+			return cursor, ErrHistoryQuery
+		}
+	}
+	return cursor, nil
+}
+
+func paginateHistory(page HistoryPage, limit int) (HistoryPage, error) {
 	if len(page.Items) > limit {
 		page.Items = page.Items[:limit]
 		last := page.Items[len(page.Items)-1]

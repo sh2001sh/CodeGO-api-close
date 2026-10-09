@@ -25,7 +25,7 @@ func TestHistoricalMoneyRemainsQueryableWithoutRepostingAndWithoutOtherUsers(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := ReadHistory(ctx, pool, 7, "", "", 1)
+	page, err := ReadHistoryWithArchive(ctx, pool, nil, 7, "", "", 1)
 	if err != nil || len(page.Items) != 1 || page.Items[0].ID != "same-time-b" || page.Items[0].Amount != credits.Micro(9007199254740993) || page.Before == "" {
 		t.Fatalf("first history page: %+v, %v", page, err)
 	}

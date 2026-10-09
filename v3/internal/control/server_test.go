@@ -169,7 +169,7 @@ func TestAdjustmentBoundaryAndConflict(t *testing.T) {
 				return Principal{UserID: 1, Admin: true}, nil
 			}}, nil)
 			p := &fakePoster{err: tc.err}
-			s.RegisterBilling(nil, nil, p)
+			s.RegisterBilling(nil, nil, p, nil)
 			w := httptest.NewRecorder()
 			s.Handler().ServeHTTP(w, httptest.NewRequest("POST", "/api/billing/adjustments", strings.NewReader(tc.payload)))
 			if w.Code != tc.status || p.calls != tc.calls {

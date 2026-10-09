@@ -11,7 +11,8 @@ import (
 )
 
 func (m *Importer) VerifyOnline(ctx context.Context, opts OnlineOptions) (OnlineReport, error) {
-	r := OnlineReport{RunID: opts.RunID, Tables: map[string]int64{}}
+	ctx = m.historyContext(ctx)
+	r := OnlineReport{RunID: opts.RunID, Tables: map[string]int64{}, LedgerHistoryMode: ledgerHistoryMode(ctx)}
 	conn, err := m.onlineConnection(ctx)
 	if err != nil {
 		return r, err

@@ -283,6 +283,18 @@ funding attribution and monetary reward transfer holds remain distinct from
 wallet openings. Every populated unsupported operational source explicitly
 blocks application until its native contract and mapping exist.
 
+Set `V3_MIGRATION_LEDGER_HISTORY=archive` to retain the original ledger in the
+frozen source instead of projecting historical entries. The default is `copy`;
+online runs bind this mode at preparation and reject a changed mode on resume.
+Archive mode still imports current balances, funding attribution, historical
+account ownership, usage and operational histories in full. Subscription reward
+calculation continues to read original ledger evidence. Reports bind the source
+cluster, database OID/name, preserved row count and archive timestamp; complete
+backup hashes and restore verification remain required to prove source content.
+Keep the source immutable after cutover, and configure the control service's
+dedicated SELECT-only `V3_LEDGER_ARCHIVE_PG_DSN` as described in its README.
+Historical entries never become new wallet money in either mode.
+
 Monetary v2 quota units convert exactly to micro credits (`× 2`); USD fields use
 exact decimal arithmetic. Each account amount must fit bigint; report aggregates
 use arbitrary precision. The canonical current wallet is the

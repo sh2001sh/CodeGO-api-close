@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sh2001sh/new-api/v3/internal/adminops"
 	"github.com/sh2001sh/new-api/v3/internal/commerce"
 	"github.com/sh2001sh/new-api/v3/internal/identity"
@@ -23,6 +24,8 @@ type config struct {
 	OIDC               oidc.Config
 	AdminTools         adminops.Config
 	TrustedProxies     []netip.Prefix
+	LedgerArchiveDSN   string
+	LedgerArchive      *pgxpool.Pool
 }
 
 func configFromEnv() (config, error) {
@@ -53,6 +56,7 @@ func configFromEnv() (config, error) {
 	}
 	cfg.CommunitySecret = os.Getenv("CODEGO_COMMUNITY_API_SECRET")
 	cfg.InternalGatewayURL = os.Getenv("V3_INTERNAL_GATEWAY_URL")
+	cfg.LedgerArchiveDSN = strings.TrimSpace(os.Getenv("V3_LEDGER_ARCHIVE_PG_DSN"))
 	cfg.AdminTools.LogDir = os.Getenv("V3_LOG_DIR")
 	cfg.AdminTools.DiskCacheDir = os.Getenv("V3_TOOL_DISK_CACHE_DIR")
 	if raw := strings.TrimSpace(os.Getenv("V3_TRUSTED_PROXY_CIDRS")); raw != "" {

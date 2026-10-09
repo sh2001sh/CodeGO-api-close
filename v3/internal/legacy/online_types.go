@@ -18,13 +18,14 @@ type OnlineOptions struct {
 }
 
 type OnlineReport struct {
-	RunID        string           `json:"run_id"`
-	Phase        string           `json:"phase"`
-	Applied      bool             `json:"applied"`
-	Copied       int64            `json:"copied_rows"`
-	Acknowledged int64            `json:"acknowledged_events"`
-	Pending      int64            `json:"pending_events"`
-	Tables       map[string]int64 `json:"tables"`
+	RunID             string           `json:"run_id"`
+	Phase             string           `json:"phase"`
+	Applied           bool             `json:"applied"`
+	Copied            int64            `json:"copied_rows"`
+	Acknowledged      int64            `json:"acknowledged_events"`
+	Pending           int64            `json:"pending_events"`
+	Tables            map[string]int64 `json:"tables"`
+	LedgerHistoryMode string           `json:"ledger_history_mode"`
 }
 
 type onlineProjection struct {

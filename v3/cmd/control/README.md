@@ -20,6 +20,23 @@ object keyed by provider, with `client_id`, `client_secret`, `authorization_url`
 `token_url`, `user_info_url`, `redirect_url` and `scopes`. Community integration
 uses the independent `CODEGO_COMMUNITY_API_SECRET`.
 
+Archive-ledger migrations additionally require `V3_LEDGER_ARCHIVE_PG_DSN` in
+the control service only. It must target the original immutable V2 database
+using a separate nonprivileged read-only role, with `USAGE` on `billing`,
+`SELECT` on `billing.ledger_entries` columns `entry_id`, `account_id`, `amount`,
+`balance_after`, `entry_type`, `direction`, `reason_code`, `created_at`, and
+`EXECUTE` on `pg_catalog.pg_control_system()`. Do not reuse a migration/admin
+role. The source needs an index on `(account_id, created_at DESC, entry_id DESC)`.
+Source ledger row-level security must be disabled so policies cannot silently
+hide financial evidence; a genuine UTC zero timestamp is rejected because it
+cannot produce a compatible historical cursor.
+Connections are bounded to four and enforce read-only transactions and a
+10-second query timeout. Startup and historical requests verify the source
+cluster and database against migration metadata; missing configuration,
+identity mismatches and archive failures return errors instead of empty history.
+Full-copy migrations keep their existing V3 historical reader and require no
+archive DSN. Current account balances and financial transactions always use V3.
+
 Browser community pages use session-protected `GET /api/community/sellers`
 and `POST /api/community/channels/{id}/rating` with a `stars` field only.
 The service derives the viewer's persistent community subject from the session;

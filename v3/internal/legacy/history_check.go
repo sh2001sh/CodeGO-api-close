@@ -201,6 +201,9 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 		}},
 	}
 	for _, c := range checks {
+		if c.name == "ledger_entries" && ledgerHistoryArchived(ctx) {
+			continue
+		}
 		if onlineViewFrom(ctx) != nil {
 			continue
 		}

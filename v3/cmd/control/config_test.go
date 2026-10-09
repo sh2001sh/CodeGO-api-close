@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
+	"strings"
 	"testing"
 )
 
@@ -48,5 +50,24 @@ func TestConfigurationRejectsMissingAndMalformedSecrets(t *testing.T) {
 	t.Setenv("V3_SMTP_PASSWORD", "sensitive-value")
 	if _, err := configFromEnv(); err == nil {
 		t.Fatal("unpaired SMTP credential accepted")
+	}
+}
+
+func TestArchiveConnectionIgnoresWritableAndUnboundedDSNOptions(t *testing.T) {
+	pool, err := openLedgerArchive(context.Background(), "postgresql://fixture_user@127.0.0.1:1/archive?sslmode=disable&pool_max_conns=50&default_transaction_read_only=off&statement_timeout=0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	cfg := pool.Config()
+	if cfg.MaxConns != 4 || cfg.MinConns != 0 || cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] != "on" || cfg.ConnConfig.RuntimeParams["statement_timeout"] != "10000" || cfg.ConnConfig.RuntimeParams["lock_timeout"] != "3000" {
+		t.Fatal("archive pool accepted unsafe connection options")
+	}
+}
+
+func TestMalformedArchiveDSNDoesNotExposeCredential(t *testing.T) {
+	pool, err := openLedgerArchive(context.Background(), "postgresql://fixture_user:private-archive-password@[malformed")
+	if pool != nil || err == nil || strings.Contains(err.Error(), "private-archive-password") || strings.Contains(err.Error(), "fixture_user") {
+		t.Fatal("malformed archive DSN was accepted or disclosed supplied credentials")
 	}
 }

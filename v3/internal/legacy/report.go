@@ -17,15 +17,16 @@ type Issue struct {
 }
 
 type Report struct {
-	Applied             bool              `json:"applied"`
-	Users               int               `json:"users"`
-	Keys                int               `json:"api_keys"`
-	Channels            int               `json:"channels"`
-	UnmappedSources     []string          `json:"unmapped_sources"`
-	Counts              map[string]int64  `json:"counts"`
-	Amounts             map[string]string `json:"amounts"`
-	OpeningMicroCredits string            `json:"opening_micro_credits"`
-	Issues              []Issue           `json:"issues"`
+	Applied              bool                  `json:"applied"`
+	Users                int                   `json:"users"`
+	Keys                 int                   `json:"api_keys"`
+	Channels             int                   `json:"channels"`
+	UnmappedSources      []string              `json:"unmapped_sources"`
+	Counts               map[string]int64      `json:"counts"`
+	Amounts              map[string]string     `json:"amounts"`
+	OpeningMicroCredits  string                `json:"opening_micro_credits"`
+	Issues               []Issue               `json:"issues"`
+	LedgerHistoryArchive *LedgerHistoryArchive `json:"ledger_history_archive,omitempty"`
 }
 
 type Wallet struct {

@@ -19,12 +19,13 @@ import (
 type Billing struct {
 	server   *Server
 	pool     *pgxpool.Pool
+	archive  *pgxpool.Pool
 	accounts *ledger.Accounts
 	poster   billing.Poster
 }
 
-func (s *Server) RegisterBilling(pool *pgxpool.Pool, accounts *ledger.Accounts, poster billing.Poster) {
-	b := &Billing{server: s, pool: pool, accounts: accounts, poster: poster}
+func (s *Server) RegisterBilling(pool *pgxpool.Pool, accounts *ledger.Accounts, poster billing.Poster, archive *pgxpool.Pool) {
+	b := &Billing{server: s, pool: pool, accounts: accounts, poster: poster, archive: archive}
 	s.mux.Handle("GET /api/billing/balance", s.RequireUser(http.HandlerFunc(b.balance)))
 	s.mux.Handle("GET /api/wallet", s.RequireUser(http.HandlerFunc(b.balance)))
 	s.mux.Handle("GET /api/billing/entries", s.RequireUser(http.HandlerFunc(b.entries)))

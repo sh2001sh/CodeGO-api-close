@@ -43,6 +43,9 @@ func closeOnlineConnection(conn *pgxpool.Conn) {
 }
 
 func onlineReadBatch(ctx context.Context, source pgx.Tx, spec onlineSpec, cursor json.RawMessage) ([]onlineInput, error) {
+	if spec.name == "ledger_entries" && ledgerHistoryArchived(ctx) {
+		return nil, nil
+	}
 	quoted := make([]string, len(spec.keys))
 	left, right := make([]string, len(spec.keys)), make([]string, len(spec.keys))
 	for i, key := range spec.keys {
@@ -158,7 +161,8 @@ func onlineInputBatches(rows pgx.Rows, visit func([]onlineInput) error) error {
 }
 
 func (m *Importer) CopyOnline(ctx context.Context, opts OnlineOptions) (OnlineReport, error) {
-	r := OnlineReport{RunID: opts.RunID, Tables: map[string]int64{}}
+	ctx = m.historyContext(ctx)
+	r := OnlineReport{RunID: opts.RunID, Tables: map[string]int64{}, LedgerHistoryMode: ledgerHistoryMode(ctx)}
 	conn, err := m.onlineConnection(ctx)
 	if err != nil {
 		return r, err
@@ -293,7 +297,8 @@ func onlineRefreshAccounts(ctx context.Context, target pgx.Tx, p *onlineProjecto
 }
 
 func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineReport, error) {
-	r := OnlineReport{RunID: opts.RunID, Tables: map[string]int64{}}
+	ctx = m.historyContext(ctx)
+	r := OnlineReport{RunID: opts.RunID, Tables: map[string]int64{}, LedgerHistoryMode: ledgerHistoryMode(ctx)}
 	if opts.SourceAdmin == nil {
 		return r, errors.New("legacy: online sync requires capture acknowledgement connection")
 	}

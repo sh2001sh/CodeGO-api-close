@@ -109,15 +109,17 @@ step_integration() {
   selected=$(integration_packages)
   [ -n "$selected" ] || { echo 'integration shard has no packages' >&2; return 1; }
   local -a packages filters=()
+  local pg_image=postgres:15-alpine
   mapfile -t packages <<< "$selected"
   case "$V3_INTEGRATION_SHARD" in
     migration) filters=(-skip '^TestOnline') ;;
-    migration-online) filters=(-run '^TestOnline') ;;
+    # musl treats en_US sorting like C; the capture regression needs glibc.
+    migration-online) filters=(-run '^TestOnline'); pg_image=postgres:15-bookworm ;;
   esac
   docker network create "$net" >/dev/null
   NETWORKS+=("$net")
   docker run -d --rm --shm-size=256m --name "$pg" --network "$net" \
-    -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=v3test postgres:15-alpine postgres -p 55497 >/dev/null
+    -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=v3test "$pg_image" postgres -p 55497 >/dev/null
   CONTAINERS+=("$pg")
   docker run -d --rm --name "$rd" --network "$net" redis:7-alpine \
     redis-server --maxmemory-policy noeviction --appendonly yes >/dev/null

@@ -21,11 +21,12 @@ func TestExactMarketReserveFinalizeRedisEvent(t *testing.T) {
 			price := catalog.Price{Mode: "per_request", PerRequest: 9000000000}
 			usage := gateway.Usage{}
 			want := int64(90)
-			if factor == "1e-14" {
+			switch factor {
+			case "1e-14":
 				price = catalog.Price{Mode: "per_token", InputPerMTok: 1000000000000000000, OutputPerMTok: 1000000000000000000}
 				req.Body = []byte(`{"max_tokens":1000000000000000}`)
 				usage.CompletionTokens, want = 1000000000000000, 10000000
-			} else if factor == "0" {
+			case "0":
 				want = 0
 			}
 			snapshot.Market.Channels[1].ModelPrices["model"] = price

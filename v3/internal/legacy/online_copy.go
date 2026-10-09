@@ -56,7 +56,9 @@ func onlineReadBatch(ctx context.Context, source pgx.Tx, spec onlineSpec, cursor
 	query := "SELECT to_jsonb(t) FROM " + spec.source + " t"
 	var args []any
 	if len(cursor) > 0 && string(cursor) != "null" {
-		query += " CROSS JOIN jsonb_populate_record(NULL::" + spec.source + ",$1::jsonb)e WHERE ROW(" + strings.Join(left, ",") + ")>ROW(" + strings.Join(right, ",") + ")"
+		// An uncorrelated typed subquery makes the boundary an InitPlan. A cross
+		// join can instead scan the primary key from its beginning on every page.
+		query += " WHERE ROW(" + strings.Join(left, ",") + ")>(SELECT " + strings.Join(right, ",") + " FROM jsonb_populate_record(NULL::" + spec.source + ",$1::jsonb)e)"
 		args = append(args, cursor)
 	}
 	query += " ORDER BY " + strings.Join(left, ",") + " LIMIT 512"

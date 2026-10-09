@@ -19,9 +19,9 @@ MODCACHE="$(go env GOMODCACHE)"
 BUILD_CACHE="$(go env GOCACHE)"
 LINT_CACHE="${V3_LINT_CACHE:-$BUILD_CACHE/codego-lint}"
 mkdir -p "$BUILD_CACHE" "$LINT_CACHE"
-LINT_IMG=golangci/golangci-lint:v2.14.0
-ATLAS_IMG=arigaio/atlas:latest
-ATLAS_LINT_IMG=arigaio/atlas:0.37.0 # v0.38+ needs an Atlas login for migrate lint
+LINT_IMG=mirror.gcr.io/golangci/golangci-lint:v2.14.0
+ATLAS_IMG=mirror.gcr.io/arigaio/atlas:latest
+ATLAS_LINT_IMG=mirror.gcr.io/arigaio/atlas:0.37.0 # v0.38+ needs an Atlas login for migrate lint
 PG_PASS=v3test
 
 # Everything a step starts is registered here and removed on any exit,
@@ -46,7 +46,7 @@ go_in_docker() {
 start_pg() {
   CONTAINERS+=("$1")
   docker run -d --rm --name "$1" -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=v3test \
-    -p "127.0.0.1:$2:5432" "postgres:$3-alpine" >/dev/null
+    -p "127.0.0.1:$2:5432" "mirror.gcr.io/library/postgres:$3-alpine" >/dev/null
   until docker exec "$1" pg_isready -U postgres -d v3test >/dev/null 2>&1; do sleep 1; done
   sleep 2 # the entrypoint restarts the server once after init
 }
@@ -109,19 +109,19 @@ step_integration() {
   selected=$(integration_packages)
   [ -n "$selected" ] || { echo 'integration shard has no packages' >&2; return 1; }
   local -a packages filters=()
-  local pg_image=postgres:15-alpine
+  local pg_image=mirror.gcr.io/library/postgres:15-alpine
   mapfile -t packages <<< "$selected"
   case "$V3_INTEGRATION_SHARD" in
     migration) filters=(-skip '^TestOnline') ;;
     # musl treats en_US sorting like C; the capture regression needs glibc.
-    migration-online) filters=(-run '^TestOnline'); pg_image=postgres:15-bookworm ;;
+    migration-online) filters=(-run '^TestOnline'); pg_image=mirror.gcr.io/library/postgres:15-bookworm ;;
   esac
   docker network create "$net" >/dev/null
   NETWORKS+=("$net")
   docker run -d --rm --shm-size=256m --name "$pg" --network "$net" \
     -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=v3test "$pg_image" postgres -p 55497 >/dev/null
   CONTAINERS+=("$pg")
-  docker run -d --rm --name "$rd" --network "$net" redis:7-alpine \
+  docker run -d --rm --name "$rd" --network "$net" mirror.gcr.io/library/redis:7-alpine \
     redis-server --maxmemory-policy noeviction --appendonly yes >/dev/null
   CONTAINERS+=("$rd")
   for ((i=0; i<60; i++)); do
@@ -169,7 +169,7 @@ step_atlas() {
   docker network create "$net" >/dev/null
   NETWORKS+=("$net")
   docker run -d --rm --name "$pg" --network "$net" \
-    -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=v3test postgres:15-alpine >/dev/null
+    -e POSTGRES_PASSWORD="$PG_PASS" -e POSTGRES_DB=v3test mirror.gcr.io/library/postgres:15-alpine >/dev/null
   CONTAINERS+=("$pg")
   for ((i=0; i<60; i++)); do
     if docker exec "$pg" pg_isready -U postgres -d v3test >/dev/null 2>&1; then ready=1; break; fi
@@ -193,7 +193,7 @@ step_bench() {
   CONTAINERS+=(v3-mock)
   docker network create v3bench >/dev/null
   docker run -d --rm --name v3-mock --network v3bench -v "$SRC/bench:/bench:ro" \
-    --entrypoint /bench/.mockupstream-linux redis:7-alpine -addr 0.0.0.0:18080 >/dev/null
+    --entrypoint /bench/.mockupstream-linux mirror.gcr.io/library/redis:7-alpine -addr 0.0.0.0:18080 >/dev/null
   sleep 2
   docker run --rm --network v3bench -v "$SRC/bench:/bench:ro" -e TARGET=http://v3-mock:18080 \
     -e STREAMS="${STREAMS:-300}" -e RPS="${RPS:-300}" -e DURATION="${DURATION:-30s}" \

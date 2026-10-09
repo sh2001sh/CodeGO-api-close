@@ -28,7 +28,7 @@ x-backend: &backend
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: mirror.gcr.io/library/postgres:15-alpine
     shm_size: 1gb
     environment:
       POSTGRES_USER: codego
@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: mirror.gcr.io/library/redis:7-alpine
     command: [redis-server, --maxmemory, '${V3_TEST_REDIS_MAXMEMORY_BYTES:-1073741824}', --maxmemory-policy, noeviction, --appendonly, 'yes', --appendfsync, everysec]
     # Leave space beyond the data budget for AOF buffers and fork/COW.
     mem_limit: ${V3_TEST_REDIS_CONTAINER_MEMORY:-3g}

@@ -54,6 +54,12 @@ jobs:
         check: [lint, race, schema]
     steps:
       - uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: v3/go.mod
@@ -89,6 +95,12 @@ jobs:
         shard: [commerce, ledger, market, core, migration, migration-online]
     steps:
       - uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: v3/go.mod
@@ -144,6 +156,12 @@ jobs:
         service: [gateway, control, worker, migrate, web]
     steps:
       - uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Resolve immutable revision tag
         id: image
         env:
@@ -216,6 +234,12 @@ jobs:
       V3_REAL_OIDC_REDIRECT_URI: http://localhost:18083/community-callback
     steps:
       - uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: oven-sh/setup-bun@v2
       - name: Prepare isolated test credentials
         run: |

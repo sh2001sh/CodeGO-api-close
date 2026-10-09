@@ -332,13 +332,21 @@ func (p *onlineProjector) insert(ctx context.Context, spec onlineSpec, inputs []
 		return nil
 	}
 	metrics := onlineMetrics{}
+	if err := p.replaceRetired(ctx, spec, inputs, metrics); err != nil {
+		return err
+	}
+	var attemptParents map[string]bool
+	if spec.name == "request_attempt_audits" {
+		var err error
+		attemptParents, err = p.attemptParents(ctx, inputs)
+		if err != nil {
+			return err
+		}
+	}
 	var logGroups []map[string]any
 	projected := map[string][]map[string]any{}
 	targetKeys := map[string][]string{}
 	for _, input := range inputs {
-		if err := p.replaceRetired(ctx, spec, input, metrics); err != nil {
-			return err
-		}
 		if len(input.raw) == 0 {
 			continue
 		}
@@ -349,7 +357,7 @@ func (p *onlineProjector) insert(ctx context.Context, spec onlineSpec, inputs []
 			}
 			logGroups = append(logGroups, map[string]any{"created_at": historyDate(l.CreatedAt), "user_id": l.UserID, "request_id": l.RequestID})
 		}
-		out, err := p.project(ctx, spec, input.raw)
+		out, err := p.project(ctx, spec, input.raw, attemptParents)
 		if err != nil {
 			return err
 		}
@@ -383,13 +391,18 @@ func (p *onlineProjector) insert(ctx context.Context, spec onlineSpec, inputs []
 	return metrics.save(ctx, p.target)
 }
 
-func (p *onlineProjector) replaceRetired(ctx context.Context, spec onlineSpec, input onlineInput, metrics onlineMetrics) error {
-	if spec.name == "ledger_entries" && ledgerHistoryArchived(ctx) {
+func (p *onlineProjector) replaceRetired(ctx context.Context, spec onlineSpec, inputs []onlineInput, metrics onlineMetrics) error {
+	if len(inputs) == 0 || spec.name == "ledger_entries" && ledgerHistoryArchived(ctx) {
 		return nil
 	}
-	var before []byte
-	err := p.target.QueryRow(ctx, "DELETE FROM v3_migration_online.retired_rows WHERE name=$1 AND row_key=$2 RETURNING metrics", spec.name, input.key).Scan(&before)
-	if err != nil && err != pgx.ErrNoRows {
+	keys := make([]json.RawMessage, len(inputs))
+	for i, input := range inputs {
+		keys[i] = input.key
+	}
+	// Copy's primary-key cursor and sync's deduplicated dirty/related keys give
+	// this bounded batch one input per source key.
+	data, err := json.Marshal(keys)
+	if err != nil {
 		return err
 	}
 	apply := func(raw []byte, sign int64) error {
@@ -404,51 +417,72 @@ func (p *onlineProjector) replaceRetired(ctx context.Context, spec onlineSpec, i
 		}
 		return nil
 	}
-	if err == nil {
-		if err = apply(before, -1); err != nil {
-			return err
-		}
-	}
-	if len(input.raw) == 0 {
-		return nil
-	}
-	values := map[string]string{}
-	if spec.name == "ledger_entries" && p.history.retiredHistoryEntry(input.raw) {
-		d := &historyData{counts: map[string]int64{}, amounts: map[string]*big.Int{}}
-		d.reportRetiredHistoryEntry(input.raw)
-		for key, count := range d.counts {
-			values["retired.history."+key] = fmt.Sprint(count)
-		}
-		for key, amount := range d.amounts {
-			values["retired.history."+key] = amount.String()
-		}
-	} else if spec.name == "funding_lots" || spec.name == "funding_allocations" {
-		var row commerceRow
-		if err = json.Unmarshal(input.raw, &row); err != nil {
-			return err
-		}
-		if p.funding.retiredFundingRow(spec.name, row) {
-			r := Report{Counts: map[string]int64{}, Amounts: map[string]string{}}
-			reportRetiredFunding(&r, spec.name, row)
-			for key, count := range r.Counts {
-				values[key] = fmt.Sprint(count)
-			}
-			for key, amount := range r.Amounts {
-				values[key] = amount
-			}
-		}
-	}
-	if len(values) == 0 {
-		return nil
-	}
-	b, err := json.Marshal(values)
+	rows, err := p.target.Query(ctx, `DELETE FROM v3_migration_online.retired_rows r
+ USING jsonb_array_elements($2::jsonb) k(value)
+ WHERE r.name=$1 AND r.row_key=k.value RETURNING r.metrics`, spec.name, data)
 	if err != nil {
 		return err
 	}
-	if _, err = p.target.Exec(ctx, "INSERT INTO v3_migration_online.retired_rows(name,row_key,metrics)VALUES($1,$2,$3)", spec.name, input.key, b); err != nil {
+	for rows.Next() {
+		var before []byte
+		if err = rows.Scan(&before); err != nil {
+			rows.Close()
+			return err
+		}
+		if err = apply(before, -1); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
 		return err
 	}
-	return apply(b, 1)
+	for _, input := range inputs {
+		if len(input.raw) == 0 {
+			continue
+		}
+		values := map[string]string{}
+		if spec.name == "ledger_entries" && p.history.retiredHistoryEntry(input.raw) {
+			d := &historyData{counts: map[string]int64{}, amounts: map[string]*big.Int{}}
+			d.reportRetiredHistoryEntry(input.raw)
+			for key, count := range d.counts {
+				values["retired.history."+key] = fmt.Sprint(count)
+			}
+			for key, amount := range d.amounts {
+				values["retired.history."+key] = amount.String()
+			}
+		} else if spec.name == "funding_lots" || spec.name == "funding_allocations" {
+			var row commerceRow
+			if err = json.Unmarshal(input.raw, &row); err != nil {
+				return err
+			}
+			if p.funding.retiredFundingRow(spec.name, row) {
+				r := Report{Counts: map[string]int64{}, Amounts: map[string]string{}}
+				reportRetiredFunding(&r, spec.name, row)
+				for key, count := range r.Counts {
+					values[key] = fmt.Sprint(count)
+				}
+				for key, amount := range r.Amounts {
+					values[key] = amount
+				}
+			}
+		}
+		if len(values) == 0 {
+			continue
+		}
+		b, err := json.Marshal(values)
+		if err != nil {
+			return err
+		}
+		if _, err = p.target.Exec(ctx, "INSERT INTO v3_migration_online.retired_rows(name,row_key,metrics)VALUES($1,$2,$3)", spec.name, input.key, b); err != nil {
+			return err
+		}
+		if err = apply(b, 1); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func onlineDuplicateCount(ctx context.Context, target pgx.Tx, groups []map[string]any) (int64, error) {

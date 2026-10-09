@@ -74,7 +74,7 @@ def main():
             run("run", "-d", "--name", name, *host_options,
                 "-p", "127.0.0.1::80", "--mount", f"type=bind,source={temp}/default.conf,target=/etc/nginx/conf.d/default.conf,readonly",
                 "--mount", f"type=bind,source={temp}/nginx.conf,target=/etc/nginx/nginx.conf,readonly",
-                "nginx:1.28.0-alpine")
+                "mirror.gcr.io/library/nginx:1.28.0-alpine")
             port = int(run("port", name, "80/tcp").rsplit(":", 1)[1])
             def get(path, headers=None):
                 conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)

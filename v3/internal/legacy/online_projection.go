@@ -127,7 +127,38 @@ func (p *onlineProjector) historicalAccounts() ([]onlineProjection, error) {
 	return out, nil
 }
 
-func (p *onlineProjector) project(ctx context.Context, spec onlineSpec, raw json.RawMessage) ([]onlineProjection, error) {
+func (p *onlineProjector) attemptParents(ctx context.Context, inputs []onlineInput) (map[string]bool, error) {
+	parents := map[string]bool{}
+	var ids []string
+	for _, input := range inputs {
+		if len(input.raw) == 0 {
+			continue
+		}
+		a, err := decodeHistoryAttemptAudit(input.raw)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, a.RequestID)
+	}
+	if len(ids) == 0 {
+		return parents, nil
+	}
+	rows, err := p.target.Query(ctx, "SELECT request_id FROM "+onlineStage("v3_audit.request_audits")+" WHERE request_id=ANY($1::text[])", ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		parents[id] = true
+	}
+	return parents, rows.Err()
+}
+
+func (p *onlineProjector) project(ctx context.Context, spec onlineSpec, raw json.RawMessage, attemptParents map[string]bool) ([]onlineProjection, error) {
 	if strings.HasPrefix(spec.name, "market.") {
 		return p.projectOnlineMarket(strings.TrimPrefix(spec.name, "market."), raw)
 	}
@@ -194,11 +225,7 @@ func (p *onlineProjector) project(ctx context.Context, spec onlineSpec, raw json
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		var parent bool
-		if err = p.target.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM "+onlineStage("v3_audit.request_audits")+" WHERE request_id=$1)", a.RequestID).Scan(&parent); err != nil {
-			return nil, err
-		}
-		if !parent {
+		if !attemptParents[a.RequestID] {
 			return []onlineProjection{{"v3_audit", "orphan_request_attempt_history", []string{"attempt_id"}, map[string]any{"attempt_id": a.AttemptID, "request_id": a.RequestID, "source_record": raw}}}, nil
 		}
 		fields, err = onlineProjectionFields(a, map[string]string{"model_name": "model"}, nil, map[string]historyTime{"created_at": a.CreatedAt, "started_at": a.StartedAt, "completed_at": a.CompletedAt})

@@ -26,21 +26,34 @@ func verifyHistoryTotals(ctx context.Context, target pgx.Tx, d *historyData, rep
 		{"orphan_request_attempt_history", "v3_audit.orphan_request_attempt_history", "", ""},
 	} {
 		var count int64
-		query := "SELECT count(*)"
 		var sum string
-		if c.amount != "" {
-			query += ",COALESCE(sum(" + c.amount + "),0)::text"
-		}
-		query += " FROM " + c.table + c.filter
-		row := target.QueryRow(ctx, query)
-		var err error
-		if c.amount == "" {
-			err = row.Scan(&count)
+		view := onlineViewFrom(ctx)
+		if view != nil && (historyOnlineLargeSource(c.source) || c.source == "request_attempt_audits_linked" || c.source == "orphan_request_attempt_history") {
+			// The protected receipt was independently checked at baseline and
+			// after every replay. Finalization must not rescan adopted histories.
+			count = view.counts[c.source]
+			if c.amount != "" {
+				sum = view.amounts[c.table+"."+c.amount]
+				if sum == "" {
+					sum = "0"
+				}
+			}
 		} else {
-			err = row.Scan(&count, &sum)
-		}
-		if err != nil {
-			return err
+			query := "SELECT count(*)"
+			if c.amount != "" {
+				query += ",COALESCE(sum(" + c.amount + "),0)::text"
+			}
+			query += " FROM " + c.table + c.filter
+			row := target.QueryRow(ctx, query)
+			var err error
+			if c.amount == "" {
+				err = row.Scan(&count)
+			} else {
+				err = row.Scan(&count, &sum)
+			}
+			if err != nil {
+				return err
+			}
 		}
 		report.Counts["check:history:"+c.source+":actual"] = count
 		if count != d.counts[c.source] {

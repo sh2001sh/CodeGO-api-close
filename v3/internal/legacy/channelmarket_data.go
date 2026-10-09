@@ -48,6 +48,12 @@ type cmKeyBinding struct {
 }
 
 func loadChannelMarket(ctx context.Context, source pgx.Tx, sources map[string]string) (*channelMarketData, error) {
+	return loadChannelMarketBase(ctx, source, sources, true)
+}
+
+// Online preparation loads only structural dependencies. Live settlement totals
+// and account balances are validated together after writers have been drained.
+func loadChannelMarketBase(ctx context.Context, source pgx.Tx, sources map[string]string, inspectStreams bool) (*channelMarketData, error) {
 	d := &channelMarketData{source: source, streamTables: map[string]string{}, streamCounts: map[string]int64{}, rows: map[string][]cmRow{}, channels: map[string]*cmChannel{}, groups: map[string]cmRow{}, users: map[int64]bool{}, internal: map[int64]cmRow{}, pending: map[int64]int64{}}
 	for _, table := range channelMarketSourceTables {
 		if cmStreamedTable(table) {
@@ -114,6 +120,9 @@ func loadChannelMarket(ctx context.Context, source pgx.Tx, sources map[string]st
 		d.keyBindings = append(d.keyBindings, cmKeyBinding{ID: id, UserID: owner, Group: row.text("group")})
 	}
 	d.prepare(os.Getenv("V3_MIGRATION_SOURCE_CRYPTO_SECRET"))
+	if !inspectStreams {
+		return d, nil
+	}
 	if err := d.inspectStreamed(ctx); err != nil {
 		return nil, err
 	}

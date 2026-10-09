@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -27,9 +28,54 @@ func (d *fundingData) validateContext(ctx context.Context, report *Report) error
 	for name, count := range d.queues {
 		report.Counts[name] = count
 	}
+	view := onlineViewFrom(ctx)
+	if view != nil {
+		// Retired values are evidence in original v2 units, never opening money.
+		for key, value := range view.amounts {
+			if !strings.HasPrefix(key, "retired_features.billing_funding_lots") && !strings.HasPrefix(key, "retired_features.billing_funding_allocations") {
+				continue
+			}
+			if strings.HasSuffix(key, "_v2_units") {
+				if _, ok := new(big.Int).SetString(value, 10); !ok {
+					return fmt.Errorf("legacy: invalid verified retired funding amount %s", key)
+				}
+				report.Amounts[key] = value
+			} else {
+				count, err := strconv.ParseInt(value, 10, 64)
+				if err != nil || count < 0 {
+					return fmt.Errorf("legacy: invalid verified retired funding count %s", key)
+				}
+				report.Counts[key] = count
+			}
+		}
+	}
 	invalid := false
 	for _, name := range fundingSourceNames {
 		report.Counts["billing_"+name] = 0
+		if view != nil && (name == "funding_lots" || name == "funding_allocations") {
+			count, err := d.onlineFundingCount(view, name)
+			if err != nil {
+				return err
+			}
+			report.Counts["billing_"+name] = count
+			if fundingSource(d.sources, name) == "" {
+				continue
+			}
+			fields := []string{"amount"}
+			if name == "funding_lots" {
+				fields = []string{"original_amount", "remaining_amount"}
+			}
+			for _, field := range fields {
+				key := "v3_billing." + name + "." + field
+				value, exists := view.amounts[key]
+				amount, ok := new(big.Int).SetString(value, 10)
+				if !exists || !ok || amount.Sign() < 0 {
+					return fmt.Errorf("legacy: missing or invalid verified funding amount %s", key)
+				}
+				report.Amounts["billing_"+name+"_"+field+"_micro_credits"] = amount.String()
+			}
+			continue
+		}
 		sums := map[string]*big.Int{}
 		emitted := false
 		err := d.walk(ctx, name, func(row commerceRow) error {
@@ -71,6 +117,19 @@ func (d *fundingData) validateContext(ctx context.Context, report *Report) error
 		return nil
 	}
 	return d.validateFundingSQL(ctx, report)
+}
+
+func (d *fundingData) onlineFundingCount(view *onlineView, name string) (int64, error) {
+	if fundingSource(d.sources, name) == "" {
+		return 0, nil
+	}
+	key := "v3_billing." + name + ".rows"
+	value, exists := view.amounts[key]
+	count, err := strconv.ParseInt(value, 10, 64)
+	if !exists || err != nil || count < 0 {
+		return 0, fmt.Errorf("legacy: missing or invalid verified funding count %s", key)
+	}
+	return count, nil
 }
 
 func (d *fundingData) validateFundingSQL(ctx context.Context, report *Report) error {

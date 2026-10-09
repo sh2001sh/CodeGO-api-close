@@ -201,6 +201,9 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 		}},
 	}
 	for _, c := range checks {
+		if onlineViewFrom(ctx) != nil {
+			continue
+		}
 		var err error
 		switch c.name {
 		case "logs":

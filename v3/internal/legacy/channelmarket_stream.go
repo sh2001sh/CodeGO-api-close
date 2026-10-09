@@ -59,6 +59,20 @@ func (d *channelMarketData) addPendingSettlement(record cmRecord) error {
 }
 
 func (d *channelMarketData) inspectStreamed(ctx context.Context) error {
+	if view := onlineViewFrom(ctx); view != nil {
+		for _, table := range channelMarketSourceTables {
+			if !cmStreamedTable(table) || d.streamTables[table] == "" {
+				continue
+			}
+			count, exists := view.marketCounts[table]
+			if !exists || count < 0 {
+				return fmt.Errorf("legacy: missing or invalid verified marketplace count %s", table)
+			}
+			d.streamCounts[table] = count
+		}
+		d.pending = view.marketPending
+		return nil
+	}
 	for _, table := range channelMarketSourceTables {
 		if !cmStreamedTable(table) || d.streamTables[table] == "" {
 			continue
@@ -113,6 +127,9 @@ func cmRecordShape(record cmRecord) string {
 }
 
 func (d *channelMarketData) streamBatches(ctx context.Context, table string, visit func([]cmRecord) error) error {
+	if onlineViewFrom(ctx) != nil {
+		return nil
+	}
 	const limit = 512
 	batch := make([]cmRecord, 0, limit)
 	shape := ""

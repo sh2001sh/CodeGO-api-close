@@ -1,4 +1,4 @@
-// Command migrate applies v3 schema and performs an offline, atomic v2 import.
+// Command migrate applies v3 schema and performs staged online or atomic offline v2 migration.
 package main
 
 import (
@@ -51,6 +51,9 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	if command == "drain" {
 		return runDrain(ctx, output)
 	}
+	if isOnlineCommand(command) {
+		return runOnline(ctx, command, apply, output)
+	}
 	pool, err := pg.Connect(ctx, pg.Config{DSN: os.Getenv("V3_PG_DSN"), MaxConns: 2})
 	if err != nil {
 		return err
@@ -69,7 +72,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 // flags, returning the subcommand name and whether -apply was set.
 func parseMigrateArgs(args []string) (command string, apply bool, err error) {
 	if len(args) == 0 {
-		return "", false, errors.New("usage: migrate schema | drain | files [-apply -offline] | background [-apply -offline] | import [-apply -offline] | check | ledger-check")
+		return "", false, errors.New("usage: migrate schema | drain | files [-apply -offline] | background [-apply -offline] | import [-apply -offline] | check | ledger-check | online-{prepare,copy,sync,verify,seal,unseal,finalize,backup,delta,restore-delta}")
 	}
 	flags := flag.NewFlagSet("migrate "+args[0], flag.ContinueOnError)
 	applyFlag := flags.Bool("apply", false, "commit the import; default is dry-run")
@@ -79,6 +82,12 @@ func parseMigrateArgs(args []string) (command string, apply bool, err error) {
 	}
 	if flags.NArg() != 0 {
 		return "", false, errors.New("unexpected arguments")
+	}
+	if isOnlineCommand(args[0]) {
+		if err := validateOnlineFlags(args[0], *applyFlag, *offline); err != nil {
+			return "", false, err
+		}
+		return args[0], *applyFlag, nil
 	}
 	if args[0] != "schema" && args[0] != "drain" && args[0] != "files" && args[0] != "background" && args[0] != "import" && args[0] != "check" && args[0] != "ledger-check" {
 		return "", false, errors.New("unknown command; use schema, drain, files, background, import, check or ledger-check")

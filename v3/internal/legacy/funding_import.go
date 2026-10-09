@@ -52,6 +52,10 @@ func resolveFundingAccount(index map[fundingAccountKey]int64, p *fundingProjecti
 }
 
 func (d *fundingData) batches(ctx context.Context, name string, accounts map[fundingAccountKey]int64, visit func(string, []map[string]any) error) error {
+	if view := onlineViewFrom(ctx); view != nil && (name == "funding_lots" || name == "funding_allocations") {
+		_, err := d.onlineFundingCount(view, name)
+		return err
+	}
 	batch := make([]map[string]any, 0, exactBulkRows)
 	bytes := 2 // JSON array brackets, plus a comma between projected rows.
 	key := ""
@@ -126,6 +130,15 @@ func (m *Importer) checkFunding(ctx context.Context, target pgx.Tx, d *fundingDa
 		return fmt.Errorf("legacy: load native funding accounts: %w", err)
 	}
 	for _, name := range fundingSourceNames {
+		if view := onlineViewFrom(ctx); view != nil && (name == "funding_lots" || name == "funding_allocations") {
+			count, err := d.onlineFundingCount(view, name)
+			if err != nil {
+				return err
+			}
+			report.Counts["verified_billing_"+name] = count
+			report.Counts["target_billing_"+name] = count
+			continue
+		}
 		var expected, activeSourceCount int64
 		emitted := false
 		err := d.batches(ctx, name, accounts, func(key string, rows []map[string]any) error {

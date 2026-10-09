@@ -100,6 +100,9 @@ func decodeHistoryAttemptAudit(raw json.RawMessage) (historyAttemptAudit, error)
 }
 
 func (m *Importer) importHistoryRequestAudits(ctx context.Context, target pgx.Tx, d *historyData) error {
+	if onlineViewFrom(ctx) != nil {
+		return nil
+	}
 	requests := historyImportBatch(ctx, target, "v3_audit", "request_audits", "request_id")
 	err := walkHistory(ctx, d.source, d.sources["request_audits"], func(raw json.RawMessage) error {
 		a, err := decodeHistoryRequestAudit(raw)

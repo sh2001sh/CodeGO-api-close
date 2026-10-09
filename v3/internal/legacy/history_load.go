@@ -156,6 +156,9 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 		{"request_attempt_audits", sources["request_attempt_audits"], func(raw json.RawMessage) error { _, err := decodeHistoryAttemptAudit(raw); return err }},
 	}
 	for _, load := range loads {
+		if onlineViewFrom(ctx) != nil && historyOnlineLargeSource(load.name) {
+			continue
+		}
 		visit := func(raw json.RawMessage) error {
 			d.counts[load.name]++
 			if err := load.decode(raw); err != nil {
@@ -195,7 +198,7 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 	if sources["request_attempt_audits"] != "" {
 		if sources["request_audits"] == "" {
 			d.recordIssue(Issue{"request_attempt_audit", 0, "missing_request_audits", "request attempt history requires its parent request audits"})
-		} else {
+		} else if onlineViewFrom(ctx) == nil {
 			var orphans int64
 			if err := source.QueryRow(ctx, `SELECT count(*) FROM `+sources["request_attempt_audits"]+` a LEFT JOIN `+sources["request_audits"]+` r ON r.request_id=a.request_id WHERE r.request_id IS NULL`).Scan(&orphans); err != nil {
 				return nil, err
@@ -205,8 +208,73 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 			d.counts["orphan_request_attempt_history"] = orphans
 		}
 	}
-	d.counts["request_attempt_audits_linked"] = d.counts["request_attempt_audits"] - d.counts["orphan_request_attempt_history"]
+	if view := onlineViewFrom(ctx); view != nil {
+		if err := d.loadOnlineHistoryTotals(view); err != nil {
+			return nil, err
+		}
+	} else {
+		d.counts["request_attempt_audits_linked"] = d.counts["request_attempt_audits"] - d.counts["orphan_request_attempt_history"]
+	}
 	return d, nil
+}
+
+func historyOnlineLargeSource(name string) bool {
+	switch name {
+	case "ledger_entries", "logs", "request_audits", "request_attempt_audits":
+		return true
+	}
+	return false
+}
+
+// Only finalization creates this view, after validating the complete baseline,
+// replaying all committed changes and sealing the source. Small identity and
+// account records above still come from the final source snapshot.
+func (d *historyData) loadOnlineHistoryTotals(view *onlineView) error {
+	for _, name := range []string{"ledger_entries", "logs", "usage_logs", "request_audits", "request_attempt_audits", "request_attempt_audits_linked", "orphan_request_attempt_history", "usage_request_ids_disambiguated"} {
+		count := view.counts[name]
+		if count < 0 {
+			return fmt.Errorf("legacy: online history receipt has a negative %s count", name)
+		}
+		d.counts[name] = count
+	}
+	if d.counts["request_attempt_audits"]-d.counts["orphan_request_attempt_history"] != d.counts["request_attempt_audits_linked"] {
+		return fmt.Errorf("legacy: online attempt receipt counts disagree")
+	}
+	for name, metric := range map[string]string{
+		"ledger_entries": "v3_billing.historical_entries.amount",
+		"logs":           "v3_audit.events.amount",
+		"usage_logs":     "v3_billing.usage_logs.amount",
+		"request_audits": "v3_audit.request_audits.amount",
+	} {
+		value := view.amounts[metric]
+		if value == "" {
+			value = "0"
+		}
+		sum, ok := new(big.Int).SetString(value, 10)
+		if !ok || sum.String() != value {
+			return fmt.Errorf("legacy: invalid online history amount receipt for %s", name)
+		}
+		d.amounts[name] = sum
+	}
+	for key, value := range view.amounts {
+		if !strings.HasPrefix(key, "retired.history.retired:ledger_entries") {
+			continue
+		}
+		name := strings.TrimPrefix(key, "retired.history.")
+		amount, ok := new(big.Int).SetString(value, 10)
+		if !ok || amount.String() != value {
+			return fmt.Errorf("legacy: invalid retired online history receipt for %s", name)
+		}
+		if strings.HasSuffix(name, "_v2_units") {
+			d.amounts[name] = amount
+		} else {
+			if amount.Sign() < 0 || !amount.IsInt64() {
+				return fmt.Errorf("legacy: invalid retired online history count for %s", name)
+			}
+			d.counts[name] = amount.Int64()
+		}
+	}
+	return nil
 }
 
 // Keep one representative issue per source/code, with exact occurrence counts.

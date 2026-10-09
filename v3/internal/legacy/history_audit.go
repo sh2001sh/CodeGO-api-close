@@ -74,6 +74,9 @@ func decodeHistoryLog(raw json.RawMessage) (historyLog, error) {
 }
 
 func (m *Importer) importHistoryLogs(ctx context.Context, target pgx.Tx, d *historyData) error {
+	if onlineViewFrom(ctx) != nil {
+		return nil
+	}
 	mappings, err := historyAccountTargets(ctx, target)
 	if err != nil {
 		return err

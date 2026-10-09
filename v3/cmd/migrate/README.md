@@ -1,4 +1,129 @@
-# Offline v2 import
+# v2 to v3 migration
+
+## Online staging and the final offline window
+
+The staged path moves the historical bulk copy and its verification before the
+maintenance window. It captures source changes without posting money to v3.
+It does not stop writers, switch traffic, waive financial drain checks, or prove
+that the production cutover takes only minutes. Keep v2 serving users until an
+independent rehearsal proves capture overhead, target capacity, final sync time,
+backup restoration and all application checks on the actual release.
+
+Use a unique `V3_ONLINE_MIGRATION_ID` containing 16–64 letters, digits, hyphens
+or underscores. Keep it unchanged across retries and backup/delta files. Use
+`V3_SOURCE_PG_DSN` for source reads and `V3_PG_DSN` for the separate,
+non-serving v3 target. Source business reads always use READ ONLY REPEATABLE
+READ transactions. The private capture namespace requires its owner login;
+granting another reader access to capture metadata is rejected. The encryption
+inputs below remain required. Set
+`V3_ONLINE_SOURCE_ADMIN_PG_DSN` only for capture setup, acknowledgement and
+seal/unseal: this login can install the capture schema/triggers and write its
+metadata. It must not be supplied through command arguments or stored in logs.
+All CLI pools are limited to two connections.
+
+All three migration logins require EXECUTE on `pg_control_system()` to establish
+the real cluster and database identity. The reader and capture administrator
+must reach the same actual database. One capture run is permanently bound to
+one actual target database; another target cannot consume its acknowledged
+change journal. Native and staging schema fingerprints are checked on each
+operation. A schema change requires a new isolated target and capture run;
+staging from an earlier schema must not replace upgraded native tables. Custom
+access policies, grants or ownership on tables being adopted are explicitly
+refused rather than lost by table replacement.
+
+| Command | Required flags | Effect |
+| --- | --- | --- |
+| `online-prepare` | None | Preview source coverage and target staging requirements. |
+| `online-prepare` | `-apply` | Install source capture and prepare isolated staging. |
+| `online-copy` | `-apply` | Copy the historical bulk into target staging. |
+| `online-sync` | `-apply` | Apply captured changes and acknowledge committed work. |
+| `online-verify` | `-apply` | Run full verification and retain verification evidence. |
+| `online-backup` | `-apply` | Create a snapshot-bound legacy base archive. |
+| `online-delta` | `-apply` | Export a cumulative source delta for isolated restore. |
+| `online-restore-delta` | `-apply` | Apply a delta only to an explicitly named isolated restore. |
+| `online-seal` | `-apply -offline` | Seal capture after every v2 writer has stopped. |
+| `online-finalize` | `-apply -offline` | Sync a sealed source, enforce offline contracts and atomically finalize. |
+| `online-unseal` | `-apply` | Remove this capture's write seal; no v3 transactions are reversed. |
+
+Only `online-prepare` has a preview mode. Commands that write staging, metadata,
+verification evidence or backup files require `-apply`. `online-seal` and
+`online-finalize` additionally require the operator's `-offline` assertion; all
+other online commands reject `-offline`. Invalid command/flag combinations are
+rejected before any database connection. Capture installation itself briefly
+locks tables: validate its overhead and schedule it outside peak traffic.
+
+Run prepare, bulk copy, repeated sync and full verify while v2 stays live. Full
+verification can still take substantial time; do not defer it to the final
+window. Changes continue to be captured during online work. Do not start v3
+writers against the staging target. At the agreed maintenance time, freeze new
+admissions, drain real provider/billing work, stop every v2 writer, seal capture,
+then run the final sync and finalize. A missing seal, financial blocker or
+verification failure prevents finalization. Independent asset backups, account
+and ledger checks, release checks, capacity checks and candidate acceptance are
+still prerequisites before routing users to v3. Keep the original offline import
+path below available as a fallback.
+
+Finalization holds a real source database lock until the target commit, so a
+concurrent unseal cannot reopen v2 while its frozen balances are being imported.
+Failed finalization releases that lock but leaves the write seal in place.
+Staging and its accounting receipts require migration transaction ownership;
+ordinary application writes and replication mode cannot bypass their guards.
+Each delta is applied in bounded batches within one target transaction, with
+exact event acknowledgement only after commit. Individual source or projected
+records above 64 MiB fail explicitly and remain unacknowledged. The final
+window still validates foreign keys and financial SQL across the actual data;
+moving JSON projection online does not by itself eliminate those scan costs.
+
+`online-unseal` is for resuming v2 during an aborted cutover. It only cancels the
+capture seal and does not restore deleted data, refund debits or migrate v3
+transactions back into v2. Once v3 accepts business writes, rolling back to a
+v2 snapshot can lose those writes; an independently verified reverse migration
+is required for a lossless rollback.
+
+### Base archives and cumulative deltas
+
+`online-backup -apply` writes `V3_ONLINE_BACKUP_PATH`. The destination must be a
+new absolute file on the designated backup disk; the parent must exist without
+symlinks. `pg_dump` must be available and compatible with the source PostgreSQL
+version. The exported source snapshot stays open until the archive finishes.
+The backup report records snapshot, capture hash, bytes and archive SHA256.
+Capture schema data is excluded. Its source capture trigger names are listed in
+`excluded_trigger_names`; remove their trigger TOC entries when restoring the
+archive, since the capture implementation is not part of the restored business
+database. Preserve all unrelated triggers and constraints.
+
+`online-delta -apply` writes a new `V3_ONLINE_DELTA_PATH`. A private mode-0600 file
+is written, flushed and atomically published without replacing an existing
+destination. Interrupted export leaves no published partial archive. On Windows,
+also restrict the backup parent directory with private NTFS ACLs; Unix mode bits
+alone do not protect Windows archives. The delta is cumulative from capture
+installation, including keys already acknowledged
+by online sync; it is not a maximum-sequence watermark. Late commits, updates,
+deletions and tables without primary keys remain part of its reconciliation
+contract. Each later export needs a new destination file.
+
+Restore the base into a disposable database named `online_restore_<suffix>`.
+Set `V3_ONLINE_RESTORE_DATABASE` to that exact name and
+`V3_ONLINE_RESTORE_PG_DSN` to its independent connection string. Then run
+`online-restore-delta -apply` with the matching run ID and existing delta file.
+The CLI checks the database name before connecting; the restore API checks the
+actual database again. It accepts neither the source business database nor the
+v3 serving target. Delta validation spools beside the delta archive rather than
+using the system temporary disk. Keep sufficient space there for the validation
+spool and the archive. Restore verifies the transport before writing and keeps
+business rows and sequence changes inside its isolated restore contract.
+
+A delta file alone is not a backup. Restore the actual base plus final cumulative
+delta in isolation, check source identities, rows, relationships, constraints,
+sequences and financial totals, and retain both archive hashes. Protect archives
+with private filesystem permissions and preserve independent API-host and local
+copies, including configuration, user assets, invoice originals and mail receipts.
+For this deployment the local database backup root is `D:/CodegoBackups`; do not
+use the system C drive. Recalculate disk/WAL/temp capacity and verify both copies
+before cutover. These commands do not copy the backup to another host or
+automatically change Nginx.
+
+## Original atomic offline import
 
 Set `V3_SOURCE_PG_DSN` to the v2 PostgreSQL database with a read-only login and
 `V3_PG_DSN` to the separate v3 database. Set `V3_SECRET_KEY` to the target's base64

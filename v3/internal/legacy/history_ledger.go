@@ -98,6 +98,9 @@ func (m *Importer) importHistoryLedger(ctx context.Context, target pgx.Tx, d *hi
 	if err = accounts.finish(); err != nil {
 		return err
 	}
+	if onlineViewFrom(ctx) != nil {
+		return nil
+	}
 	entries := historyImportBatch(ctx, target, "v3_billing", "historical_entries", "entry_id")
 	err = walkHistory(ctx, d.source, d.sources["ledger_entries"], func(raw json.RawMessage) error {
 		if d.retiredHistoryEntry(raw) {

@@ -50,6 +50,15 @@ func (m *Importer) checkChannelMarket(ctx context.Context, target pgx.Tx, data *
 			continue
 		}
 		native := "v3_channelmarket." + table
+		if view := onlineViewFrom(ctx); view != nil {
+			count, exists := view.marketCounts[table]
+			if !exists || count < 0 {
+				return fmt.Errorf("legacy: missing or invalid verified marketplace count %s", table)
+			}
+			expectedCounts[native] = count
+			report.Counts["check:channelmarket"] += count
+			continue
+		}
 		expectedCounts[native] = 0
 		emitted := false
 		if err := data.streamBatches(ctx, table, func(records []cmRecord) error {
@@ -82,6 +91,10 @@ func (m *Importer) checkChannelMarket(ctx context.Context, target pgx.Tx, data *
 		}
 	}
 	for table, want := range expectedCounts {
+		if onlineViewFrom(ctx) != nil && strings.HasPrefix(table, "v3_channelmarket.") && cmStreamedTable(strings.TrimPrefix(table, "v3_channelmarket.")) {
+			report.Counts["check:"+table] = want
+			continue
+		}
 		var actual int64
 		if err := target.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&actual); err != nil {
 			return err

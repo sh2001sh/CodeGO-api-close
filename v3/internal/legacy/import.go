@@ -38,11 +38,50 @@ func (m *Importer) Import(ctx context.Context, apply bool) (Report, error) {
 	if m.source == nil || m.pool == nil || m.crypto == nil {
 		return r, errors.New("legacy: source, target and encrypter are required")
 	}
+	view := onlineViewFrom(ctx)
+	if view != nil {
+		inherited, err := onlineInheritedSourceFence(ctx, m.source)
+		if err != nil {
+			return r, err
+		}
+		if !inherited {
+			fence, err := onlineHoldSourceFence(ctx, m.source)
+			if err != nil {
+				return r, err
+			}
+			defer closeOnlineConnection(fence)
+		}
+	}
 	tx, err := m.source.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return r, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var staged bool
+	if err = m.pool.QueryRow(ctx, "SELECT to_regclass('v3_migration_online.run') IS NOT NULL").Scan(&staged); err != nil {
+		return r, err
+	}
+	if staged && view == nil && apply {
+		var phase string
+		if err = m.pool.QueryRow(ctx, "SELECT phase FROM v3_migration_online.run WHERE singleton").Scan(&phase); err != nil {
+			return r, err
+		}
+		if phase != "finalized" {
+			return r, errors.New("legacy: staged target requires online finalization; use an independent empty target for offline fallback")
+		}
+	}
+	if view != nil {
+		capture, captureErr := ValidateOnlineCapture(ctx, tx, view.runID)
+		if captureErr != nil {
+			return r, captureErr
+		}
+		if !capture.Sealed {
+			return r, errors.New("legacy: online source fence was released")
+		}
+		if err = onlineRequireQuiescent(ctx, tx); err != nil {
+			return r, err
+		}
+	}
 	sources, err := discoverSources(ctx, tx)
 	if err != nil {
 		return r, err
@@ -58,13 +97,35 @@ func (m *Importer) Import(ctx context.Context, apply bool) (Report, error) {
 	if len(r.Issues) != 0 {
 		return r, errors.New("legacy: import blocked by dry-run issues")
 	}
+	var targetRelations []pgx.Identifier
+	if view != nil {
+		// Discover outside the SERIALIZABLE transaction. Its first statement
+		// must lock these tables, before any SELECT fixes a stale catalog view.
+		targetRelations, err = onlineDiscoverTargetRelations(ctx, m.pool)
+		if err != nil {
+			return r, err
+		}
+	}
 	target, err := m.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return r, err
 	}
 	defer func() { _ = target.Rollback(ctx) }()
+	if view != nil {
+		if err = onlineLockTargetRelations(ctx, target, targetRelations); err != nil {
+			return r, err
+		}
+	}
 	if _, err = target.Exec(ctx, `SELECT pg_advisory_xact_lock(738301031)`); err != nil {
 		return r, err
+	}
+	if view != nil {
+		if _, _, err = onlineBindings(ctx, tx, target, view.runID); err != nil {
+			return r, err
+		}
+		if err = onlineAdopt(ctx, target, onlineSpecs(sources), view); err != nil {
+			return r, err
+		}
 	}
 	if err = m.importUsers(ctx, target, data.users); err != nil {
 		return r, err
@@ -116,6 +177,17 @@ func (m *Importer) Import(ctx context.Context, apply bool) (Report, error) {
 	}
 	if err = resetSequences(ctx, target); err != nil {
 		return r, err
+	}
+	if view != nil {
+		if err = onlineRestoreRelationships(ctx, target, onlineSpecs(sources)); err != nil {
+			return r, err
+		}
+		if err = m.checkImportData(ctx, target, data, &r); err != nil {
+			return r, err
+		}
+		if _, err = target.Exec(ctx, "UPDATE v3_migration_online.run SET phase='finalized' WHERE singleton AND run_id=$1", view.runID); err != nil {
+			return r, err
+		}
 	}
 	if err = target.Commit(ctx); err != nil {
 		return r, err

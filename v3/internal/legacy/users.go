@@ -176,6 +176,18 @@ func (m *Importer) importUsers(ctx context.Context, tx pgx.Tx, users []sourceUse
 
 func opening(ctx context.Context, tx pgx.Tx, owner string, id int64, kind string, amount int64) error {
 	var account int64
+	if view := onlineViewFrom(ctx); view != nil {
+		var reserved int64
+		reserveErr := tx.QueryRow(ctx, `SELECT id FROM v3_migration_online.account_ids WHERE owner_type=$1 AND owner_id=$2 AND kind=$3`, owner, id, kind).Scan(&reserved)
+		if reserveErr != nil && !errors.Is(reserveErr, pgx.ErrNoRows) {
+			return reserveErr
+		}
+		if reserveErr == nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO v3_billing.accounts(id,owner_type,owner_id,kind) OVERRIDING SYSTEM VALUE VALUES($1,$2,$3,$4) ON CONFLICT(owner_type,owner_id,kind) DO NOTHING`, reserved, owner, id, kind); err != nil {
+				return err
+			}
+		}
+	}
 	err := tx.QueryRow(ctx, `INSERT INTO v3_billing.accounts(owner_type,owner_id,kind) VALUES($1,$2,$3)
 		ON CONFLICT(owner_type,owner_id,kind) DO UPDATE SET owner_id=EXCLUDED.owner_id RETURNING id`, owner, id, kind).Scan(&account)
 	if err != nil {

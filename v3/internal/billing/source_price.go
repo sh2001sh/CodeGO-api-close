@@ -8,6 +8,7 @@ import (
 	"github.com/sh2001sh/new-api/v3/internal/billing/pricing"
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 type sourceQuote struct {
@@ -27,13 +28,25 @@ func sourceScalePackage(amount credits.Micro, numerator, denominator, packagePPM
 }
 
 func sourceScaleQuantum(amount credits.Micro, numerator, denominator, packagePPM, quantum int64) (credits.Micro, error) {
-	if amount < 0 || numerator < 0 || denominator <= 0 || packagePPM <= 0 || (quantum != 1 && quantum != 2) {
+	return sourceScaleExactQuantum(amount, exactfactor.FromInt64(numerator), exactfactor.FromInt64(denominator), packagePPM, quantum)
+}
+
+func sourceScaleExactQuantum(amount credits.Micro, numerator, denominator string, packagePPM, quantum int64) (credits.Micro, error) {
+	num, err := exactfactor.ParsePPM(numerator)
+	if err != nil {
+		return 0, fmt.Errorf("billing: invalid source numerator: %w", err)
+	}
+	den, err := exactfactor.ParsePPM(denominator)
+	if err != nil {
+		return 0, fmt.Errorf("billing: invalid source denominator: %w", err)
+	}
+	if amount < 0 || den.Sign() <= 0 || packagePPM <= 0 || (quantum != 1 && quantum != 2) {
 		return 0, fmt.Errorf("billing: invalid source multiplier")
 	}
-	n := new(big.Int).Mul(big.NewInt(int64(amount)), big.NewInt(numerator))
-	n.Mul(n, big.NewInt(packagePPM))
-	d := new(big.Int).Mul(big.NewInt(denominator), big.NewInt(1_000_000))
-	d.Mul(d, big.NewInt(quantum))
+	ratio := new(big.Rat).Quo(num, den)
+	ratio.Mul(ratio, big.NewRat(packagePPM, 1_000_000))
+	ratio.Mul(ratio, big.NewRat(int64(amount), quantum))
+	n, d := new(big.Int).Set(ratio.Num()), new(big.Int).Set(ratio.Denom())
 	n.Mul(n, big.NewInt(2)).Add(n, d)
 	n.Quo(n, d.Mul(d, big.NewInt(2)))
 	n.Mul(n, big.NewInt(quantum))
@@ -42,7 +55,7 @@ func sourceScaleQuantum(amount credits.Micro, numerator, denominator, packagePPM
 	}
 	// V2's positive minimum is one OLD quota unit (two migrated micro).
 	// Native prices retain their one-micro minimum.
-	if amount > 0 && numerator > 0 && n.Sign() == 0 {
+	if amount > 0 && num.Sign() > 0 && n.Sign() == 0 {
 		return credits.Micro(quantum), nil
 	}
 	return credits.Micro(n.Int64()), nil
@@ -63,7 +76,7 @@ func (s *Settler) quoteSource(h *hold, target gateway.Target, usage gateway.Usag
 	if !ok {
 		return sourceQuote{}, fmt.Errorf("billing: source target was not admitted")
 	}
-	before, err := pricing.PriceForRequestPPM(usage, p.Price, p.MultiplierPPM, h.pricingInput)
+	before, err := p.charge(usage, h.pricingInput)
 	if err != nil {
 		return sourceQuote{}, err
 	}
@@ -82,11 +95,18 @@ func (s *Settler) quoteSource(h *hold, target gateway.Target, usage gateway.Usag
 	if !p.SubscriptionAllowed {
 		return quote, nil
 	}
-	denominator := p.MultiplierPPM
-	if denominator == 0 {
-		denominator = 1_000_000
+	denominator, err := p.exactMultiplier()
+	if err != nil {
+		return quote, err
 	}
-	subscription, err := sourceScaleQuantum(before, p.SubscriptionFactorPPM, denominator, p.PackagePPM, quantum)
+	if denominator == "0" {
+		denominator = "1000000"
+	}
+	numerator, err := exactfactor.Resolve(p.SubscriptionFactorPPM, p.SubscriptionFactorPPMExact)
+	if err != nil {
+		return quote, err
+	}
+	subscription, err := sourceScaleExactQuantum(before, numerator, denominator, p.PackagePPM, quantum)
 	if err != nil {
 		return quote, err
 	}

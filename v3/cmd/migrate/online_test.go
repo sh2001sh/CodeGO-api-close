@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
@@ -10,10 +12,12 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/sh2001sh/new-api/v3/migrations"
 )
 
 func TestOnlineFlagsKeepOfflineAssertionExplicit(t *testing.T) {
-	for _, command := range []string{"online-prepare", "online-copy", "online-sync", "online-verify", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta"} {
+	for _, command := range []string{"online-prepare", "online-copy", "online-sync", "online-verify", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta"} {
 		for _, apply := range []bool{false, true} {
 			for _, offline := range []bool{false, true} {
 				args := []string{command}
@@ -80,6 +84,37 @@ func TestOnlineInputValidationPrecedesAnyConnection(t *testing.T) {
 	t.Setenv("V3_ONLINE_RESTORE_PG_DSN", "invalid-private-user-private-password")
 	if err := run(context.Background(), []string{"online-restore-delta", "-apply"}, io.Discard); err == nil || strings.Contains(err.Error(), "private-password") {
 		t.Fatalf("malformed restore DSN accepted or leaked: %v", err)
+	}
+}
+
+func TestOnlineEmptySchemaUpgradeReviewedHashesPrecedeConnections(t *testing.T) {
+	t.Setenv("V3_ONLINE_MIGRATION_ID", "migration-cli-test-20261010")
+	t.Setenv("V3_SOURCE_PG_DSN", "private-invalid-source-DSN")
+	t.Setenv("V3_PG_DSN", "private-invalid-target-DSN")
+	t.Setenv("V3_SECRET_KEY", "invalid-key")
+	sql, err := migrations.Read(migrations.ExactPriceMigration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256([]byte(sql))
+	approved := hex.EncodeToString(hash[:])
+	for _, test := range []struct{ name, shape, capture, migration string }{
+		{"missing_shape", "", strings.Repeat("a", 64), approved},
+		{"missing_capture", strings.Repeat("a", 64), "", approved},
+		{"missing_migration", strings.Repeat("a", 64), strings.Repeat("a", 64), ""},
+		{"uppercase_hash", strings.Repeat("A", 64), strings.Repeat("a", 64), approved},
+		{"wrong_embedded_bytes", strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("a", 64)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("V3_ONLINE_EXPECTED_TARGET_SHAPE", test.shape)
+			t.Setenv("V3_ONLINE_EXPECTED_CAPTURE_HASH", test.capture)
+			t.Setenv("V3_ONLINE_EXPECTED_MIGRATION_SHA256", test.migration)
+			var output bytes.Buffer
+			err := run(context.Background(), []string{"online-empty-schema-upgrade", "-apply"}, &output)
+			if err == nil || !strings.Contains(err.Error(), "upgrade") || strings.Contains(err.Error(), "DSN") || strings.Contains(err.Error(), "SECRET_KEY") || output.Len() != 0 {
+				t.Fatalf("review validation did not precede key/connection validation: %v %s", err, output.String())
+			}
+		})
 	}
 }
 

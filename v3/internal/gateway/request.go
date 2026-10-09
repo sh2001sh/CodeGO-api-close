@@ -61,6 +61,7 @@ type Target struct {
 	OwnerUserID               int64
 	Group                     string
 	MultiplierPPM             int64
+	MultiplierPPMExact        string // authoritative scaled PPM decimal; empty uses MultiplierPPM
 	RoutePoolID               int64
 	ProcurementCostMultiplier string // frozen exact decimal, empty means unattributed
 	PersonalPoolGroup         string // internal personal-pool identity, separate from the priced member group

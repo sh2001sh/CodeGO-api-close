@@ -5,6 +5,7 @@ import { resourceOptions } from '../../lib/queries'
 import { Button, ErrorMessage, Field, Loading, Status } from '../../components/ui'
 import { DataTable } from '../../components/data-table'
 import { date } from '../../lib/format'
+import { factorText, ppmFactorText } from '../../lib/factor'
 import { MarketForm, text, factor, integer } from './form'
 
 export function OwnerAccess(props: { id: string; internalID: number | string | bigint }) {
@@ -113,7 +114,7 @@ export function OwnerAccess(props: { id: string; internalID: number | string | b
           { label: '用户', render: (row) => String(row.user_id) },
           {
             label: '专属倍率',
-            render: (row) => Number(row.multiplier_ppm) / 1_000_000,
+            render: (row) => ppmFactorText(row.multiplier_ppm),
             numeric: true,
           },
           { label: '更新时间', render: (row) => date(row.updated_at) },
@@ -210,7 +211,7 @@ export function OwnerAccess(props: { id: string; internalID: number | string | b
             { label: '说明', render: (row) => row.label },
             { label: '开始时间', render: (row) => date(Number(row.start_timestamp) * 1000) },
             { label: '结束时间', render: (row) => date(Number(row.end_timestamp) * 1000) },
-            { label: '倍率', render: (row) => String(row.multiplier), numeric: true },
+            { label: '倍率', render: (row) => factorText(row.multiplier), numeric: true },
             {
               label: '操作',
               render: (row) => (
@@ -257,7 +258,11 @@ export function OwnerBargains() {
         rowKey={(row) => row.id}
         columns={[
           { label: '用户', render: (row) => String(row.user_id) },
-          { label: '期望倍率', render: (row) => String(row.proposed_multiplier), numeric: true },
+          {
+            label: '期望倍率',
+            render: (row) => factorText(row.proposed_multiplier),
+            numeric: true,
+          },
           { label: '理由', render: (row) => row.reason },
           { label: '状态', render: (row) => <Status value={row.status} /> },
           {

@@ -53,7 +53,7 @@ func appendEconomicsCall(rec walRecord, h *hold, out gateway.Outcome) (walRecord
 		if err != nil {
 			return rec, err
 		}
-		value, err := pricing.PriceForRequestPPM(out.Usage, price.Price, price.MultiplierPPM, h.pricingInput)
+		value, err := price.charge(out.Usage, h.pricingInput)
 		if err != nil {
 			return rec, err
 		}

@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/sh2001sh/new-api/v3/internal/billing"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 // AccrueUsageBatchTx accepts fresh primary events only; secondary funding
@@ -59,15 +60,15 @@ func (s *Service) AccrueUsageBatchTx(ctx context.Context, tx pgx.Tx, events []ma
 		if err != nil || gross < 0 {
 			return ErrInvalid
 		}
-		factor, err := strconv.ParseInt(fields["marketplace_multiplier_ppm"], 10, 64)
-		if err != nil || factor < 0 {
+		factor, err := exactfactor.ParsePPM(fields["marketplace_multiplier_ppm"])
+		if err != nil {
 			return ErrInvalid
 		}
 		request := fields[billing.FieldRequestID]
 		if request == "" {
 			return ErrInvalid
 		}
-		inputs = append(inputs, SettlementInput{RequestID: request, ChannelID: channels[i], ConsumerUserID: user, ConsumerMicro: credits.Micro(amount), GrossMicro: credits.Micro(gross), BillingSource: fields["billing_source"], MultiplierPPM: factor})
+		inputs = append(inputs, SettlementInput{RequestID: request, ChannelID: channels[i], ConsumerUserID: user, ConsumerMicro: credits.Micro(amount), GrossMicro: credits.Micro(gross), BillingSource: fields["billing_source"], MultiplierPPMExact: exactfactor.Decimal(factor)})
 	}
 	return s.accrueKnownGroupsTx(ctx, tx, inputs, groups, debitAccounts)
 }

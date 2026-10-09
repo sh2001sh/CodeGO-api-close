@@ -30,8 +30,11 @@ export async function generateTypes() {
   const document = JSON.parse(await readFile(source, 'utf8'))
   const nodes = await openapiTS(source, {
     transform(schema) {
-      if (schema.type === 'integer' && schema.format === 'int64') {
-        // Large JSON integers are read as decimal strings; requests accept bigint.
+      if (
+        (schema.type === 'integer' && schema.format === 'int64') ||
+        schema['x-codego-exact-decimal'] === true
+      ) {
+        // Exact JSON decimals/large integers are read as strings; requests accept bigint.
         const types = [
           ts.factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword),
           ts.factory.createKeywordTypeNode(ts.SyntaxKind.StringKeyword),

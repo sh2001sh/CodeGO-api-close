@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/sh2001sh/new-api/v3/internal/billing"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 // AccrueUsageTx satisfies the ledger worker's business hook without exposing
@@ -50,9 +51,9 @@ func (s *Service) AccrueUsageTx(ctx context.Context, tx pgx.Tx, fields map[strin
 	if err != nil || gross < 0 {
 		return ErrInvalid
 	}
-	factor, err := strconv.ParseInt(fields["marketplace_multiplier_ppm"], 10, 64)
-	if err != nil || factor < 0 {
+	factor, err := exactfactor.ParsePPM(fields["marketplace_multiplier_ppm"])
+	if err != nil {
 		return ErrInvalid
 	}
-	return s.AccrueTx(ctx, tx, SettlementInput{RequestID: fields[billing.FieldRequestID], ChannelID: channel, ConsumerUserID: user, ConsumerMicro: credits.Micro(amount), GrossMicro: credits.Micro(gross), BillingSource: fields["billing_source"], MultiplierPPM: factor})
+	return s.AccrueTx(ctx, tx, SettlementInput{RequestID: fields[billing.FieldRequestID], ChannelID: channel, ConsumerUserID: user, ConsumerMicro: credits.Micro(amount), GrossMicro: credits.Micro(gross), BillingSource: fields["billing_source"], MultiplierPPMExact: exactfactor.Decimal(factor)})
 }

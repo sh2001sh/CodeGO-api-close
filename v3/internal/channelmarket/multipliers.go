@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 type MultiplierTarget struct {
@@ -49,8 +50,8 @@ func (t *MultiplierTarget) UnmarshalJSON(raw []byte) error {
 
 type UserMultiplier struct {
 	MultiplierTarget
-	MultiplierPPM int64     `json:"multiplier_ppm"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	MultiplierPPM json.Number `json:"multiplier_ppm"`
+	UpdatedAt     time.Time   `json:"updated_at"`
 }
 
 func (s *Service) SetMultiplier(ctx context.Context, a Actor, channel, user int64, value *json.Number) error {
@@ -74,33 +75,54 @@ func (s *Service) SetMultiplier(ctx context.Context, a Actor, channel, user int6
 }
 
 func setMultiplierTx(ctx context.Context, tx pgx.Tx, channel, user, factor int64, source string) error {
-	var previous, public int64
-	err := tx.QueryRow(ctx, `SELECT multiplier_ppm FROM v3_channelmarket.groups WHERE channel_id=$1`, channel).Scan(&public)
+	return setMultiplierExactTx(ctx, tx, channel, user, exactfactor.FromInt64(factor), factor == 0, source)
+}
+
+// A historical negotiated factor can be smaller than one PPM. Clearing is
+// explicit so a tiny positive value can never be mistaken for removal.
+func setMultiplierExactTx(ctx context.Context, tx pgx.Tx, channel, user int64, factor string, clear bool, source string) error {
+	parsed, err := exactfactor.ParsePPM(factor)
+	if err != nil || (!clear && parsed.Sign() == 0) {
+		return ErrInvalid
+	}
+	factor = exactfactor.Decimal(parsed)
+	var previous, public string
+	err = tx.QueryRow(ctx, `SELECT multiplier_ppm::text FROM v3_channelmarket.groups WHERE channel_id=$1 AND deleted_at IS NULL AND lifecycle_status<>'deleted' FOR UPDATE`, channel).Scan(&public)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
 	if err != nil {
 		return err
 	}
-	err = tx.QueryRow(ctx, `SELECT multiplier_ppm FROM v3_channelmarket.user_multipliers WHERE channel_id=$1 AND user_id=$2`, channel, user).Scan(&previous)
+	err = tx.QueryRow(ctx, `SELECT multiplier_ppm::text FROM v3_channelmarket.user_multipliers WHERE channel_id=$1 AND user_id=$2`, channel, user).Scan(&previous)
 	if errors.Is(err, pgx.ErrNoRows) {
 		previous = public
 	} else if err != nil {
 		return err
 	}
 	next := factor
-	if next == 0 {
+	if clear {
 		next = public
 	}
-	if next == previous {
+	comparison, err := exactfactor.Compare(next, previous)
+	if err != nil {
+		return err
+	}
+	if comparison == 0 && !clear {
 		return nil
 	}
-	if factor == 0 {
+	if clear {
 		_, err = tx.Exec(ctx, `DELETE FROM v3_channelmarket.user_multipliers WHERE channel_id=$1 AND user_id=$2`, channel, user)
 	} else {
-		_, err = tx.Exec(ctx, `INSERT INTO v3_channelmarket.user_multipliers(channel_id,user_id,multiplier_ppm) VALUES($1,$2,$3) ON CONFLICT(channel_id,user_id) DO UPDATE SET multiplier_ppm=EXCLUDED.multiplier_ppm,updated_at=now()`, channel, user, factor)
+		_, err = tx.Exec(ctx, `INSERT INTO v3_channelmarket.user_multipliers(channel_id,user_id,multiplier_ppm) VALUES($1,$2,$3::numeric) ON CONFLICT(channel_id,user_id) DO UPDATE SET multiplier_ppm=EXCLUDED.multiplier_ppm,updated_at=now()`, channel, user, factor)
 	}
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO v3_channelmarket.multiplier_notices(channel_id,user_id,previous_ppm,multiplier_ppm,cleared,source) VALUES($1,$2,$3,$4,$5,$6)`, channel, user, previous, next, factor == 0, source)
+	if comparison == 0 {
+		return nil
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO v3_channelmarket.multiplier_notices(channel_id,user_id,previous_ppm,multiplier_ppm,cleared,source) VALUES($1,$2,$3::numeric,$4::numeric,$5,$6)`, channel, user, previous, next, clear, source)
 	return err
 }
 
@@ -108,7 +130,7 @@ func (s *Service) Multipliers(ctx context.Context, a Actor) ([]UserMultiplier, e
 	if s.pool == nil {
 		return nil, ErrUnavailable
 	}
-	rows, err := s.pool.Query(ctx, `SELECT m.channel_id,m.user_id,m.multiplier_ppm,m.updated_at FROM v3_channelmarket.user_multipliers m JOIN v3_channelmarket.groups g ON g.channel_id=m.channel_id WHERE g.owner_user_id=$1 OR $2 ORDER BY m.updated_at DESC LIMIT 1000`, a.UserID, a.Admin)
+	rows, err := s.pool.Query(ctx, `SELECT m.channel_id,m.user_id,m.multiplier_ppm::text,m.updated_at FROM v3_channelmarket.user_multipliers m JOIN v3_channelmarket.groups g ON g.channel_id=m.channel_id WHERE g.owner_user_id=$1 OR $2 ORDER BY m.updated_at DESC LIMIT 1000`, a.UserID, a.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -116,9 +138,11 @@ func (s *Service) Multipliers(ctx context.Context, a Actor) ([]UserMultiplier, e
 	items := []UserMultiplier{}
 	for rows.Next() {
 		var m UserMultiplier
-		if err = rows.Scan(&m.ChannelID, &m.UserID, &m.MultiplierPPM, &m.UpdatedAt); err != nil {
+		var factor string
+		if err = rows.Scan(&m.ChannelID, &m.UserID, &factor, &m.UpdatedAt); err != nil {
 			return nil, err
 		}
+		m.MultiplierPPM = json.Number(factor)
 		items = append(items, m)
 	}
 	return items, rows.Err()
@@ -130,7 +154,7 @@ type TimeMultiplier struct {
 	Start         int64       `json:"start_timestamp"`
 	End           int64       `json:"end_timestamp"`
 	Multiplier    json.Number `json:"multiplier"`
-	MultiplierPPM int64       `json:"multiplier_ppm"`
+	MultiplierPPM json.Number `json:"multiplier_ppm"`
 	Label         string      `json:"label"`
 }
 
@@ -139,7 +163,7 @@ func (s *Service) SaveTimeMultiplier(ctx context.Context, a Actor, m TimeMultipl
 	if err != nil || m.End <= m.Start || m.End-m.Start > 366*86400 || len(m.Label) > 255 {
 		return m, ErrInvalid
 	}
-	m.MultiplierPPM = f
+	m.MultiplierPPM = json.Number(exactfactor.FromInt64(f))
 	m.ID, err = newID()
 	if err != nil {
 		return m, err
@@ -171,7 +195,7 @@ type Bargain struct {
 	GroupID     string      `json:"group_id"`
 	UserID      int64       `json:"user_id"`
 	Proposed    json.Number `json:"proposed_multiplier"`
-	ProposedPPM int64       `json:"proposed_ppm"`
+	ProposedPPM json.Number `json:"proposed_ppm"`
 	Reason      string      `json:"reason"`
 	Status      string      `json:"status"`
 }
@@ -186,7 +210,7 @@ func (s *Service) RequestBargain(ctx context.Context, user int64, b Bargain) (Ba
 		return b, e
 	}
 	b.UserID = user
-	b.ProposedPPM = f
+	b.ProposedPPM = json.Number(exactfactor.FromInt64(f))
 	b.Status = "pending"
 	e = s.transaction(ctx, func(tx pgx.Tx) error {
 		if e := accessible(ctx, tx, user, b.GroupID); e != nil {
@@ -202,9 +226,10 @@ func (s *Service) ResolveBargain(ctx context.Context, a Actor, id string, accept
 		return ErrInvalid
 	}
 	return s.transaction(ctx, func(tx pgx.Tx) error {
-		var channel, user, f int64
+		var channel, user int64
+		var f string
 		var status string
-		e := tx.QueryRow(ctx, `SELECT g.channel_id,b.user_id,b.proposed_ppm,b.status FROM v3_channelmarket.bargain_requests b JOIN v3_channelmarket.groups g ON g.id=b.group_id WHERE b.id=$1 AND ($2 OR g.owner_user_id=$3) FOR UPDATE OF g,b`, id, a.Admin, a.UserID).Scan(&channel, &user, &f, &status)
+		e := tx.QueryRow(ctx, `SELECT g.channel_id,b.user_id,b.proposed_ppm::text,b.status FROM v3_channelmarket.bargain_requests b JOIN v3_channelmarket.groups g ON g.id=b.group_id JOIN v3_catalog.channels c ON c.id=g.channel_id WHERE b.id=$1 AND g.deleted_at IS NULL AND g.lifecycle_status<>'deleted' AND ($2 OR g.owner_user_id=$3) FOR UPDATE OF g,b`, id, a.Admin, a.UserID).Scan(&channel, &user, &f, &status)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -217,7 +242,7 @@ func (s *Service) ResolveBargain(ctx context.Context, a Actor, id string, accept
 		status = "rejected"
 		if accept {
 			status = "accepted"
-			if e = setMultiplierTx(ctx, tx, channel, user, f, "bargain"); e != nil {
+			if e = setMultiplierExactTx(ctx, tx, channel, user, f, false, "bargain"); e != nil {
 				return e
 			}
 		}

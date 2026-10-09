@@ -14,6 +14,7 @@ import (
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
 	"github.com/sh2001sh/new-api/v3/internal/workflow"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 type workflowPart struct {
@@ -102,6 +103,19 @@ func restoreWorkflowHold(req *gateway.Request, reservation workflow.Reservation)
 	if err := pricing.Validate(data.Price); err != nil {
 		return nil, err
 	}
+	for _, target := range data.TargetPrices {
+		if err := pricing.Validate(target.Price); err != nil {
+			return nil, err
+		}
+		if _, err := target.exactMultiplier(); err != nil {
+			return nil, err
+		}
+		if target.SubscriptionAllowed {
+			if _, err := exactfactor.Resolve(target.SubscriptionFactorPPM, target.SubscriptionFactorPPMExact); err != nil {
+				return nil, err
+			}
+		}
+	}
 	h := &hold{account: data.Account, amount: data.Amount, keys: keysFor(data.Account, req.ID), price: data.Price,
 		multiplier: data.Multiplier, pricingInput: pricing.RequestInput{Body: req.Body, Headers: data.Headers, Now: data.Now},
 		budgetAccount: data.BudgetAccount, cardMultiplier: data.CardMultiplier, cardChannels: data.CardChannels, cards: data.Cards, targetPrices: data.TargetPrices, sourceMode: data.SourceMode, sourceLimits: data.SourceLimits, fundingPreference: data.FundingPreference}
@@ -127,6 +141,7 @@ func frozenWorkflowTarget(h *hold, target gateway.Target) (gateway.Target, error
 	for key, price := range h.targetPrices {
 		if strings.HasPrefix(key, prefix) {
 			target.Group = price.Group
+			target.MultiplierPPM, target.MultiplierPPMExact = price.MultiplierPPM, price.MultiplierPPMExact
 			return target, nil
 		}
 	}

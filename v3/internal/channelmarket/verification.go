@@ -108,7 +108,7 @@ func (s *Service) claimNextVerificationRunTx(ctx context.Context) (pendingVerifi
 		if _, e := tx.Exec(ctx, `UPDATE v3_channelmarket.verification_runs SET status='queued',started_at=NULL WHERE status='running' AND started_at<$1`, s.cfg.Now().Add(-time.Hour)); e != nil {
 			return e
 		}
-		e := tx.QueryRow(ctx, `SELECT v.id,v.channel_id,c.provider,c.base_url,k.secret,CASE WHEN v.target_model<>'' THEN ARRAY[v.target_model] ELSE ARRAY(SELECT model FROM v3_catalog.channel_models WHERE channel_id=c.id ORDER BY model) END,v.trigger FROM v3_channelmarket.verification_runs v JOIN v3_catalog.channels c ON c.id=v.channel_id JOIN v3_channelmarket.groups g ON g.channel_id=c.id AND g.deleted_at IS NULL JOIN LATERAL(SELECT secret FROM v3_catalog.channel_credentials WHERE channel_id=c.id AND status='enabled' ORDER BY id LIMIT 1) k ON true WHERE v.status='queued' ORDER BY v.created_at,v.id LIMIT 1 FOR UPDATE OF v SKIP LOCKED`).Scan(&pending.run.ID, &pending.run.ChannelID, &pending.probe.Provider, &pending.probe.BaseURL, &pending.encrypted, &pending.models, &pending.trigger)
+		e := tx.QueryRow(ctx, `SELECT v.id,v.channel_id,c.provider,c.base_url,k.secret,CASE WHEN v.target_model<>'' THEN ARRAY[v.target_model] ELSE ARRAY(SELECT model FROM v3_catalog.channel_models WHERE channel_id=c.id ORDER BY model) END,v.trigger FROM v3_channelmarket.verification_runs v JOIN v3_catalog.channels c ON c.id=v.channel_id JOIN v3_channelmarket.groups g ON g.channel_id=c.id AND g.deleted_at IS NULL AND g.lifecycle_status<>'deleted' JOIN LATERAL(SELECT secret FROM v3_catalog.channel_credentials WHERE channel_id=c.id AND status='enabled' ORDER BY id LIMIT 1) k ON true WHERE v.status='queued' ORDER BY v.created_at,v.id LIMIT 1 FOR UPDATE OF v SKIP LOCKED`).Scan(&pending.run.ID, &pending.run.ChannelID, &pending.probe.Provider, &pending.probe.BaseURL, &pending.encrypted, &pending.models, &pending.trigger)
 		if e != nil {
 			return e
 		}
@@ -184,6 +184,17 @@ func (s *Service) saveVerificationResultTx(ctx context.Context, pending pendingV
 		return err
 	}
 	return s.transaction(ctx, func(tx pgx.Tx) error {
+		// Deletion may happen while an upstream probe is in flight. Lock both
+		// records before accepting its result so deleted history stays terminal.
+		var group string
+		e := tx.QueryRow(ctx, `SELECT g.id FROM v3_channelmarket.groups g JOIN v3_catalog.channels c ON c.id=g.channel_id WHERE g.channel_id=$1 AND g.deleted_at IS NULL AND g.lifecycle_status<>'deleted' FOR UPDATE OF g,c`, pending.run.ChannelID).Scan(&group)
+		if errors.Is(e, pgx.ErrNoRows) {
+			_, e = tx.Exec(ctx, `UPDATE v3_channelmarket.verification_runs SET status='paused',completed_at=$2,summary='Channel deleted before verification completed' WHERE id=$1 AND status='running'`, pending.run.ID, s.cfg.Now())
+			return e
+		}
+		if e != nil {
+			return e
+		}
 		tag, e := tx.Exec(ctx, `UPDATE v3_channelmarket.verification_runs SET status=$2,stage='completed',results=$3,completed_at=$4,summary='Connectivity probe; publication requires administrator approval' WHERE id=$1 AND status='running'`, pending.run.ID, status, payload, s.cfg.Now())
 		if e != nil {
 			return e

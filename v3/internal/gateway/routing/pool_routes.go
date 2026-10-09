@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 type poolCandidate struct {
 	member   catalog.MarketPoolMember
 	group    string
-	factor   int64
+	factor   string
 	score    float64
 	hasScore bool
 	routes   []catalog.Route
@@ -50,7 +51,7 @@ func (b *planBuilder) buildPoolCandidates(pool catalog.MarketPoolPolicy, now tim
 			if !exists {
 				continue
 			}
-			c.factor = int64(math.Round(g.Multiplier * 1000000))
+			c.factor = exactfactor.FromInt64(int64(math.Round(g.Multiplier * 1000000)))
 		} else {
 			g, exists := b.snap.Market.Groups[group]
 			if !exists || g.ID != member.GroupID || !g.Allows(b.req.Principal.UserID) {
@@ -60,10 +61,10 @@ func (b *planBuilder) buildPoolCandidates(pool catalog.MarketPoolPolicy, now tim
 			if !exists || policy.Blocked[b.req.Principal.UserID] {
 				continue
 			}
-			c.factor = policy.Factor(b.req.Principal.UserID, now)
+			c.factor = policy.FactorExact(b.req.Principal.UserID, now)
 			c.score, c.hasScore = g.Score, g.HasScore
 		}
-		if c.factor < 0 || (pool.MaxMultiplierPPM > 0 && c.factor > pool.MaxMultiplierPPM) {
+		if !routingFactorAllowed(c.factor, pool.MaxMultiplierPPM) || (!strings.HasPrefix(member.GroupID, "official:") && !routingFactorAllowed(c.factor, b.req.Principal.MaxMarketplaceMultiplierPPM)) {
 			continue
 		}
 		if scored, ok := b.snap.OfficialPools[group]; ok && scored.Matches(b.req.Model) {
@@ -100,8 +101,10 @@ func sortPoolCandidates(candidates []poolCandidate, strategy string) {
 				return a.member.Priority < z.member.Priority
 			}
 		case "cost":
-			if a.factor != z.factor {
-				return a.factor < z.factor
+			// Candidate factors were validated before this sort. Invalid direct
+			// callers fall through to the deterministic identity tiebreak.
+			if cmp, err := exactfactor.Compare(a.factor, z.factor); err == nil && cmp != 0 {
+				return cmp < 0
 			}
 		case "score":
 			if a.hasScore != z.hasScore {

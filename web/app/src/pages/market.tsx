@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { ArrowRight, Search, Server, ShieldCheck, Star } from 'lucide-react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap } from '../lib/api'
+import { ppmFactorText } from '../lib/factor'
 import { resourceOptions, keysOptions, sessionOptions } from '../lib/queries'
 import {
   groupPageOptions,
@@ -1013,12 +1014,12 @@ export default function MarketPage() {
                             { label: '渠道', render: (row) => String(row.channel_id) },
                             {
                               label: '原倍率',
-                              render: (row) => Number(row.previous_multiplier_ppm) / 1_000_000,
+                              render: (row) => ppmFactorText(row.previous_multiplier_ppm),
                               numeric: true,
                             },
                             {
                               label: '新倍率',
-                              render: (row) => Number(row.multiplier_ppm) / 1_000_000,
+                              render: (row) => ppmFactorText(row.multiplier_ppm),
                               numeric: true,
                             },
                             {

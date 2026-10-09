@@ -1960,10 +1960,12 @@ type ChannelMarketBargain struct {
 	GroupId            string      `json:"group_id"`
 	Id                 string      `json:"id"`
 	ProposedMultiplier json.Number `json:"proposed_multiplier"`
-	ProposedPpm        int64       `json:"proposed_ppm"`
-	Reason             string      `json:"reason"`
-	Status             string      `json:"status"`
-	UserId             int64       `json:"user_id"`
+
+	// ProposedPpm Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero.
+	ProposedPpm json.Number `json:"proposed_ppm"`
+	Reason      string      `json:"reason"`
+	Status      string      `json:"status"`
+	UserId      int64       `json:"user_id"`
 }
 
 // ChannelMarketBargainInput defines model for ChannelMarketBargainInput.
@@ -2319,13 +2321,17 @@ type ChannelMarketMultiplierTarget struct {
 
 // ChannelMarketNotice defines model for ChannelMarketNotice.
 type ChannelMarketNotice struct {
-	ChannelId             int64     `json:"channel_id"`
-	Cleared               bool      `json:"cleared"`
-	CreatedAt             time.Time `json:"created_at"`
-	Id                    int64     `json:"id"`
-	MultiplierPpm         int64     `json:"multiplier_ppm"`
-	PreviousMultiplierPpm int64     `json:"previous_multiplier_ppm"`
-	Source                string    `json:"source"`
+	ChannelId int64     `json:"channel_id"`
+	Cleared   bool      `json:"cleared"`
+	CreatedAt time.Time `json:"created_at"`
+	Id        int64     `json:"id"`
+
+	// MultiplierPpm Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero.
+	MultiplierPpm json.Number `json:"multiplier_ppm"`
+
+	// PreviousMultiplierPpm Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero.
+	PreviousMultiplierPpm json.Number `json:"previous_multiplier_ppm"`
+	Source                string      `json:"source"`
 }
 
 // ChannelMarketPagination defines model for ChannelMarketPagination.
@@ -2531,12 +2537,14 @@ type ChannelMarketShopUpdate struct {
 
 // ChannelMarketTimeMultiplier defines model for ChannelMarketTimeMultiplier.
 type ChannelMarketTimeMultiplier struct {
-	ChannelId      int64       `json:"channel_id"`
-	EndTimestamp   int64       `json:"end_timestamp"`
-	Id             string      `json:"id"`
-	Label          string      `json:"label"`
-	Multiplier     json.Number `json:"multiplier"`
-	MultiplierPpm  int64       `json:"multiplier_ppm"`
+	ChannelId    int64       `json:"channel_id"`
+	EndTimestamp int64       `json:"end_timestamp"`
+	Id           string      `json:"id"`
+	Label        string      `json:"label"`
+	Multiplier   json.Number `json:"multiplier"`
+
+	// MultiplierPpm Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero.
+	MultiplierPpm  json.Number `json:"multiplier_ppm"`
 	StartTimestamp int64       `json:"start_timestamp"`
 }
 
@@ -2596,10 +2604,12 @@ type ChannelMarketUsageSeries struct {
 
 // ChannelMarketUserMultiplier defines model for ChannelMarketUserMultiplier.
 type ChannelMarketUserMultiplier struct {
-	ChannelId     int64     `json:"channel_id"`
-	MultiplierPpm int64     `json:"multiplier_ppm"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	UserId        int64     `json:"user_id"`
+	ChannelId int64 `json:"channel_id"`
+
+	// MultiplierPpm Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero.
+	MultiplierPpm json.Number `json:"multiplier_ppm"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+	UserId        int64       `json:"user_id"`
 }
 
 // ChannelMarketUserMultiplierInput defines model for ChannelMarketUserMultiplierInput.

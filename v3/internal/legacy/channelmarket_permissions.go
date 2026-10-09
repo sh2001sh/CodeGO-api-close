@@ -77,13 +77,13 @@ func (d *channelMarketData) preparePermissions() {
 					b.times(r, "created_at")
 				case "user_multipliers":
 					b.integer(r, "id", "legacy_id")
-					b.factor(r, "multiplier", "multiplier_ppm", false)
+					b.exactFactor(r, "multiplier", "multiplier_ppm", false)
 					b.times(r, "updated_at")
 				case "multiplier_notices":
 					b.integer(r, "id", "id")
 					keys = []string{"id"}
-					b.factor(r, "previous_multiplier", "previous_ppm", true)
-					b.factor(r, "multiplier", "multiplier_ppm", true)
+					b.exactFactor(r, "previous_multiplier", "previous_ppm", true)
+					b.exactFactor(r, "multiplier", "multiplier_ppm", true)
 					b.put("cleared", r.text("cleared") == "true")
 					b.texts(r, "source")
 					b.times(r, "created_at", "read_at")
@@ -131,14 +131,14 @@ func (d *channelMarketData) preparePermissions() {
 		}
 		b.put("starts_at", cmUnix(start))
 		b.put("ends_at", cmUnix(end))
-		b.factor(r, "multiplier", "multiplier_ppm", false)
+		b.exactFactor(r, "multiplier", "multiplier_ppm", false)
 		d.record("v3_channelmarket.time_range_multipliers", []string{"id"}, b, r)
 	}
 	for _, r := range d.rows["bargain_requests"] {
 		b := cmBuild()
 		b.texts(r, "id", "group_id", "status", "reason")
 		b.put("resolution_note", r.text("admin_note"))
-		b.factor(r, "proposed_multiplier", "proposed_ppm", false)
+		b.exactFactor(r, "proposed_multiplier", "proposed_ppm", false)
 		user := b.integer(r, "user_id", "user_id")
 		if err := d.user(user); err != nil {
 			b.err = err
@@ -146,7 +146,12 @@ func (d *channelMarketData) preparePermissions() {
 		if _, err := d.group(r.text("group_id")); err != nil {
 			b.err = err
 		}
-		if status := r.text("status"); status != "pending" && status != "accepted" && status != "rejected" {
+		status := r.text("status")
+		if status == "approved" {
+			status = "accepted"
+		}
+		b.put("status", status)
+		if status != "pending" && status != "accepted" && status != "rejected" {
 			b.err = fmt.Errorf("unknown bargain status %s", status)
 		}
 		b.times(r, "created_at", "resolved_at")

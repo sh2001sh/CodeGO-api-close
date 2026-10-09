@@ -28,10 +28,11 @@ func (s *Settler) appendMarketCall(rec walRecord, h *hold, out gateway.Outcome, 
 	if !price.Market {
 		return rec, nil
 	}
-	if price.MultiplierPPM < 0 {
-		return rec, fmt.Errorf("billing: negative frozen market multiplier")
+	factor, err := price.exactMultiplier()
+	if err != nil {
+		return rec, fmt.Errorf("billing: invalid frozen market multiplier: %w", err)
 	}
 	rec.Args = append(rec.Args, FieldMarketGross, strconv.FormatInt(int64(actual), 10),
-		FieldMarketMultiplier, strconv.FormatInt(price.MultiplierPPM, 10), FieldBillingSource, "wallet")
+		FieldMarketMultiplier, factor, FieldBillingSource, "wallet")
 	return rec, nil
 }

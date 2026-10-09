@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/sh2001sh/new-api/v3/internal/billing"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 type SettlementInput struct {
@@ -18,6 +19,9 @@ type SettlementInput struct {
 	ConsumerMicro, GrossMicro credits.Micro
 	BillingSource             string
 	MultiplierPPM             int64
+	// MultiplierPPMExact is the exact scaled PPM from the frozen usage event.
+	// It takes precedence over the integer field for legacy negotiated factors.
+	MultiplierPPMExact string
 }
 type IncomeResult struct {
 	Count  int           `json:"count"`
@@ -58,9 +62,14 @@ func lockAccounts(ctx context.Context, tx pgx.Tx, ids ...int64) error {
 // AccrueTx must be called from the accepted usage ledger transaction, never
 // from the request handler. Its uniqueness and fingerprint reject altered replay.
 func (s *Service) AccrueTx(ctx context.Context, tx pgx.Tx, p SettlementInput) error {
-	if p.RequestID == "" || p.ConsumerUserID <= 0 || p.ChannelID <= 0 || p.ConsumerMicro < 0 || p.GrossMicro < 0 || p.MultiplierPPM < 0 {
+	if p.RequestID == "" || p.ConsumerUserID <= 0 || p.ChannelID <= 0 || p.ConsumerMicro < 0 || p.GrossMicro < 0 {
 		return ErrInvalid
 	}
+	factor, err := exactfactor.Resolve(p.MultiplierPPM, p.MultiplierPPMExact)
+	if err != nil {
+		return ErrInvalid
+	}
+	p.MultiplierPPMExact = factor
 	if p.GrossMicro == 0 {
 		return nil
 	}
@@ -71,7 +80,7 @@ func (s *Service) AccrueTx(ctx context.Context, tx pgx.Tx, p SettlementInput) er
 		p.BillingSource = "wallet"
 	}
 	var owner int64
-	err := tx.QueryRow(ctx, `SELECT owner_user_id FROM v3_channelmarket.groups WHERE channel_id=$1`, p.ChannelID).Scan(&owner)
+	err = tx.QueryRow(ctx, `SELECT owner_user_id FROM v3_channelmarket.groups WHERE channel_id=$1`, p.ChannelID).Scan(&owner)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -101,8 +110,12 @@ func splitAccrueCommission(gross credits.Micro) (commission, net int64) {
 // reports whether a new row was created (false means an identical replay,
 // true an error from a mismatched fingerprint).
 func insertSettlementTx(ctx context.Context, tx pgx.Tx, availableAt time.Time, p SettlementInput, owner int64, commission, net int64) (bool, error) {
+	factor, err := exactfactor.Resolve(p.MultiplierPPM, p.MultiplierPPMExact)
+	if err != nil {
+		return false, ErrInvalid
+	}
 	id := "usage:" + p.RequestID
-	tag, err := tx.Exec(ctx, `INSERT INTO v3_channelmarket.settlements(id,request_id,channel_id,owner_user_id,consumer_user_id,billing_source,consumer_micro,gross_micro,commission_micro,fee_micro,net_micro,multiplier_ppm,available_at,group_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12,(SELECT id FROM v3_channelmarket.groups WHERE channel_id=$3)) ON CONFLICT(request_id) DO NOTHING`, id, p.RequestID, p.ChannelID, owner, p.ConsumerUserID, p.BillingSource, int64(p.ConsumerMicro), int64(p.GrossMicro), commission, net, p.MultiplierPPM, availableAt)
+	tag, err := tx.Exec(ctx, `INSERT INTO v3_channelmarket.settlements(id,request_id,channel_id,owner_user_id,consumer_user_id,billing_source,consumer_micro,gross_micro,commission_micro,fee_micro,net_micro,multiplier_ppm,available_at,group_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,$11::numeric,$12,(SELECT id FROM v3_channelmarket.groups WHERE channel_id=$3)) ON CONFLICT(request_id) DO NOTHING`, id, p.RequestID, p.ChannelID, owner, p.ConsumerUserID, p.BillingSource, int64(p.ConsumerMicro), int64(p.GrossMicro), commission, net, factor, availableAt)
 	if err != nil {
 		return false, err
 	}
@@ -110,7 +123,7 @@ func insertSettlementTx(ctx context.Context, tx pgx.Tx, availableAt time.Time, p
 		return true, nil
 	}
 	var same bool
-	err = tx.QueryRow(ctx, `SELECT channel_id=$2 AND owner_user_id=$3 AND consumer_user_id=$4 AND billing_source=$5 AND consumer_micro=$6 AND gross_micro=$7 AND multiplier_ppm=$8 FROM v3_channelmarket.settlements WHERE request_id=$1`, p.RequestID, p.ChannelID, owner, p.ConsumerUserID, p.BillingSource, int64(p.ConsumerMicro), int64(p.GrossMicro), p.MultiplierPPM).Scan(&same)
+	err = tx.QueryRow(ctx, `SELECT channel_id=$2 AND owner_user_id=$3 AND consumer_user_id=$4 AND billing_source=$5 AND consumer_micro=$6 AND gross_micro=$7 AND multiplier_ppm=$8::numeric FROM v3_channelmarket.settlements WHERE request_id=$1`, p.RequestID, p.ChannelID, owner, p.ConsumerUserID, p.BillingSource, int64(p.ConsumerMicro), int64(p.GrossMicro), factor).Scan(&same)
 	if err != nil {
 		return false, err
 	}

@@ -20,7 +20,15 @@ describe('渠道市场操作输入', () => {
   it('限制倍率范围与小数精度', () => {
     expect(factor(fields('multiplier', '0.000001'))).toBe(0.000001)
     expect(factor(fields('multiplier', '1000'))).toBe(1000)
-    for (const invalid of ['0', '-1', '1000.000001', '0.1234567', 'NaN']) {
+    for (const invalid of [
+      '0',
+      '-1',
+      '1000.000001',
+      '0.1234567',
+      '1e-63',
+      `0.${'0'.repeat(62)}1`,
+      'NaN',
+    ]) {
       expect(() => factor(fields('multiplier', invalid))).toThrow()
     }
   })

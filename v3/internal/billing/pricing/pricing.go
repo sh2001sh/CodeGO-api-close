@@ -13,6 +13,7 @@ import (
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 	"github.com/tidwall/gjson"
 )
 
@@ -74,8 +75,15 @@ func MultiplierToPPM(multiplier float64) (int64, error) {
 // PriceForRequestPPM preserves compiled routing multipliers exactly, including
 // zero, without passing money or an integer factor through floating point.
 func PriceForRequestPPM(usage gateway.Usage, p catalog.Price, multiplierPPM int64, request RequestInput) (credits.Micro, error) {
-	if multiplierPPM < 0 {
-		return 0, fmt.Errorf("pricing: negative multiplier")
+	return PriceForRequestExactPPM(usage, p, exactfactor.FromInt64(multiplierPPM), request)
+}
+
+// PriceForRequestExactPPM accepts an exact scaled PPM decimal. Imported market
+// discounts may be smaller than one PPM; only the final money quantum is rounded.
+func PriceForRequestExactPPM(usage gateway.Usage, p catalog.Price, multiplierPPM string, request RequestInput) (credits.Micro, error) {
+	factor, err := exactfactor.ParsePPM(multiplierPPM)
+	if err != nil {
+		return 0, fmt.Errorf("pricing: invalid multiplier: %w", err)
 	}
 	if err := validateUsage(usage); err != nil {
 		return 0, err
@@ -87,7 +95,7 @@ func PriceForRequestPPM(usage gateway.Usage, p catalog.Price, multiplierPPM int6
 		return 0, err
 	}
 	var amount *big.Rat
-	var err error
+	err = nil
 	switch p.Mode {
 	case "per_token", "":
 		amount, err = tokenAmount(usage, p)
@@ -108,7 +116,7 @@ func PriceForRequestPPM(usage gateway.Usage, p catalog.Price, multiplierPPM int6
 	if err != nil {
 		return 0, err
 	}
-	amount.Mul(amount, new(big.Rat).SetFrac64(multiplierPPM, multiplierScale))
+	amount.Mul(amount, factor.Quo(factor, big.NewRat(multiplierScale, 1)))
 	// v2 tool surcharges are absolute published prices; group discounts apply
 	// to the model charge only. Add before rounding to avoid double rounding.
 	amount.Add(amount, tools)

@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 type PoolMember struct {
@@ -285,19 +286,24 @@ func addOwnedPoolMemberTx(ctx context.Context, tx pgx.Tx, user int64, poolID str
 	if e := accessible(ctx, tx, user, m.GroupID); e != nil {
 		return e
 	}
-	var channel, factor int64
-	if e := tx.QueryRow(ctx, `SELECT g.channel_id,coalesce(u.multiplier_ppm,least(g.multiplier_ppm,coalesce((SELECT min(multiplier_ppm) FROM v3_channelmarket.time_range_multipliers w WHERE w.channel_id=g.channel_id AND w.starts_at<=$3 AND w.ends_at>$3),g.multiplier_ppm))) FROM v3_channelmarket.groups g JOIN v3_catalog.channels c ON c.id=g.channel_id LEFT JOIN v3_channelmarket.user_multipliers u ON u.channel_id=g.channel_id AND u.user_id=$2 WHERE g.id=$1 AND c.status='enabled' AND EXISTS(SELECT 1 FROM v3_catalog.channel_models cm WHERE cm.channel_id=g.channel_id) AND EXISTS(SELECT 1 FROM v3_catalog.channel_credentials k WHERE k.channel_id=c.id AND k.status='enabled')`, m.GroupID, user, now).Scan(&channel, &factor); errors.Is(e, pgx.ErrNoRows) {
+	var channel int64
+	var factor string
+	if e := tx.QueryRow(ctx, `SELECT g.channel_id,coalesce(u.multiplier_ppm,least(g.multiplier_ppm,coalesce((SELECT min(multiplier_ppm) FROM v3_channelmarket.time_range_multipliers w WHERE w.channel_id=g.channel_id AND w.starts_at<=$3 AND w.ends_at>$3),g.multiplier_ppm)))::text FROM v3_channelmarket.groups g JOIN v3_catalog.channels c ON c.id=g.channel_id LEFT JOIN v3_channelmarket.user_multipliers u ON u.channel_id=g.channel_id AND u.user_id=$2 WHERE g.id=$1 AND g.deleted_at IS NULL AND g.lifecycle_status='active' AND c.status='enabled' AND EXISTS(SELECT 1 FROM v3_catalog.channel_models cm WHERE cm.channel_id=g.channel_id) AND EXISTS(SELECT 1 FROM v3_catalog.channel_credentials k WHERE k.channel_id=c.id AND k.status='enabled')`, m.GroupID, user, now).Scan(&channel, &factor); errors.Is(e, pgx.ErrNoRows) {
 		return ErrNotFound
 	} else if e != nil {
 		return e
 	}
-	if maximum > 0 && factor > maximum {
+	comparison, e := exactfactor.Compare(factor, exactfactor.FromInt64(maximum))
+	if e != nil {
+		return e
+	}
+	if maximum > 0 && comparison > 0 {
 		return ErrInvalid
 	}
 	if _, e := tx.Exec(ctx, `INSERT INTO v3_channelmarket.route_pool_members(pool_id,group_id,priority) VALUES($1,$2,$3)`, poolID, m.GroupID, m.Priority); e != nil {
 		return e
 	}
-	_, e := tx.Exec(ctx, `INSERT INTO v3_catalog.route_pool_members(pool_id,channel_id,priority) VALUES($1,$2,$3)`, catalogPool, channel, -m.Priority)
+	_, e = tx.Exec(ctx, `INSERT INTO v3_catalog.route_pool_members(pool_id,channel_id,priority) VALUES($1,$2,$3)`, catalogPool, channel, -m.Priority)
 	return e
 }
 

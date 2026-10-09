@@ -1,7 +1,7 @@
 import createClient from 'openapi-fetch'
 import type { MaybeOptionalInit, FetchResponse } from 'openapi-fetch'
 import type { PathsWithMethod, RequiredKeysOf } from 'openapi-typescript-helpers'
-import { parse, stringify } from 'lossless-json'
+import { isLosslessNumber, parse, stringify } from 'lossless-json'
 import type { paths } from './api.generated'
 import { integerRequestFields } from './api.generated'
 
@@ -16,10 +16,18 @@ export class APIError extends Error {
 
 let refreshing: Promise<boolean> | undefined
 
-function decodeJSON(text: string): unknown {
-  return parse(text, undefined, (value) => {
-    const number = Number(value)
-    return Number.isInteger(number) && !Number.isSafeInteger(number) ? value : number
+function decodeJSON(text: string, marketplaceFactors = false): unknown {
+  return parse(text, (key, value) => {
+    if (!isLosslessNumber(value)) return value
+    const raw = value.value
+    // Fractional scaled PPM and historical multipliers must never pass through
+    // Number. Other API decimals (scores, probabilities and charts) stay numeric.
+    const exactFactor =
+      ['multiplier_ppm', 'previous_multiplier_ppm', 'proposed_ppm'].includes(key) ||
+      (marketplaceFactors && ['multiplier', 'proposed_multiplier'].includes(key))
+    if (exactFactor && !/^-?\d+$/.test(raw)) return raw
+    const number = Number(raw)
+    return Number.isInteger(number) && !Number.isSafeInteger(number) ? raw : number
   })
 }
 
@@ -80,7 +88,7 @@ async function transport(request: Request): Promise<Response> {
   let payload: unknown
   const raw = await response.text()
   try {
-    payload = decodeJSON(raw)
+    payload = decodeJSON(raw, url.pathname.startsWith('/api/marketplace/'))
   } catch {
     throw new APIError('服务器返回了无效响应', response.status)
   }

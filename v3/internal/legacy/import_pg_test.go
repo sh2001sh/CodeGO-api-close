@@ -17,6 +17,10 @@ import (
 )
 
 func importTestDB(t *testing.T) (*pgxpool.Pool, *pgxpool.Pool, *catalog.AESGCM) {
+	return importTestDBBefore(t, "")
+}
+
+func importTestDBBefore(t *testing.T, before string) (*pgxpool.Pool, *pgxpool.Pool, *catalog.AESGCM) {
 	t.Helper()
 	dsn := os.Getenv("V3_MIGRATION_TEST_PG_DSN")
 	if dsn == "" {
@@ -31,6 +35,9 @@ func importTestDB(t *testing.T) (*pgxpool.Pool, *pgxpool.Pool, *catalog.AESGCM) 
 		t.Fatal(err)
 	}
 	for _, name := range names {
+		if before != "" && name >= before {
+			continue
+		}
 		source, readErr := migrations.Read(name)
 		if readErr != nil {
 			t.Fatal(readErr)

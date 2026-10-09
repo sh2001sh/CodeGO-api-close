@@ -93,7 +93,11 @@ func (d *channelMarketData) projectMarketHistory(table string, r cmRow) (cmRecor
 		b.integer(r, "id", "id")
 		b.texts(r, "source_label")
 		b.json(r, "models", "models", "[]")
-		b.factor(r, "multiplier", "multiplier_ppm", false)
+		factor, err := cmPublicFactor(r.text("multiplier"))
+		if err != nil {
+			b.err = err
+		}
+		b.put("multiplier_ppm", factor)
 		b.put("reliable", r.text("reliable") == "true")
 		b.integer(r, "request_count", "request_count")
 		if len(r["wilson_success_rate"]) > 0 {

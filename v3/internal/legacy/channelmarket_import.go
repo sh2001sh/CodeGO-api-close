@@ -23,7 +23,7 @@ func (m *Importer) importChannelMarket(ctx context.Context, target pgx.Tx, data 
 	for _, id := range ids {
 		c := data.channels[id]
 		g := c.group
-		factor, err := cmFactor(g.text("multiplier"), false)
+		factor, err := cmPublicFactor(g.text("multiplier"))
 		if err != nil {
 			return err
 		}

@@ -7552,9 +7552,8 @@ export interface components {
             group_id: string;
             /** Format: int64 */
             user_id: number | string | bigint;
-            /** Format: double */
-            proposed_multiplier: number;
-            /** Format: int64 */
+            proposed_multiplier: number | string | bigint;
+            /** @description Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero. */
             proposed_ppm: number | string | bigint;
             reason: string;
             status: string;
@@ -7846,9 +7845,9 @@ export interface components {
             id: number | string | bigint;
             /** Format: int64 */
             channel_id: number | string | bigint;
-            /** Format: int64 */
+            /** @description Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero. */
             previous_multiplier_ppm: number | string | bigint;
-            /** Format: int64 */
+            /** @description Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero. */
             multiplier_ppm: number | string | bigint;
             cleared: boolean;
             source: string;
@@ -7962,9 +7961,8 @@ export interface components {
             start_timestamp: number | string | bigint;
             /** Format: int64 */
             end_timestamp: number | string | bigint;
-            /** Format: double */
-            multiplier: number;
-            /** Format: int64 */
+            multiplier: number | string | bigint;
+            /** @description Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero. */
             multiplier_ppm: number | string | bigint;
             label: string;
         };
@@ -8038,7 +8036,7 @@ export interface components {
             channel_id: number | string | bigint;
             /** Format: int64 */
             user_id: number | string | bigint;
-            /** Format: int64 */
+            /** @description Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero. */
             multiplier_ppm: number | string | bigint;
             /** Format: date-time */
             updated_at: string;

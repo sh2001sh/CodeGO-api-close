@@ -18,7 +18,7 @@ import (
 
 func isOnlineCommand(command string) bool {
 	switch command {
-	case "online-prepare", "online-copy", "online-sync", "online-verify", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta":
+	case "online-prepare", "online-copy", "online-sync", "online-verify", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta":
 		return true
 	}
 	return false
@@ -102,6 +102,17 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 	if command == "online-backup" || command == "online-delta" {
 		return runOnlineArchive(ctx, command, runID, output)
 	}
+	upgrade := legacy.OnlineEmptySchemaUpgradeOptions{
+		OnlineOptions:           legacy.OnlineOptions{RunID: runID},
+		ExpectedTargetShape:     os.Getenv("V3_ONLINE_EXPECTED_TARGET_SHAPE"),
+		ExpectedCaptureHash:     os.Getenv("V3_ONLINE_EXPECTED_CAPTURE_HASH"),
+		ExpectedMigrationSHA256: os.Getenv("V3_ONLINE_EXPECTED_MIGRATION_SHA256"),
+	}
+	if command == "online-empty-schema-upgrade" {
+		if err := legacy.ValidateOnlineEmptySchemaUpgradeOptions(upgrade); err != nil {
+			return err
+		}
+	}
 	crypto, err := catalog.NewAESGCMFromBase64(os.Getenv("V3_SECRET_KEY"))
 	if err != nil {
 		return errors.New("V3_SECRET_KEY must be a valid base64 AES encryption key")
@@ -140,6 +151,10 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 		secret = os.Getenv("LEGACY_CRYPTO_SECRET")
 	}
 	importer := legacy.NewImporter(source.Pool, target.Pool, crypto).WithSourceCryptoSecret(secret).WithLedgerHistoryArchive(archiveLedger)
+	if command == "online-empty-schema-upgrade" {
+		report, err := importer.UpgradeEmptyOnlineSchema(ctx, upgrade)
+		return encodeOnlineReport(output, report, err)
+	}
 	if command == "online-finalize" {
 		report, err := importer.FinalizeOnline(ctx, options)
 		return encodeOnlineReport(output, report, err)

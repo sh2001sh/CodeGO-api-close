@@ -8,6 +8,7 @@ import (
 
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 // usable is applied to weighted, affinity and cooldown fallbacks alike.
@@ -44,7 +45,7 @@ func (b *planBuilder) usable(ch *catalog.Channel, cred catalog.Credential) bool 
 	if ch.Scope != "marketplace" && !ok {
 		if pool, pooled := b.snap.Market.Pools[b.group]; pooled {
 			group, factor := b.targetPricing(ch)
-			if group == b.group || !b.allowsGroup(group) || (pool.MaxMultiplierPPM > 0 && factor > pool.MaxMultiplierPPM) {
+			if group == b.group || !b.allowsGroup(group) || !routingFactorAllowed(factor, pool.MaxMultiplierPPM) {
 				return false
 			}
 		}
@@ -53,14 +54,28 @@ func (b *planBuilder) usable(ch *catalog.Channel, cred catalog.Credential) bool 
 	if !ok || policy.Blocked[user] || !b.snap.Market.Groups[policy.GroupName].Allows(user) {
 		return false
 	}
-	factor := policy.Factor(user, now)
-	if maximum := b.req.Principal.MaxMarketplaceMultiplierPPM; maximum > 0 && factor > maximum {
+	factor := policy.FactorExact(user, now)
+	if !routingFactorAllowed(factor, b.req.Principal.MaxMarketplaceMultiplierPPM) {
 		return false
 	}
-	if pool, ok := b.snap.Market.Pools[b.group]; ok && pool.MaxMultiplierPPM > 0 && factor > pool.MaxMultiplierPPM {
+	if pool, ok := b.snap.Market.Pools[b.group]; ok && !routingFactorAllowed(factor, pool.MaxMultiplierPPM) {
 		return false
 	}
-	return factor >= 0
+	return true
+}
+
+// Invalid catalog factors fail closed. A genuine zero remains a valid free
+// factor; a positive fractional PPM is compared without rounding to zero.
+func routingFactorAllowed(factor string, maximum int64) bool {
+	value, err := exactfactor.ParsePPM(factor)
+	if err != nil || value.Sign() < 0 {
+		return false
+	}
+	if maximum > 0 {
+		cmp, err := exactfactor.Compare(factor, exactfactor.FromInt64(maximum))
+		return err == nil && cmp <= 0
+	}
+	return true
 }
 
 // Catalog user pools use a wildcard entry to project their members. That
@@ -116,17 +131,17 @@ func (b *planBuilder) enableOfficialIsolation() {
 	}
 }
 
-func (b *planBuilder) targetPricing(ch *catalog.Channel) (string, int64) {
+func (b *planBuilder) targetPricing(ch *catalog.Channel) (string, string) {
 	if policy, ok := b.snap.Market.Channels[ch.ID]; ok {
-		return policy.GroupName, policy.Factor(b.req.Principal.UserID, time.Unix(0, b.now))
+		return policy.GroupName, policy.FactorExact(b.req.Principal.UserID, time.Unix(0, b.now))
 	}
 	group := b.group
 	if member, ok := b.poolGroups[ch.ID]; ok {
-		return member, int64(math.Round(b.snap.Groups[member].Multiplier * 1000000))
+		return member, exactfactor.FromInt64(int64(math.Round(b.snap.Groups[member].Multiplier * 1000000)))
 	}
 	if b.req.Principal.Group == "zero-hour" && ch.MultiplierCardUserEnabled {
 		if _, ok := b.snap.AccountProfiles[b.req.Principal.UserID].PackageCard("zero_hour_multiplier", time.Unix(0, b.now)); ok {
-			return group, 0
+			return group, "0"
 		}
 	}
 	if pool, ok := b.snap.Market.Pools[group]; ok {
@@ -137,7 +152,7 @@ func (b *planBuilder) targetPricing(ch *catalog.Channel) (string, int64) {
 			}
 			for _, membership := range ch.Groups {
 				if membership == name && b.allowsGroup(name) && b.memberGroupSupports(name, ch.ID) {
-					return name, int64(math.Round(b.snap.Groups[name].Multiplier * 1000000))
+					return name, exactfactor.FromInt64(int64(math.Round(b.snap.Groups[name].Multiplier * 1000000)))
 				}
 			}
 		}
@@ -146,7 +161,7 @@ func (b *planBuilder) targetPricing(ch *catalog.Channel) (string, int64) {
 	if g, ok := b.snap.Groups[group]; ok {
 		factor = int64(math.Round(g.Multiplier * 1000000))
 	}
-	return group, factor
+	return group, exactfactor.FromInt64(factor)
 }
 
 func requestedGroups(req *gateway.Request, snap *catalog.Snapshot) []string {

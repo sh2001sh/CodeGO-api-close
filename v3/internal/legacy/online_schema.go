@@ -23,8 +23,9 @@ func onlineDatabaseIdentity(ctx context.Context, tx pgx.Tx) (string, error) {
 }
 
 // Bind every native and private relation, including its OID, instead of just
-// the tables copied today. Schema upgrades during a run must start a fresh run;
-// otherwise adopting an older LIKE table could silently discard the upgrade.
+// the tables copied today. Ordinary schema upgrades require a fresh run; only
+// the explicit, strictly empty upgrade may atomically change this binding.
+// Adopting an older LIKE table must never silently discard a schema upgrade.
 // Volatile statistics and sequence current values are deliberately excluded.
 const onlineTargetShapeSQL = `WITH ns AS (
  SELECT oid,nspname,nspowner,nspacl FROM pg_namespace WHERE left(nspname,3)='v3_'

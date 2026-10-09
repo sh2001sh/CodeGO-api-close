@@ -7,6 +7,7 @@ import (
 
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 func officialSubscriptionPolicy(snap *catalog.Snapshot, group string) (catalog.SubscriptionPolicy, int64, error) {
@@ -72,7 +73,12 @@ func freezeSourcePolicies(req *gateway.Request, snap *catalog.Snapshot, prices m
 	for _, target := range req.Targets {
 		key := targetPriceKey(target)
 		value := prices[key]
+		factorText, err := value.exactMultiplier()
+		if err != nil {
+			return false, fmt.Errorf("billing: invalid frozen source multiplier: %w", err)
+		}
 		value.PackagePPM = 1_000_000
+		value.SubscriptionFactorPPMExact = ""
 		if pref == "wallet_only" {
 			prices[key] = value
 			continue
@@ -87,17 +93,20 @@ func freezeSourcePolicies(req *gateway.Request, snap *catalog.Snapshot, prices m
 			default:
 				return false, fmt.Errorf("billing: market source credit policy missing")
 			}
-			if value.MultiplierPPM == 0 {
+			if factorText == "0" {
 				prices[key] = value
 				continue
 			}
-			factor := new(big.Int).Mul(big.NewInt(value.MultiplierPPM), big.NewInt(10))
-			if !factor.IsInt64() && legacyActive {
-				return false, fmt.Errorf("billing: market subscription factor overflow")
-			}
-			value.SubscriptionFactorPPM, value.SubscriptionAllowed = value.MultiplierPPM, true
+			value.SubscriptionFactorPPM, value.SubscriptionFactorPPMExact, value.SubscriptionAllowed = value.MultiplierPPM, factorText, true
 			if legacyActive {
-				value.SubscriptionFactorPPM = factor.Int64()
+				factor, err := exactfactor.ParsePPM(factorText)
+				if err != nil {
+					return false, err
+				}
+				factor.Mul(factor, big.NewRat(10, 1))
+				value.SubscriptionFactorPPMExact = exactfactor.Decimal(factor)
+				// Nonintegral or large factors live only in the authoritative text.
+				value.SubscriptionFactorPPM, _ = exactfactor.Int64(value.SubscriptionFactorPPMExact)
 			}
 		} else {
 			policy, factor, err := officialSubscriptionPolicy(snap, target.Group)
@@ -135,8 +144,10 @@ func freezeSourcePolicies(req *gateway.Request, snap *catalog.Snapshot, prices m
 		}
 		if !legacyActive {
 			value.SubscriptionFactorPPM = value.MultiplierPPM
-			if value.MultiplierPPM == 0 {
+			value.SubscriptionFactorPPMExact = factorText
+			if factorText == "0" {
 				value.SubscriptionFactorPPM = 1_000_000
+				value.SubscriptionFactorPPMExact = "1000000"
 			}
 			value.PackagePPM = 1_000_000
 		}

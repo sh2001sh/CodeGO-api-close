@@ -6,6 +6,7 @@ import (
 
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 // weightedSamples bounds random draws per slot before falling back to a scan,
@@ -59,6 +60,7 @@ func (b *planBuilder) hardCooling(ch *catalog.Channel, credID int64) int64 {
 
 func (b *planBuilder) add(ch *catalog.Channel, cred catalog.Credential) {
 	group, factor := b.targetPricing(ch)
+	integerFactor, _ := exactfactor.Int64(factor)
 	poolGroup, poolCooldown := "", time.Duration(0)
 	if pool, ok := b.snap.Market.Pools[b.group]; ok {
 		poolGroup, poolCooldown = b.group, time.Duration(pool.FailureCooldownSeconds)*time.Second
@@ -81,7 +83,7 @@ func (b *planBuilder) add(ch *catalog.Channel, cred catalog.Credential) {
 		Settings:                 ch.Settings, ParamOverride: ch.ParamOverride,
 		HeaderOverride: ch.HeaderOverride, StatusCodeMapping: ch.StatusCodeMapping,
 		Fingerprint: gateway.CredentialFingerprint{UserAgent: cred.Fingerprint.UserAgent, TLSProfile: cred.Fingerprint.TLSProfile},
-		Scope:       ch.Scope, OwnerUserID: ch.OwnerUserID, Group: group, MultiplierPPM: factor,
+		Scope:       ch.Scope, OwnerUserID: ch.OwnerUserID, Group: group, MultiplierPPM: integerFactor, MultiplierPPMExact: factor,
 		RoutePoolID: selection.PoolID, ProcurementCostMultiplier: selection.CostMultiplier,
 		PersonalPoolGroup: poolGroup, PoolFailureCooldown: poolCooldown,
 	})

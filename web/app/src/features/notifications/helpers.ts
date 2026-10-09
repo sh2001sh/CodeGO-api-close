@@ -1,13 +1,9 @@
 import { safeLocalReturn } from '../../lib/auth-navigation'
 import { parse } from 'lossless-json'
+import { ppmFactorText } from '../../lib/factor'
 
 export function multiplierText(value: unknown): string {
-  if (typeof value !== 'string' || !/^\d+$/.test(value)) return '—'
-  const amount = BigInt(value)
-  const decimals = String(amount % 1_000_000n)
-    .padStart(6, '0')
-    .replace(/0+$/, '')
-  return `${amount / 1_000_000n}${decimals ? `.${decimals}` : ''}`
+  return ppmFactorText(value)
 }
 
 export function notificationAction(value: unknown): string | undefined {

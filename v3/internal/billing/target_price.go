@@ -8,6 +8,7 @@ import (
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 // targetPrice is serializable so durable tasks retain admission pricing across
@@ -17,14 +18,28 @@ type targetPrice struct {
 	SubscriptionPolicies         map[int64]subscriptionPrice `json:"subscription_policies,omitempty"`
 	Price                        catalog.Price               `json:"price"`
 	MultiplierPPM                int64                       `json:"multiplier_ppm"`
+	MultiplierPPMExact           string                      `json:"multiplier_ppm_exact,omitempty"`
 	Group                        string                      `json:"group"`
 	Market                       bool                        `json:"market"`
 	SubscriptionAllowed          bool                        `json:"subscription_allowed,omitempty"`
 	SubscriptionFactorPPM        int64                       `json:"subscription_factor_ppm,omitempty"`
+	SubscriptionFactorPPMExact   string                      `json:"subscription_factor_ppm_exact,omitempty"`
 	PackagePPM                   int64                       `json:"package_ppm,omitempty"`
 	SubscriptionAccounts         map[int64]bool              `json:"subscription_accounts,omitempty"`
 	RoutePoolID                  int64                       `json:"route_pool_id,omitempty"`
 	ProcurementCostMultiplierPPM int64                       `json:"procurement_cost_multiplier_ppm,omitempty"`
+}
+
+func (p targetPrice) exactMultiplier() (string, error) {
+	return exactfactor.Resolve(p.MultiplierPPM, p.MultiplierPPMExact)
+}
+
+func (p targetPrice) charge(usage gateway.Usage, input pricing.RequestInput) (credits.Micro, error) {
+	factor, err := p.exactMultiplier()
+	if err != nil {
+		return 0, err
+	}
+	return pricing.PriceForRequestExactPPM(usage, p.Price, factor, input)
 }
 
 type subscriptionPrice struct {
@@ -126,7 +141,11 @@ func (s *Settler) freezeOneTargetPrice(req *gateway.Request, snap *catalog.Snaps
 	if err := pricing.Validate(price); err != nil {
 		return targetPrice{}, fmt.Errorf("%w: target price: %v", gateway.ErrBillingUnavailable, err)
 	}
-	value := targetPrice{Price: price, MultiplierPPM: factor, Group: target.Group, Market: ownerPrice}
+	exact, err := exactfactor.Resolve(factor, target.MultiplierPPMExact)
+	if err != nil {
+		return targetPrice{}, fmt.Errorf("%w: target multiplier: %v", gateway.ErrBillingUnavailable, err)
+	}
+	value := targetPrice{Price: price, MultiplierPPM: factor, MultiplierPPMExact: exact, Group: target.Group, Market: ownerPrice}
 	poolID, procurementPPM, err := freezeProcurement(target)
 	if err != nil {
 		return targetPrice{}, fmt.Errorf("%w: procurement: %v", gateway.ErrBillingUnavailable, err)
@@ -165,7 +184,7 @@ func (s *Settler) estimateTargetPrices(req *gateway.Request, frozen map[string]t
 		if err != nil {
 			return 0, err
 		}
-		amount, err := pricing.PriceForRequestPPM(usage, value.Price, value.MultiplierPPM, input)
+		amount, err := value.charge(usage, input)
 		if err != nil {
 			return 0, err
 		}
@@ -192,5 +211,5 @@ func (s *Settler) targetCharge(h *hold, out gateway.Outcome) (credits.Micro, err
 	if !ok {
 		return 0, fmt.Errorf("billing: settlement target was not admitted")
 	}
-	return pricing.PriceForRequestPPM(out.Usage, value.Price, value.MultiplierPPM, h.pricingInput)
+	return value.charge(out.Usage, h.pricingInput)
 }

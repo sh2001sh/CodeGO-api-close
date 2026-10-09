@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 func formatFactor(f int64) string { return fmt.Sprintf("%d.%06d", f/1000000, f%1000000) }
@@ -67,20 +68,20 @@ func (s *Service) BatchMultipliers(ctx context.Context, a Actor, targets []Multi
 }
 
 type Notice struct {
-	ID            int64     `json:"id"`
-	ChannelID     int64     `json:"channel_id"`
-	PreviousPPM   int64     `json:"previous_multiplier_ppm"`
-	MultiplierPPM int64     `json:"multiplier_ppm"`
-	Cleared       bool      `json:"cleared"`
-	Source        string    `json:"source"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            int64       `json:"id"`
+	ChannelID     int64       `json:"channel_id"`
+	PreviousPPM   json.Number `json:"previous_multiplier_ppm"`
+	MultiplierPPM json.Number `json:"multiplier_ppm"`
+	Cleared       bool        `json:"cleared"`
+	Source        string      `json:"source"`
+	CreatedAt     time.Time   `json:"created_at"`
 }
 
 func (s *Service) Notices(ctx context.Context, user int64) ([]Notice, error) {
 	if s.pool == nil {
 		return nil, ErrUnavailable
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id,channel_id,previous_ppm,multiplier_ppm,cleared,source,created_at FROM v3_channelmarket.multiplier_notices WHERE user_id=$1 AND read_at IS NULL ORDER BY id LIMIT 100`, user)
+	rows, err := s.pool.Query(ctx, `SELECT id,channel_id,previous_ppm::text,multiplier_ppm::text,cleared,source,created_at FROM v3_channelmarket.multiplier_notices WHERE user_id=$1 AND read_at IS NULL ORDER BY id LIMIT 100`, user)
 	if err != nil {
 		return nil, err
 	}
@@ -88,9 +89,11 @@ func (s *Service) Notices(ctx context.Context, user int64) ([]Notice, error) {
 	items := []Notice{}
 	for rows.Next() {
 		var n Notice
-		if err = rows.Scan(&n.ID, &n.ChannelID, &n.PreviousPPM, &n.MultiplierPPM, &n.Cleared, &n.Source, &n.CreatedAt); err != nil {
+		var previous, factor string
+		if err = rows.Scan(&n.ID, &n.ChannelID, &previous, &factor, &n.Cleared, &n.Source, &n.CreatedAt); err != nil {
 			return nil, err
 		}
+		n.PreviousPPM, n.MultiplierPPM = json.Number(previous), json.Number(factor)
 		items = append(items, n)
 	}
 	return items, rows.Err()
@@ -111,7 +114,7 @@ func (s *Service) TimeMultipliers(ctx context.Context, a Actor, channel int64) (
 		if _, e := owned(ctx, tx, a, channel); e != nil {
 			return e
 		}
-		rows, e := tx.Query(ctx, `SELECT id,channel_id,starts_at,ends_at,multiplier_ppm,label FROM v3_channelmarket.time_range_multipliers WHERE channel_id=$1 ORDER BY starts_at,id`, channel)
+		rows, e := tx.Query(ctx, `SELECT id,channel_id,starts_at,ends_at,multiplier_ppm::text,label FROM v3_channelmarket.time_range_multipliers WHERE channel_id=$1 ORDER BY starts_at,id`, channel)
 		if e != nil {
 			return e
 		}
@@ -119,12 +122,18 @@ func (s *Service) TimeMultipliers(ctx context.Context, a Actor, channel int64) (
 		for rows.Next() {
 			var m TimeMultiplier
 			var start, end time.Time
-			if e = rows.Scan(&m.ID, &m.ChannelID, &start, &end, &m.MultiplierPPM, &m.Label); e != nil {
+			var factor string
+			if e = rows.Scan(&m.ID, &m.ChannelID, &start, &end, &factor, &m.Label); e != nil {
 				return e
 			}
 			m.Start = start.Unix()
 			m.End = end.Unix()
-			m.Multiplier = json.Number(formatFactor(m.MultiplierPPM))
+			m.MultiplierPPM = json.Number(factor)
+			value, e := exactfactor.Multiplier(factor)
+			if e != nil {
+				return e
+			}
+			m.Multiplier = json.Number(value)
 			items = append(items, m)
 		}
 		return rows.Err()
@@ -135,7 +144,7 @@ func (s *Service) Bargains(ctx context.Context, a Actor) ([]Bargain, error) {
 	if s.pool == nil {
 		return nil, ErrUnavailable
 	}
-	rows, err := s.pool.Query(ctx, `SELECT b.id,b.group_id,b.user_id,b.proposed_ppm,b.reason,b.status FROM v3_channelmarket.bargain_requests b JOIN v3_channelmarket.groups g ON g.id=b.group_id WHERE g.owner_user_id=$1 OR $2 ORDER BY b.created_at DESC LIMIT 1000`, a.UserID, a.Admin)
+	rows, err := s.pool.Query(ctx, `SELECT b.id,b.group_id,b.user_id,b.proposed_ppm::text,b.reason,b.status FROM v3_channelmarket.bargain_requests b JOIN v3_channelmarket.groups g ON g.id=b.group_id WHERE g.owner_user_id=$1 OR $2 ORDER BY b.created_at DESC LIMIT 1000`, a.UserID, a.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -143,10 +152,16 @@ func (s *Service) Bargains(ctx context.Context, a Actor) ([]Bargain, error) {
 	items := []Bargain{}
 	for rows.Next() {
 		var b Bargain
-		if err = rows.Scan(&b.ID, &b.GroupID, &b.UserID, &b.ProposedPPM, &b.Reason, &b.Status); err != nil {
+		var factor string
+		if err = rows.Scan(&b.ID, &b.GroupID, &b.UserID, &factor, &b.Reason, &b.Status); err != nil {
 			return nil, err
 		}
-		b.Proposed = json.Number(formatFactor(b.ProposedPPM))
+		b.ProposedPPM = json.Number(factor)
+		value, e := exactfactor.Multiplier(factor)
+		if e != nil {
+			return nil, e
+		}
+		b.Proposed = json.Number(value)
 		items = append(items, b)
 	}
 	return items, rows.Err()

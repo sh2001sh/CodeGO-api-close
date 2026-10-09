@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/sh2001sh/new-api/v3/internal/billing"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 type accrualBatchPoster interface {
@@ -22,7 +23,10 @@ type accrualGroup struct {
 func (s *Service) AccrueBatchTx(ctx context.Context, tx pgx.Tx, input []SettlementInput) error {
 	channels := make([]int64, 0, len(input))
 	for _, p := range input {
-		if p.RequestID == "" || p.ConsumerUserID <= 0 || p.ChannelID <= 0 || p.ConsumerMicro < 0 || p.GrossMicro < 0 || p.MultiplierPPM < 0 {
+		if p.RequestID == "" || p.ConsumerUserID <= 0 || p.ChannelID <= 0 || p.ConsumerMicro < 0 || p.GrossMicro < 0 {
+			return ErrInvalid
+		}
+		if _, err := exactfactor.Resolve(p.MultiplierPPM, p.MultiplierPPMExact); err != nil {
 			return ErrInvalid
 		}
 		if p.GrossMicro != 0 {
@@ -64,6 +68,11 @@ func (s *Service) accrueKnownGroupsTx(ctx context.Context, tx pgx.Tx, input []Se
 	unique := make([]SettlementInput, 0, len(input))
 	seen := make(map[string]SettlementInput, len(input))
 	for _, p := range input {
+		factor, err := exactfactor.Resolve(p.MultiplierPPM, p.MultiplierPPMExact)
+		if err != nil {
+			return ErrInvalid
+		}
+		p.MultiplierPPM, p.MultiplierPPMExact = 0, factor
 		if p.GrossMicro == 0 || groups[p.ChannelID].owner == 0 {
 			continue
 		}

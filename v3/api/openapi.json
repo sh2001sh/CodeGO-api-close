@@ -46557,12 +46557,14 @@
           },
           "proposed_multiplier": {
             "type": "number",
-            "format": "double",
-            "x-go-type": "json.Number"
+            "x-go-type": "json.Number",
+            "x-codego-exact-decimal": true
           },
           "proposed_ppm": {
-            "type": "integer",
-            "format": "int64"
+            "type": "number",
+            "x-go-type": "json.Number",
+            "x-codego-exact-decimal": true,
+            "description": "Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero."
           },
           "reason": {
             "type": "string"
@@ -47630,12 +47632,16 @@
             "format": "int64"
           },
           "previous_multiplier_ppm": {
-            "type": "integer",
-            "format": "int64"
+            "type": "number",
+            "x-go-type": "json.Number",
+            "x-codego-exact-decimal": true,
+            "description": "Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero."
           },
           "multiplier_ppm": {
-            "type": "integer",
-            "format": "int64"
+            "type": "number",
+            "x-go-type": "json.Number",
+            "x-codego-exact-decimal": true,
+            "description": "Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero."
           },
           "cleared": {
             "type": "boolean"
@@ -48065,12 +48071,14 @@
           },
           "multiplier": {
             "type": "number",
-            "format": "double",
-            "x-go-type": "json.Number"
+            "x-go-type": "json.Number",
+            "x-codego-exact-decimal": true
           },
           "multiplier_ppm": {
-            "type": "integer",
-            "format": "int64"
+            "type": "number",
+            "x-go-type": "json.Number",
+            "x-codego-exact-decimal": true,
+            "description": "Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero."
           },
           "label": {
             "type": "string"
@@ -48291,8 +48299,10 @@
             "format": "int64"
           },
           "multiplier_ppm": {
-            "type": "integer",
-            "format": "int64"
+            "type": "number",
+            "x-go-type": "json.Number",
+            "x-codego-exact-decimal": true,
+            "description": "Exact scaled PPM decimal (multiplier multiplied by 1000000). Preserve decimal precision; a positive fractional PPM is not zero."
           },
           "updated_at": {
             "type": "string",

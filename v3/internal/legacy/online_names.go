@@ -47,6 +47,19 @@ SELECT o.staged,'sequence',s.oid,s.relname::text,a.attname::text AS signature
 ORDER BY 2,5,4`
 
 func onlineRememberObjectNames(ctx context.Context, target pgx.Tx, tables []string) error {
+	remembered, err := onlineReadObjectNames(ctx, target, tables)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(remembered)
+	if err != nil {
+		return err
+	}
+	_, err = target.Exec(ctx, "UPDATE v3_migration_online.run SET object_names=$1 WHERE singleton", raw)
+	return err
+}
+
+func onlineReadObjectNames(ctx context.Context, target pgx.Tx, tables []string) ([]onlineObjectName, error) {
 	var remembered []onlineObjectName
 	for _, table := range tables {
 		if table == "v3_billing.historical_accounts" {
@@ -63,7 +76,7 @@ func onlineRememberObjectNames(ctx context.Context, target pgx.Tx, tables []stri
 		}
 		rows, err := target.Query(ctx, onlineObjectNamesSQL, table, onlineStage(table))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		var originals []onlineObjectName
 		var signatures []string
@@ -74,7 +87,7 @@ func onlineRememberObjectNames(ctx context.Context, target pgx.Tx, tables []stri
 			var signature string
 			if err = rows.Scan(&cloned, &object.Kind, &object.OID, &object.Name, &signature); err != nil {
 				rows.Close()
-				return err
+				return nil, err
 			}
 			object.Table = table
 			key := object.Kind + "\x00" + signature
@@ -87,13 +100,13 @@ func onlineRememberObjectNames(ctx context.Context, target pgx.Tx, tables []stri
 		}
 		rows.Close()
 		if err = rows.Err(); err != nil {
-			return err
+			return nil, err
 		}
 		for i, original := range originals {
 			key := signatures[i]
 			matches := staged[key]
 			if len(matches) == 0 {
-				return fmt.Errorf("legacy: LIKE did not preserve the native %s definition on %s", original.Kind, table)
+				return nil, fmt.Errorf("legacy: LIKE did not preserve the native %s definition on %s", original.Kind, table)
 			}
 			original.OID = matches[0].OID
 			remembered = append(remembered, original)
@@ -101,19 +114,14 @@ func onlineRememberObjectNames(ctx context.Context, target pgx.Tx, tables []stri
 		}
 		for _, matches := range staged {
 			if len(matches) != 0 {
-				return fmt.Errorf("legacy: unexpected staged object definition on %s", table)
+				return nil, fmt.Errorf("legacy: unexpected staged object definition on %s", table)
 			}
 		}
 	}
 	if remembered == nil {
 		remembered = []onlineObjectName{}
 	}
-	raw, err := json.Marshal(remembered)
-	if err != nil {
-		return err
-	}
-	_, err = target.Exec(ctx, "UPDATE v3_migration_online.run SET object_names=$1 WHERE singleton", raw)
-	return err
+	return remembered, nil
 }
 
 func onlineRestoreObjectNames(ctx context.Context, target pgx.Tx) error {

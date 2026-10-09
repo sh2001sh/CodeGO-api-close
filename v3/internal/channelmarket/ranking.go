@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/sh2001sh/new-api/v3/pkg/exactfactor"
 )
 
 func wilson(success, total int64) float64 {
@@ -142,7 +144,7 @@ type autoBuild struct {
 type buildCandidate struct {
 	group    string
 	score    float64
-	factor   int64
+	factor   *big.Rat
 	requests int64
 }
 
@@ -241,7 +243,7 @@ func (s *Service) buildPool(ctx context.Context, user int64, id string, dueOnly 
 // the gateway filters each member again against the actual requested model.
 func scoreBuildCandidatesTx(ctx context.Context, tx pgx.Tx, user int64, build autoBuild, maximum int64, now time.Time) ([]buildCandidate, error) {
 	rows, err := tx.Query(ctx, `SELECT g.id,
-	coalesce(u.multiplier_ppm,least(g.multiplier_ppm,coalesce((SELECT min(w.multiplier_ppm) FROM v3_channelmarket.time_range_multipliers w WHERE w.channel_id=c.id AND w.starts_at<=$2 AND w.ends_at>$2),g.multiplier_ppm))),
+	coalesce(u.multiplier_ppm,least(g.multiplier_ppm,coalesce((SELECT min(w.multiplier_ppm) FROM v3_channelmarket.time_range_multipliers w WHERE w.channel_id=c.id AND w.starts_at<=$2 AND w.ends_at>$2),g.multiplier_ppm)))::text,
 	ARRAY(SELECT model FROM v3_catalog.channel_models WHERE channel_id=c.id ORDER BY model),
 	coalesce(r.wilson_success_rate,0),coalesce(r.cache_hit_rate,0),coalesce(r.request_count,0),coalesce(r.avg_consumer_micro,0)
 	FROM v3_channelmarket.groups g JOIN v3_catalog.channels c ON c.id=g.channel_id
@@ -252,7 +254,7 @@ func scoreBuildCandidatesTx(ctx context.Context, tx pgx.Tx, user int64, build au
 	AND (g.visibility='public' OR g.owner_user_id=$1 OR EXISTS(SELECT 1 FROM v3_channelmarket.group_access a WHERE a.group_id=g.id AND a.user_id=$1))
 	AND NOT EXISTS(SELECT 1 FROM v3_channelmarket.channel_user_blocks b WHERE b.channel_id=c.id AND b.user_id=$1)
 	UNION ALL
-	SELECT 'official:'||g.name,round(g.multiplier*1000000)::bigint,
+	SELECT 'official:'||g.name,(round(g.multiplier*1000000)::bigint)::text,
 	ARRAY(SELECT DISTINCT cm.model FROM v3_catalog.channels c JOIN v3_catalog.channel_groups cg ON cg.channel_id=c.id JOIN v3_catalog.channel_models cm ON cm.channel_id=c.id WHERE cg.group_name=g.name AND c.scope='official' AND c.status='enabled' AND EXISTS(SELECT 1 FROM v3_catalog.channel_credentials k WHERE k.channel_id=c.id AND k.status='enabled') ORDER BY cm.model),
 	0::double precision,0::double precision,0::bigint,0::bigint
 	FROM v3_catalog.groups g WHERE EXISTS(SELECT 1 FROM v3_identity.allowed_groups($1) a WHERE a=g.name)`, user, now)
@@ -263,14 +265,18 @@ func scoreBuildCandidatesTx(ctx context.Context, tx pgx.Tx, user int64, build au
 	var candidates []buildCandidate
 	for rows.Next() {
 		var id string
-		var factor int64
+		var factorText string
 		var models []string
 		var success, cache float64
 		var requests, avg int64
-		if err = rows.Scan(&id, &factor, &models, &success, &cache, &requests, &avg); err != nil {
+		if err = rows.Scan(&id, &factorText, &models, &success, &cache, &requests, &avg); err != nil {
 			return nil, err
 		}
-		if len(models) == 0 || !matchesPoolModels(models, build.Models) || (maximum > 0 && factor > maximum) {
+		factor, err := exactfactor.ParsePPM(factorText)
+		if err != nil {
+			return nil, err
+		}
+		if len(models) == 0 || !matchesPoolModels(models, build.Models) || (maximum > 0 && factor.Cmp(new(big.Rat).SetInt64(maximum)) > 0) {
 			continue
 		}
 		cost := float64(0)
@@ -302,10 +308,18 @@ func matchesPoolModels(models, required []string) bool {
 func selectBuildCandidates(candidates []buildCandidate, build autoBuild) []buildCandidate {
 	sort.Slice(candidates, func(i, j int) bool {
 		if candidates[i].score == candidates[j].score {
-			if candidates[i].factor == candidates[j].factor {
+			left, right := candidates[i].factor, candidates[j].factor
+			if left == nil {
+				left = new(big.Rat)
+			}
+			if right == nil {
+				right = new(big.Rat)
+			}
+			comparison := left.Cmp(right)
+			if comparison == 0 {
 				return candidates[i].group < candidates[j].group
 			}
-			return candidates[i].factor < candidates[j].factor
+			return comparison < 0
 		}
 		return candidates[i].score > candidates[j].score
 	})

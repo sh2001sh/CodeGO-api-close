@@ -146,7 +146,7 @@ func (m *Importer) checkChannelMarket(ctx context.Context, target pgx.Tx, data *
 			}
 		}
 		var groupFactor bool
-		factor, err := cmFactor(c.group.text("multiplier"), false)
+		factor, err := cmPublicFactor(c.group.text("multiplier"))
 		if err != nil {
 			return err
 		}

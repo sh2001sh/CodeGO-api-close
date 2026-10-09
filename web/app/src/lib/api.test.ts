@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { notificationPresentation } from '../features/notifications/presentation'
+import { factorText, ppmFactorText } from './factor'
 
 afterEach(() => vi.unstubAllGlobals())
 const response = (data: string, status = 200) =>
@@ -42,6 +44,102 @@ describe('control API transport', () => {
     const { api, unwrap } = await import('./api')
     const result = unwrap(await api.GET('/api/wallet', { baseUrl }))
     expect(result.balance_micro).toBe('9223372036854775807')
+  })
+  it('keeps fractional historical PPM lossless without changing unrelated decimals', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          response(
+            '{"success":true,"data":[{"previous_multiplier_ppm":131145.14191981,"multiplier_ppm":1e-57,"proposed_ppm":"1e-57","success_rate":99.125,"count":3}]}',
+          ),
+        ),
+      ),
+    )
+    vi.resetModules()
+    const { api, unwrap } = await import('./api')
+    const rows = unwrap(await api.GET('/api/marketplace/multiplier-notices', { baseUrl }))
+    expect(rows[0]).toEqual({
+      previous_multiplier_ppm: '131145.14191981',
+      multiplier_ppm: '1e-57',
+      proposed_ppm: '1e-57',
+      success_rate: 99.125,
+      count: 3,
+    })
+  })
+  it('keeps historical bargain multipliers exact and official catalog decimals numeric', async () => {
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          '{"success":true,"data":[{"proposed_multiplier":1e-63,"multiplier":0.13114514191981}]}',
+        ),
+      )
+      .mockResolvedValueOnce(response('{"success":true,"data":[{"multiplier":0.8}]}'))
+    vi.stubGlobal('fetch', mock)
+    vi.resetModules()
+    const { api, unwrap } = await import('./api')
+    const bargains = unwrap(
+      await api.GET('/api/marketplace/channels/mine/bargain-requests', { baseUrl }),
+    )
+    expect(bargains[0]).toEqual({ proposed_multiplier: '1e-63', multiplier: '0.13114514191981' })
+    const groups = unwrap(await api.GET('/api/catalog/groups', { baseUrl }))
+    expect(groups[0].multiplier).toBe(0.8)
+  })
+  it('preserves retained activity discounts across transport and display', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          response(
+            '{"success":true,"data":[{"multiplier":1e-8,"multiplier_ppm":0.01},{"multiplier":1e-20,"multiplier_ppm":1e-14},{"multiplier":1.234567891234567891e-20,"multiplier_ppm":1.234567891234567891e-14},{"multiplier":0,"multiplier_ppm":0}]}',
+          ),
+        ),
+      ),
+    )
+    vi.resetModules()
+    const { api, unwrap } = await import('./api')
+    const rules = unwrap(
+      await api.GET('/api/marketplace/channels/{id}/time-range-multipliers', {
+        baseUrl,
+        params: { path: { id: 'channel-1' } },
+      }),
+    )
+    expect(rules[0].multiplier).toBe('1e-8')
+    expect(rules[0].multiplier_ppm).toBe('0.01')
+    expect(rules[1].multiplier).toBe('1e-20')
+    expect(rules[1].multiplier_ppm).toBe('1e-14')
+    expect(rules[2].multiplier).toBe('1.234567891234567891e-20')
+    expect(rules[2].multiplier_ppm).toBe('1.234567891234567891e-14')
+    const expectedFactors = [
+      '0.00000001',
+      `0.${'0'.repeat(19)}1`,
+      `0.${'0'.repeat(19)}1234567891234567891`,
+      '0',
+    ]
+    for (const [index, expected] of expectedFactors.entries()) {
+      expect(factorText(rules[index].multiplier)).toBe(expected)
+      expect(ppmFactorText(rules[index].multiplier_ppm)).toBe(expected)
+    }
+  })
+  it('preserves tiny bargain factors embedded in notification data', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          response(
+            '{"success":true,"data":{"items":[{"kind":"bargain_requested","data":{"channel_id":"1","proposed_ppm":1e-57}}]}}',
+          ),
+        ),
+      ),
+    )
+    vi.resetModules()
+    const { api, unwrap } = await import('./api')
+    const notifications = unwrap(await api.GET('/api/notifications', { baseUrl }))
+    expect(notifications.items[0].data?.proposed_ppm).toBe('1e-57')
+    expect(notificationPresentation(notifications.items[0], '—').parameters?.proposed).toBe(
+      `0.${'0'.repeat(62)}1`,
+    )
   })
   it('serializes schema int64 strings as JSON integers and rejects invalid boundaries', async () => {
     const mock = vi.fn((_request: Request) =>

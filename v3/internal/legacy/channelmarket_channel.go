@@ -17,7 +17,11 @@ func (d *channelMarketData) prepareChannel(c *cmChannel) {
 	b.texts(g, "public_slug", "internal_group_name", "owner_display_name", "source_type", "credit_pool_policy")
 	b.put("display_name", g.text("system_display_name"))
 	b.put("source_label", r.text("approved_source_label"))
-	factor := b.factor(g, "multiplier", "multiplier_ppm", false)
+	factor, factorErr := cmPublicFactor(g.text("multiplier"))
+	if factorErr != nil {
+		b.err = factorErr
+	}
+	b.put("multiplier_ppm", factor)
 	b.integer(g, "routing_version", "routing_version")
 	if b.values["routing_version"] == int64(0) {
 		b.put("routing_version", int64(1))

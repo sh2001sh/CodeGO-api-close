@@ -19,8 +19,10 @@ describe('notification transport and action boundaries', () => {
     expect(multiplierText('1234567')).toBe('1.234567')
     expect(multiplierText('1000000')).toBe('1')
     expect(multiplierText('9007199254740993')).toBe('9007199254.740993')
+    expect(multiplierText('131145.14191981')).toBe('0.13114514191981')
+    expect(multiplierText('1e-57')).toBe(`0.${'0'.repeat(62)}1`)
     expect(multiplierText('-100')).toBe('—')
-    expect(multiplierText(1000000)).toBe('—')
+    expect(multiplierText(1000000)).toBe('1')
   })
   it('accepts only valid unread counts from SSE, including zero', () => {
     expect(unreadEvent('{"unread_count":0}')).toBe(0n)

@@ -88,7 +88,7 @@ func (s *Service) transaction(ctx context.Context, fn func(pgx.Tx) error) error 
 
 func owned(ctx context.Context, tx pgx.Tx, a Actor, channel int64) (string, error) {
 	var id string
-	err := tx.QueryRow(ctx, `SELECT id FROM v3_channelmarket.groups WHERE channel_id=$1 AND deleted_at IS NULL AND ($2 OR owner_user_id=$3) FOR UPDATE`, channel, a.Admin, a.UserID).Scan(&id)
+	err := tx.QueryRow(ctx, `SELECT g.id FROM v3_channelmarket.groups g JOIN v3_catalog.channels c ON c.id=g.channel_id WHERE g.channel_id=$1 AND g.deleted_at IS NULL AND g.lifecycle_status<>'deleted' AND ($2 OR g.owner_user_id=$3) FOR UPDATE OF g`, channel, a.Admin, a.UserID).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound
 	}

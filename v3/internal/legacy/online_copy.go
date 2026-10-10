@@ -357,7 +357,7 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 			}
 		}
 	}
-	rows, err := source.Query(ctx, "SELECT id,table_name,row_key FROM v3_migration_capture.events WHERE NOT acked ORDER BY id LIMIT 128")
+	rows, err := source.Query(ctx, "SELECT id,table_name,row_key FROM v3_migration_capture.events WHERE NOT acked ORDER BY id LIMIT 4096")
 	if err != nil {
 		return r, err
 	}

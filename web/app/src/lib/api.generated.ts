@@ -6921,6 +6921,11 @@ export interface components {
             completion_tokens: number | string | bigint;
             /** Format: int64 */
             cached_tokens: number | string | bigint;
+            /**
+             * Format: int64
+             * @description Requests whose historical input token statistic is anomalous. Excluded from prompt_tokens; all charges remain included.
+             */
+            prompt_tokens_unknown_requests: number | string | bigint;
         };
         AuditUsage: {
             /** Format: int64 */

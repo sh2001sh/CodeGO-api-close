@@ -207,7 +207,7 @@ func (p *onlineProjector) project(ctx context.Context, spec onlineSpec, raw json
 		}
 		// Use unique qualified IDs while the baseline is incomplete. The whole
 		// group is normalized after copying and after every affected delta.
-		usage := map[string]any{"id": l.ID, "created_at": historyDate(l.CreatedAt), "account_id": account, "user_id": l.UserID, "key_id": l.KeyID, "channel_id": l.ChannelID, "amount": l.Amount, "prompt_tokens": l.PromptTokens, "completion_tokens": l.CompletionTokens, "cached_tokens": l.CachedTokens, "request_id": historyUsageRequestID(l, true), "model": l.Model, "terminal": "completed"}
+		usage := map[string]any{"id": l.ID, "created_at": historyDate(l.CreatedAt), "account_id": account, "user_id": l.UserID, "key_id": l.KeyID, "channel_id": l.ChannelID, "amount": l.Amount, "prompt_tokens": l.PromptTokens, "completion_tokens": l.CompletionTokens, "cached_tokens": l.CachedTokens, "request_id": historyUsageRequestID(l, true), "model": l.Model, "terminal": "completed", "legacy_prompt_anomaly": l.LegacyPromptAnomaly}
 		return append(out, onlineProjection{"v3_billing", "usage_logs", []string{"created_at", "id"}, usage}), nil
 	case "request_audits":
 		a, decodeErr := decodeHistoryRequestAudit(raw)

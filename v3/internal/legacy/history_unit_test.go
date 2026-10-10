@@ -141,6 +141,40 @@ func TestHistoryLogTypesAndBoundaryValidation(t *testing.T) {
 	}
 }
 
+func TestHistoryLogCacheSubtractionAnomalyPreservesRawEvidence(t *testing.T) {
+	row := map[string]any{"id": 55, "user_id": 7, "type": 2, "quota": 19, "prompt_tokens": -12,
+		"completion_tokens": 978, "use_time": 38, "other": `{"usage_semantic":"anthropic","cache_creation_tokens":9827,"cache_tokens":0}`}
+	raw, _ := json.Marshal(row)
+	l, err := decodeHistoryLog(raw)
+	if err != nil || l.PromptTokens != -12 || l.Amount != 38 || !l.LegacyPromptAnomaly || string(l.Metadata) != row["other"] {
+		t.Fatalf("raw evidence changed: %+v %v", l, err)
+	}
+	for _, mutation := range []map[string]any{
+		{"other": `{}`}, {"other": `{"usage_semantic":"openai","cache_creation_tokens":9827}`},
+		{"other": `{"usage_semantic":"anthropic","cache_creation_tokens":11}`},
+		{"other": `{"usage_semantic":"anthropic","cache_creation_tokens":9223372036854775808}`},
+		{"type": 1}, {"completion_tokens": -1}, {"use_time": -1}, {"quota": -1},
+		{"prompt_tokens": int64(math.MinInt64)},
+	} {
+		copy := map[string]any{}
+		for k, v := range row {
+			copy[k] = v
+		}
+		for k, v := range mutation {
+			copy[k] = v
+		}
+		bad, _ := json.Marshal(copy)
+		if _, err := decodeHistoryLog(bad); err == nil {
+			t.Fatalf("unwitnessed anomaly accepted: %v", mutation)
+		}
+	}
+	row["prompt_tokens"], row["legacy_prompt_anomaly"] = 0, true
+	raw, _ = json.Marshal(row)
+	if l, err := decodeHistoryLog(raw); err != nil || l.LegacyPromptAnomaly {
+		t.Fatalf("source forged anomaly marker: %+v %v", l, err)
+	}
+}
+
 func TestHistoryTimestampsBothLegacyFormats(t *testing.T) {
 	for _, raw := range []string{`1700000000`, `"2023-11-14T22:13:20Z"`} {
 		var tm historyTime

@@ -125,6 +125,9 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 			if l.Type == 2 && !users[l.UserID] {
 				return fmt.Errorf("usage log references a missing user")
 			}
+			if l.LegacyPromptAnomaly {
+				d.counts["legacy_prompt_anomalies"]++
+			}
 			d.addAmount("logs", l.Amount)
 			if l.Type == 2 {
 				d.counts["usage_logs"]++

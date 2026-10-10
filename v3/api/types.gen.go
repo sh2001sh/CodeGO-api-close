@@ -1131,7 +1131,10 @@ type AuditSummary struct {
 	CachedTokens     int64  `json:"cached_tokens"`
 	CompletionTokens int64  `json:"completion_tokens"`
 	PromptTokens     int64  `json:"prompt_tokens"`
-	Requests         int64  `json:"requests"`
+
+	// PromptTokensUnknownRequests Requests whose historical input token statistic is anomalous. Excluded from prompt_tokens; all charges remain included.
+	PromptTokensUnknownRequests int64 `json:"prompt_tokens_unknown_requests"`
+	Requests                    int64 `json:"requests"`
 }
 
 // AuditUsage defines model for AuditUsage.

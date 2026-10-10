@@ -27,7 +27,11 @@ export function LogDetailDrawer(props: { usage: AuditUsage | null; onClose: () =
           <dt>{t('扣费')}</dt>
           <dd>{credits(props.usage.amount)}</dd>
           <dt>{t('输入 token')}</dt>
-          <dd>{displayInt(props.usage.prompt_tokens)}</dd>
+          <dd>
+            {BigInt(props.usage.prompt_tokens) < 0
+              ? `${t('历史统计异常')} (${displayInt(props.usage.prompt_tokens)})`
+              : displayInt(props.usage.prompt_tokens)}
+          </dd>
           <dt>{t('输出 token')}</dt>
           <dd>{displayInt(props.usage.completion_tokens)}</dd>
           <dt>{t('缓存 token')}</dt>

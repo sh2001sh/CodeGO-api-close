@@ -88,11 +88,12 @@ type Page struct {
 }
 
 type Summary struct {
-	Requests         int64         `json:"requests"`
-	Amount           credits.Micro `json:"amount,string"`
-	PromptTokens     int64         `json:"prompt_tokens"`
-	CompletionTokens int64         `json:"completion_tokens"`
-	CachedTokens     int64         `json:"cached_tokens"`
+	Requests                    int64         `json:"requests"`
+	Amount                      credits.Micro `json:"amount,string"`
+	PromptTokens                int64         `json:"prompt_tokens"`
+	CompletionTokens            int64         `json:"completion_tokens"`
+	CachedTokens                int64         `json:"cached_tokens"`
+	PromptTokensUnknownRequests int64         `json:"prompt_tokens_unknown_requests"`
 }
 
 type cursor struct {
@@ -215,8 +216,9 @@ func (s *Service) Summarize(ctx context.Context, p Principal, q Query) (Summary,
 	}
 	var result Summary
 	err = s.pool.QueryRow(ctx, `SELECT count(*), COALESCE(sum(amount),0),
- COALESCE(sum(prompt_tokens),0), COALESCE(sum(completion_tokens),0), COALESCE(sum(cached_tokens),0)
+	COALESCE(sum(prompt_tokens) FILTER (WHERE NOT legacy_prompt_anomaly),0), COALESCE(sum(completion_tokens),0), COALESCE(sum(cached_tokens),0),
+ count(*) FILTER (WHERE legacy_prompt_anomaly)
  FROM v3_billing.usage_logs `+usageWhere, queryArgs(q)...).Scan(&result.Requests, &result.Amount,
-		&result.PromptTokens, &result.CompletionTokens, &result.CachedTokens)
+		&result.PromptTokens, &result.CompletionTokens, &result.CachedTokens, &result.PromptTokensUnknownRequests)
 	return result, err
 }

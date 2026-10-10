@@ -100,6 +100,11 @@ export default function LogsPage() {
           <Stat label="输出 token" value={displayInt(stat.data.completion_tokens)} />
         </StatGrid>
       )}
+      {BigInt(stat.data?.prompt_tokens_unknown_requests ?? 0) > 0 && (
+        <p className="subtle">
+          {t('输入 token 汇总不含历史统计异常的请求；扣费合计包含全部请求。')}
+        </p>
+      )}
       <UsageFilterBar filters={filters} range={range} preset={preset} onChange={applyFilters} />
       {list.isFetching && <Loading />}
       {!list.isFetching && (list.data?.items?.length ?? 0) > 0 && (
@@ -121,7 +126,12 @@ export default function LogsPage() {
         columns={[
           { label: '时间', render: (row) => date(row.created_at) },
           { label: '模型', render: (row) => row.model },
-          { label: '输入 token', render: (row) => displayInt(row.prompt_tokens), numeric: true },
+          {
+            label: '输入 token',
+            render: (row) =>
+              BigInt(row.prompt_tokens) < 0 ? t('历史统计异常') : displayInt(row.prompt_tokens),
+            numeric: true,
+          },
           {
             label: '输出 token',
             render: (row) => displayInt(row.completion_tokens),

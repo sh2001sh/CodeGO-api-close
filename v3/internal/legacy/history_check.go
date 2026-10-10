@@ -161,7 +161,7 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 				return fmt.Errorf("legacy: usage log %d has no target user wallet", l.ID)
 			}
 			request := historyUsageRequestID(l, duplicate)
-			u, err := historyJSONProjection(map[string]any{"id": l.ID, "created_at": historyDate(l.CreatedAt), "account_id": account, "user_id": l.UserID, "key_id": l.KeyID, "channel_id": l.ChannelID, "amount": l.Amount, "prompt_tokens": l.PromptTokens, "completion_tokens": l.CompletionTokens, "cached_tokens": l.CachedTokens, "request_id": request, "model": l.Model, "terminal": "completed"}, nil, nil)
+			u, err := historyJSONProjection(map[string]any{"id": l.ID, "created_at": historyDate(l.CreatedAt), "account_id": account, "user_id": l.UserID, "key_id": l.KeyID, "channel_id": l.ChannelID, "amount": l.Amount, "prompt_tokens": l.PromptTokens, "completion_tokens": l.CompletionTokens, "cached_tokens": l.CachedTokens, "request_id": request, "model": l.Model, "terminal": "completed", "legacy_prompt_anomaly": l.LegacyPromptAnomaly}, nil, nil)
 			if err != nil {
 				return err
 			}

@@ -228,6 +228,11 @@ export default function DashboardPage() {
               </div>
             </dl>
           )}
+          {BigInt(stat.data?.prompt_tokens_unknown_requests ?? 0) > 0 && (
+            <p className="subtle">
+              {t('输入 token 汇总不含历史统计异常的请求；扣费合计包含全部请求。')}
+            </p>
+          )}
           {stat.error && (
             <Button variant="quiet" onClick={() => void stat.refetch()}>
               {t('重试')}

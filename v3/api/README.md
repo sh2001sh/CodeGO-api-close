@@ -226,3 +226,10 @@ favorite enforces market visibility, lifecycle and blocking rules. Revoked
 access leaves a removable bookmark without the group's name, models or price.
 Model favorites are deprecated; their historical records are retained but are
 not converted to groups because a model does not identify one market group.
+
+Historical usage may retain a signed input statistic from a witnessed V2
+Anthropic cache-subtraction anomaly. This is original evidence, not a negative
+measured token count. Usage summaries exclude that input statistic and report
+`prompt_tokens_unknown_requests`; request counts and charges include all rows.
+New usage still rejects negative tokens, and historical import never recalculates
+the original charge.

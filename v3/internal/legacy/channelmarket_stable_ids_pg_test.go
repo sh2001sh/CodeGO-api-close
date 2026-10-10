@@ -71,6 +71,9 @@ func TestOnlineGeneratedChannelMappingSurvivesNewChannels(t *testing.T) {
 		t.Fatal(err)
 	}
 	onlineMigrationSync(t, m, opts)
+	if r, err := m.VerifyOnline(ctx, opts); err != nil || r.Phase != "verified" {
+		t.Fatalf("stable mapping verification=%+v err=%v", r, err)
+	}
 	if _, err := SealOnlineCapture(ctx, source, opts.RunID); err != nil {
 		t.Fatal(err)
 	}

@@ -140,6 +140,30 @@ func historyUsageRequestID(l historyLog, duplicate bool) string {
 	return fmt.Sprintf("v2-log:%d", l.ID)
 }
 
+// The reviewed 107 -> 108 upgrade deliberately excludes later revisions.
+// Preserve that supported path for ordinary logs, but require the new schema
+// for anomalies instead of silently changing its signed evidence.
+func historyPromptAnomalySchema(ctx context.Context, target pgx.Tx) (bool, error) {
+	var columns int
+	err := target.QueryRow(ctx, `SELECT count(*) FROM pg_attribute
+ WHERE attrelid IN ('v3_audit.events'::regclass,'v3_billing.usage_logs'::regclass)
+ AND attname='legacy_prompt_anomaly' AND NOT attisdropped`).Scan(&columns)
+	if err == nil && columns == 1 {
+		err = fmt.Errorf("legacy: historical prompt anomaly schema is incomplete")
+	}
+	return columns == 2, err
+}
+
+func historyPromptAnomalyFields(l historyLog, supported bool, fields map[string]any) error {
+	if !supported {
+		if l.LegacyPromptAnomaly {
+			return fmt.Errorf("legacy: historical prompt anomaly requires schema 110 and a fresh target")
+		}
+		delete(fields, "legacy_prompt_anomaly")
+	}
+	return nil
+}
+
 func (m *Importer) importHistory(ctx context.Context, target pgx.Tx, d *historyData) error {
 	if d == nil {
 		return nil

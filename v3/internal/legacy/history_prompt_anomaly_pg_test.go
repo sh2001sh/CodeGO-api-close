@@ -4,6 +4,7 @@ package legacy
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -50,6 +51,28 @@ func assertPromptAnomaly(t *testing.T, target *pgxpool.Pool, stage bool) {
 		if !found {
 			t.Fatal("API did not preserve anomalous raw evidence")
 		}
+	}
+}
+
+func TestHistoryPromptAnomalyOldTargetRejectedWithoutOpening(t *testing.T) {
+	source, target, crypto := importTestDBBefore(t, "20261010000110_legacy_prompt_anomaly.sql")
+	historyFixture(t, source)
+	seedRetiredHistoryFixture(t, source)
+	m := NewImporter(source, target, crypto)
+	ctx := context.Background()
+	opts := OnlineOptions{RunID: "unsupported-prompt-anomaly", SourceAdmin: source}
+	if _, err := source.Exec(ctx, "UPDATE migration_source.logs SET prompt_tokens=-12,other=$1 WHERE id=51", promptAnomalyMetadata); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.PrepareOnline(ctx, opts, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.CopyOnline(ctx, opts); err == nil || !strings.Contains(err.Error(), "requires schema 110") {
+		t.Fatalf("unsupported schema accepted anomalous evidence: %v", err)
+	}
+	var entries int
+	if err := target.QueryRow(ctx, "SELECT count(*) FROM v3_billing.ledger_entries").Scan(&entries); err != nil || entries != 0 {
+		t.Fatalf("refused copy opened ledger: %d %v", entries, err)
 	}
 }
 

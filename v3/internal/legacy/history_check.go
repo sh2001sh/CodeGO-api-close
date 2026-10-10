@@ -18,6 +18,10 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 		report.Amounts = map[string]string{}
 	}
 	checked := int64(0)
+	promptAnomalySchema, err := historyPromptAnomalySchema(ctx, target)
+	if err != nil {
+		return err
+	}
 	mappings, err := historyAccountTargets(ctx, target)
 	if err != nil {
 		return err
@@ -29,6 +33,12 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 			return err
 		}
 		fields[key] = id
+		if !promptAnomalySchema && (schema+"."+table == "v3_audit.events" || schema+"."+table == "v3_billing.usage_logs") {
+			if marker, exists := fields["legacy_prompt_anomaly"]; exists && marker == true {
+				return fmt.Errorf("legacy: historical prompt anomaly requires schema 110 and a fresh target")
+			}
+			delete(fields, "legacy_prompt_anomaly")
+		}
 		checked++
 		name := schema + "." + table
 		batch := batches[name]

@@ -12,6 +12,10 @@ import (
 )
 
 func loadOnlineProjector(ctx context.Context, source, target pgx.Tx, sources map[string]string) (*onlineProjector, error) {
+	promptAnomalySchema, err := historyPromptAnomalySchema(ctx, target)
+	if err != nil {
+		return nil, err
+	}
 	funding, err := loadFundingDependencies(ctx, source, sources)
 	if err != nil {
 		return nil, err
@@ -23,7 +27,7 @@ func loadOnlineProjector(ctx context.Context, source, target pgx.Tx, sources map
 	if len(market.issues) > 0 {
 		return nil, fmt.Errorf("legacy: online marketplace dependencies invalid: %s", market.issues[0].Detail)
 	}
-	p := &onlineProjector{funding: funding, market: market, target: target, users: map[int64]bool{}, history: &historyData{accounts: map[string]historyAccount{}, retiredAccounts: map[string]bool{}}}
+	p := &onlineProjector{funding: funding, market: market, target: target, promptAnomalySchema: promptAnomalySchema, users: map[int64]bool{}, history: &historyData{accounts: map[string]historyAccount{}, retiredAccounts: map[string]bool{}}}
 	for id := range funding.users {
 		p.users[id] = true
 	}
@@ -194,6 +198,9 @@ func (p *onlineProjector) project(ctx context.Context, spec onlineSpec, raw json
 			return nil, err
 		}
 		fields["metadata"] = l.Metadata
+		if err = historyPromptAnomalyFields(l, p.promptAnomalySchema, fields); err != nil {
+			return nil, err
+		}
 		out := []onlineProjection{{"v3_audit", "events", []string{"id"}, fields}}
 		if l.Type != 2 {
 			return out, nil
@@ -208,6 +215,9 @@ func (p *onlineProjector) project(ctx context.Context, spec onlineSpec, raw json
 		// Use unique qualified IDs while the baseline is incomplete. The whole
 		// group is normalized after copying and after every affected delta.
 		usage := map[string]any{"id": l.ID, "created_at": historyDate(l.CreatedAt), "account_id": account, "user_id": l.UserID, "key_id": l.KeyID, "channel_id": l.ChannelID, "amount": l.Amount, "prompt_tokens": l.PromptTokens, "completion_tokens": l.CompletionTokens, "cached_tokens": l.CachedTokens, "request_id": historyUsageRequestID(l, true), "model": l.Model, "terminal": "completed", "legacy_prompt_anomaly": l.LegacyPromptAnomaly}
+		if err = historyPromptAnomalyFields(l, p.promptAnomalySchema, usage); err != nil {
+			return nil, err
+		}
 		return append(out, onlineProjection{"v3_billing", "usage_logs", []string{"created_at", "id"}, usage}), nil
 	case "request_audits":
 		a, decodeErr := decodeHistoryRequestAudit(raw)

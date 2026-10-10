@@ -36,12 +36,13 @@ type onlineProjection struct {
 }
 
 type onlineProjector struct {
-	funding  *fundingData
-	market   *channelMarketData
-	mappings map[fundingAccountKey]int64
-	history  *historyData
-	users    map[int64]bool
-	target   pgx.Tx
+	funding             *fundingData
+	market              *channelMarketData
+	mappings            map[fundingAccountKey]int64
+	history             *historyData
+	users               map[int64]bool
+	target              pgx.Tx
+	promptAnomalySchema bool
 }
 
 type onlineSpec struct {

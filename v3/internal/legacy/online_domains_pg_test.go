@@ -116,6 +116,98 @@ func TestOnlineDomainAdaptersStageExactProvenanceWithoutMoney(t *testing.T) {
 	stage(projections)
 }
 
+func TestOnlineDomainMixedNullableSettlementDatesPreserveExactFacts(t *testing.T) {
+	source, target, _ := importTestDB(t)
+	ctx := context.Background()
+	if _, err := source.Exec(ctx, `INSERT INTO migration_source.users(id,username,role,status,"group",quota,claude_quota,setting) VALUES(8,'consumer',1,1,'default',0,0,'{}')`); err != nil {
+		t.Fatal(err)
+	}
+	marketSources := seedChannelMarketFixture(t, source)
+	read, err := source.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = read.Rollback(ctx) }()
+	sources, err := discoverSources(ctx, read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, table := range marketSources {
+		sources[name] = table
+	}
+	market, err := loadChannelMarketBase(ctx, read, sources, false)
+	if err != nil || len(market.issues) > 0 {
+		t.Fatalf("market dependency failure %v", err)
+	}
+	p := &onlineProjector{market: market}
+	rows, err := read.Query(ctx, `SELECT to_jsonb(s)||jsonb_build_object('id','mixed-'||n,'request_id','mixed-request-'||n,
+ 'status',CASE n%3 WHEN 0 THEN 'pending' WHEN 1 THEN 'released' ELSE 'reclaimed' END,
+ 'reclaimed_amount',CASE WHEN n%3=2 THEN 95 ELSE 0 END,
+ 'released_at',CASE WHEN n%3=1 THEN '2026-09-30T09:00:00Z' ELSE NULL END,
+ 'reclaimed_at',CASE WHEN n%3=2 THEN '2026-09-30T09:00:00Z' ELSE NULL END)
+ FROM marketplace.settlements s CROSS JOIN generate_series(1,600)n WHERE id='settlement-201' ORDER BY n`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var values []map[string]any
+	for rows.Next() {
+		var raw []byte
+		if err = rows.Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		out, e := p.projectOnlineMarket("settlements", raw)
+		if e != nil {
+			t.Fatal(e)
+		}
+		values = append(values, out[0].Values)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	write, err := target.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = write.Rollback(ctx) }()
+	stage := onlineStage("v3_channelmarket.settlements")
+	if _, err = write.Exec(ctx, "CREATE SCHEMA v3_migration_online; CREATE TABLE "+stage+" (LIKE v3_channelmarket.settlements INCLUDING ALL)"); err != nil {
+		t.Fatal(err)
+	}
+	metrics := onlineMetrics{}
+	if err = onlineInsertRows(ctx, write, "v3_channelmarket.settlements", []string{"id"}, values, metrics); err != nil {
+		t.Fatal(err)
+	}
+	var exact bool
+	if err = write.QueryRow(ctx, "SELECT count(*)=600 AND count(*) FILTER(WHERE released_at IS NOT NULL)=200 AND count(*) FILTER(WHERE reclaimed_at IS NOT NULL)=200 AND bool_and((released_at IS NULL OR released_at='2026-09-30T09:00:00Z') AND (reclaimed_at IS NULL OR reclaimed_at='2026-09-30T09:00:00Z')) AND sum(gross_micro)=120000 AND sum(net_micro)=114000 FROM "+stage).Scan(&exact); err != nil || !exact {
+		t.Fatalf("mixed history changed: %v %v", exact, err)
+	}
+	if metrics["v3_channelmarket.settlements.rows"].Int64() != 600 || metrics["market.pending.7"].Int64() != 38000 {
+		t.Fatalf("mixed history metrics changed: %v", metrics)
+	}
+	if err = write.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	bad := map[string]any{}
+	for field, value := range values[0] {
+		bad[field] = value
+	}
+	bad["id"], bad["request_id"], bad["gross_micro"] = "invalid", "invalid-request", -1
+	rejected, err := target.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = onlineInsertRows(ctx, rejected, "v3_channelmarket.settlements", []string{"id"}, []map[string]any{bad}, onlineMetrics{})
+	_ = rejected.Rollback(ctx)
+	if err == nil {
+		t.Fatal("invalid settlement money accepted")
+	}
+	var native int
+	if err = target.QueryRow(ctx, "SELECT count(*) FROM v3_billing.ledger_entries").Scan(&native); err != nil || native != 0 {
+		t.Fatalf("history staging posted money: %d %v", native, err)
+	}
+}
+
 type onlineDomainNoScanTx struct {
 	pgx.Tx
 	tables []string

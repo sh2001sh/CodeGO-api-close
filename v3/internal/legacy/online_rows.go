@@ -168,7 +168,19 @@ func onlineInsertRows(ctx context.Context, target pgx.Tx, table string, keys []s
 		if len(encoded)+2 > onlineRowMaxBytes {
 			return fmt.Errorf("legacy: online encoded projection exceeds 64 MiB limit")
 		}
-		if i > start && (i-start == exactBulkRows || bytes+len(encoded)+1 > exactBulkBytes) {
+		// Nullable historical dates may be omitted. Keep each typed recordset
+		// homogeneous, as the offline market stream already does; do not fill
+		// absent fields with invented dates or replace PostgreSQL defaults.
+		sameColumns := len(values[start]) == len(row)
+		if sameColumns && i > start {
+			for column := range values[start] {
+				if _, exists := row[column]; !exists {
+					sameColumns = false
+					break
+				}
+			}
+		}
+		if i > start && (!sameColumns || i-start == exactBulkRows || bytes+len(encoded)+1 > exactBulkBytes) {
 			if err = onlineInsertBatchRows(ctx, target, table, keys, values[start:i], encodedRows, metrics); err != nil {
 				return err
 			}

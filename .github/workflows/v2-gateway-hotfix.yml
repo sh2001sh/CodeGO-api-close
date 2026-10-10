@@ -65,8 +65,8 @@ jobs:
           TEST_LEDGER_POSTGRES_DSN: postgres://fixture:fixture-ci-postgres@127.0.0.1:5432/billing_test?sslmode=disable
         run: |
           set -euo pipefail
-          go test -count=1 -timeout=5m ./internal/billing/app ./internal/billing/domain ./internal/gateway/transport/http ./internal/platform/transport/http
-          go test -race -count=1 -timeout=3m ./internal/billing/app -run 'Sequence|BillingSession|WalletBilling|PreConsumeRelayBilling|Canceled|Cancelled|Cancellation'
+          go test -count=1 -timeout=5m ./internal/billing/app ./internal/billing/domain ./internal/gateway/transport/http ./internal/platform/transport/http ./internal/platform/logger
+          go test -race -count=1 -timeout=3m ./internal/billing/app ./internal/platform/logger -run 'Sequence|BillingSession|WalletBilling|PreConsumeRelayBilling|Canceled|Cancelled|Cancellation|LogHelper'
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io

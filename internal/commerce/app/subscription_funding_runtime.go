@@ -15,23 +15,30 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func reserveSubscriptionLedgerTx(tx *gorm.DB, sub *commerceschema.UserSubscription, record *commerceschema.SubscriptionPreConsumeRecord) (*billingschema.BillingReservation, error) {
+// lockedLedgerAccount is reusable only after this transaction confirmed ledger
+// entries and locked its canonical snapshot; nil retains the bootstrap path.
+func reserveSubscriptionLedgerTx(tx *gorm.DB, sub *commerceschema.UserSubscription, record *commerceschema.SubscriptionPreConsumeRecord, lockedLedgerAccount *billingschema.BillingAccount) (*billingschema.BillingReservation, error) {
 	if sub == nil || record == nil || sub.AmountTotal <= 0 {
 		return nil, nil
 	}
-	account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
-		AccountType: "subscription",
-		OwnerType:   "user_subscription",
-		OwnerID:     int64(sub.Id),
-		QuotaUnit:   "quota",
-	})
-	if err != nil {
-		return nil, err
-	}
+	account := lockedLedgerAccount
+	ledgerBacked := account != nil
+	if account == nil {
+		var err error
+		account, err = billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
+			AccountType: "subscription",
+			OwnerType:   "user_subscription",
+			OwnerID:     int64(sub.Id),
+			QuotaUnit:   "quota",
+		})
+		if err != nil {
+			return nil, err
+		}
 
-	ledgerBacked, err := subscriptionLedgerHasEntriesTx(tx, account.AccountID)
-	if err != nil {
-		return nil, err
+		ledgerBacked, err = subscriptionLedgerHasEntriesTx(tx, account.AccountID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if !ledgerBacked {
 		available := sub.AmountTotal - sub.AmountUsed

@@ -190,32 +190,33 @@ func lockUserSubscriptionRecordTx(tx *gorm.DB, userSubscriptionID int) (*commerc
 // for subscriptions that have completed their one-time ledger bootstrap. A
 // zero-entry account is intentionally treated as legacy projection-backed until
 // its first successful reservation creates the bootstrap credit.
-func subscriptionLedgerAvailableQuotaTx(tx *gorm.DB, sub *commerceschema.UserSubscription) (int64, bool, error) {
+// A non-nil account is returned only after locking its canonical snapshot in tx.
+func subscriptionLedgerAvailableQuotaTx(tx *gorm.DB, sub *commerceschema.UserSubscription) (int64, bool, *billingschema.BillingAccount, error) {
 	if tx == nil || sub == nil || sub.Id <= 0 || sub.AmountTotal <= 0 {
-		return 0, false, nil
+		return 0, false, nil, nil
 	}
 
 	var account billingschema.BillingAccount
 	err := tx.Where("account_type = ? AND owner_type = ? AND owner_id = ? AND quota_unit = ?",
 		"subscription", "user_subscription", sub.Id, "quota").First(&account).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, false, nil
+		return 0, false, nil, nil
 	}
 	if err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 
 	ledgerBacked, err := subscriptionLedgerHasEntriesTx(tx, account.AccountID)
 	if err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 	if !ledgerBacked {
-		return 0, false, nil
+		return 0, false, nil, nil
 	}
 
 	var snapshot billingschema.BillingBalanceSnapshot
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("account_id = ?", account.AccountID).First(&snapshot).Error; err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 	if snapshot.ReservedBalance == 0 {
 		targetUsed := sub.AmountTotal - snapshot.AvailableBalance
@@ -227,5 +228,5 @@ func subscriptionLedgerAvailableQuotaTx(tx *gorm.DB, sub *commerceschema.UserSub
 		}
 		sub.AmountUsed = targetUsed
 	}
-	return snapshot.AvailableBalance, true, nil
+	return snapshot.AvailableBalance, true, &account, nil
 }

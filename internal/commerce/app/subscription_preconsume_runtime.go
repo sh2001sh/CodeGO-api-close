@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/store"
@@ -116,7 +117,7 @@ func preConsumeSubscriptionCandidate(requestID string, userID int, modelName str
 		if err := maybeResetUserSubscriptionWithPlanTx(tx, subscription, plan, now); err != nil {
 			return err
 		}
-		canPreConsume, err := subscriptionCanPreConsume(tx, subscription, plan, modelName, amount)
+		canPreConsume, lockedLedgerAccount, err := subscriptionCanPreConsume(tx, subscription, plan, modelName, amount)
 		if err != nil {
 			return err
 		}
@@ -131,7 +132,7 @@ func preConsumeSubscriptionCandidate(requestID string, userID int, modelName str
 		if err := tx.Create(record).Error; err != nil {
 			return err
 		}
-		reservation, err := reserveSubscriptionLedgerTx(tx, subscription, record)
+		reservation, err := reserveSubscriptionLedgerTx(tx, subscription, record, lockedLedgerAccount)
 		if err != nil {
 			return err
 		}
@@ -165,28 +166,30 @@ func preConsumeSubscriptionCandidate(requestID string, userID int, modelName str
 	return result, true, nil
 }
 
-func subscriptionCanPreConsume(tx *gorm.DB, subscription *commerceschema.UserSubscription, plan *commerceschema.SubscriptionPlan, modelName string, amount int64) (bool, error) {
+func subscriptionCanPreConsume(tx *gorm.DB, subscription *commerceschema.UserSubscription, plan *commerceschema.SubscriptionPlan, modelName string, amount int64) (bool, *billingschema.BillingAccount, error) {
+	var lockedLedgerAccount *billingschema.BillingAccount
 	if subscription.AmountTotal > 0 {
-		available, ledgerBacked, err := subscriptionLedgerAvailableQuotaTx(tx, subscription)
+		available, ledgerBacked, account, err := subscriptionLedgerAvailableQuotaTx(tx, subscription)
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 		if (ledgerBacked && available < amount) || (!ledgerBacked && subscription.AmountTotal-subscription.AmountUsed < amount) {
-			return false, nil
+			return false, nil, nil
 		}
+		lockedLedgerAccount = account
 	}
 	periodAmount := getSubscriptionPeriodAmount(plan, subscription)
 	if !usesLegacySubscriptionPeriodicQuota(plan, subscription) && periodAmount > 0 && periodAmount-subscription.PeriodUsed < amount {
-		return false, nil
+		return false, nil, nil
 	}
 	if modelName == "" {
-		return true, nil
+		return true, lockedLedgerAccount, nil
 	}
 	modelLimit, hasLimit := subscription.GetModelLimitsMap()[modelName]
 	if !hasLimit || modelLimit <= 0 {
-		return true, nil
+		return true, lockedLedgerAccount, nil
 	}
-	return subscription.GetModelUsageMap()[modelName]+amount <= modelLimit, nil
+	return subscription.GetModelUsageMap()[modelName]+amount <= modelLimit, lockedLedgerAccount, nil
 }
 
 func subscriptionPreConsumeResultFromRecord(tx *gorm.DB, record *commerceschema.SubscriptionPreConsumeRecord) (*commercedomain.SubscriptionPreConsumeResult, error) {

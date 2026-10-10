@@ -87,10 +87,29 @@ test('narrow English header fits after fonts load and account actions remain in 
   ).toBeVisible()
   await page.getByRole('button', { name: 'Close site navigation', exact: true }).click()
   await page.unroute('**/api/user/self')
-  await page.reload()
-  await page.evaluate(() => document.fonts.ready)
+  let resumeSession!: () => void
+  const sessionGate = new Promise<void>((resolve) => {
+    resumeSession = resolve
+  })
+  await page.route('**/api/user/self', async (route) => {
+    await sessionGate
+    await route.fallback()
+  })
+  try {
+    await page.reload()
+    await page.evaluate(() => document.fonts.ready)
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Choose a model. Start building.' }),
+    ).toBeVisible()
+    await expect(page.locator('.account-placeholder')).toHaveAttribute('aria-busy', 'true')
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true)
+  } finally {
+    resumeSession()
+  }
   await expect(
-    page.getByRole('heading', { level: 1, name: 'Choose a model. Start building.' }),
+    page.locator('.topbar').getByRole('button', { name: 'Notifications', exact: true }),
   ).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,

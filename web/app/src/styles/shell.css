@@ -741,7 +741,8 @@
 }
 @media (max-width: 640px) {
   /* Account actions remain in the public drawer; keep room for search, community and preferences. */
-  .site > .topbar .topbar-actions > .button {
+  .site > .topbar .topbar-actions > .button,
+  .site > .topbar .topbar-actions > .account-placeholder {
     display: none;
   }
   .topbar .balance-chip {

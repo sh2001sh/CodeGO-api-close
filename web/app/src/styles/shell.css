@@ -741,8 +741,14 @@
 }
 @media (max-width: 640px) {
   /* Account actions remain in the public drawer; keep room for search, community and preferences. */
-  .site > .topbar .topbar-actions > .button,
+  .site > .topbar .topbar-actions > .button {
+    display: none;
+  }
   .site > .topbar .topbar-actions > .account-placeholder {
+    inline-size: 44px;
+    min-block-size: 44px;
+  }
+  .site > .topbar:has(.account-placeholder) .brand-name {
     display: none;
   }
   .topbar .balance-chip {

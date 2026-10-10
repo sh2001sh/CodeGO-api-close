@@ -71,51 +71,54 @@ test('resources navigation is keyboard accessible on desktop and reachable in th
   await expect(community).toHaveAttribute('rel', 'noopener noreferrer')
 })
 
-test('narrow English header fits after fonts load and account actions remain in the drawer', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 375, height: 812 })
-  await page.goto('/')
-  await selectLanguage(page, 'English')
-  await page.evaluate(() => document.fonts.ready)
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-    true,
-  )
-  await page.getByRole('button', { name: 'Open site navigation', exact: true }).click()
-  await expect(
-    page.getByRole('dialog').getByRole('link', { name: 'Sign in', exact: true }),
-  ).toBeVisible()
-  await page.getByRole('button', { name: 'Close site navigation', exact: true }).click()
-  await page.unroute('**/api/user/self')
-  let resumeSession!: () => void
-  const sessionGate = new Promise<void>((resolve) => {
-    resumeSession = resolve
-  })
-  await page.route('**/api/user/self', async (route) => {
-    await sessionGate
-    await route.fallback()
-  })
-  try {
-    await page.reload()
+for (const width of [375, 390]) {
+  test(`narrow English ${width}px header fits after fonts load and account actions remain in the drawer`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 812 })
+    await page.goto('/')
+    await selectLanguage(page, 'English')
     await page.evaluate(() => document.fonts.ready)
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Choose a model. Start building.' }),
-    ).toBeVisible()
-    await expect(page.locator('.account-placeholder')).toHaveAttribute('aria-busy', 'true')
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true)
-  } finally {
-    resumeSession()
-  }
-  await expect(
-    page.locator('.topbar').getByRole('button', { name: 'Notifications', exact: true }),
-  ).toBeVisible()
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-    true,
-  )
-  await page.getByRole('button', { name: 'Open site navigation', exact: true }).click()
-  await expect(
-    page.getByRole('dialog').getByRole('link', { name: 'Open console', exact: true }),
-  ).toBeVisible()
-})
+    await page.getByRole('button', { name: 'Open site navigation', exact: true }).click()
+    await expect(
+      page.getByRole('dialog').getByRole('link', { name: 'Sign in', exact: true }),
+    ).toBeVisible()
+    await page.getByRole('button', { name: 'Close site navigation', exact: true }).click()
+    await page.unroute('**/api/user/self')
+    let resumeSession!: () => void
+    const sessionGate = new Promise<void>((resolve) => {
+      resumeSession = resolve
+    })
+    await page.route('**/api/user/self', async (route) => {
+      await sessionGate
+      await route.fallback()
+    })
+    try {
+      await page.reload()
+      await page.evaluate(() => document.fonts.ready)
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Choose a model. Start building.' }),
+      ).toBeVisible()
+      await expect(page.locator('.account-placeholder')).toBeVisible()
+      await expect(page.locator('.account-placeholder')).toHaveAttribute('aria-busy', 'true')
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true)
+    } finally {
+      resumeSession()
+    }
+    await expect(
+      page.locator('.topbar').getByRole('button', { name: 'Notifications', exact: true }),
+    ).toBeVisible()
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true)
+    await page.getByRole('button', { name: 'Open site navigation', exact: true }).click()
+    await expect(
+      page.getByRole('dialog').getByRole('link', { name: 'Open console', exact: true }),
+    ).toBeVisible()
+  })
+}

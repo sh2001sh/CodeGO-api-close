@@ -334,6 +334,10 @@ func createReservationTx(tx *gorm.DB, params CreateReservationParams) (billingsc
 		return *existing, nil
 	}
 
+	if platformdb.UsingPostgreSQL && tx.Dialector.Name() == "postgres" {
+		return createReservationPostgresTx(tx, params)
+	}
+
 	snapshot, err := ensureAndLockBalanceSnapshot(tx, params.AccountID)
 	if err != nil {
 		return reservation, err
@@ -447,6 +451,10 @@ func releaseReservationTx(tx *gorm.DB, params ReleaseReservationParams) (billing
 			return reservation, err
 		}
 		return *current, nil
+	}
+
+	if platformdb.UsingPostgreSQL && tx.Dialector.Name() == "postgres" {
+		return releaseReservationPostgresTx(tx, current, params)
 	}
 
 	snapshot, err := ensureAndLockBalanceSnapshot(tx, current.AccountID)

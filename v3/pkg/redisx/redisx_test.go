@@ -30,7 +30,7 @@ func TestCommandReadHonorsContextDeadlineAfterAuthenticatedConnect(t *testing.T)
 			serverErrors <- err
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		reader := bufio.NewReader(conn)
 		for {
 			command, err := readRESPCommand(reader)

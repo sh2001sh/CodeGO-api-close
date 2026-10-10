@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -416,76 +415,71 @@ func (tracer *onlineCopyEndToEndTracer) TraceQueryEnd(ctx context.Context, _ *pg
 
 func TestOnlineCopyEndToEndPageComparison(t *testing.T) {
 	ctx := context.Background()
+	// Narrow 8192-row coverage above proves 4096-row pages. Here each width
+	// needs one full copy/check crossing projection and (for wide rows) byte
+	// boundaries, rather than repeated throughput trials under the race detector.
+	const extraRows = 1025
 	for _, width := range []int{3 << 10, 8 << 10, 20 << 10} {
-		var elapsed []time.Duration
-		for trial := 1; trial <= 3; trial++ {
-			t.Run(fmt.Sprintf("%d_bytes_trial_%d", width, trial), func(t *testing.T) {
-				m, source, target, opts := onlineMigrationFixture(t, false)
-				if _, err := source.Exec(ctx, `INSERT INTO migration_source.logs
+		t.Run(fmt.Sprintf("%d_bytes", width), func(t *testing.T) {
+			m, source, target, opts := onlineMigrationFixture(t, false)
+			if _, err := source.Exec(ctx, `INSERT INTO migration_source.logs
  SELECT 10000+g,7,1700010000+g,2,repeat('w',$1),'alice','key','chat-model',1,1,1,0,false,13,11,'default','','copy-e2e-'||g,'','{}'
- FROM generate_series(1,8192)g`, width); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := m.PrepareOnline(ctx, opts, true); err != nil {
-					t.Fatal(err)
-				}
-				var received atomic.Int64
-				readTrace := &onlineCopyEndToEndTracer{source: true}
-				writeTrace := &onlineCopyEndToEndTracer{}
-				measuredPool := func(original *pgxpool.Pool, trace *onlineCopyEndToEndTracer) *pgxpool.Pool {
-					config := original.Config().Copy()
-					config.MaxConns = 1
-					config.ConnConfig.Tracer = trace
-					if trace.source {
-						dial := config.ConnConfig.DialFunc
-						config.ConnConfig.DialFunc = func(ctx context.Context, network, address string) (net.Conn, error) {
-							conn, err := dial(ctx, network, address)
-							if err != nil {
-								return nil, err
-							}
-							return &onlineCopyWireConn{Conn: conn, bytes: &received}, nil
+ FROM generate_series(1,$2)g`, width, extraRows); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := m.PrepareOnline(ctx, opts, true); err != nil {
+				t.Fatal(err)
+			}
+			var received atomic.Int64
+			readTrace := &onlineCopyEndToEndTracer{source: true}
+			writeTrace := &onlineCopyEndToEndTracer{}
+			measuredPool := func(original *pgxpool.Pool, trace *onlineCopyEndToEndTracer) *pgxpool.Pool {
+				config := original.Config().Copy()
+				config.MaxConns = 1
+				config.ConnConfig.Tracer = trace
+				if trace.source {
+					dial := config.ConnConfig.DialFunc
+					config.ConnConfig.DialFunc = func(ctx context.Context, network, address string) (net.Conn, error) {
+						conn, err := dial(ctx, network, address)
+						if err != nil {
+							return nil, err
 						}
+						return &onlineCopyWireConn{Conn: conn, bytes: &received}, nil
 					}
-					pool, err := pgxpool.NewWithConfig(ctx, config)
-					if err != nil {
-						t.Fatal(err)
-					}
-					t.Cleanup(pool.Close)
-					if err := pool.Ping(ctx); err != nil {
-						t.Fatal(err)
-					}
-					return pool
 				}
-				clone := *m
-				clone.source, clone.pool = measuredPool(source, readTrace), measuredPool(target, writeTrace)
-				received.Store(0)
-				started := time.Now()
-				if report, err := clone.CopyOnline(ctx, opts); err != nil || report.Phase != "copied" || report.Tables["logs"] != 8196 {
-					t.Fatalf("copy report=%+v err=%v", report, err)
-				}
-				duration := time.Since(started)
-				elapsed = append(elapsed, duration)
-				var count, amount, mismatches int64
-				query := "SELECT count(*),sum(amount),(SELECT count(*) FROM " + onlineStage("v3_audit.events") + " WHERE id>10000 AND content<>repeat('w',$1)) FROM " + onlineStage("v3_billing.usage_logs") + " WHERE id>10000"
-				if err := target.QueryRow(ctx, query, width).Scan(&count, &amount, &mismatches); err != nil || count != 8192 || amount != 16384 || mismatches != 0 {
-					t.Fatalf("projection count=%d amount=%d mismatch=%d err=%v", count, amount, mismatches, err)
-				}
-				var cursor, copied int64
-				var complete bool
-				if err := target.QueryRow(ctx, "SELECT (cursor->>'id')::bigint,copied,complete FROM v3_migration_online.progress WHERE name='logs'").Scan(&cursor, &copied, &complete); err != nil || cursor != 18192 || copied != 8196 || !complete || writeTrace.pendingLogCommit || writeTrace.invalidInsert || writeTrace.insertRows != 8196 {
-					t.Fatalf("cursor=%d copied=%d complete=%t tracer=%+v err=%v", cursor, copied, complete, writeTrace, err)
-				}
-				if _, err := m.VerifyOnline(ctx, opts); err != nil {
+				pool, err := pgxpool.NewWithConfig(ctx, config)
+				if err != nil {
 					t.Fatal(err)
 				}
-				onlineRecoveryAssertNoMoney(t, target)
-				t.Logf("copy_variant=%s payload_bytes=%d trial=%d rows=8196 log_pages=%d max_page_rows=%d target_commits=%d event_insert_batches=%d server_rows=%d source_wire_bytes=%d elapsed=%s rows_per_second=%.0f", os.Getenv("COPY_VARIANT"), width, trial, writeTrace.pages, writeTrace.maxPageRows, writeTrace.commits, writeTrace.inserts, readTrace.serverRows, received.Load(), duration, 8196/duration.Seconds())
-			})
-		}
-		if len(elapsed) != 3 {
-			t.Fatal("incomplete copy comparison")
-		}
-		sort.Slice(elapsed, func(i, j int) bool { return elapsed[i] < elapsed[j] })
-		t.Logf("copy_variant=%s payload_bytes=%d median_copy_elapsed=%s median_rows_per_second=%.0f trials=3", os.Getenv("COPY_VARIANT"), width, elapsed[1], 8196/elapsed[1].Seconds())
+				t.Cleanup(pool.Close)
+				if err := pool.Ping(ctx); err != nil {
+					t.Fatal(err)
+				}
+				return pool
+			}
+			clone := *m
+			clone.source, clone.pool = measuredPool(source, readTrace), measuredPool(target, writeTrace)
+			received.Store(0)
+			started := time.Now()
+			if report, err := clone.CopyOnline(ctx, opts); err != nil || report.Phase != "copied" || report.Tables["logs"] != extraRows+4 {
+				t.Fatalf("copy report=%+v err=%v", report, err)
+			}
+			duration := time.Since(started)
+			var count, amount, mismatches int64
+			query := "SELECT count(*),sum(amount),(SELECT count(*) FROM " + onlineStage("v3_audit.events") + " WHERE id>10000 AND content<>repeat('w',$1)) FROM " + onlineStage("v3_billing.usage_logs") + " WHERE id>10000"
+			if err := target.QueryRow(ctx, query, width).Scan(&count, &amount, &mismatches); err != nil || count != extraRows || amount != extraRows*2 || mismatches != 0 {
+				t.Fatalf("projection count=%d amount=%d mismatch=%d err=%v", count, amount, mismatches, err)
+			}
+			var cursor, copied int64
+			var complete bool
+			if err := target.QueryRow(ctx, "SELECT (cursor->>'id')::bigint,copied,complete FROM v3_migration_online.progress WHERE name='logs'").Scan(&cursor, &copied, &complete); err != nil || cursor != 10000+extraRows || copied != extraRows+4 || !complete || writeTrace.pendingLogCommit || writeTrace.invalidInsert || writeTrace.insertRows != extraRows+4 {
+				t.Fatalf("cursor=%d copied=%d complete=%t tracer=%+v err=%v", cursor, copied, complete, writeTrace, err)
+			}
+			if _, err := m.VerifyOnline(ctx, opts); err != nil {
+				t.Fatal(err)
+			}
+			onlineRecoveryAssertNoMoney(t, target)
+			t.Logf("copy_variant=%s payload_bytes=%d rows=%d log_pages=%d max_page_rows=%d target_commits=%d event_insert_batches=%d server_rows=%d source_wire_bytes=%d elapsed=%s rows_per_second=%.0f", os.Getenv("COPY_VARIANT"), width, extraRows+4, writeTrace.pages, writeTrace.maxPageRows, writeTrace.commits, writeTrace.inserts, readTrace.serverRows, received.Load(), duration, float64(extraRows+4)/duration.Seconds())
+		})
 	}
 }

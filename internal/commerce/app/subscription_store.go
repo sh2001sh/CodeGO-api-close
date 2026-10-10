@@ -92,6 +92,15 @@ func getSubscriptionPlanRecordTx(tx *gorm.DB, planID int) (*commerceschema.Subsc
 	if planID <= 0 {
 		return nil, errors.New("invalid plan id")
 	}
+	if tx != nil {
+		// A transaction must read its own snapshot and must not publish
+		// uncommitted plan changes or wait for Redis while holding row locks.
+		plan := &commerceschema.SubscriptionPlan{}
+		if err := tx.Where("id = ?", planID).First(plan).Error; err != nil {
+			return nil, err
+		}
+		return plan, nil
+	}
 
 	key := subscriptionPlanCacheKey(planID)
 	if key != "" {
@@ -101,11 +110,7 @@ func getSubscriptionPlanRecordTx(tx *gorm.DB, planID int) (*commerceschema.Subsc
 	}
 
 	plan := &commerceschema.SubscriptionPlan{}
-	query := platformdb.DB
-	if tx != nil {
-		query = tx
-	}
-	if err := query.Where("id = ?", planID).First(plan).Error; err != nil {
+	if err := platformdb.DB.Where("id = ?", planID).First(plan).Error; err != nil {
 		return nil, err
 	}
 	if key != "" {

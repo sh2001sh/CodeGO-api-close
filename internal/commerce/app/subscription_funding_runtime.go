@@ -83,7 +83,10 @@ func ReserveAdditionalSubscriptionQuota(requestID string, subscriptionID int, mo
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", subscriptionID).First(sub).Error; err != nil {
 			return err
 		}
-		now := commercestore.GetDBTimestamp()
+		now, err := commercestore.GetDBTimestampTx(tx)
+		if err != nil {
+			return err
+		}
 		if sub.Status != "active" || sub.EndTime <= now {
 			return errors.New("subscription is no longer active")
 		}

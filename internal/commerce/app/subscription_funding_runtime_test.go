@@ -1,6 +1,9 @@
 package app
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
@@ -9,9 +12,69 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestReserveAdditionalSubscriptionQuotaUsesTransactionTime(t *testing.T) {
+	for _, failTimeQuery := range []bool{false, true} {
+		t.Run(fmt.Sprintf("timeQueryFails=%t", failTimeQuery), func(t *testing.T) {
+			db := setupRedemptionTestDB(t)
+			plan := insertSubscriptionResetAppTestPlan(t, 9981, 0, 1_000)
+			sub := &commerceschema.UserSubscription{
+				Id: 9982, UserId: 9980, PlanId: plan.Id, AmountTotal: 1_000,
+				StartTime: time.Now().Add(-time.Hour).Unix(), EndTime: time.Now().Add(time.Hour).Unix(), Status: "active",
+			}
+			require.NoError(t, db.Create(sub).Error)
+			account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{
+				AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(sub.Id), QuotaUnit: "quota",
+			})
+			require.NoError(t, err)
+			_, err = billingdomain.CreditAccount(billingdomain.CreditAccountParams{
+				AccountID: account.AccountID, Amount: 1_000, IdempotencyKey: "additional-time-fixture", ReasonCode: "test",
+			})
+			require.NoError(t, err)
+			timeQueryErr := errors.New("database time unavailable")
+			if failTimeQuery {
+				require.NoError(t, db.Callback().Row().Before("gorm:row").Register("test:reject_time_query", func(tx *gorm.DB) {
+					if strings.Contains(tx.Statement.SQL.String(), "strftime") {
+						tx.AddError(timeQueryErr)
+					}
+				}))
+				t.Cleanup(func() { _ = db.Callback().Row().Remove("test:reject_time_query") })
+			}
+			sqlDB, err := db.DB()
+			require.NoError(t, err)
+			sqlDB.SetMaxOpenConns(1)
+			waitsBefore := sqlDB.Stats().WaitCount
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			platformdb.DB = db.WithContext(ctx)
+			err = ReserveAdditionalSubscriptionQuota("additional-time-request", sub.Id, "gpt-5", 100)
+			if failTimeQuery {
+				require.ErrorIs(t, err, timeQueryErr)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, waitsBefore, sqlDB.Stats().WaitCount, "the transaction must not borrow a second SQL connection")
+			var reloaded commerceschema.UserSubscription
+			require.NoError(t, db.First(&reloaded, sub.Id).Error)
+			var snapshot billingschema.BillingBalanceSnapshot
+			require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
+			if failTimeQuery {
+				assert.Zero(t, reloaded.AmountUsed)
+				assert.EqualValues(t, 1_000, snapshot.AvailableBalance)
+				assert.Zero(t, snapshot.ReservedBalance)
+			} else {
+				assert.EqualValues(t, 100, reloaded.AmountUsed)
+				assert.EqualValues(t, 900, snapshot.AvailableBalance)
+				assert.EqualValues(t, 100, snapshot.ReservedBalance)
+			}
+		})
+	}
+}
 
 func ensureSubscriptionPreConsumeRecordSchema(t *testing.T) {
 	t.Helper()

@@ -1,12 +1,16 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	"github.com/sh2001sh/new-api/internal/platform/cachex"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/assert"
@@ -15,6 +19,77 @@ import (
 	"testing"
 	"time"
 )
+
+func TestSubscriptionPlanTransactionReadsOwnChangesWithoutCachePollution(t *testing.T) {
+	for _, cached := range []bool{true, false} {
+		t.Run(fmt.Sprintf("cached=%t", cached), func(t *testing.T) {
+			db := setupRedemptionTestDB(t)
+			plan := insertSubscriptionResetAppTestPlan(t, 8652, 0, 1_000)
+			originalTitle := plan.Title
+			cache := getSubscriptionPlanCache()
+			key := subscriptionPlanCacheKey(plan.Id)
+			_, err := cache.DeleteMany([]string{key})
+			require.NoError(t, err)
+			t.Cleanup(func() { _, _ = cache.DeleteMany([]string{key}) })
+			if cached {
+				require.NoError(t, cache.SetWithTTL(key, *plan, time.Minute))
+			}
+			rollback := errors.New("roll back plan edit")
+			err = db.Transaction(func(tx *gorm.DB) error {
+				if err := tx.Model(plan).Update("title", "uncommitted plan").Error; err != nil {
+					return err
+				}
+				loaded, err := getSubscriptionPlanRecordTx(tx, plan.Id)
+				require.NoError(t, err)
+				assert.Equal(t, "uncommitted plan", loaded.Title)
+				return rollback
+			})
+			require.ErrorIs(t, err, rollback)
+			loaded, err := getSubscriptionPlanRecordTx(nil, plan.Id)
+			require.NoError(t, err)
+			assert.Equal(t, originalTitle, loaded.Title)
+		})
+	}
+}
+
+type subscriptionPlanRedisFailureHook struct{ requests int }
+
+func (h *subscriptionPlanRedisFailureHook) BeforeProcess(ctx context.Context, _ redis.Cmder) (context.Context, error) {
+	h.requests++
+	return ctx, errors.New("Redis must not run in the transaction")
+}
+func (*subscriptionPlanRedisFailureHook) AfterProcess(context.Context, redis.Cmder) error { return nil }
+func (h *subscriptionPlanRedisFailureHook) BeforeProcessPipeline(ctx context.Context, cmds []redis.Cmder) (context.Context, error) {
+	h.requests += len(cmds)
+	return ctx, errors.New("Redis must not run in the transaction")
+}
+func (*subscriptionPlanRedisFailureHook) AfterProcessPipeline(context.Context, []redis.Cmder) error {
+	return nil
+}
+
+func TestSubscriptionPlanTransactionDoesNotAccessRedis(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	plan := insertSubscriptionResetAppTestPlan(t, 8653, 0, 1_000)
+	originalCache := getSubscriptionPlanCache()
+	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
+	t.Cleanup(func() { subscriptionPlanCache = originalCache; _ = client.Close() })
+	hook := &subscriptionPlanRedisFailureHook{}
+	client.AddHook(hook)
+	subscriptionPlanCache = cachex.NewHybridCache[commerceschema.SubscriptionPlan](cachex.HybridCacheConfig[commerceschema.SubscriptionPlan]{
+		Namespace: cachex.Namespace(subscriptionPlanCacheNamespace), Redis: client,
+		RedisEnabled: func() bool { return true }, RedisCodec: cachex.JSONCodec[commerceschema.SubscriptionPlan]{},
+	})
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		loaded, err := getSubscriptionPlanRecordTx(tx, plan.Id)
+		require.NoError(t, err)
+		assert.Equal(t, plan.Title, loaded.Title)
+		return nil
+	}))
+	assert.Zero(t, hook.requests)
+	_, err := getSubscriptionPlanRecordTx(nil, plan.Id)
+	require.NoError(t, err)
+	assert.Positive(t, hook.requests, "non-transactional reads must retain the existing cache path")
+}
 
 func insertSubscriptionStoreTestUser(t *testing.T, id int, orderIDs []int) {
 	t.Helper()
@@ -205,7 +280,7 @@ func TestCompleteSubscriptionOrder_RestoresExpiredOrderAfterVerifiedPayment(t *t
 	require.NoError(t, db.Model(&commerceschema.SubscriptionOrder{}).
 		Where("trade_no = ?", "sub-late-payment-order").
 		Updates(map[string]any{
-			"status":              constant.TopUpStatusExpired,
+			"status":             constant.TopUpStatusExpired,
 			"fulfillment_status": commerceschema.SubscriptionOrderFulfillmentPending,
 		}).Error)
 

@@ -75,6 +75,8 @@ jobs:
           set -euo pipefail
           go test -v -count=1 -timeout=3m ./internal/billing/domain -run '^TestReservationPostgresFastPath$'
           go test -race -count=1 -timeout=3m ./internal/billing/domain -run '^TestReservationPostgresFastPath$'
+          go test -count=1 -timeout=5m ./internal/commerce/app ./internal/commerce/store
+          go test -race -count=1 -timeout=3m ./internal/commerce/app ./internal/commerce/store -run 'Subscription.*Transaction|Subscription.*SingleConnection|Timestamp.*Transaction'
           go test -count=1 -timeout=8m ./internal/gateway/runtime ./internal/billing/... ./internal/audit/... ./internal/gateway/execution/providers/... ./internal/platform/logger ./internal/platform/transport/http/middleware
           go test -race -count=1 -timeout=3m ./internal/gateway/runtime ./internal/billing/app ./internal/audit/app ./internal/audit/projection ./internal/platform/logger ./internal/platform/transport/http/middleware -run 'First|Latency|Duration|Stream|Throughput|Perf|BillingSession|WalletBilling|Sequence|Canceled|Cancelled|Cancellation|LogHelper|RequestLog'
       - uses: actions/setup-node@v4

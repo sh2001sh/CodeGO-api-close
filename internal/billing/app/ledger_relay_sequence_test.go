@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -305,6 +307,96 @@ func TestWalletBillingCancellationLeavesSaturatedPoolLookup(t *testing.T) {
 		require.ErrorIs(t, err, context.Canceled)
 	case <-time.After(time.Second):
 		t.Fatal("cancelled wallet lookup retained a SQL pool waiter")
+	}
+}
+
+func TestWalletBillingLookupCancellationPreservesDriverError(t *testing.T) {
+	for _, operation := range []string{"cancel", "deadline", "active_sql_error"} {
+		t.Run(operation, func(t *testing.T) {
+			database := walletSequenceDatabase(t)
+			const userID = 1422
+			seedUser(t, userID, 10000)
+			_, err := ensureMirroredUserAccount(userID, billingAccountTypeClaudeWallet, 10000)
+			require.NoError(t, err)
+			type lookupFixtureKey struct{}
+			base := context.WithValue(context.Background(), lookupFixtureKey{}, true)
+			ctx, cancel := context.WithCancel(base)
+			if operation == "deadline" {
+				cancel()
+				ctx, cancel = context.WithTimeout(base, 200*time.Millisecond)
+			}
+			defer cancel()
+			// Some drivers report their own interrupt error when QueryContext is
+			// cancelled, without wrapping ctx.Err(). Reproduce that exact boundary
+			// deterministically, rather than depending on SQLite scheduling.
+			driverErr := errors.New("fixture SQLite interrupted (9)")
+			entered := make(chan struct{})
+			var once sync.Once
+			var mutationQueries atomic.Int64
+			require.NoError(t, database.Callback().Query().Before("gorm:query").Register("test:wallet_lookup_interrupt", func(tx *gorm.DB) {
+				if tx.Statement.Context.Value(lookupFixtureKey{}) != true {
+					return
+				}
+				if tx.Statement.Table == "billing_reservations" {
+					mutationQueries.Add(1)
+				}
+				if tx.Statement.Table == "billing_accounts" {
+					once.Do(func() { close(entered) })
+					if operation != "active_sql_error" {
+						<-tx.Statement.Context.Done()
+					}
+					tx.AddError(driverErr)
+				}
+			}))
+			t.Cleanup(func() { _ = database.Callback().Query().Remove("test:wallet_lookup_interrupt") })
+			c, info := walletSequenceRequest(ctx, userID, "lookup-interrupt-"+operation)
+			info.FirstByteTrace = relaycommon.NewFirstByteTrace(time.Now())
+			done := make(chan error, 1)
+			go func() {
+				_, apiErr := NewBillingSession(c, info, 100)
+				if apiErr == nil {
+					done <- nil
+				} else {
+					done <- apiErr.Unwrap()
+				}
+			}()
+			select {
+			case <-entered:
+			case <-time.After(time.Second):
+				t.Fatal("wallet balance selection did not reach the driver boundary")
+			}
+			if operation == "cancel" {
+				cancel()
+			}
+			select {
+			case err := <-done:
+				require.ErrorIs(t, err, driverErr, "the original database error must be preserved")
+				switch operation {
+				case "cancel":
+					require.ErrorIs(t, err, context.Canceled)
+				case "deadline":
+					require.ErrorIs(t, err, context.DeadlineExceeded)
+				case "active_sql_error":
+					require.NoError(t, ctx.Err())
+					require.NotErrorIs(t, err, context.Canceled)
+					require.NotErrorIs(t, err, context.DeadlineExceeded)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("wallet balance selection retained a cancelled request")
+			}
+			require.Zero(t, mutationQueries.Load(), "failed balance selection must not enter reservation SQL")
+			require.NotContains(t, info.FirstByteTrace.ProgressSnapshot(time.Now()), "wallet_queue_wait_ms")
+			relayWalletSequence.Lock()
+			queued := relayWalletSequence.accounts[userID] != nil
+			relayWalletSequence.Unlock()
+			require.False(t, queued, "failed balance selection must not enter the wallet queue")
+			snapshot := loadBillingSnapshot(t, userID, billingAccountTypeClaudeWallet)
+			require.EqualValues(t, 10000, snapshot.AvailableBalance)
+			require.Zero(t, snapshot.ReservedBalance)
+			var reservations int64
+			require.NoError(t, database.Model(&billingschema.BillingReservation{}).Count(&reservations).Error)
+			require.Zero(t, reservations)
+		})
 	}
 }
 

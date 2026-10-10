@@ -87,11 +87,17 @@ func GetUserClaudeWalletFunding(userID int) (int, string, error) {
 
 func getUserClaudeWalletFundingContext(ctx context.Context, userID int) (int, string, error) {
 	db := platformdb.DB.WithContext(ctx)
-	return getLedgerBackedWalletFundingDB(db, userID, billingAccountTypeClaudeWallet, func() (int, error) {
+	balance, accountID, err := getLedgerBackedWalletFundingDB(db, userID, billingAccountTypeClaudeWallet, func() (int, error) {
 		var quota int
 		err := db.Model(&identityschema.User{}).Where("id = ?", userID).Select("claude_quota").Find(&quota).Error
 		return quota, err
 	})
+	if contextErr := ctx.Err(); err != nil && contextErr != nil {
+		// A driver can report its own interrupt error without wrapping ctx.Err().
+		// Preserve both causes at this read-only boundary before wallet admission.
+		err = errors.Join(contextErr, err)
+	}
+	return balance, accountID, err
 }
 
 func getLedgerBackedWalletFunding(userID int, accountType string, legacyRead func() (int, error)) (int, string, error) {

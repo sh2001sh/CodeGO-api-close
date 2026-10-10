@@ -27,6 +27,7 @@ func (m *Importer) WithLedgerHistoryArchive(enabled bool) *Importer {
 }
 
 func (m *Importer) historyContext(ctx context.Context) context.Context {
+	ctx = context.WithValue(ctx, historyCutoffContextKey{}, m.historyCutoff)
 	return context.WithValue(ctx, ledgerArchiveContextKey{}, m.archiveLedger)
 }
 
@@ -43,6 +44,9 @@ func ledgerHistoryMode(ctx context.Context) string {
 }
 
 func onlineValidateLedgerHistoryMode(ctx context.Context, target pgx.Tx) error {
+	if err := validateHistoryCutoff(ctx, target); err != nil {
+		return err
+	}
 	var stored string
 	if err := target.QueryRow(ctx, "SELECT ledger_history_mode FROM v3_migration_online.run WHERE singleton").Scan(&stored); err != nil {
 		return err

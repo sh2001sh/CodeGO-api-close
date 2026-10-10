@@ -8,7 +8,7 @@
 
 Compose 的 Redis 使用单主、AOF 和 `noeviction`，网关/worker各有 WAL 卷。网关和 worker共享 `V3_FILES_DIR=/data/files`，worker通过 `V3_INTERNAL_GATEWAY_URL=http://gateway:3001` 执行真正计费的渠道批量测试。当前文件配额/去重协调适用于单上传网关，不承诺多个上传进程共享卷的严格一致性。
 
-可信代理地址通过 `V3_TRUSTED_PROXY_CIDRS` 配置，逗号分隔；仅这些对端的 `X-Forwarded-For` / `X-Real-IP` 用于客户端 IP 策略与鉴权失败限制。审计采样默认关闭；worker仅在明确设置 `V3_AUDIT_SAMPLE_RETENTION_DAYS`（1–3650天）时清理样本，保留期应与实际策略一致。
+可信代理地址通过 `V3_TRUSTED_PROXY_CIDRS` 配置，逗号分隔；仅这些对端的 `X-Forwarded-For` / `X-Real-IP` 用于客户端 IP 策略与鉴权失败限制。审计采样默认关闭；worker 默认清理超过30天的样本，`V3_AUDIT_SAMPLE_RETENTION_DAYS`（1–3650天）只覆盖样本期限。普通消费、请求与重试历史按30天分批清理；金融事件和仍用于交易恢复的记录保留。迁移与对账期间必须停止 worker，避免业务写入及清理改变校验对象。
 
 测试入口会覆盖外部传入的 `X-Forwarded-For`、`X-Real-IP`；不能把整个 Docker 网段、`0.0.0.0/0` 或 `::/0` 配成可信代理。Docker 为每个隔离项目分配不同网络，首次启动后读取该项目 `web` 容器的 IPv4，只把这个 `/32` 地址写入私有环境文件的 `V3_TRUSTED_PROXY_CIDRS`，再用原参数执行 `up -d --no-deps gateway control`。`web` 重建后核对地址并同步；生产使用真实边缘代理的固定对端地址，代理前若还有负载均衡器，只接收经过验证的来源链。未配置时保持拒绝信任转发头，但用户会共享代理地址的鉴权限制。
 

@@ -107,7 +107,7 @@ func TestOnlineBulkQueriesStayBoundedAndPreserveExactProjection(t *testing.T) {
 			}
 			cursor = inputs[len(inputs)-1].key
 		}
-		if spec.name != "logs" && maxRows != 512 {
+		if spec.name != "logs" && (maxRows < 512 || maxRows > 4096) {
 			t.Fatalf("%s did not exercise a full bounded batch: %d", spec.name, maxRows)
 		}
 		counted.retiredDeletes, counted.parentQueries = 0, 0
@@ -125,7 +125,7 @@ func TestOnlineBulkQueriesStayBoundedAndPreserveExactProjection(t *testing.T) {
 	if err := write.QueryRow(ctx, query).Scan(&linked, &orphan, &changedRaw); err != nil || linked != 255 || orphan != 256 || changedRaw != 0 {
 		t.Fatalf("linked/orphan projection linked=%d orphan=%d changedRaw=%d err=%v", linked, orphan, changedRaw, err)
 	}
-	t.Log("512-row batches use one retired DELETE and one attempt parent query; exact totals and linked/orphan projections preserved")
+	t.Log("copy pages retain one retired DELETE and one attempt parent query; exact totals and linked/orphan projections preserved")
 }
 
 func TestOnlineBulkRetiredReplacementFailureRollsBackAndLeavesEventsPending(t *testing.T) {

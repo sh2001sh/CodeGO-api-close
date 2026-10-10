@@ -74,6 +74,10 @@ func encodeOnlineReport(output io.Writer, report any, operationErr error) error 
 }
 
 func runOnline(ctx context.Context, command string, apply bool, output io.Writer) error {
+	cutoff, err := migrationHistoryCutoff()
+	if err != nil {
+		return err
+	}
 	archiveLedger, err := migrationLedgerArchive()
 	if err != nil {
 		return err
@@ -150,7 +154,7 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 	if secret == "" {
 		secret = os.Getenv("LEGACY_CRYPTO_SECRET")
 	}
-	importer := legacy.NewImporter(source.Pool, target.Pool, crypto).WithSourceCryptoSecret(secret).WithLedgerHistoryArchive(archiveLedger)
+	importer := legacy.NewImporter(source.Pool, target.Pool, crypto).WithSourceCryptoSecret(secret).WithLedgerHistoryArchive(archiveLedger).WithHistoryCutoff(cutoff)
 	if command == "online-empty-schema-upgrade" {
 		report, err := importer.UpgradeEmptyOnlineSchema(ctx, upgrade)
 		return encodeOnlineReport(output, report, err)

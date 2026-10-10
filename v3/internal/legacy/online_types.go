@@ -26,6 +26,7 @@ type OnlineReport struct {
 	Pending           int64            `json:"pending_events"`
 	Tables            map[string]int64 `json:"tables"`
 	LedgerHistoryMode string           `json:"ledger_history_mode"`
+	HistoryCutoff     string           `json:"history_cutoff,omitempty"`
 }
 
 type onlineProjection struct {
@@ -44,16 +45,17 @@ type onlineProjector struct {
 }
 
 type onlineSpec struct {
-	name, source string
-	keys         []string
-	targets      []string
+	name, source       string
+	keys               []string
+	targets            []string
+	requests, attempts string
 }
 
 func onlineSpecs(sources map[string]string) []onlineSpec {
 	var specs []onlineSpec
 	add := func(name, source string, keys []string, targets ...string) {
 		if source != "" {
-			specs = append(specs, onlineSpec{name, source, keys, targets})
+			specs = append(specs, onlineSpec{name: name, source: source, keys: keys, targets: targets, requests: sources["request_audits"], attempts: sources["request_attempt_audits"]})
 		}
 	}
 	add("ledger_entries", sources["ledger_entries"], []string{"entry_id"}, "v3_billing.historical_entries")

@@ -104,7 +104,7 @@ func (m *Importer) importHistoryRequestAudits(ctx context.Context, target pgx.Tx
 		return nil
 	}
 	requests := historyImportBatch(ctx, target, "v3_audit", "request_audits", "request_id")
-	err := walkHistory(ctx, d.source, d.sources["request_audits"], func(raw json.RawMessage) error {
+	err := walkHistoryRequests(ctx, d.source, d.sources["request_audits"], d.sources["request_attempt_audits"], func(raw json.RawMessage) error {
 		a, err := decodeHistoryRequestAudit(raw)
 		if err != nil {
 			return err

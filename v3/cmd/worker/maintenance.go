@@ -16,6 +16,7 @@ func maintenance(deps *boot.Deps, s *services, cfg workerConfig) (map[string]fun
 		"reservation_sweep":       30 * time.Second,
 		"reconcile":               cfg.reconcileEvery,
 		"usage_partitions":        24 * time.Hour,
+		"history_cleanup":         time.Minute,
 		"commerce_expire":         time.Minute,
 		"marketplace_expire":      time.Minute,
 		"channel_market":          time.Minute,
@@ -25,7 +26,7 @@ func maintenance(deps *boot.Deps, s *services, cfg workerConfig) (map[string]fun
 		"blind_box_contributions": time.Minute,
 	}
 	if cfg.retentionDays > 0 {
-		periods["sample_cleanup"] = 24 * time.Hour
+		periods["sample_cleanup"] = time.Minute
 	}
 	actions := map[string]func(context.Context) error{
 		"reservation_sweep": func(ctx context.Context) error { _, err := s.sweeper.SweepExpired(ctx, 1000); return err },
@@ -36,6 +37,19 @@ func maintenance(deps *boot.Deps, s *services, cfg workerConfig) (map[string]fun
 		},
 		"usage_partitions": func(ctx context.Context) error {
 			return ledger.EnsureUsagePartitions(ctx, deps.PG.Pool, time.Now().UTC())
+		},
+		"history_cleanup": func(ctx context.Context) error {
+			cutoff := time.Now().UTC().AddDate(0, 0, -30)
+			for batch := 0; batch < 12; batch++ {
+				n, err := audit.CleanupHistoriesBefore(ctx, deps.PG.Pool, cutoff, 5000)
+				if err != nil {
+					return err
+				}
+				if n == 0 {
+					break
+				}
+			}
+			return audit.ReclaimExpiredUsagePartitions(ctx, deps.PG.Pool, cutoff)
 		},
 		"commerce_expire":       s.commerceMaintenance,
 		"lucky_reward_recovery": s.rewards.RecoverLuckyRewards,
@@ -53,8 +67,17 @@ func maintenance(deps *boot.Deps, s *services, cfg workerConfig) (map[string]fun
 		},
 		"sample_cleanup": func(ctx context.Context) error {
 			cutoff := time.Now().UTC().AddDate(0, 0, -cfg.retentionDays)
-			_, err := audit.New(deps.PG.Pool, audit.Config{}).DeleteSamplesBefore(ctx, cutoff)
-			return err
+			service := audit.New(deps.PG.Pool, audit.Config{})
+			for batch := 0; batch < 12; batch++ {
+				n, err := service.DeleteSamplesBefore(ctx, cutoff)
+				if err != nil {
+					return err
+				}
+				if n == 0 {
+					break
+				}
+			}
+			return nil
 		},
 	}
 	return actions, periods

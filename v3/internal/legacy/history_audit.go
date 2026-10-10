@@ -143,6 +143,9 @@ func (m *Importer) importHistory(ctx context.Context, target pgx.Tx, d *historyD
 	if err := m.importHistoryRequestAudits(ctx, target, d); err != nil {
 		return err
 	}
+	if err := importRetiredUsageTotals(ctx, target, d.retiredUsage); err != nil {
+		return err
+	}
 	r := Report{}
 	if err := verifyHistoryTotals(ctx, target, d, &r); err != nil {
 		return err

@@ -41,7 +41,7 @@ func walkHistoryAttempts(ctx context.Context, source pgx.Tx, attempts, requests 
 		return fmt.Errorf("legacy: attempt history requires the source request audit table")
 	}
 	rows, err := source.Query(ctx, `SELECT to_jsonb(a),r.request_id IS NULL FROM `+attempts+` a
-	 LEFT JOIN `+requests+` r ON r.request_id=a.request_id`)
+	 LEFT JOIN `+requests+` r ON r.request_id=a.request_id WHERE `+historyWindow(ctx, "request_attempt_audits", "a", requests, attempts))
 	if err != nil {
 		return err
 	}
@@ -70,9 +70,9 @@ func walkHistoryLogs(ctx context.Context, source pgx.Tx, table string, visit fun
 	}
 	rows, err := source.Query(ctx, `SELECT to_jsonb(l),COALESCE(l.type=2 AND repeated.request_id IS NOT NULL,false)
 	 FROM `+table+` l LEFT JOIN
-	 (SELECT created_at,request_id,user_id FROM `+table+` WHERE type=2 AND request_id<>''
+	 (SELECT created_at,request_id,user_id FROM `+table+` WHERE type=2 AND request_id<>'' AND `+historyWindow(ctx, "logs", table, "", "")+`
 	 GROUP BY created_at,request_id,user_id HAVING count(*)>1) repeated
-	 ON l.created_at=repeated.created_at AND l.request_id=repeated.request_id AND l.user_id=repeated.user_id`)
+	 ON l.created_at=repeated.created_at AND l.request_id=repeated.request_id AND l.user_id=repeated.user_id WHERE `+historyWindow(ctx, "logs", "l", "", ""))
 	if err != nil {
 		return err
 	}

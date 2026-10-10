@@ -37,7 +37,7 @@ func onlineCaptureBindingHash(c OnlineCaptureReport) (string, error) {
 
 func (m *Importer) PrepareOnline(ctx context.Context, opts OnlineOptions, apply bool) (OnlineReport, error) {
 	ctx = m.historyContext(ctx)
-	r := OnlineReport{RunID: opts.RunID, Phase: "preview", Tables: map[string]int64{}, LedgerHistoryMode: ledgerHistoryMode(ctx)}
+	r := OnlineReport{RunID: opts.RunID, Phase: "preview", Tables: map[string]int64{}, LedgerHistoryMode: ledgerHistoryMode(ctx), HistoryCutoff: historyCutoffLabel(ctx)}
 	if m.source == nil || m.pool == nil {
 		return r, errors.New("legacy: independent online source and target required")
 	}
@@ -74,6 +74,9 @@ func (m *Importer) PrepareOnline(ctx context.Context, opts OnlineOptions, apply 
 	// any source capture. Repeat these checks under the target writer lock below.
 	var prepared bool
 	if err = identityTx.QueryRow(ctx, "SELECT to_regclass('v3_migration_online.run') IS NOT NULL").Scan(&prepared); err != nil {
+		return r, err
+	}
+	if err = validateHistoryCutoff(ctx, identityTx); err != nil {
 		return r, err
 	}
 	if prepared {
@@ -182,6 +185,9 @@ func (m *Importer) PrepareOnline(ctx context.Context, opts OnlineOptions, apply 
 		if populated {
 			return r, errors.New("legacy: online preparation requires an unused target")
 		}
+	}
+	if err = bindHistoryCutoff(ctx, target); err != nil {
+		return r, err
 	}
 	_, err = target.Exec(ctx, `CREATE SCHEMA v3_migration_online;
 	 CREATE TABLE v3_migration_online.run(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),run_id text NOT NULL,capture_hash text NOT NULL,target_identity text NOT NULL,target_shape text NOT NULL DEFAULT '',object_names jsonb NOT NULL DEFAULT '[]',phase text NOT NULL,dependencies jsonb NOT NULL DEFAULT '{}',verified_at timestamptz,ledger_history_mode text NOT NULL CHECK(ledger_history_mode IN('copy','archive')));

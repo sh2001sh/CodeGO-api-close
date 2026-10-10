@@ -211,6 +211,8 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 		switch c.name {
 		case "logs":
 			err = walkHistoryLogs(ctx, d.source, d.sources[c.name], c.visit)
+		case "request_audits":
+			err = walkHistoryRequests(ctx, d.source, d.sources[c.name], d.sources["request_attempt_audits"], func(raw json.RawMessage) error { return c.visit(raw, false) })
 		case "request_attempt_audits":
 			err = walkHistoryAttempts(ctx, d.source, d.sources[c.name], d.sources["request_audits"], c.visit)
 		default:
@@ -231,6 +233,9 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 			continue
 		}
 		report.Amounts["check:history:"+name+":expected_micro_credits"] = sum.String()
+	}
+	if err := checkRetiredUsageTotals(ctx, target, d.retiredUsage); err != nil {
+		return err
 	}
 	return verifyHistoryTotals(ctx, target, d, report)
 }

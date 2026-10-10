@@ -2,8 +2,9 @@
 
 ## Online staging and the final offline window
 
-The staged path moves the historical bulk copy and its verification before the
-maintenance window. It captures source changes without posting money to v3.
+The staged path moves the historical bulk copy before the maintenance window.
+It captures source changes without posting money to v3. Formal full verification
+requires every v2 writer to stop, capture to seal and pending changes to reach zero.
 It does not stop writers, switch traffic, waive financial drain checks, or prove
 that the production cutover takes only minutes. Keep v2 serving users until an
 independent rehearsal proves capture overhead, target capacity, final sync time,
@@ -30,6 +31,11 @@ operation. A schema change requires a new isolated target and capture run;
 staging from an earlier schema must not replace upgraded native tables. Custom
 access policies, grants or ownership on tables being adopted are explicitly
 refused rather than lost by table replacement.
+
+The historic `online-empty-schema-upgrade` command applies only the approved
+exact-price revision 108. It does not apply retention revision 109 or later
+revisions. A migration using a history cutoff needs a new, fully migrated target;
+do not resume an older captured run by applying unrelated schema changes.
 
 | Command | Required flags | Effect |
 | --- | --- | --- |
@@ -286,8 +292,8 @@ blocks application until its native contract and mapping exist.
 Set `V3_MIGRATION_LEDGER_HISTORY=archive` to retain the original ledger in the
 frozen source instead of projecting historical entries. The default is `copy`;
 online runs bind this mode at preparation and reject a changed mode on resume.
-Archive mode still imports current balances, funding attribution, historical
-account ownership, usage and operational histories in full. Subscription reward
+Archive mode still imports current balances, funding attribution and historical
+account ownership. Ordinary histories follow the optional cutoff below. Subscription reward
 calculation continues to read original ledger evidence. Reports bind the source
 cluster, database OID/name, preserved row count and archive timestamp; complete
 backup hashes and restore verification remain required to prove source content.
@@ -295,8 +301,45 @@ Keep the source immutable after cutover, and configure the control service's
 dedicated SELECT-only `V3_LEDGER_ARCHIVE_PG_DSN` as described in its README.
 Historical entries never become new wallet money in either mode.
 
-Monetary v2 quota units convert exactly to micro credits (`× 2`); USD fields use
-exact decimal arithmetic. Each account amount must fit bigint; report aggregates
+Set `V3_MIGRATION_HISTORY_CUTOFF` to one explicit past RFC3339 timestamp with
+whole seconds (for example, the start of the migration minus 30 days). Omit it
+to retain all history. Import, check and every online command must use the same
+value; the target binds it immutably, including the all-history choice. A changed
+cutoff requires a new independent migration. This is a data-selection boundary,
+not permission to delete source tables or backups.
+
+Only ordinary logs, request audits and retry attempts are filtered. Recharge,
+quota-management and refund events (v2 types 1, 3 and 6), money provenance and
+settlement evidence remain. Unknown or unfinished request outcomes remain,
+and recent children keep their old parents and complete retry families. Recent
+attempts with genuinely absent parents remain in the orphan archive.
+
+Expired usage is reduced to exact per-user/per-Key totals, without issuing
+credits or changing wallets, prices or budgets. Native Key lifetime usage adds
+these totals to retained usage. The final frozen import computes and checks the
+aggregate against the same source snapshot; measure this scan in the maintenance
+window budget. Source financial/workflow drain checks remain mandatory. V2
+channel batch tests are in-memory and must be drained before process shutdown;
+V3 durable batch recovery receipts are protected by runtime retention.
+
+After cutover, the worker cleans ordinary histories older than 30 days in short,
+bounded transactions. Open reservations, unfinished workflows, pending seller
+settlements, recoverable batch receipts and unknown request outcomes retain their
+evidence. Deleted usage and lifetime totals change atomically. Only empty,
+fully expired managed usage month partitions are removed; the boundary month
+and DEFAULT remain. Row deletion alone does not return filesystem capacity.
+Audit samples also default to 30 days; `V3_AUDIT_SAMPLE_RETENTION_DAYS` overrides
+their period only. Keep workers stopped throughout migration and verification.
+
+Model prices are quoted and edited in credits: an old $1 model price remains
+1 credit with the same token, request or media billing unit. Input, output and
+cache rates use credits per million tokens; per-request prices use credits per
+request. Group multipliers and discounts retain their value. Native price
+integers remain micro credits, so 2.5 credits stores as 2,500,000 without changing
+the charge. Administrator price inputs perform this conversion exactly.
+
+Monetary v2 quota units convert exactly to micro credits (`× 2`); legacy USD price
+fields convert numerically to credits using exact decimal arithmetic. Each account amount must fit bigint; report aggregates
 use arbitrary precision. The canonical current wallet is the
 `billing.balance_snapshots` entry for `claude_wallet`. Projection differences,
 nonzero active reservations, invalid money and overflows block application.

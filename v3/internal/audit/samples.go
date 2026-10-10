@@ -145,6 +145,17 @@ func (s *Service) DeleteSamplesBefore(ctx context.Context, cutoff time.Time) (in
 	if s.pool == nil {
 		return 0, ErrUnavailable
 	}
-	tag, err := s.pool.Exec(ctx, `DELETE FROM v3_audit.request_samples WHERE created_at < $1`, cutoff)
-	return tag.RowsAffected(), err
+	var deleted int64
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout='200ms'; SET LOCAL statement_timeout='5s'"); err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctx, `WITH expired AS(SELECT s.request_id FROM v3_audit.request_samples s WHERE s.created_at<$1 AND NOT `+pendingRequest("s")+` AND NOT EXISTS(SELECT 1 FROM v3_audit.request_audits r WHERE r.request_id=s.request_id AND (`+terminalAudit("r")+`) IS NOT TRUE) ORDER BY s.created_at LIMIT 5000 FOR UPDATE OF s SKIP LOCKED) DELETE FROM v3_audit.request_samples s USING expired e WHERE s.request_id=e.request_id`, cutoff)
+		deleted = tag.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	return deleted, nil
 }

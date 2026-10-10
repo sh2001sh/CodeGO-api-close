@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +19,7 @@ type Importer struct {
 	crypto             catalog.Encrypter
 	sourceCryptoSecret string
 	archiveLedger      bool
+	historyCutoff      time.Time
 }
 
 func NewImporter(source, target *pgxpool.Pool, crypto catalog.Encrypter) *Importer {
@@ -59,6 +61,15 @@ func (m *Importer) Import(ctx context.Context, apply bool) (Report, error) {
 		return r, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	policyTx, policyErr := m.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if policyErr != nil {
+		return r, policyErr
+	}
+	policyErr = validateHistoryCutoff(ctx, policyTx)
+	_ = policyTx.Rollback(ctx)
+	if policyErr != nil {
+		return r, policyErr
+	}
 	var staged bool
 	if err = m.pool.QueryRow(ctx, "SELECT to_regclass('v3_migration_online.run') IS NOT NULL").Scan(&staged); err != nil {
 		return r, err
@@ -119,6 +130,9 @@ func (m *Importer) Import(ctx context.Context, apply bool) (Report, error) {
 		}
 	}
 	if _, err = target.Exec(ctx, `SELECT pg_advisory_xact_lock(738301031)`); err != nil {
+		return r, err
+	}
+	if err = bindHistoryCutoff(ctx, target); err != nil {
 		return r, err
 	}
 	if view != nil {

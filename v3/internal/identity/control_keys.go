@@ -119,7 +119,8 @@ func (c *Control) CreateKey(ctx context.Context, uid int64, in KeyInput) (KeyRec
 
 const keyColumns = `k.id,k.name,k.status,k.group_name,k.allowed_models,k.allowed_cidrs::text[],k.expires_at,k.key_prefix,k.created_at,k.last_used_at,k.budget_limited,
  CASE WHEN k.budget_limited THEN coalesce(b.balance,0) ELSE NULL END,k.cross_group_retry,(k.max_marketplace_multiplier*1000000)::bigint,coalesce(b.id,0),k.user_id,
- coalesce((SELECT sum(l.amount) FROM v3_billing.usage_logs l WHERE l.key_id=k.id AND l.user_id=k.user_id),0)::bigint`
+ (coalesce((SELECT sum(l.amount) FROM v3_billing.usage_logs l WHERE l.key_id=k.id AND l.user_id=k.user_id),0)
+ +coalesce((SELECT t.amount FROM v3_billing.retired_usage_totals t WHERE t.key_id=k.id AND t.user_id=k.user_id),0))::bigint`
 const keyFrom = `v3_identity.api_keys k LEFT JOIN v3_billing.accounts b ON b.owner_type='api_key' AND b.owner_id=k.id AND b.kind='key_budget'`
 
 func scanKey(row pgx.Row) (KeyRecord, error) {

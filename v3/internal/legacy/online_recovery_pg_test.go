@@ -52,7 +52,7 @@ type onlineRecoveryCancelTracer struct {
 }
 
 func (tracer *onlineRecoveryCancelTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
-	if strings.HasPrefix(data.SQL, "SELECT to_jsonb(t)") && strings.Contains(data.SQL, `"migration_source"."logs"`) && strings.Contains(data.SQL, "WHERE ROW(") && tracer.fired.CompareAndSwap(false, true) {
+	if strings.HasPrefix(data.SQL, "DECLARE codego_online_copy_page ") && strings.Contains(data.SQL, `"migration_source"."logs"`) && strings.Contains(data.SQL, "WHERE ROW(") && tracer.fired.CompareAndSwap(false, true) {
 		tracer.cancel()
 	}
 	return ctx
@@ -64,9 +64,9 @@ func TestOnlineRecoveryCopyCheckpointAfterBadBatchOrCancellation(t *testing.T) {
 		t.Run(failure, func(t *testing.T) {
 			m, source, target, opts := onlineMigrationFixture(t, false)
 			ctx := context.Background()
-			onlineRecoveryExec(t, source, `INSERT INTO migration_source.logs SELECT 10000+g,7,1700010000+g,2,'recovery','alice','key','chat-model',1,1,1,0,false,13,11,'default','','recovery-'||g,'','{}' FROM generate_series(1,1000) g`)
+			onlineRecoveryExec(t, source, `INSERT INTO migration_source.logs SELECT 10000+g,7,1700010000+g,2,'recovery','alice','key','chat-model',1,1,1,0,false,13,11,'default','','recovery-'||g,'','{}' FROM generate_series(1,8192) g`)
 			if failure == "bad_second_batch" {
-				onlineRecoveryExec(t, source, `UPDATE migration_source.logs SET quota=-1 WHERE id=10600`)
+				onlineRecoveryExec(t, source, `UPDATE migration_source.logs SET quota=-1 WHERE id=14200`)
 			}
 			if _, err := m.PrepareOnline(ctx, opts, true); err != nil {
 				t.Fatal(err)
@@ -98,15 +98,15 @@ func TestOnlineRecoveryCopyCheckpointAfterBadBatchOrCancellation(t *testing.T) {
 			}
 			var copied, rows int64
 			var complete bool
-			if err := target.QueryRow(ctx, `SELECT copied,complete FROM v3_migration_online.progress WHERE name='logs'`).Scan(&copied, &complete); err != nil || copied != 512 || complete {
+			if err := target.QueryRow(ctx, `SELECT copied,complete FROM v3_migration_online.progress WHERE name='logs'`).Scan(&copied, &complete); err != nil || copied != 4096 || complete {
 				t.Fatalf("copy checkpoint copied=%d complete=%t err=%v", copied, complete, err)
 			}
-			if err := target.QueryRow(ctx, "SELECT count(*) FROM "+onlineStage("v3_audit.events")).Scan(&rows); err != nil || rows != 512 {
+			if err := target.QueryRow(ctx, "SELECT count(*) FROM "+onlineStage("v3_audit.events")).Scan(&rows); err != nil || rows != 4096 {
 				t.Fatalf("bad/canceled batch partially committed rows=%d err=%v", rows, err)
 			}
 			onlineRecoveryAssertNoMoney(t, target)
 			if failure == "bad_second_batch" {
-				onlineRecoveryExec(t, source, `UPDATE migration_source.logs SET quota=1 WHERE id=10600`)
+				onlineRecoveryExec(t, source, `UPDATE migration_source.logs SET quota=1 WHERE id=14200`)
 			}
 			if r, err := m.CopyOnline(ctx, opts); err != nil || r.Phase != "copied" {
 				t.Fatalf("resumed copy %+v err=%v", r, err)
@@ -115,10 +115,10 @@ func TestOnlineRecoveryCopyCheckpointAfterBadBatchOrCancellation(t *testing.T) {
 			if _, err := m.VerifyOnline(ctx, opts); err != nil {
 				t.Fatal(err)
 			}
-			if err := target.QueryRow(ctx, `SELECT copied FROM v3_migration_online.progress WHERE name='logs'`).Scan(&copied); err != nil || copied != 1004 {
+			if err := target.QueryRow(ctx, `SELECT copied FROM v3_migration_online.progress WHERE name='logs'`).Scan(&copied); err != nil || copied != 8196 {
 				t.Fatalf("resumed checkpoint duplicated first batch copied=%d err=%v", copied, err)
 			}
-			if err := target.QueryRow(ctx, "SELECT count(*) FROM "+onlineStage("v3_audit.events")).Scan(&rows); err != nil || rows != 1004 {
+			if err := target.QueryRow(ctx, "SELECT count(*) FROM "+onlineStage("v3_audit.events")).Scan(&rows); err != nil || rows != 8196 {
 				t.Fatalf("resumed baseline lost/duplicated rows=%d err=%v", rows, err)
 			}
 		})

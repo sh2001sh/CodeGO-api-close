@@ -5,6 +5,7 @@ import { resourceOptions } from '../lib/queries'
 import type { Schema } from '../lib/types'
 import { useTranslation } from '../lib/i18n'
 import { credits } from '../lib/format'
+import { decimalCredits, nonnegativeMicroCredits } from '../features/commerce/amounts'
 import { DataTable } from './data-table'
 import { Button, ErrorMessage } from './ui'
 
@@ -17,6 +18,14 @@ type Editor =
   | { kind: 'prices'; value: Price }
   | { kind: 'route-pools'; value: Pool }
 type Kind = Editor['kind']
+
+const priceFields = [
+  ['input_per_mtok', '输入 credits / 百万 tokens'],
+  ['output_per_mtok', '输出 credits / 百万 tokens'],
+  ['cache_read_per_mtok', '缓存读取 credits / 百万 tokens'],
+  ['cache_write_per_mtok', '缓存写入 credits / 百万 tokens'],
+  ['per_request', '每次 credits'],
+] as const
 
 function template(kind: Kind): Editor {
   if (kind === 'groups') return { kind, value: { name: '', description: '', multiplier: 1 } }
@@ -209,17 +218,32 @@ export function CatalogConfiguration() {
             event.preventDefault()
             setError(null)
             try {
-              save.mutate(
-                parseEditor(
-                  editing.kind,
-                  JSON.parse(String(new FormData(event.currentTarget).get('config'))),
-                ),
-              )
+              const form = new FormData(event.currentTarget)
+              const config: unknown = JSON.parse(String(form.get('config')))
+              if (editing.kind === 'prices' && record(config)) {
+                for (const [field] of priceFields)
+                  config[field] = nonnegativeMicroCredits(String(form.get(field)).trim())
+              }
+              save.mutate(parseEditor(editing.kind, config))
             } catch (failure) {
               setError(failure instanceof Error ? failure : new Error('配置值必须为有效 JSON'))
             }
           }}
         >
+          {editing.kind === 'prices' &&
+            priceFields.map(([field, label]) => (
+              <label className="field" htmlFor={`catalog-${field}`} key={field}>
+                <span>{t(label)}</span>
+                <input
+                  id={`catalog-${field}`}
+                  name={field}
+                  inputMode="decimal"
+                  required
+                  key={`${editing.value.model}-${editing.value[field]}`}
+                  defaultValue={decimalCredits(editing.value[field])}
+                />
+              </label>
+            ))}
           <label className="field full-width" htmlFor="catalog-config">
             <span>{t('配置')}</span>
             <textarea
@@ -227,7 +251,17 @@ export function CatalogConfiguration() {
               name="config"
               rows={9}
               key={JSON.stringify(editing.value)}
-              defaultValue={JSON.stringify(editing.value, null, 2)}
+              defaultValue={JSON.stringify(
+                editing.kind === 'prices'
+                  ? {
+                      model: editing.value.model,
+                      mode: editing.value.mode,
+                      rules: editing.value.rules,
+                    }
+                  : editing.value,
+                null,
+                2,
+              )}
             />
           </label>
           <Button type="submit" disabled={save.isPending}>
@@ -253,12 +287,12 @@ export function CatalogConfiguration() {
             numeric: true,
           },
           {
-            label: '输入价 / 百万 token',
+            label: '输入 credits / 百万 tokens',
             render: (row) => credits('input_per_mtok' in row ? row.input_per_mtok : undefined),
             numeric: true,
           },
           {
-            label: '输出价 / 百万 token',
+            label: '输出 credits / 百万 tokens',
             render: (row) => credits('output_per_mtok' in row ? row.output_per_mtok : undefined),
             numeric: true,
           },

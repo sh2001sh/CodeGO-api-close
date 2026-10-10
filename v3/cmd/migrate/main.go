@@ -55,6 +55,9 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		return runOnline(ctx, command, apply, output)
 	}
 	if command == "import" || command == "check" {
+		if _, err := migrationHistoryCutoff(); err != nil {
+			return err
+		}
 		if _, err := migrationLedgerArchive(); err != nil {
 			return err
 		}
@@ -110,6 +113,10 @@ func parseMigrateArgs(args []string) (command string, apply bool, err error) {
 // and writes its report as indented JSON before returning any import error,
 // so a partial report is still visible on failure.
 func runLegacyImport(ctx context.Context, command string, apply bool, pool *pgxpool.Pool, output io.Writer) error {
+	cutoff, err := migrationHistoryCutoff()
+	if err != nil {
+		return err
+	}
 	archiveLedger, err := migrationLedgerArchive()
 	if err != nil {
 		return err
@@ -131,7 +138,7 @@ func runLegacyImport(ctx context.Context, command string, apply bool, pool *pgxp
 	if sourceSecret == "" {
 		sourceSecret = os.Getenv("LEGACY_CRYPTO_SECRET")
 	}
-	importer := legacy.NewImporter(source.Pool, pool, crypto).WithSourceCryptoSecret(sourceSecret).WithLedgerHistoryArchive(archiveLedger)
+	importer := legacy.NewImporter(source.Pool, pool, crypto).WithSourceCryptoSecret(sourceSecret).WithLedgerHistoryArchive(archiveLedger).WithHistoryCutoff(cutoff)
 	var report legacy.Report
 	var importErr error
 	if command == "check" {

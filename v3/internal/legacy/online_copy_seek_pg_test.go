@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type onlineCopySeekTx struct {
@@ -19,8 +20,17 @@ type onlineCopySeekTx struct {
 }
 
 func (tx *onlineCopySeekTx) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
-	tx.query, tx.args = query, args
+	if !strings.HasPrefix(query, "FETCH ") {
+		tx.query, tx.args = query, args
+	}
 	return tx.Tx.Query(ctx, query, args...)
+}
+
+func (tx *onlineCopySeekTx) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
+	if strings.HasPrefix(query, "DECLARE codego_online_copy_page ") {
+		tx.query, tx.args = query, args
+	}
+	return tx.Tx.Exec(ctx, query, args...)
 }
 
 func TestOnlineCopySeeksTypedCursorWithoutScanningEarlierRows(t *testing.T) {
@@ -46,14 +56,14 @@ func TestOnlineCopySeeksTypedCursorWithoutScanningEarlierRows(t *testing.T) {
 				keys                           []string
 				seek                           bool
 			}{
-				{"empty", "seek_id", "", "SELECT to_jsonb(t) FROM seek_id t ORDER BY id LIMIT 512", []string{"id"}, false},
-				{"null", "seek_id", "null", "SELECT to_jsonb(t) FROM seek_id t ORDER BY id LIMIT 512", []string{"id"}, false},
-				{"high_id", "seek_id", `{"id":90000}`, "SELECT to_jsonb(t) FROM seek_id t WHERE id>90000 ORDER BY id LIMIT 512", []string{"id"}, true},
-				{"last_id", "seek_id", `{"id":100000}`, "SELECT to_jsonb(t) FROM seek_id t WHERE id>100000 ORDER BY id LIMIT 512", []string{"id"}, true},
-				{"high_text", "seek_text", `{"id":"request-090000"}`, "SELECT to_jsonb(t) FROM seek_text t WHERE id>'request-090000' ORDER BY id LIMIT 512", []string{"id"}, true},
-				{"text_collation", "seek_text", `{"id":"request-A"}`, "SELECT to_jsonb(t) FROM seek_text t WHERE id>'request-A' ORDER BY id LIMIT 512", []string{"id"}, false},
-				{"same_prefix_pair", "seek_pair", `{"group_id":900,"model":"model-050"}`, "SELECT to_jsonb(t) FROM seek_pair t WHERE ROW(group_id,model)>ROW(900::bigint,'model-050'::text) ORDER BY group_id,model LIMIT 512", []string{"group_id", "model"}, true},
-				{"end_prefix_pair", "seek_pair", `{"group_id":900,"model":"model-100"}`, "SELECT to_jsonb(t) FROM seek_pair t WHERE ROW(group_id,model)>ROW(900::bigint,'model-100'::text) ORDER BY group_id,model LIMIT 512", []string{"group_id", "model"}, true},
+				{"empty", "seek_id", "", "SELECT to_jsonb(t) FROM seek_id t ORDER BY id LIMIT 4096", []string{"id"}, false},
+				{"null", "seek_id", "null", "SELECT to_jsonb(t) FROM seek_id t ORDER BY id LIMIT 4096", []string{"id"}, false},
+				{"high_id", "seek_id", `{"id":90000}`, "SELECT to_jsonb(t) FROM seek_id t WHERE id>90000 ORDER BY id LIMIT 4096", []string{"id"}, true},
+				{"last_id", "seek_id", `{"id":100000}`, "SELECT to_jsonb(t) FROM seek_id t WHERE id>100000 ORDER BY id LIMIT 4096", []string{"id"}, true},
+				{"high_text", "seek_text", `{"id":"request-090000"}`, "SELECT to_jsonb(t) FROM seek_text t WHERE id>'request-090000' ORDER BY id LIMIT 4096", []string{"id"}, true},
+				{"text_collation", "seek_text", `{"id":"request-A"}`, "SELECT to_jsonb(t) FROM seek_text t WHERE id>'request-A' ORDER BY id LIMIT 4096", []string{"id"}, false},
+				{"same_prefix_pair", "seek_pair", `{"group_id":900,"model":"model-050"}`, "SELECT to_jsonb(t) FROM seek_pair t WHERE ROW(group_id,model)>ROW(900::bigint,'model-050'::text) ORDER BY group_id,model LIMIT 4096", []string{"group_id", "model"}, true},
+				{"end_prefix_pair", "seek_pair", `{"group_id":900,"model":"model-100"}`, "SELECT to_jsonb(t) FROM seek_pair t WHERE ROW(group_id,model)>ROW(900::bigint,'model-100'::text) ORDER BY group_id,model LIMIT 4096", []string{"group_id", "model"}, true},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					traced := &onlineCopySeekTx{Tx: read}
@@ -114,7 +124,7 @@ func TestOnlineCopySeeksTypedCursorWithoutScanningEarlierRows(t *testing.T) {
 						}
 					}
 					walk(plans[0]["Plan"].(map[string]any))
-					if !indexed || visited > 2048 {
+					if !indexed || visited > 4096 {
 						t.Fatalf("cursor rescanned earlier rows: index_boundary=%t visited=%.0f plan=%s", indexed, visited, encoded)
 					}
 					t.Logf("index_boundary=%t visited=%.0f execution_ms=%v", indexed, visited, plans[0]["Execution Time"])

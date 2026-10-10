@@ -13,9 +13,8 @@ import (
 const EmbeddedSchemaLock int64 = 738301030
 const ExactPriceMigration = "20261010000108_channelmarket_exact_prices.sql"
 
-// ApplyEmbeddedTx shares the existing embedded runner with the guarded empty
-// online upgrade. The caller owns commit, so schema and ownership proof commit
-// together. Atlas installations are never silently adopted.
+// ApplyEmbeddedTx applies the embedded schema in the caller's transaction.
+// The caller owns commit. Atlas installations are never silently adopted.
 func ApplyEmbeddedTx(ctx context.Context, tx pgx.Tx) (applied, total int, err error) {
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, EmbeddedSchemaLock); err != nil {
 		return

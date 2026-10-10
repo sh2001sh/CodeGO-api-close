@@ -24,6 +24,7 @@ type historyData struct {
 	amounts         map[string]*big.Int
 	issues          []Issue
 	archive         *LedgerHistoryArchive
+	retiredUsage    []retiredUsageTotal
 }
 
 func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) (*historyData, error) {
@@ -183,6 +184,16 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 				}
 				return visit(raw)
 			})
+		} else if load.name == "request_audits" {
+			err = walkHistoryRequests(ctx, source, load.table, sources["request_attempt_audits"], visit)
+		} else if load.name == "request_attempt_audits" {
+			if sources["request_audits"] == "" {
+				// Preserve the structured missing-parent-schema issue below,
+				// including when the attempts table is completely empty.
+				err = walkHistory(ctx, source, load.table, visit)
+			} else {
+				err = walkHistoryAttempts(ctx, source, load.table, sources["request_audits"], func(raw json.RawMessage, _ bool) error { return visit(raw) })
+			}
 		} else {
 			err = walkHistory(ctx, source, load.table, visit)
 		}
@@ -204,7 +215,7 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 			d.recordIssue(Issue{"request_attempt_audit", 0, "missing_request_audits", "request attempt history requires its parent request audits"})
 		} else if onlineViewFrom(ctx) == nil {
 			var orphans int64
-			if err := source.QueryRow(ctx, `SELECT count(*) FROM `+sources["request_attempt_audits"]+` a LEFT JOIN `+sources["request_audits"]+` r ON r.request_id=a.request_id WHERE r.request_id IS NULL`).Scan(&orphans); err != nil {
+			if err := source.QueryRow(ctx, `SELECT count(*) FROM `+sources["request_attempt_audits"]+` a LEFT JOIN `+sources["request_audits"]+` r ON r.request_id=a.request_id WHERE r.request_id IS NULL AND `+historyWindow(ctx, "request_attempt_audits", "a", sources["request_audits"], sources["request_attempt_audits"])).Scan(&orphans); err != nil {
 				return nil, err
 			}
 			// Preserve every orphan's complete source record in a separate
@@ -225,6 +236,11 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 		if err != nil {
 			return nil, err
 		}
+	}
+	var err error
+	d.retiredUsage, err = loadRetiredUsageTotals(ctx, source, sources["logs"])
+	if err != nil {
+		return nil, err
 	}
 	return d, nil
 }

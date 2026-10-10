@@ -28,6 +28,7 @@ type OnlineSchemaUpgradeReport struct {
 	TargetShape         string `json:"target_shape"`
 	CaptureHash         string `json:"capture_hash"`
 	LedgerHistoryMode   string `json:"ledger_history_mode"`
+	HistoryCutoff       string `json:"history_cutoff,omitempty"`
 	SourceWrites        int    `json:"source_writes"`
 }
 
@@ -55,7 +56,7 @@ func ValidateOnlineEmptySchemaUpgradeOptions(opts OnlineEmptySchemaUpgradeOption
 // event. Both the exact DDL and new catalog fingerprint commit atomically.
 func (m *Importer) UpgradeEmptyOnlineSchema(ctx context.Context, opts OnlineEmptySchemaUpgradeOptions) (OnlineSchemaUpgradeReport, error) {
 	ctx = m.historyContext(ctx)
-	r := OnlineSchemaUpgradeReport{RunID: opts.RunID, Migration: migrations.ExactPriceMigration, MigrationSHA256: opts.ExpectedMigrationSHA256, LedgerHistoryMode: ledgerHistoryMode(ctx)}
+	r := OnlineSchemaUpgradeReport{RunID: opts.RunID, Migration: migrations.ExactPriceMigration, MigrationSHA256: opts.ExpectedMigrationSHA256, LedgerHistoryMode: ledgerHistoryMode(ctx), HistoryCutoff: historyCutoffLabel(ctx)}
 	if err := ValidateOnlineEmptySchemaUpgradeOptions(opts); err != nil {
 		return r, err
 	}
@@ -145,12 +146,17 @@ func (m *Importer) UpgradeEmptyOnlineSchema(ctx context.Context, opts OnlineEmpt
 	if already {
 		return r, nil
 	}
-	applied, _, err := migrations.ApplyEmbeddedTx(ctx, target)
+	// Apply only the hash-approved historic revision. Later embedded migrations
+	// require their own reviewed upgrade or an independent migration target.
+	sql, err := migrations.Read(migrations.ExactPriceMigration)
 	if err != nil {
 		return r, err
 	}
-	if applied != 1 {
-		return r, errors.New("legacy: empty schema upgrade attempted an unreviewed migration set")
+	if _, err = target.Exec(ctx, sql); err != nil {
+		return r, err
+	}
+	if _, err = target.Exec(ctx, `INSERT INTO v3_platform.embedded_schema_revisions(name,checksum) VALUES($1,$2)`, migrations.ExactPriceMigration, opts.ExpectedMigrationSHA256); err != nil {
+		return r, err
 	}
 	// ALTER TYPE and replaced checks acquire new object OIDs. Refresh only after
 	// proving the original adoption mapping, inside the same DDL transaction.
@@ -206,9 +212,17 @@ func onlineExactPriceRevisionGate(ctx context.Context, target pgx.Tx) (bool, err
 	if err != nil {
 		return false, err
 	}
-	if len(names) == 0 || names[len(names)-1] != migrations.ExactPriceMigration {
+	approved := 0
+	for i, name := range names {
+		if name == migrations.ExactPriceMigration {
+			approved = i + 1
+			break
+		}
+	}
+	if approved == 0 {
 		return false, errors.New("legacy: empty schema upgrade only supports the reviewed exact price revision")
 	}
+	names = names[:approved]
 	rows, err := target.Query(ctx, `SELECT name,checksum FROM v3_platform.embedded_schema_revisions`)
 	if err != nil {
 		return false, err

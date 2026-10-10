@@ -21,6 +21,15 @@ func (m *Importer) Check(ctx context.Context) (Report, error) {
 		return r, err
 	}
 	defer func() { _ = source.Rollback(ctx) }()
+	policyTx, policyErr := m.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if policyErr != nil {
+		return r, policyErr
+	}
+	policyErr = validateHistoryCutoff(ctx, policyTx)
+	_ = policyTx.Rollback(ctx)
+	if policyErr != nil {
+		return r, policyErr
+	}
 	sources, err := discoverSources(ctx, source)
 	if err != nil {
 		return r, err

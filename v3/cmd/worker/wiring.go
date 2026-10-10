@@ -158,7 +158,7 @@ type workerConfig struct {
 }
 
 func loadWorkerConfig() (workerConfig, error) {
-	cfg := workerConfig{reconcileEvery: 5 * time.Minute, metricsAddr: os.Getenv("V3_WORKER_METRICS_ADDR"), ledgerConsumers: 1, ledgerBatchSize: 500}
+	cfg := workerConfig{reconcileEvery: 5 * time.Minute, retentionDays: 30, metricsAddr: os.Getenv("V3_WORKER_METRICS_ADDR"), ledgerConsumers: 1, ledgerBatchSize: 500}
 	for _, item := range []struct {
 		name    string
 		target  *int

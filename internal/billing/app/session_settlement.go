@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -82,7 +83,12 @@ func (s *BillingSession) reserveSettlementIncrease(actualQuota int) (int, error)
 	if _, subscription := s.funding.(*SubscriptionFunding); subscription && subscriptionFundingHooks.ReserveAdditional == nil {
 		return actualQuota, nil
 	}
-	if err := reservable.ReserveAdditional(int64(delta)); err != nil {
+	reserveAdditional := reservable.ReserveAdditional
+	if wallet, ok := s.funding.(*LedgerRelayFunding); ok {
+		// Final usage must complete even when the originating HTTP context ended.
+		reserveAdditional = wallet.reserveSettlementAdditional
+	}
+	if err := reserveAdditional(int64(delta)); err != nil {
 		if !errors.Is(err, billingdomain.ErrInsufficientBalance) {
 			return 0, err
 		}
@@ -98,7 +104,7 @@ func (s *BillingSession) reserveSettlementIncrease(actualQuota int) (int, error)
 		if partial <= 0 {
 			return s.preConsumedQuota, nil
 		}
-		if err := reservable.ReserveAdditional(partial); err != nil {
+		if err := reserveAdditional(partial); err != nil {
 			if errors.Is(err, billingdomain.ErrInsufficientBalance) {
 				return s.preConsumedQuota, nil
 			}
@@ -112,7 +118,13 @@ func (s *BillingSession) reserveSettlementIncrease(actualQuota int) (int, error)
 }
 
 func (s *BillingSession) reserveTrustedSettlement(actualQuota int) error {
-	if err := s.funding.PreConsume(actualQuota); err != nil {
+	preConsume := s.funding.PreConsume
+	if wallet, ok := s.funding.(*LedgerRelayFunding); ok {
+		preConsume = func(amount int) error {
+			return wallet.preConsume(context.WithoutCancel(wallet.reservationContext()), amount)
+		}
+	}
+	if err := preConsume(actualQuota); err != nil {
 		return err
 	}
 	if !s.relayInfo.IsPlayground {

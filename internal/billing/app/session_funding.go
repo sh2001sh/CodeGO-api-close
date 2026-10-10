@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -112,7 +113,14 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 }
 
 func newWalletBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
-	userQuota, accountID, err := GetUserClaudeWalletFunding(relayInfo.UserId)
+	ctx := context.Background()
+	if c != nil && c.Request != nil {
+		ctx = c.Request.Context()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+	}
+	userQuota, accountID, err := getUserClaudeWalletFundingContext(ctx, relayInfo.UserId)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
 	}
@@ -130,9 +138,15 @@ func newWalletBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, p
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 	}
+	funding.requestContext = ctx
 	session := &BillingSession{relayInfo: relayInfo, funding: funding}
 	if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
 		return nil, apiErr
+	}
+	if err := ctx.Err(); err != nil {
+		// The reservation may have committed just before cancellation. Complete
+		// its compensating release before abandoning the HTTP billing session.
+		return nil, types.NewError(errors.Join(err, session.RefundSync(c)), types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 	}
 	return session, nil
 }

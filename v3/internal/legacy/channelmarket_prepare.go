@@ -1,29 +1,25 @@
 package legacy
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/url"
 	"sort"
 	"strings"
 )
 
+// Public-only channels have no legacy gateway ID. Their generated ID must
+// survive new channels and gateway IDs appearing between online snapshots.
+// Keep it below JavaScript's safe-integer limit; reject any source collision.
+func cmGeneratedCatalogID(publicID string) int64 {
+	digest := sha256.Sum256([]byte("codego.v3.marketplace.catalog:" + publicID))
+	return 1<<46 | int64(binary.BigEndian.Uint64(digest[:8])&((1<<46)-1))
+}
+
 func (d *channelMarketData) prepare(sourceSecret string) {
-	var maximum int64
-	for id := range d.internal {
-		if id > maximum {
-			maximum = id
-		}
-	}
-	// Deleted marketplace rows retain their original catalog IDs after v2
-	// removes the gateway parent. Reserve those IDs before allocating new ones.
-	for _, row := range d.rows["channels"] {
-		if id, err := row.integer("internal_channel_id"); err == nil && id > maximum {
-			maximum = id
-		}
-	}
 	groupsByChannel := map[string][]cmRow{}
 	for _, group := range d.rows["groups"] {
 		id := group.text("channel_id")
@@ -54,11 +50,9 @@ func (d *channelMarketData) prepare(sourceSecret string) {
 		newCatalog := catalogID == 0
 		archiveParent := false
 		if newCatalog {
-			if maximum == math.MaxInt64 {
-				err = errors.New("catalog ID overflow")
-			} else {
-				maximum++
-				catalogID = maximum
+			catalogID = cmGeneratedCatalogID(id)
+			if d.internal[catalogID] != nil {
+				err = errors.New("generated catalog ID collides with a source gateway channel")
 			}
 		} else if d.internal[catalogID] == nil {
 			groups := groupsByChannel[id]

@@ -189,7 +189,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		if streamResponse.Type == dto.ResponsesOutputTypeItemDone && isResponsesCompactionItem(streamResponse.Item) {
 			sawCompactionOutput.Store(true)
 		}
-		textOutput := isResponsesTextDelta(streamResponse)
+		textOutput := hasResponsesVisibleText(streamResponse)
 		// Capture provider usage before writing anything downstream. A client
 		// disconnect while flushing the final event must not discard exact usage.
 		if streamResponse.Response != nil && streamResponse.Response.Usage != nil {
@@ -226,20 +226,13 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			return
 		}
 		if semanticOutput {
+			info.ObserveStreamOutput(sr.ReceivedAt(), textOutput)
 			sr.MarkProgress()
 			firstSemanticOutput := sawSemanticOutput.CompareAndSwap(false, true)
 			if firstSemanticOutput {
-				if info.FirstByteTrace != nil {
-					info.FirstByteTrace.MarkFirstSemanticReadAt(sr.ReceivedAt(), textOutput)
-				}
-				info.SetFirstSemanticResponseTime()
 				if firstOutputTimer != nil {
 					firstOutputTimer.Stop()
 				}
-			}
-			if textOutput && info.FirstByteTrace != nil {
-				info.FirstByteTrace.MarkFirstTextReadAt(sr.ReceivedAt())
-				info.FirstByteTrace.MarkFirstTextEvent()
 			}
 			helper.MarkSemanticCommitted(c)
 			var err error

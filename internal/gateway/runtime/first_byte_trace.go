@@ -37,6 +37,8 @@ type FirstByteTrace struct {
 	requestBodyRestoreDoneAt    time.Time
 	billingReserveStartAt       time.Time
 	billingReserveDoneAt        time.Time
+	walletQueueWaitDuration     time.Duration
+	walletQueueWaitObserved     bool
 	upstreamStartAt             time.Time
 	requestConversionDoneAt     time.Time
 	upstreamRequestReadyAt      time.Time
@@ -81,6 +83,18 @@ func NewFirstByteTrace(startedAt time.Time) *FirstByteTrace {
 
 func (t *FirstByteTrace) MarkBodyReadStarted() { t.mark(&t.bodyReadStartAt) }
 func (t *FirstByteTrace) MarkBodyReadDone()    { t.mark(&t.bodyReadDoneAt) }
+
+// AddWalletQueueWaitDuration records only initial relay wallet reservation
+// queue waits, including cancellation. SQL, settlement and refund are excluded.
+func (t *FirstByteTrace) AddWalletQueueWaitDuration(duration time.Duration) {
+	if t == nil || duration < 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.walletQueueWaitDuration += duration
+	t.walletQueueWaitObserved = true
+}
 
 // BodyReadDoneTime returns the instant the client request body was fully
 // materialized by the gateway. It is used as the origin for latency metrics
@@ -217,6 +231,8 @@ func (t *FirstByteTrace) snapshot(includeProgress bool, now time.Time) map[strin
 		now = time.Now()
 	}
 	snapshot := map[string]int64{
+		"body_read_complete":               boolToInt64(!t.bodyReadDoneAt.IsZero()),
+		"upstream_request_started":         boolToInt64(!t.upstreamStartAt.IsZero()),
 		"ingress_ms":                       durationMilliseconds(t.startedAt, t.relayInfoReadyAt),
 		"request_validation_ms":            durationMilliseconds(t.startedAt, t.requestValidAt),
 		"admission_ms":                     durationMilliseconds(t.requestValidAt, t.admittedAt),
@@ -231,6 +247,9 @@ func (t *FirstByteTrace) snapshot(includeProgress bool, now time.Time) map[strin
 		"upstream_first_semantic_event_ms": durationMilliseconds(t.upstreamStartAt, t.firstSemanticAt),
 		"total_raw_event_ms":               durationMilliseconds(t.startedAt, t.firstEventAt),
 		"total_ms":                         durationMilliseconds(t.startedAt, t.firstSemanticAt),
+	}
+	if t.walletQueueWaitObserved {
+		snapshot["wallet_queue_wait_ms"] = t.walletQueueWaitDuration.Milliseconds()
 	}
 	if !t.bodyReadStartAt.IsZero() && !t.bodyReadDoneAt.IsZero() {
 		snapshot["body_receive_ms"] = durationMilliseconds(t.bodyReadStartAt, t.bodyReadDoneAt)
@@ -328,6 +347,16 @@ func (t *FirstByteTrace) snapshot(includeProgress bool, now time.Time) map[strin
 	if !t.firstTextReadAt.IsZero() {
 		snapshot["upstream_first_text_read_ms"] = durationMilliseconds(t.upstreamStartAt, t.firstTextReadAt)
 		snapshot["text_read_to_handler_ms"] = durationMilliseconds(t.firstTextReadAt, t.firstTextAt)
+	}
+	if !t.firstTextAt.IsZero() && !t.firstTextAt.Before(t.startedAt) {
+		snapshot["total_text_ms"] = t.firstTextAt.Sub(t.startedAt).Milliseconds()
+		start := t.startedAt
+		if t.bodyReadDoneAt.After(start) {
+			start = t.bodyReadDoneAt
+		}
+		if !t.firstTextAt.Before(start) {
+			snapshot["e2e_first_text_ms"] = t.firstTextAt.Sub(start).Milliseconds()
+		}
 	}
 	if includeProgress {
 		snapshot["elapsed_ms"] = durationMilliseconds(t.startedAt, now)

@@ -108,6 +108,7 @@ type RelayInfo struct {
 	StartTime               time.Time
 	AttemptStartTime        time.Time
 	FirstResponseTime       time.Time
+	ResponseCompletedAt     time.Time
 	FirstByteTrace          *FirstByteTrace
 	firstSemanticResponse   bool
 	isFirstResponse         bool
@@ -721,13 +722,10 @@ func (info *RelayInfo) GetEstimatePromptTokens() int {
 }
 
 func (info *RelayInfo) SetFirstResponseTime() {
-	if info.isFirstResponse {
+	if info.isFirstResponse && !info.firstSemanticResponse {
 		info.FirstResponseTime = time.Now()
 		if info.FirstByteTrace != nil {
 			info.FirstByteTrace.MarkFirstEvent()
-			if info.RelayFormat != types.RelayFormatOpenAIResponses {
-				info.FirstByteTrace.MarkFirstSemanticEvent()
-			}
 		}
 		info.isFirstResponse = false
 	}
@@ -743,12 +741,16 @@ func (info *RelayInfo) SetFirstSemanticResponseTime() {
 	if info.FirstByteTrace != nil {
 		info.FirstByteTrace.MarkFirstSemanticEvent()
 	}
-	info.isFirstResponse = false
 	info.firstSemanticResponse = true
 }
 
 func (info *RelayInfo) HasSendResponse() bool {
 	return info.FirstResponseTime.After(info.StartTime)
+}
+
+// HasSemanticResponse excludes protocol lifecycle and role-only events.
+func (info *RelayInfo) HasSemanticResponse() bool {
+	return info != nil && info.firstSemanticResponse && info.HasSendResponse()
 }
 
 type TaskRelayInfo struct {

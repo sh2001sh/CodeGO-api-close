@@ -6326,7 +6326,15 @@
     "输入 Token": "Входные токены",
     "输出 Token": "Выходные токены",
     "缓存命中 Token": "Токены из кеша",
-    "缓存写入 Token": "Токены записи в кеш"
+    "缓存写入 Token": "Токены записи в кеш",
+    "Attempt": "Текущая попытка к провайдеру",
+    "First text": "Первый текст",
+    "First output": "Первый вывод",
+    "Output token rate": "Скорость вывода",
+    "Effective throughput": "Эффективная скорость",
+    "First output may include reasoning or tool calls. First text excludes lifecycle events and reasoning.": "Первый вывод может включать рассуждения и вызовы инструментов. Первый текст не включает служебные события и рассуждения.",
+    "Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.": "Токены вывода в секунду от первого вывода модели до завершения ответа. Учитываются и токены рассуждений; это не внутренняя скорость модели.",
+    "Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed.": "Число токенов вывода, делённое на полное время запроса. Исторические записи и непотоковые ответы не позволяют измерить скорость потока."
   },
   "Unable to load collective plans.": "Unable to load collective plans.",
   "Unable to load participation records.": "Unable to load participation records.",

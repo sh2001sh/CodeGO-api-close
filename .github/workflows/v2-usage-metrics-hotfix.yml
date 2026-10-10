@@ -1,0 +1,176 @@
+name: V2 usage metrics hotfix (amd64)
+
+on:
+  push:
+    branches: [fix/v2-usage-metrics-20261010]
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Exact 40-character hotfix commit on this branch
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2-usage-metrics-hotfix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.repository == 'sh2001sh/CodeGO-api-close' && github.ref == 'refs/heads/fix/v2-usage-metrics-20261010'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
+      tag: ${{ steps.revision.outputs.tag }}
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:17
+        env:
+          POSTGRES_USER: fixture
+          POSTGRES_PASSWORD: fixture-ci-postgres
+          POSTGRES_DB: billing_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fixture -d billing_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: mirror.gcr.io/library/redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision || github.sha }}
+          fetch-depth: 0
+      - name: Verify exact production-based hotfix revision
+        id: revision
+        env:
+          EXPECTED_SHA: ${{ inputs.revision || github.sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          actual=$(git rev-parse HEAD)
+          test "$actual" = "$EXPECTED_SHA"
+          test "$actual" = "$WORKFLOW_SHA"
+          git merge-base --is-ancestor a4f8b054263b5fa978683b4377dd4ed10d905fb7 "$actual"
+          test "$actual" != a4f8b054263b5fa978683b4377dd4ed10d905fb7
+          printf 'sha=%s\ntag=sha-%s\n' "$actual" "${actual:0:7}" >> "$GITHUB_OUTPUT"
+          printf 'sha-%s\n' "${actual:0:7}" > VERSION
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.1"
+          cache-dependency-path: go.sum
+      - name: Verify V2 runtime, billing, audit and provider behavior
+        timeout-minutes: 15
+        env:
+          TEST_LEDGER_POSTGRES_DSN: postgres://fixture:fixture-ci-postgres@127.0.0.1:5432/billing_test?sslmode=disable
+          USER_CONCURRENCY_TEST_REDIS_ADDR: 127.0.0.1:6379
+        run: |
+          set -euo pipefail
+          go test -count=1 -timeout=8m ./internal/gateway/runtime ./internal/billing/... ./internal/audit/... ./internal/gateway/execution/providers/... ./internal/platform/logger ./internal/platform/transport/http/middleware
+          go test -race -count=1 -timeout=3m ./internal/gateway/runtime ./internal/billing/app ./internal/audit/app ./internal/audit/projection ./internal/platform/logger ./internal/platform/transport/http/middleware -run 'First|Latency|Duration|Stream|Throughput|Perf|BillingSession|WalletBilling|Sequence|Canceled|Cancelled|Cancellation|LogHelper|RequestLog'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - name: Verify usage-log frontend types, tests and build
+        timeout-minutes: 10
+        working-directory: web/default
+        env:
+          DISABLE_ESLINT_PLUGIN: "true"
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bun run typecheck
+          node --experimental-strip-types --test src/features/usage-logs/lib/throughput.test.ts src/features/usage-logs/section-meta.test.ts
+          VITE_REACT_APP_VERSION=$(cat ../../VERSION) bun run build
+          test -s dist/index.html
+      - name: Verify response completion and failure handlers
+        timeout-minutes: 8
+        run: go test -count=1 -timeout=5m ./internal/gateway/execution ./internal/gateway/transport/http ./internal/platform/transport/http
+
+  images:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [gateway-api, control-api]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+      - name: Verify the tested commit and V2 executable
+        env:
+          EXPECTED_SHA: ${{ needs.verify.outputs.sha }}
+          SERVICE: ${{ matrix.service }}
+          VERSION_TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          case "$SERVICE" in gateway-api|control-api) ;; *) exit 1 ;; esac
+          test -f "cmd/$SERVICE/main.go"
+          printf '%s\n' "$VERSION_TAG" > VERSION
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+      - name: Build and publish the tested V2 image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          build-args: |
+            APP_PATH=./cmd/${{ matrix.service }}
+            FRONTEND_REVISION=${{ needs.verify.outputs.sha }}
+            BUN_IMAGE=mirror.gcr.io/oven/bun:1@sha256:0733e50325078969732ebe3b15ce4c4be5082f18c4ac1a0f0ca4839c2e4e42a7
+            GO_IMAGE=mirror.gcr.io/library/golang:1.26.1-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039
+            RUNTIME_IMAGE=mirror.gcr.io/library/debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
+          cache-from: |
+            type=gha,scope=v2-usage-metrics-${{ matrix.service }}-amd64
+            type=gha,scope=v2-${{ matrix.service }}-amd64
+          cache-to: type=gha,mode=max,scope=v2-usage-metrics-${{ matrix.service }}-amd64
+          tags: ghcr.io/sh2001sh/codego-api:${{ needs.verify.outputs.tag }}-${{ matrix.service }}-amd64
+          labels: |
+            org.opencontainers.image.revision=${{ needs.verify.outputs.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.verify.outputs.tag }}
+      - name: Verify published digest and OCI revision
+        env:
+          IMAGE: ghcr.io/sh2001sh/codego-api:${{ needs.verify.outputs.tag }}-${{ matrix.service }}-amd64
+          DIGEST: ${{ steps.build.outputs.digest }}
+          EXPECTED_SHA: ${{ needs.verify.outputs.sha }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          pinned="$IMAGE@$DIGEST"
+          docker buildx imagetools inspect "$pinned" --format '{{json .Image}}' > /tmp/v2-usage-metrics-oci.json
+          jq -e --arg revision "$EXPECTED_SHA" '.os == "linux" and .architecture == "amd64" and .config.Labels["org.opencontainers.image.revision"] == $revision' /tmp/v2-usage-metrics-oci.json
+          jq -n --arg image "$IMAGE" --arg digest "$DIGEST" --arg revision "$EXPECTED_SHA" --arg service "$SERVICE" '{image: $image, digest: $digest, revision: $revision, service: $service, platform: "linux/amd64"}' > "/tmp/v2-usage-metrics-$SERVICE-image.json"
+          printf 'Verified V2 %s: `%s`\nOCI revision: `%s`\n' "$SERVICE" "$pinned" "$EXPECTED_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v2-usage-metrics-image-${{ matrix.service }}-${{ needs.verify.outputs.sha }}
+          path: /tmp/v2-usage-metrics-${{ matrix.service }}-image.json

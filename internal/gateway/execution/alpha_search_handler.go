@@ -212,6 +212,7 @@ func writeAlphaSearchResponse(c *gin.Context, info *relaycommon.RelayInfo, respo
 	}
 	platformhttpx.IOCopyBytesGracefully(c, response, responseBody)
 	info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearchPreview].CallCount = 1
+	info.MarkResponseCompleted()
 	billingapp.PostTextConsumeQuota(c, info, &dto.Usage{}, nil)
 	return nil
 }

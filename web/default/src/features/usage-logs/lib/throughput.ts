@@ -22,6 +22,65 @@ export interface UsageLogThroughputInput {
   useTimeSeconds: number
 }
 
+export interface StreamThroughputInput {
+  isStream: boolean
+  completionTokens: number
+  generationTimeMs?: number | null
+  timingVersion?: number | null
+}
+
+/** Output-token throughput, measured before billing and background work. */
+export function getStreamTokenThroughput(
+  input: StreamThroughputInput
+): number | null {
+  if (
+    !input.isStream ||
+    input.timingVersion !== 2 ||
+    !Number.isFinite(input.completionTokens) ||
+    input.completionTokens <= 0 ||
+    input.generationTimeMs == null ||
+    !Number.isFinite(input.generationTimeMs) ||
+    input.generationTimeMs <= 0
+  )
+    return null
+  return (input.completionTokens * 1000) / input.generationTimeMs
+}
+
+export interface FirstOutputTimingInput {
+  frt?: number
+  e2e_ttft_ms?: number
+  response_start_ms?: number
+  first_byte_trace?: {
+    e2e_first_text_ms?: number
+    total_text_ms?: number
+  }
+}
+
+/** Lifecycle events must not be presented as model text or output. */
+export function getFirstOutputTiming(input: FirstOutputTimingInput | null): {
+  milliseconds: number
+  label: 'First text' | 'First output' | 'Response started'
+} | null {
+  if (!input) return null
+  const candidates = [
+    [input.first_byte_trace?.e2e_first_text_ms, 'First text'],
+    [input.first_byte_trace?.total_text_ms, 'First text'],
+    [input.e2e_ttft_ms, 'First output'],
+    [input.frt, 'First output'],
+    [input.response_start_ms, 'Response started'],
+  ] as const
+  for (const [milliseconds, label] of candidates) {
+    if (
+      milliseconds != null &&
+      Number.isFinite(milliseconds) &&
+      milliseconds >= 0
+    ) {
+      return { milliseconds, label }
+    }
+  }
+  return null
+}
+
 /**
  * Calculates effective output throughput over the complete request lifetime.
  * The second-resolution use time keeps historical logs compatible.

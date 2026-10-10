@@ -89,6 +89,7 @@ func RerankHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	info.MarkResponseCompleted()
 	if newAPIError != nil {
 		platformhttpx.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError

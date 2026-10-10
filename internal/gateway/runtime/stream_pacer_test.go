@@ -68,10 +68,30 @@ func TestStreamPacer_TracksReleasedVisibleTokens(t *testing.T) {
 
 	require.Equal(t, expectedTokens, pacer.OutputTokens())
 	duration, measured := pacer.OutputDuration()
-	require.True(t, measured)
+	require.Equal(t, len(parts) > 1, measured)
 	require.GreaterOrEqual(t, duration, time.Duration(0))
 }
 
 func TestStreamPacer_SkipsNonGPTModels(t *testing.T) {
 	require.Nil(t, NewStreamPacer("claude-sonnet-4"))
+}
+
+func TestStreamPacerDurationEndsAtLastFragment(t *testing.T) {
+	start := time.Now().Add(-time.Hour)
+	pacer := &StreamPacer{started: true, firstContentAt: start, lastContentAt: start.Add(2 * time.Second), estimatedTokens: 20}
+	duration, measured := pacer.OutputDuration()
+	require.True(t, measured)
+	require.Equal(t, 2*time.Second, duration)
+	durationAgain, measured := pacer.OutputDuration()
+	require.True(t, measured)
+	require.Equal(t, duration, durationAgain)
+}
+
+func TestStreamPacerSingleFragmentHasNoMeasuredRate(t *testing.T) {
+	pacer := NewStreamPacer("gpt-5.6-sol")
+	require.NoError(t, pacer.Pace(context.Background(), "hello"))
+	duration, measured := pacer.OutputDuration()
+	require.False(t, measured)
+	require.Zero(t, duration)
+	require.Positive(t, pacer.OutputTokens())
 }

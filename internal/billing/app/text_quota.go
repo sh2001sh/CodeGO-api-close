@@ -208,6 +208,9 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		CacheCreationRatio1h: relayInfo.PriceData.CacheCreation1hRatio,
 		UsageSemantic:        usageSemanticFromUsage(relayInfo, usage),
 	}
+	if duration, measured := relayInfo.ResponseDuration(); measured {
+		summary.UseTimeSeconds = int64(duration / time.Second)
+	}
 	summary.IsClaudeUsageSemantic = summary.UsageSemantic == "anthropic"
 
 	if fallback, ok := fallbackPromptOnlyUsage(relayInfo, usage); ok {

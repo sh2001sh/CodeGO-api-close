@@ -70,6 +70,24 @@ func TestCalculateTextQuotaSummaryUnifiedForClaudeSemantic(t *testing.T) {
 	require.Equal(t, 1488, chatSummary.Quota)
 }
 
+func TestCalculateTextQuotaSummaryUsesFrozenWholeSeconds(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	start := time.Now().Add(-time.Hour)
+	info := &relaycommon.RelayInfo{
+		StartTime: start, OriginModelName: "gpt-5.6-sol",
+		ChannelMeta: &relaycommon.ChannelMeta{},
+		PriceData:   types.PriceData{ModelRatio: 1, CompletionRatio: 1, GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1}},
+	}
+	usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 3, TotalTokens: 13}
+	info.MarkResponseCompletedAt(start.Add(5900 * time.Millisecond))
+	summary := calculateTextQuotaSummary(ctx, info, usage)
+	require.EqualValues(t, 5, summary.UseTimeSeconds)
+	info.BeginAttempt(time.Now())
+	legacy := calculateTextQuotaSummary(ctx, info, usage)
+	require.GreaterOrEqual(t, legacy.UseTimeSeconds, int64(time.Hour/time.Second))
+	require.Equal(t, summary.Quota, legacy.Quota, "changing the timing source must preserve billing")
+}
+
 func TestCalculateTextQuotaSummaryUsesSplitClaudeCacheCreationRatios(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

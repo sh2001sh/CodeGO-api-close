@@ -33,6 +33,7 @@ func WssHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, nil, info)
+	info.MarkResponseCompleted()
 	if newAPIError != nil {
 		platformhttpx.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError

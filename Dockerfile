@@ -1,4 +1,8 @@
-FROM oven/bun:1@sha256:0733e50325078969732ebe3b15ce4c4be5082f18c4ac1a0f0ca4839c2e4e42a7 AS builder
+ARG BUN_IMAGE=oven/bun:1@sha256:0733e50325078969732ebe3b15ce4c4be5082f18c4ac1a0f0ca4839c2e4e42a7
+ARG GO_IMAGE=golang:1.26.1-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039
+ARG RUNTIME_IMAGE=debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
+
+FROM ${BUN_IMAGE} AS builder
 
 WORKDIR /build
 ARG FRONTEND_REVISION=unknown
@@ -14,7 +18,7 @@ RUN test -n "$FRONTEND_REVISION" \
     && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat VERSION) bun run build \
     && test -s dist/index.html
 
-FROM golang:1.26.1-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039 AS builder2
+FROM ${GO_IMAGE} AS builder2
 ENV GO111MODULE=on CGO_ENABLED=0
 
 ARG TARGETOS
@@ -34,7 +38,7 @@ COPY . .
 COPY --from=builder /build/dist ./web/default/dist
 RUN go build -ldflags "-s -w -X 'github.com/sh2001sh/new-api/internal/platform/config.Version=$(cat VERSION)'" -o app ${APP_PATH}
 
-FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
+FROM ${RUNTIME_IMAGE}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tzdata libasan8 wget \

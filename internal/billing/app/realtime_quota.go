@@ -155,6 +155,9 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	}
 
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
+	if duration, measured := relayInfo.ResponseDuration(); measured {
+		useTimeSeconds = int64(duration / time.Second)
+	}
 	completionRatio := decimal.NewFromFloat(gatewaystore.GetCompletionRatio(modelName))
 	audioRatio := decimal.NewFromFloat(gatewaystore.GetAudioRatio(relayInfo.OriginModelName))
 	audioCompletionRatio := decimal.NewFromFloat(gatewaystore.GetAudioCompletionRatio(modelName))
@@ -262,6 +265,9 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	}
 
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
+	if duration, measured := relayInfo.ResponseDuration(); measured {
+		useTimeSeconds = int64(duration / time.Second)
+	}
 	completionRatio := decimal.NewFromFloat(gatewaystore.GetCompletionRatio(relayInfo.OriginModelName))
 	audioRatio := decimal.NewFromFloat(gatewaystore.GetAudioRatio(relayInfo.OriginModelName))
 	audioCompletionRatio := decimal.NewFromFloat(gatewaystore.GetAudioCompletionRatio(relayInfo.OriginModelName))

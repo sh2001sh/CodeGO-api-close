@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -84,12 +85,25 @@ func GetUserClaudeWalletFunding(userID int) (int, string, error) {
 	})
 }
 
+func getUserClaudeWalletFundingContext(ctx context.Context, userID int) (int, string, error) {
+	db := platformdb.DB.WithContext(ctx)
+	return getLedgerBackedWalletFundingDB(db, userID, billingAccountTypeClaudeWallet, func() (int, error) {
+		var quota int
+		err := db.Model(&identityschema.User{}).Where("id = ?", userID).Select("claude_quota").Find(&quota).Error
+		return quota, err
+	})
+}
+
 func getLedgerBackedWalletFunding(userID int, accountType string, legacyRead func() (int, error)) (int, string, error) {
+	return getLedgerBackedWalletFundingDB(platformdb.DB, userID, accountType, legacyRead)
+}
+
+func getLedgerBackedWalletFundingDB(db *gorm.DB, userID int, accountType string, legacyRead func() (int, error)) (int, string, error) {
 	if userID <= 0 {
 		return 0, "", errors.New("invalid user id")
 	}
 	var account billingschema.BillingAccount
-	err := platformdb.DB.Select("account_id").Where("owner_type = ? AND owner_id = ? AND account_type = ? AND quota_unit = ?",
+	err := db.Select("account_id").Where("owner_type = ? AND owner_id = ? AND account_type = ? AND quota_unit = ?",
 		billingOwnerTypeUser, userID, accountType, billingQuotaUnitQuota,
 	).First(&account).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) || isMissingBillingSchema(err) {
@@ -101,7 +115,7 @@ func getLedgerBackedWalletFunding(userID int, accountType string, legacyRead fun
 	}
 
 	var snapshot billingschema.BillingBalanceSnapshot
-	if err := platformdb.DB.Select("available_balance").Where("account_id = ?", account.AccountID).First(&snapshot).Error; err != nil {
+	if err := db.Select("available_balance").Where("account_id = ?", account.AccountID).First(&snapshot).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) || isMissingBillingSchema(err) {
 			balance, readErr := legacyRead()
 			return balance, "", readErr

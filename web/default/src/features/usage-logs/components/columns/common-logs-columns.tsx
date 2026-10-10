@@ -49,7 +49,11 @@ import {
   getUsageLogRoutePoolName,
   isViolationFeeLog,
 } from '../../lib/format'
-import { getEffectiveTokenThroughput } from '../../lib/throughput'
+import {
+  getEffectiveTokenThroughput,
+  getStreamTokenThroughput,
+  getFirstOutputTiming,
+} from '../../lib/throughput'
 import {
   isDisplayableLogType,
   isTimingLogType,
@@ -663,26 +667,34 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const log = row.original
         if (!isTimingLogType(log.type)) return null
 
-        const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
-        const frt = other?.frt
-        const responseStartMs = other?.response_start_ms
-        const upstreamFirstEventMs =
-          other?.first_byte_trace?.upstream_first_event_ms
-        const displayedStreamStartMs =
-          upstreamFirstEventMs != null && upstreamFirstEventMs > 0
-            ? upstreamFirstEventMs
-            : responseStartMs != null && responseStartMs > 0
-              ? responseStartMs
-              : frt
-        const tokensPerSecond = getEffectiveTokenThroughput({
+        const useTime =
+          other?.total_duration_ms != null &&
+          Number.isFinite(other.total_duration_ms) &&
+          other.total_duration_ms >= 0
+            ? other.total_duration_ms / 1000
+            : log.use_time
+        const firstOutput = log.is_stream ? getFirstOutputTiming(other) : null
+        const streamTokensPerSecond = getStreamTokenThroughput({
+          isStream: log.is_stream,
+          timingVersion: other?.timing_version,
+          completionTokens: log.completion_tokens,
+          generationTimeMs: other?.generation_time_ms,
+        })
+        const effectiveTokensPerSecond = getEffectiveTokenThroughput({
           completionTokens: log.completion_tokens,
           totalDurationMs: other?.total_duration_ms,
           useTimeSeconds: useTime,
         })
+        const tokensPerSecond =
+          streamTokensPerSecond ?? effectiveTokensPerSecond
+        const throughputLabel =
+          streamTokensPerSecond != null
+            ? t('Output token rate')
+            : t('Effective throughput')
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
-        const streamStartVariant = displayedStreamStartMs
-          ? getFirstResponseTimeColor(displayedStreamStartMs / 1000)
+        const streamStartVariant = firstOutput
+          ? getFirstResponseTimeColor(firstOutput.milliseconds / 1000)
           : null
 
         const pillBg: Record<string, string> = {
@@ -721,8 +733,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 {formatUseTime(useTime)}
               </span>
               {log.is_stream &&
-                (displayedStreamStartMs != null &&
-                displayedStreamStartMs > 0 ? (
+                (firstOutput != null ? (
                   <TooltipProvider delay={300}>
                     <Tooltip>
                       <TooltipTrigger
@@ -736,10 +747,13 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                           />
                         }
                       >
-                        {formatUseTime(displayedStreamStartMs / 1000)}
+                        {t(firstOutput.label)}:{' '}
+                        {formatUseTime(firstOutput.milliseconds / 1000)}
                       </TooltipTrigger>
                       <TooltipContent>
-                        {t('Channel first event')}
+                        {t(
+                          'First output may include reasoning or tool calls. First text excludes lifecycle events and reasoning.'
+                        )}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -753,13 +767,27 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               <span className='text-muted-foreground/60'>
                 {log.is_stream ? t('Stream') : t('Non-stream')}
                 {tokensPerSecond != null && (
-                  <>
-                    {' · '}
-                    <span className='font-mono tabular-nums'>
-                      {Math.round(tokensPerSecond)}
-                    </span>
-                    {' t/s'}
-                  </>
+                  <TooltipProvider delay={300}>
+                    <Tooltip>
+                      <TooltipTrigger render={<span className='cursor-help' />}>
+                        {' · '}
+                        {throughputLabel}{' '}
+                        <span className='font-mono tabular-nums'>
+                          {tokensPerSecond.toFixed(1)}
+                        </span>
+                        {' t/s'}
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {streamTokensPerSecond != null
+                          ? t(
+                              'Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.'
+                            )
+                          : t(
+                              'Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed.'
+                            )}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </span>
               {log.is_stream &&

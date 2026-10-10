@@ -58,6 +58,7 @@ func AudioHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	info.MarkResponseCompleted()
 	if newAPIError != nil {
 		platformhttpx.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError

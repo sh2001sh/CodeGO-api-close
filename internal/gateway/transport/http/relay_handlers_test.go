@@ -31,6 +31,7 @@ type relayErrorEnvelope struct {
 type refundTrackingBilling struct {
 	refunded bool
 	settled  bool
+	onRefund func()
 }
 
 func (b *refundTrackingBilling) Settle(int) error {
@@ -38,8 +39,13 @@ func (b *refundTrackingBilling) Settle(int) error {
 	return nil
 }
 
-func (b *refundTrackingBilling) Refund(*gin.Context) { b.refunded = true }
-func (b *refundTrackingBilling) NeedsRefund() bool   { return true }
+func (b *refundTrackingBilling) Refund(*gin.Context) {
+	if b.onRefund != nil {
+		b.onRefund()
+	}
+	b.refunded = true
+}
+func (b *refundTrackingBilling) NeedsRefund() bool { return true }
 func (b *refundTrackingBilling) GetPreConsumedQuota() int {
 	return 100
 }
@@ -102,6 +108,22 @@ func TestRefundRelayBillingRefundsExplicitUpstreamTerminalErrorAfterOutput(t *te
 	require.True(t, billing.refunded)
 	require.False(t, billing.settled)
 	require.Nil(t, info.Billing)
+}
+
+func TestFailedResponseTimingFreezesBeforeRefund(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	billing := &refundTrackingBilling{}
+	info := &relaycommon.RelayInfo{StartTime: time.Now().Add(-time.Second), Billing: billing}
+	var completedAt time.Time
+	billing.onRefund = func() {
+		require.False(t, info.ResponseCompletedAt.IsZero(), "refund must start after response timing is frozen")
+		completedAt = info.ResponseCompletedAt
+	}
+	apiErr := types.NewOpenAIError(errors.New("upstream failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	require.Same(t, apiErr, refundRelayBillingIfNeeded(ctx, info, apiErr))
+	require.True(t, billing.refunded)
+	info.MarkResponseCompleted()
+	require.Equal(t, completedAt, info.ResponseCompletedAt)
 }
 
 func TestRelayFailureSampleRequiresUpstreamAttempt(t *testing.T) {

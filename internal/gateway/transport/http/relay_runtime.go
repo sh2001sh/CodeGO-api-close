@@ -421,6 +421,7 @@ func refundRelayBillingIfNeeded(c *gin.Context, relayInfo *relaycommon.RelayInfo
 	if apiErr == nil || relayInfo == nil {
 		return apiErr
 	}
+	relayInfo.MarkResponseCompleted()
 	apiErr = billingapp.NormalizeViolationFeeError(apiErr)
 	if gatewaystream.AttemptStageFromContext(c) == gatewaystream.AttemptStageSemanticCommitted &&
 		!c.GetBool(string(constant.ContextKeyUpstreamTerminalError)) &&

@@ -40,6 +40,40 @@ func TestGenerateTextOtherInfoIncludesFirstByteTrace(t *testing.T) {
 	require.Greater(t, trace["total_ms"], int64(0))
 }
 
+func TestGenerateTextOtherInfoUsesFrozenResponseTiming(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	start := time.Now().Add(-time.Hour)
+	info := &gatewaysruntime.RelayInfo{StartTime: start, IsStream: true, ChannelMeta: &gatewaysruntime.ChannelMeta{}}
+	info.SetFirstSemanticResponseTime()
+	info.FirstResponseTime = start.Add(2 * time.Second)
+	info.MarkResponseCompletedAt(start.Add(5 * time.Second))
+	other := GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 0, 0, 1)
+	require.Equal(t, 2, other["timing_version"])
+	require.EqualValues(t, 5000, other["total_duration_ms"])
+	require.EqualValues(t, 3000, other["generation_time_ms"])
+	info.MarkResponseCompleted()
+	require.Equal(t, other["generation_time_ms"], GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 0, 0, 1)["generation_time_ms"])
+}
+
+func TestGenerateTextOtherInfoDoesNotInventOutputTiming(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	start := time.Now().Add(-time.Minute)
+	info := &gatewaysruntime.RelayInfo{StartTime: start, IsStream: true, FirstResponseTime: start.Add(time.Second), ChannelMeta: &gatewaysruntime.ChannelMeta{}}
+	info.MarkResponseCompletedAt(start.Add(5 * time.Second))
+	other := GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 0, 0, 1)
+	require.NotContains(t, other, "generation_time_ms")
+	require.NotContains(t, other, "frt")
+	info.SetFirstSemanticResponseTime()
+	info.FirstResponseTime = start.Add(time.Second)
+	info.IsStream = false
+	require.NotContains(t, GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 0, 0, 1), "generation_time_ms")
+	info.IsStream = true
+	info.BeginAttempt(time.Now())
+	other = GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 0, 0, 1)
+	require.NotContains(t, other, "generation_time_ms")
+	require.NotContains(t, other, "total_duration_ms")
+}
+
 func TestAppendBillingInfoIncludesQuotaSource(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -90,11 +124,11 @@ func TestBillingQuotaForLogUsesMonthlyPassSettlement(t *testing.T) {
 func TestAppendBillingInfoIncludesMonthlyPassPolicy(t *testing.T) {
 	other := make(map[string]interface{})
 	appendBillingInfo(&gatewaysruntime.RelayInfo{
-		BillingSource:               BillingSourceSubscription,
-		SubscriptionGroupMultiplier: 1.5,
+		BillingSource:                 BillingSourceSubscription,
+		SubscriptionGroupMultiplier:   1.5,
 		SubscriptionPackageMultiplier: 0.9,
-		SubscriptionQuotaScale:      15,
-		SubscriptionGroupRatio:      0.1,
+		SubscriptionQuotaScale:        15,
+		SubscriptionGroupRatio:        0.1,
 	}, other)
 
 	require.Equal(t, 1.5, other["subscription_group_multiplier"])

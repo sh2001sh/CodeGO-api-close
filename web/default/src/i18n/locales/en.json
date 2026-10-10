@@ -6936,7 +6936,15 @@
     "输入 Token": "Input tokens",
     "输出 Token": "Output tokens",
     "缓存命中 Token": "Cache read tokens",
-    "缓存写入 Token": "Cache write tokens"
+    "缓存写入 Token": "Cache write tokens",
+    "Attempt": "Attempt",
+    "First text": "First text",
+    "First output": "First output",
+    "Output token rate": "Output token rate",
+    "Effective throughput": "Effective throughput",
+    "First output may include reasoning or tool calls. First text excludes lifecycle events and reasoning.": "First output may include reasoning or tool calls. First text excludes lifecycle events and reasoning.",
+    "Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.": "Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.",
+    "Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed.": "Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed."
   },
   "Unable to load collective plans.": "Unable to load collective plans.",
   "Unable to load participation records.": "Unable to load participation records.",

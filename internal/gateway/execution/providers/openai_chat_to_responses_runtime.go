@@ -86,6 +86,7 @@ func OaiChatToResponsesStreamHandler(
 			result.Stop(streamErr)
 			return
 		}
+		info.ObserveChatStreamOutput(chunk, result.ReceivedAt())
 		events, err := state.ConvertChunk(&chunk)
 		if err != nil {
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)

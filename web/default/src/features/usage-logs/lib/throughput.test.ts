@@ -18,7 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { getEffectiveTokenThroughput } from './throughput.ts'
+import {
+  getEffectiveTokenThroughput,
+  getStreamTokenThroughput,
+  getFirstOutputTiming,
+} from './throughput.ts'
 
 describe('usage log effective token throughput', () => {
   test('uses exact completion tokens over the complete request duration', () => {
@@ -74,6 +78,82 @@ describe('usage log effective token throughput', () => {
         totalDurationMs: 0,
         useTimeSeconds: 0,
       }),
+      null
+    )
+  })
+})
+
+describe('measured output timing', () => {
+  test('keeps stream rate separate from effective request throughput', () => {
+    assert.equal(
+      getStreamTokenThroughput({
+        isStream: true,
+        timingVersion: 2,
+        completionTokens: 600,
+        generationTimeMs: 6_000,
+      }),
+      100
+    )
+    assert.equal(
+      getEffectiveTokenThroughput({
+        completionTokens: 600,
+        totalDurationMs: 20_000,
+        useTimeSeconds: 20,
+      }),
+      30
+    )
+  })
+
+  test('does not manufacture stream speed for historical or non-streaming logs', () => {
+    const input = {
+      isStream: true,
+      completionTokens: 600,
+      generationTimeMs: 6_000,
+    }
+    assert.equal(getStreamTokenThroughput(input), null)
+    assert.equal(
+      getStreamTokenThroughput({ ...input, timingVersion: 2, isStream: false }),
+      null
+    )
+    for (const generationTimeMs of [0, -1, NaN, Infinity]) {
+      assert.equal(
+        getStreamTokenThroughput({
+          ...input,
+          timingVersion: 2,
+          generationTimeMs,
+        }),
+        null
+      )
+    }
+  })
+
+  test('prefers visible text over an early lifecycle or reasoning event', () => {
+    assert.deepEqual(
+      getFirstOutputTiming({
+        response_start_ms: 50,
+        frt: 1_000,
+        e2e_ttft_ms: 900,
+        first_byte_trace: { e2e_first_text_ms: 3_000, total_text_ms: 3_100 },
+      }),
+      { milliseconds: 3_000, label: 'First text' }
+    )
+  })
+
+  test('labels semantic output and lifecycle timing honestly', () => {
+    assert.deepEqual(
+      getFirstOutputTiming({ response_start_ms: 50, frt: 1_000 }),
+      { milliseconds: 1_000, label: 'First output' }
+    )
+    assert.deepEqual(getFirstOutputTiming({ response_start_ms: 50 }), {
+      milliseconds: 50,
+      label: 'Response started',
+    })
+    assert.deepEqual(getFirstOutputTiming({ e2e_ttft_ms: 0 }), {
+      milliseconds: 0,
+      label: 'First output',
+    })
+    assert.equal(
+      getFirstOutputTiming({ frt: -1, response_start_ms: NaN }),
       null
     )
   })

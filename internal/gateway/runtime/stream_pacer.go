@@ -18,6 +18,7 @@ const (
 type StreamPacer struct {
 	started         bool
 	firstContentAt  time.Time
+	lastContentAt   time.Time
 	estimatedTokens int
 }
 
@@ -42,10 +43,12 @@ func (p *StreamPacer) Pace(ctx context.Context, text string) error {
 	if !p.started {
 		p.started = true
 		p.firstContentAt = time.Now()
+		p.lastContentAt = p.firstContentAt
 		p.estimatedTokens = tokens
 		return nil
 	}
 
+	p.lastContentAt = time.Now()
 	p.estimatedTokens += tokens
 	return nil
 }
@@ -64,7 +67,8 @@ func (p *StreamPacer) OutputDuration() (time.Duration, bool) {
 	if p == nil || !p.started {
 		return 0, false
 	}
-	return time.Since(p.firstContentAt), true
+	duration := p.lastContentAt.Sub(p.firstContentAt)
+	return duration, duration > 0
 }
 
 // SplitText breaks oversized text deltas into small, protocol-safe fragments.

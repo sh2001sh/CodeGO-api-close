@@ -346,12 +346,14 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		usageDTO = bridgeUsage
 	} else {
 		usage, responseErr := adaptor.DoResponse(c, httpResp, info)
+		info.MarkResponseCompleted()
 		if responseErr != nil {
 			platformhttpx.ResetStatusCode(responseErr, statusCodeMappingStr)
 			return responseErr
 		}
 		usageDTO = usage.(*dto.Usage)
 	}
+	info.MarkResponseCompleted()
 	if info.RelayMode == gatewaycontract.RelayModeResponsesCompact {
 		originModelName := info.OriginModelName
 		originPriceData := info.PriceData

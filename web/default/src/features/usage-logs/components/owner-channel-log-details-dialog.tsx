@@ -102,11 +102,11 @@ export function OwnerChannelLogDetailsDialog(props: {
               </DetailSection>
               <DetailSection icon={<Clock3 />} title={t('耗时')}>
                 <DetailRow
-                  label={t('尝试级首字')}
+                  label={t('First output') + ' · ' + t('Attempt')}
                   value={formatMs(item.attempt_ttft_ms)}
                 />
                 <DetailRow
-                  label={t('端到端首字')}
+                  label={t('First output')}
                   value={formatMs(item.first_byte_ms)}
                 />
                 <DetailRow

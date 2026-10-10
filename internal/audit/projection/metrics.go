@@ -30,21 +30,26 @@ func RecordRelayUsageSample(info *relaycommon.RelayInfo, success bool, inputToke
 	if info == nil {
 		return
 	}
-	now := time.Now()
-	hasTtft := info.IsStream && info.HasSendResponse()
+	hasTtft := info.IsStream && info.HasSemanticResponse()
 	ttftMs := int64(0)
 	if hasTtft {
 		ttftMs = info.FirstResponseTime.Sub(info.StartTime).Milliseconds()
 	}
 	attemptTtft, hasAttemptTtft := info.AttemptTTFT()
 	e2eTtft, hasE2eTtft := info.EndToEndTTFT()
-	latencyMs := now.Sub(info.StartTime).Milliseconds()
-	generationMs := latencyMs
-	if hasTtft {
-		generationMs = now.Sub(info.FirstResponseTime).Milliseconds()
+	latency, hasLatency := info.ResponseDuration()
+	if !hasLatency {
+		// Keep legacy request latency/count accounting for paths that bill before
+		// sending the response (portable alpha search). This is elapsed request
+		// time at collection, and is never used as an observed generation interval.
+		latency = time.Since(info.StartTime)
 	}
-	if generationMs <= 0 {
-		generationMs = latencyMs
+	latencyMs := latency.Milliseconds()
+	generation, measured := info.GenerationDuration()
+	generationMs := generation.Milliseconds()
+	if !measured || generationMs <= 0 {
+		generationMs = 0
+		outputTokens = 0
 	}
 	Record(Sample{
 		Model:            info.OriginModelName,

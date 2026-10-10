@@ -6936,7 +6936,15 @@
     "输入 Token": "输入 Token",
     "输出 Token": "输出 Token",
     "缓存命中 Token": "缓存命中 Token",
-    "缓存写入 Token": "缓存写入 Token"
+    "缓存写入 Token": "缓存写入 Token",
+    "Attempt": "本次上游尝试",
+    "First text": "首字",
+    "First output": "首个输出",
+    "Output token rate": "输出速率",
+    "Effective throughput": "有效吞吐量",
+    "First output may include reasoning or tool calls. First text excludes lifecycle events and reasoning.": "首个输出可能包含思考或工具调用；首字仅记录正文文字，不包含状态事件和思考内容。",
+    "Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.": "输出速率按首个模型输出至响应结束计算。用量可能包含思考令牌，此值不代表上游内部推理速度。",
+    "Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed.": "有效吞吐量为输出令牌数除以整个请求耗时。历史日志和非流式请求无法测量流速。"
   },
   "Unable to load collective plans.": "无法加载集享计划。",
   "Unable to load participation records.": "无法加载参与记录。",

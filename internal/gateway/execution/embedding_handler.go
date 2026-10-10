@@ -80,6 +80,7 @@ func EmbeddingHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	info.MarkResponseCompleted()
 	if newAPIError != nil {
 		platformhttpx.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError

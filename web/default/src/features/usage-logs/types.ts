@@ -110,6 +110,8 @@ export interface LogOtherData {
     event_to_semantic_ms?: number
     upstream_first_semantic_event_ms?: number
     total_ms?: number
+    total_text_ms?: number
+    e2e_first_text_ms?: number
   }
   admin_info?: {
     is_multi_key?: boolean
@@ -179,6 +181,9 @@ export interface LogOtherData {
   audio_ratio?: number
   audio_completion_ratio?: number
   frt?: number
+  attempt_ttft_ms?: number
+  e2e_ttft_ms?: number
+  timing_version?: number
   response_start_ms?: number
   total_duration_ms?: number
   generation_time_ms?: number

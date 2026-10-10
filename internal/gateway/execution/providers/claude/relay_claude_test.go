@@ -99,6 +99,7 @@ func TestClaudeStreamHandlerAcceptsUpstreamStreamWithEvents(t *testing.T) {
 	require.Equal(t, 100, usage.PromptTokens)
 	require.Equal(t, 5, usage.CompletionTokens)
 	require.Equal(t, 2, info.ReceivedResponseCount)
+	require.False(t, info.HasSemanticResponse(), "message_start and usage must not fabricate output timing")
 }
 
 func TestFormatClaudeResponseInfoMessageDeltaFullUsage(t *testing.T) {

@@ -243,6 +243,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			return
 		}
 
+		info.ObserveResponsesStreamOutput(streamResp, sr.ReceivedAt())
 		switch streamResp.Type {
 		case "response.created":
 			if streamResp.Response != nil {

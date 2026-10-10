@@ -84,7 +84,7 @@ export function useOwnerChannelLogColumns(
       },
       {
         id: 'timing',
-        header: t('首字 / 总耗时'),
+        header: t('First output') + ' / ' + t('总耗时'),
         cell: ({ row }) => (
           <div className='text-xs tabular-nums'>
             <div>{formatMilliseconds(row.original.first_byte_ms)}</div>
@@ -93,7 +93,7 @@ export function useOwnerChannelLogColumns(
             </div>
           </div>
         ),
-        meta: { label: t('首字 / 总耗时') },
+        meta: { label: t('First output') + ' / ' + t('总耗时') },
       },
       {
         accessorKey: 'consumer_amount',

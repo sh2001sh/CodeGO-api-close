@@ -303,6 +303,7 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 	}
 
 	usageAny, respErr := adaptor.DoResponse(ctx, httpResp, info)
+	info.MarkResponseCompleted()
 	if respErr != nil {
 		return channelTestResult{
 			context:     ctx,

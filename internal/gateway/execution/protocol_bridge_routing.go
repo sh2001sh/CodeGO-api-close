@@ -164,6 +164,7 @@ func executeChatToResponsesBridge(c *gin.Context, info *relaycommon.RelayInfo, a
 }
 
 func billChatBridgeUsage(c *gin.Context, info *relaycommon.RelayInfo, usage *dto.Usage) {
+	info.MarkResponseCompleted()
 	containsAudioTokens := usage.CompletionTokenDetails.AudioTokens > 0 || usage.PromptTokensDetails.AudioTokens > 0
 	containsAudioRatios := gatewaystore.ContainsAudioRatio(info.OriginModelName) || gatewaystore.ContainsAudioCompletionRatio(info.OriginModelName)
 	if containsAudioTokens && containsAudioRatios {
@@ -178,6 +179,7 @@ func executeResponsesToChatBridge(c *gin.Context, info *relaycommon.RelayInfo, a
 	if bridgeError != nil {
 		return bridgeError
 	}
+	info.MarkResponseCompleted()
 	billingapp.PostTextConsumeQuota(c, info, usage, nil)
 	return nil
 }

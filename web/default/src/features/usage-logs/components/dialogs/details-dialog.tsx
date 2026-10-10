@@ -58,9 +58,12 @@ import {
   getTieredBillingSummary,
   hasAnyCacheTokens,
   isViolationFeeLog,
-  getFirstResponseTimeColor,
-  getResponseTimeColor,
 } from '../../lib/format'
+import {
+  getEffectiveTokenThroughput,
+  getStreamTokenThroughput,
+  getFirstOutputTiming,
+} from '../../lib/throughput'
 import {
   getLogTypeConfig,
   isPerCallBilling,
@@ -70,14 +73,6 @@ import type { LogOtherData } from '../../types'
 import { BillingQuotaSourceBadge } from '../billing-quota-source'
 import { BillingCalculationSection } from './billing-calculation-section'
 import { RouteSummarySection } from './route-summary-section'
-
-function timingTextColorClass(
-  variant: 'success' | 'warning' | 'danger'
-): string {
-  if (variant === 'success') return 'text-success'
-  if (variant === 'warning') return 'text-warning'
-  return 'text-destructive'
-}
 
 function DetailRow(props: {
   label: React.ReactNode
@@ -466,7 +461,24 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
   const details = props.log.content ?? ''
   const other = parseLogOther(props.log.other)
-  const streamStartMs = other?.response_start_ms ?? other?.frt ?? 0
+  const firstOutput = props.log.is_stream ? getFirstOutputTiming(other) : null
+  const totalDurationSeconds =
+    other?.total_duration_ms != null &&
+    Number.isFinite(other.total_duration_ms) &&
+    other.total_duration_ms >= 0
+      ? other.total_duration_ms / 1000
+      : props.log.use_time
+  const streamThroughput = getStreamTokenThroughput({
+    isStream: props.log.is_stream,
+    completionTokens: props.log.completion_tokens,
+    timingVersion: other?.timing_version,
+    generationTimeMs: other?.generation_time_ms,
+  })
+  const effectiveThroughput = getEffectiveTokenThroughput({
+    completionTokens: props.log.completion_tokens,
+    totalDurationMs: other?.total_duration_ms,
+    useTimeSeconds: props.log.use_time,
+  })
   const timingTrace = other?.first_byte_trace
   const hasDetailedTiming =
     timingTrace?.request_body_restore_ms != null ||
@@ -664,57 +676,43 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 />
               )}
 
-              {showTiming && props.log.use_time > 0 && (
+              {showTiming && totalDurationSeconds >= 0 && (
                 <DetailRow
-                  label={t('Response Time')}
-                  value={
-                    <span
-                      className={cn(
-                        'font-medium',
-                        timingTextColorClass(
-                          getResponseTimeColor(
-                            props.log.use_time,
-                            props.log.completion_tokens
-                          )
-                        )
-                      )}
-                    >
-                      {formatUseTime(props.log.use_time)}
-                      {props.log.is_stream &&
-                        ((other?.response_start_ms != null &&
-                          other.response_start_ms > 0) ||
-                          (other?.frt != null && other.frt > 0)) && (
-                          <span
-                            className={cn(
-                              'font-normal',
-                              timingTextColorClass(
-                                getFirstResponseTimeColor(streamStartMs / 1000)
-                              )
-                            )}
-                          >
-                            {' '}
-                            {other.response_start_ms != null &&
-                              other.response_start_ms > 0 && (
-                                <>
-                                  ({t('Response started')}:{' '}
-                                  {formatUseTime(
-                                    other.response_start_ms / 1000
-                                  )}
-                                  )
-                                </>
-                              )}
-                            {other.frt != null && other.frt > 0 && (
-                              <>
-                                {' '}
-                                ({t('First token')}:{' '}
-                                {formatUseTime(other.frt / 1000)})
-                              </>
-                            )}
-                          </span>
-                        )}
-                    </span>
-                  }
+                  label={t('Timing')}
+                  value={formatUseTime(totalDurationSeconds)}
+                  mono
                 />
+              )}
+              {showTiming && firstOutput && (
+                <DetailRow
+                  label={t(firstOutput.label)}
+                  value={formatUseTime(firstOutput.milliseconds / 1000)}
+                  mono
+                />
+              )}
+              {showTiming && streamThroughput != null && (
+                <DetailRow
+                  label={t('Output token rate')}
+                  value={streamThroughput.toFixed(1) + ' t/s'}
+                  mono
+                />
+              )}
+              {showTiming && effectiveThroughput != null && (
+                <DetailRow
+                  label={t('Effective throughput')}
+                  value={effectiveThroughput.toFixed(1) + ' t/s'}
+                  mono
+                />
+              )}
+              {showTiming && (
+                <p className='text-muted-foreground col-span-full text-xs'>
+                  {t(
+                    'First output may include reasoning or tool calls. First text excludes lifecycle events and reasoning.'
+                  )}{' '}
+                  {t(
+                    'Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.'
+                  )}
+                </p>
               )}
             </div>
 

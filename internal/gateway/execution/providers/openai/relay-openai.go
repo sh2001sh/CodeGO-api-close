@@ -244,6 +244,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 		var streamResponse dto.ChatCompletionsStreamResponse
 		if err := platformencoding.UnmarshalString(data, &streamResponse); err == nil {
+			info.ObserveChatStreamOutput(streamResponse, sr.ReceivedAt())
 			for _, choice := range streamResponse.Choices {
 				if choice.Delta.GetContentString() != "" || choice.Delta.GetReasoningContent() != "" || len(choice.Delta.ToolCalls) > 0 {
 					sr.MarkProgress()

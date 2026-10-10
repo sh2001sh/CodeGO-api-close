@@ -6682,7 +6682,15 @@
     "输入 Token": "Tokens en entrée",
     "输出 Token": "Tokens en sortie",
     "缓存命中 Token": "Tokens lus dans le cache",
-    "缓存写入 Token": "Tokens écrits en cache"
+    "缓存写入 Token": "Tokens écrits en cache",
+    "Attempt": "Tentative actuelle auprès du fournisseur",
+    "First text": "Premier texte",
+    "First output": "Première sortie",
+    "Output token rate": "Débit de sortie",
+    "Effective throughput": "Débit effectif",
+    "First output may include reasoning or tool calls. First text excludes lifecycle events and reasoning.": "La première sortie peut inclure le raisonnement ou des appels aux outils. Le premier texte exclut les événements de statut et le raisonnement.",
+    "Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.": "Tokens par seconde entre la première sortie du modèle et la fin de la réponse. Le raisonnement peut être inclus ; ce débit ne mesure pas la vitesse interne du modèle.",
+    "Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed.": "Nombre de tokens de sortie divisé par la durée totale de la requête. Les anciens journaux et les réponses non diffusées ne mesurent pas la vitesse du flux."
   },
   "Unable to load collective plans.": "Unable to load collective plans.",
   "Unable to load participation records.": "Unable to load participation records.",

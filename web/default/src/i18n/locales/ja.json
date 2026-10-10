@@ -6369,7 +6369,15 @@
     "输入 Token": "入力トークン",
     "输出 Token": "出力トークン",
     "缓存命中 Token": "キャッシュ読み取りトークン",
-    "缓存写入 Token": "キャッシュ書き込みトークン"
+    "缓存写入 Token": "キャッシュ書き込みトークン",
+    "Attempt": "今回の上流試行",
+    "First text": "最初のテキスト",
+    "First output": "最初の出力",
+    "Output token rate": "出力速度",
+    "Effective throughput": "実効スループット",
+    "First output may include reasoning or tool calls. First text excludes lifecycle events and reasoning.": "最初の出力には推論やツール呼び出しを含む場合があります。最初のテキストは状態イベントと推論を除きます。",
+    "Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.": "最初のモデル出力から応答終了までの毎秒出力トークン数です。推論トークンを含む場合があり、上流の内部推論速度ではありません。",
+    "Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed.": "出力トークン数をリクエスト全体の所要時間で割った値です。過去のログや非ストリーミングの速度は測定できません。"
   },
   "Unable to load collective plans.": "Unable to load collective plans.",
   "Unable to load participation records.": "Unable to load participation records.",

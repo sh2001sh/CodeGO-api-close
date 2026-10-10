@@ -75,6 +75,21 @@ func isResponsesCompactionItem(item *dto.ResponsesOutput) bool {
 	}
 }
 
+func hasResponsesVisibleText(response dto.ResponsesStreamResponse) bool {
+	if isResponsesTextDelta(response) {
+		return true
+	}
+	if response.Type != dto.ResponsesOutputTypeItemAdded || response.Item == nil || response.Item.Type != "message" {
+		return false
+	}
+	for _, content := range response.Item.Content {
+		if content.Text != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func hasResponsesCompletedContent(streamResponse dto.ResponsesStreamResponse) bool {
 	if streamResponse.Response == nil {
 		return false

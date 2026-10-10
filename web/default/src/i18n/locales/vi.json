@@ -5760,7 +5760,15 @@
     "输入 Token": "Token đầu vào",
     "输出 Token": "Token đầu ra",
     "缓存命中 Token": "Token đọc từ bộ nhớ đệm",
-    "缓存写入 Token": "Token ghi vào bộ nhớ đệm"
+    "缓存写入 Token": "Token ghi vào bộ nhớ đệm",
+    "Attempt": "Lần gọi nhà cung cấp hiện tại",
+    "First text": "Văn bản đầu tiên",
+    "First output": "Đầu ra đầu tiên",
+    "Output token rate": "Tốc độ đầu ra",
+    "Effective throughput": "Thông lượng hiệu dụng",
+    "First output may include reasoning or tool calls. First text excludes lifecycle events and reasoning.": "Đầu ra đầu tiên có thể bao gồm suy luận hoặc gọi công cụ. Văn bản đầu tiên không bao gồm sự kiện trạng thái và suy luận.",
+    "Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.": "Token đầu ra mỗi giây từ đầu ra đầu tiên đến khi phản hồi kết thúc. Có thể bao gồm token suy luận; đây không phải tốc độ suy luận nội bộ của mô hình.",
+    "Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed.": "Số token đầu ra chia cho toàn bộ thời gian yêu cầu. Nhật ký cũ và phản hồi không truyền luồng không thể đo tốc độ luồng."
   },
   "Unable to load collective plans.": "Unable to load collective plans.",
   "Unable to load participation records.": "Unable to load participation records.",

@@ -128,6 +128,7 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		if newAPIError != nil {
 			return newAPIError
 		}
+		info.MarkResponseCompleted()
 		billingapp.PostTextConsumeQuota(c, info, usage, nil)
 		return nil
 	}
@@ -188,6 +189,7 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	info.MarkResponseCompleted()
 	if newAPIError != nil {
 		platformhttpx.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError

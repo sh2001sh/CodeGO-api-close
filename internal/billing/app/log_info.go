@@ -10,7 +10,6 @@ import (
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,8 +43,11 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	other["cache_ratio"] = cacheRatio
 	other["model_price"] = modelPrice
 	other["user_group_ratio"] = userGroupRatio
-	other["total_duration_ms"] = time.Since(relayInfo.StartTime).Milliseconds()
-	if relayInfo.HasSendResponse() {
+	other["timing_version"] = 2
+	if duration, ok := relayInfo.ResponseDuration(); ok {
+		other["total_duration_ms"] = duration.Milliseconds()
+	}
+	if relayInfo.HasSemanticResponse() {
 		other["frt"] = float64(relayInfo.FirstResponseTime.Sub(relayInfo.StartTime).Milliseconds())
 		if attemptTTFT, ok := relayInfo.AttemptTTFT(); ok {
 			other["attempt_ttft_ms"] = attemptTTFT.Milliseconds()
@@ -62,13 +64,12 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 			other["response_start_ms"] = responseStartMs
 		}
 	}
-	other["generation_time_ms"] = time.Since(relayInfo.StartTime).Milliseconds()
-	if relayInfo.HasSendResponse() {
-		other["generation_time_ms"] = time.Since(relayInfo.FirstResponseTime).Milliseconds()
+	if duration, ok := relayInfo.GenerationDuration(); ok && duration.Milliseconds() > 0 {
+		other["generation_time_ms"] = duration.Milliseconds()
 	}
 	if visibleTokens := relayInfo.StreamPacer.OutputTokens(); visibleTokens > 0 {
 		other["stream_output_tokens"] = visibleTokens
-		if visibleDuration, measured := relayInfo.StreamPacer.OutputDuration(); measured {
+		if visibleDuration, measured := relayInfo.StreamPacer.OutputDuration(); measured && visibleDuration.Milliseconds() > 0 {
 			other["stream_output_time_ms"] = visibleDuration.Milliseconds()
 		}
 	}

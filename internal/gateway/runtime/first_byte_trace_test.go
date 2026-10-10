@@ -38,6 +38,8 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 	trace.semanticKindMarked = true
 
 	require.Equal(t, map[string]int64{
+		"body_read_complete":                 1,
+		"upstream_request_started":           1,
 		"ingress_ms":                         20,
 		"body_receive_ms":                    7,
 		"body_receive_from_request_start_ms": 8,
@@ -64,6 +66,8 @@ func TestFirstByteTraceSnapshotSeparatesRequestStages(t *testing.T) {
 		"upstream_first_semantic_event_ms":   870,
 		"total_raw_event_ms":                 900,
 		"total_ms":                           950,
+		"total_text_ms":                      951,
+		"e2e_first_text_ms":                  943,
 		"first_flush_ms":                     960,
 		"semantic_to_first_flush_ms":         10,
 	}, trace.Snapshot())
@@ -147,4 +151,40 @@ func TestRelayInfoSeparatesResponsesLifecycleAndSemanticOutput(t *testing.T) {
 	trace := info.FirstByteTrace.Snapshot()
 	require.NotNil(t, trace)
 	require.GreaterOrEqual(t, trace["event_to_semantic_ms"], int64(0))
+}
+
+func TestFirstTextTimingExcludesUploadAndDoesNotInventText(t *testing.T) {
+	start := time.Now().Add(-time.Minute)
+	trace := NewFirstByteTrace(start)
+	trace.bodyReadDoneAt = start.Add(3 * time.Second)
+	trace.firstSemanticAt = start.Add(5 * time.Second)
+	require.NotContains(t, trace.Snapshot(), "total_text_ms")
+	require.NotContains(t, trace.Snapshot(), "e2e_first_text_ms")
+	trace.firstTextAt = start.Add(8 * time.Second)
+	require.EqualValues(t, 8000, trace.Snapshot()["total_text_ms"])
+	require.EqualValues(t, 5000, trace.Snapshot()["e2e_first_text_ms"])
+	trace.bodyReadDoneAt = time.Time{}
+	require.EqualValues(t, 8000, trace.Snapshot()["e2e_first_text_ms"])
+}
+
+func TestWalletQueueTraceZeroWaitRemainsAnObservedZero(t *testing.T) {
+	var absent *FirstByteTrace
+	absent.AddWalletQueueWaitDuration(0)
+	trace := NewFirstByteTrace(time.Now())
+	require.NotContains(t, trace.ProgressSnapshot(time.Now()), "wallet_queue_wait_ms")
+	trace.AddWalletQueueWaitDuration(0)
+	progress := trace.ProgressSnapshot(time.Now())
+	require.Contains(t, progress, "wallet_queue_wait_ms")
+	require.Zero(t, progress["wallet_queue_wait_ms"])
+	require.Zero(t, progress["body_read_complete"])
+	require.Zero(t, progress["upstream_request_started"])
+	trace.AddWalletQueueWaitDuration(2 * time.Millisecond)
+	trace.AddWalletQueueWaitDuration(3 * time.Millisecond)
+	trace.MarkBodyReadDone()
+	trace.MarkUpstreamStart()
+	trace.MarkFirstSemanticEvent()
+	snapshot := trace.Snapshot()
+	require.EqualValues(t, 5, snapshot["wallet_queue_wait_ms"])
+	require.EqualValues(t, 1, snapshot["body_read_complete"])
+	require.EqualValues(t, 1, snapshot["upstream_request_started"])
 }

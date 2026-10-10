@@ -176,7 +176,8 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 			return nil
 		}
 		var err error
-		if load.name == "logs" {
+		switch load.name {
+		case "logs":
 			d.counts["usage_request_ids_disambiguated"] = 0
 			err = walkHistoryLogs(ctx, source, load.table, func(raw json.RawMessage, duplicate bool) error {
 				if duplicate {
@@ -184,9 +185,9 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 				}
 				return visit(raw)
 			})
-		} else if load.name == "request_audits" {
+		case "request_audits":
 			err = walkHistoryRequests(ctx, source, load.table, sources["request_attempt_audits"], visit)
-		} else if load.name == "request_attempt_audits" {
+		case "request_attempt_audits":
 			if sources["request_audits"] == "" {
 				// Preserve the structured missing-parent-schema issue below,
 				// including when the attempts table is completely empty.
@@ -194,7 +195,7 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 			} else {
 				err = walkHistoryAttempts(ctx, source, load.table, sources["request_audits"], func(raw json.RawMessage, _ bool) error { return visit(raw) })
 			}
-		} else {
+		default:
 			err = walkHistory(ctx, source, load.table, visit)
 		}
 		if err != nil {

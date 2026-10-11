@@ -234,6 +234,7 @@ func (m *Importer) CopyOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 	if err != nil {
 		return r, err
 	}
+	p.copying = true
 	if err = onlineRefreshAccounts(ctx, init, p); err != nil {
 		return r, err
 	}

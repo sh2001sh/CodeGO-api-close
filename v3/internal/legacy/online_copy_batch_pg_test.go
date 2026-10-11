@@ -19,9 +19,10 @@ import (
 )
 
 type onlineCopyBatchTracer struct {
-	reads, fetches, inserts, maxInsertRows int
-	invalidInsert                          bool
-	logs                                   bool
+	reads, fetches, inserts, maxInsertRows       int
+	baselineDeletes, normalizations, exactChecks int
+	invalidInsert                                bool
+	logs                                         bool
 }
 
 func (tracer *onlineCopyBatchTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, query pgx.TraceQueryStartData) context.Context {
@@ -42,6 +43,17 @@ func (tracer *onlineCopyBatchTracer) TraceQueryStart(ctx context.Context, _ *pgx
 			tracer.invalidInsert = true
 		}
 		tracer.maxInsertRows = max(tracer.maxInsertRows, len(rows))
+	}
+	for _, table := range []string{"v3_audit.events", "v3_billing.usage_logs"} {
+		if strings.HasPrefix(query.SQL, "DELETE FROM "+onlineStage(table)) {
+			tracer.baselineDeletes++
+		}
+		if strings.HasPrefix(query.SQL, "SELECT EXISTS(SELECT 1 FROM "+onlineStage(table)) {
+			tracer.exactChecks++
+		}
+	}
+	if strings.HasPrefix(query.SQL, "WITH repeated AS(") {
+		tracer.normalizations++
 	}
 	return ctx
 }
@@ -79,6 +91,9 @@ func TestOnlineCopy4096PagesKeepExact512RowProjectionBatches(t *testing.T) {
 	elapsed := time.Since(started)
 	if tracer.reads != 4 || tracer.fetches != 18 || tracer.inserts != 17 || tracer.maxInsertRows != 512 || tracer.invalidInsert {
 		t.Fatalf("copy pages=%d fetches=%d insert batches=%d largest=%d invalid=%t", tracer.reads, tracer.fetches, tracer.inserts, tracer.maxInsertRows, tracer.invalidInsert)
+	}
+	if tracer.baselineDeletes != 0 || tracer.normalizations != 1 || tracer.exactChecks != 34 {
+		t.Fatalf("copy replacement deletes=%d normalizations=%d exact checks=%d", tracer.baselineDeletes, tracer.normalizations, tracer.exactChecks)
 	}
 	var count, amount int64
 	if err := target.QueryRow(ctx, "SELECT count(*),sum(amount) FROM "+onlineStage("v3_billing.usage_logs")+" WHERE id>10000").Scan(&count, &amount); err != nil || count != 8192 || amount != 16384 {

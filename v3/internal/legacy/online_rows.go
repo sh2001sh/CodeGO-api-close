@@ -250,12 +250,14 @@ func (p *onlineProjector) apply(ctx context.Context, spec onlineSpec, inputs []o
 	if spec.name == "ledger_entries" && ledgerHistoryArchived(ctx) {
 		return nil
 	}
-	keys := make([]json.RawMessage, len(inputs))
-	for i, input := range inputs {
-		keys[i] = input.key
-	}
-	if err := p.delete(ctx, spec, keys); err != nil {
-		return err
+	if !p.copying {
+		keys := make([]json.RawMessage, len(inputs))
+		for i, input := range inputs {
+			keys[i] = input.key
+		}
+		if err := p.delete(ctx, spec, keys); err != nil {
+			return err
+		}
 	}
 	return p.insert(ctx, spec, inputs)
 }
@@ -389,8 +391,10 @@ func (p *onlineProjector) insert(ctx context.Context, spec onlineSpec, inputs []
 		}
 	}
 	if spec.name == "logs" {
-		if err = onlineNormalizeLogs(ctx, p.target, logGroups, false); err != nil {
-			return err
+		if !p.copying {
+			if err = onlineNormalizeLogs(ctx, p.target, logGroups, false); err != nil {
+				return err
+			}
 		}
 		after, err := onlineDuplicateCount(ctx, p.target, logGroups)
 		if err != nil {

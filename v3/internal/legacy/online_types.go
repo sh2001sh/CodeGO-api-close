@@ -36,6 +36,9 @@ type onlineProjection struct {
 }
 
 type onlineProjector struct {
+	// Copy advances an atomic primary-key checkpoint and cannot overlap sync.
+	// Fresh pages need no replacement; log IDs remain qualified until finish.
+	copying             bool
 	funding             *fundingData
 	market              *channelMarketData
 	mappings            map[fundingAccountKey]int64

@@ -17,7 +17,7 @@ import (
 )
 
 func TestOnlineFlagsKeepOfflineAssertionExplicit(t *testing.T) {
-	for _, command := range []string{"online-prepare", "online-copy", "online-sync", "online-verify", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta"} {
+	for _, command := range []string{"online-prepare", "online-copy", "online-sync", "online-verify", "online-reconcile-prepare", "online-reconcile", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta"} {
 		for _, apply := range []bool{false, true} {
 			for _, offline := range []bool{false, true} {
 				args := []string{command}
@@ -113,6 +113,29 @@ func TestOnlineEmptySchemaUpgradeReviewedHashesPrecedeConnections(t *testing.T) 
 			err := run(context.Background(), []string{"online-empty-schema-upgrade", "-apply"}, &output)
 			if err == nil || !strings.Contains(err.Error(), "upgrade") || strings.Contains(err.Error(), "DSN") || strings.Contains(err.Error(), "SECRET_KEY") || output.Len() != 0 {
 				t.Fatalf("review validation did not precede key/connection validation: %v %s", err, output.String())
+			}
+		})
+	}
+}
+
+func TestOnlineRetainedReconciliationReviewPrecedesConnections(t *testing.T) {
+	t.Setenv("V3_ONLINE_MIGRATION_ID", "retained-cli-review-20261012")
+	t.Setenv("V3_ONLINE_PREVIOUS_MIGRATION_ID", "previous-cli-review-20261011")
+	t.Setenv("V3_ONLINE_PREVIOUS_CAPTURE_SCHEMA", "v3_capture_retired_cli_review")
+	t.Setenv("V3_ONLINE_PREVIOUS_CAPTURE_EVENTS_OID", "12345")
+	t.Setenv("V3_ONLINE_EXPECTED_SOURCE_IDENTITY", strings.Repeat("a", 64))
+	t.Setenv("V3_ONLINE_EXPECTED_TARGET_SHAPE", strings.Repeat("a", 64))
+	t.Setenv("V3_ONLINE_EXPECTED_CAPTURE_HASH", strings.Repeat("a", 64))
+	t.Setenv("V3_SOURCE_PG_DSN", "private-invalid-source-DSN")
+	t.Setenv("V3_PG_DSN", "private-invalid-target-DSN")
+	t.Setenv("V3_SECRET_KEY", "invalid-key")
+	for _, envName := range []string{"V3_ONLINE_PREVIOUS_MIGRATION_ID", "V3_ONLINE_PREVIOUS_CAPTURE_SCHEMA", "V3_ONLINE_PREVIOUS_CAPTURE_EVENTS_OID", "V3_ONLINE_EXPECTED_SOURCE_IDENTITY", "V3_ONLINE_EXPECTED_TARGET_SHAPE", "V3_ONLINE_EXPECTED_CAPTURE_HASH"} {
+		t.Run(envName, func(t *testing.T) {
+			t.Setenv(envName, "")
+			var output bytes.Buffer
+			err := run(context.Background(), []string{"online-reconcile-prepare", "-apply"}, &output)
+			if err == nil || strings.Contains(err.Error(), "DSN") || strings.Contains(err.Error(), "SECRET_KEY") || output.Len() != 0 {
+				t.Fatalf("retained review did not precede connections/key validation: %v", err)
 			}
 		})
 	}

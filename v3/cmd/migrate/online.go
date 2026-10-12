@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sh2001sh/new-api/v3/internal/catalog"
@@ -18,7 +19,7 @@ import (
 
 func isOnlineCommand(command string) bool {
 	switch command {
-	case "online-prepare", "online-copy", "online-sync", "online-verify", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta":
+	case "online-prepare", "online-copy", "online-sync", "online-verify", "online-reconcile-prepare", "online-reconcile", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta":
 		return true
 	}
 	return false
@@ -117,12 +118,30 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 			return err
 		}
 	}
+	reconcile := legacy.OnlineReconcilePrepareOptions{
+		OnlineOptions:          legacy.OnlineOptions{RunID: runID},
+		PreviousRunID:          os.Getenv("V3_ONLINE_PREVIOUS_MIGRATION_ID"),
+		ExpectedSourceIdentity: os.Getenv("V3_ONLINE_EXPECTED_SOURCE_IDENTITY"),
+		ExpectedTargetShape:    os.Getenv("V3_ONLINE_EXPECTED_TARGET_SHAPE"),
+		ExpectedCaptureHash:    os.Getenv("V3_ONLINE_EXPECTED_CAPTURE_HASH"),
+		PreviousCaptureSchema:  os.Getenv("V3_ONLINE_PREVIOUS_CAPTURE_SCHEMA"),
+	}
+	if command == "online-reconcile-prepare" {
+		previousOID, err := strconv.ParseUint(os.Getenv("V3_ONLINE_PREVIOUS_CAPTURE_EVENTS_OID"), 10, 32)
+		if err != nil || previousOID == 0 {
+			return errors.New("V3_ONLINE_PREVIOUS_CAPTURE_EVENTS_OID must identify the reviewed retired journal")
+		}
+		reconcile.ExpectedPreviousCaptureEventsOID = uint32(previousOID)
+		if err := legacy.ValidateOnlineReconcilePrepareOptions(reconcile); err != nil {
+			return err
+		}
+	}
 	crypto, err := catalog.NewAESGCMFromBase64(os.Getenv("V3_SECRET_KEY"))
 	if err != nil {
 		return errors.New("V3_SECRET_KEY must be a valid base64 AES encryption key")
 	}
 	// Validate every required input before opening any database connection.
-	adminRequired := (command == "online-prepare" && apply) || command == "online-sync" || command == "online-finalize"
+	adminRequired := (command == "online-prepare" && apply) || command == "online-reconcile-prepare" || command == "online-sync" || command == "online-finalize"
 	for _, envName := range []string{"V3_SOURCE_PG_DSN", "V3_PG_DSN"} {
 		if os.Getenv(envName) == "" {
 			return fmt.Errorf("%s is required", envName)
@@ -155,6 +174,15 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 		secret = os.Getenv("LEGACY_CRYPTO_SECRET")
 	}
 	importer := legacy.NewImporter(source.Pool, target.Pool, crypto).WithSourceCryptoSecret(secret).WithLedgerHistoryArchive(archiveLedger).WithHistoryCutoff(cutoff)
+	if command == "online-reconcile-prepare" {
+		reconcile.SourceAdmin = options.SourceAdmin
+		report, err := importer.PrepareRetainedOnline(ctx, reconcile)
+		return encodeOnlineReport(output, report, err)
+	}
+	if command == "online-reconcile" {
+		report, err := importer.ReconcileRetainedOnline(ctx, options)
+		return encodeOnlineReport(output, report, err)
+	}
 	if command == "online-empty-schema-upgrade" {
 		report, err := importer.UpgradeEmptyOnlineSchema(ctx, upgrade)
 		return encodeOnlineReport(output, report, err)

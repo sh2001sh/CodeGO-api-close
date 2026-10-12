@@ -481,31 +481,9 @@ func (p *onlineProjector) replaceRetired(ctx context.Context, spec onlineSpec, i
 		if len(input.raw) == 0 {
 			continue
 		}
-		values := map[string]string{}
-		if spec.name == "ledger_entries" && p.history.retiredHistoryEntry(input.raw) {
-			d := &historyData{counts: map[string]int64{}, amounts: map[string]*big.Int{}}
-			d.reportRetiredHistoryEntry(input.raw)
-			for key, count := range d.counts {
-				values["retired.history."+key] = fmt.Sprint(count)
-			}
-			for key, amount := range d.amounts {
-				values["retired.history."+key] = amount.String()
-			}
-		} else if spec.name == "funding_lots" || spec.name == "funding_allocations" {
-			var row commerceRow
-			if err = json.Unmarshal(input.raw, &row); err != nil {
-				return err
-			}
-			if p.funding.retiredFundingRow(spec.name, row) {
-				r := Report{Counts: map[string]int64{}, Amounts: map[string]string{}}
-				reportRetiredFunding(&r, spec.name, row)
-				for key, count := range r.Counts {
-					values[key] = fmt.Sprint(count)
-				}
-				for key, amount := range r.Amounts {
-					values[key] = amount
-				}
-			}
+		values, metricErr := p.retiredInputMetrics(spec, input.raw)
+		if metricErr != nil {
+			return metricErr
 		}
 		if len(values) == 0 {
 			continue
@@ -522,6 +500,37 @@ func (p *onlineProjector) replaceRetired(ctx context.Context, spec onlineSpec, i
 		}
 	}
 	return nil
+}
+
+// Shared by replay and retained-baseline comparison; no database writes.
+func (p *onlineProjector) retiredInputMetrics(spec onlineSpec, raw json.RawMessage) (map[string]string, error) {
+	values := map[string]string{}
+	if spec.name == "ledger_entries" && p.history.retiredHistoryEntry(raw) {
+		d := &historyData{counts: map[string]int64{}, amounts: map[string]*big.Int{}}
+		d.reportRetiredHistoryEntry(raw)
+		for key, count := range d.counts {
+			values["retired.history."+key] = fmt.Sprint(count)
+		}
+		for key, amount := range d.amounts {
+			values["retired.history."+key] = amount.String()
+		}
+	} else if spec.name == "funding_lots" || spec.name == "funding_allocations" {
+		var row commerceRow
+		if err := json.Unmarshal(raw, &row); err != nil {
+			return nil, err
+		}
+		if p.funding.retiredFundingRow(spec.name, row) {
+			r := Report{Counts: map[string]int64{}, Amounts: map[string]string{}}
+			reportRetiredFunding(&r, spec.name, row)
+			for key, count := range r.Counts {
+				values[key] = fmt.Sprint(count)
+			}
+			for key, amount := range r.Amounts {
+				values[key] = amount
+			}
+		}
+	}
+	return values, nil
 }
 
 func onlineDuplicateCount(ctx context.Context, target pgx.Tx, groups []map[string]any) (int64, error) {

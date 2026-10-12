@@ -42,6 +42,8 @@ do not resume an older captured run by applying unrelated schema changes.
 | `online-prepare` | None | Preview source coverage and target staging requirements. |
 | `online-prepare` | `-apply` | Install source capture and prepare isolated staging. |
 | `online-copy` | `-apply` | Copy the historical bulk into target staging. |
+| `online-reconcile-prepare` | `-apply` | Bind a reviewed new capture epoch to the retained, unused target. |
+| `online-reconcile` | `-apply` | Reconcile all source rows and target keys while preserving identical staging rows. |
 | `online-sync` | `-apply` | Apply captured changes and acknowledge committed work. |
 | `online-verify` | `-apply` | Run full verification and retain verification evidence. |
 | `online-backup` | `-apply` | Create a snapshot-bound legacy base archive. |
@@ -85,6 +87,44 @@ capture seal and does not restore deleted data, refund debits or migrate v3
 transactions back into v2. Once v3 accepts business writes, rolling back to a
 v2 snapshot can lose those writes; an independently verified reverse migration
 is required for a lossless rollback.
+
+### Recovering a capture gap while retaining staging
+
+An uninterrupted capture journal allows ordinary Copy/Sync retries. A paused
+capture creates a gap: restarting Copy or changing its run ID cannot prove that
+updates or deletions during the gap were retained. Keep the failed receipts and
+journal. Retire its triggers with bounded writer locks, preserving that private
+namespace, then install a complete, unsealed capture under a distinct run ID.
+Do not acknowledge any of the new journal until reconciliation has completed.
+
+`online-reconcile-prepare -apply` requires the existing target schema and database
+identity to be unchanged, no native users/accounts/ledger to have been opened,
+and immutable account/catalog mappings to remain compatible. Review and supply
+`V3_ONLINE_PREVIOUS_MIGRATION_ID`, `V3_ONLINE_EXPECTED_SOURCE_IDENTITY`,
+`V3_ONLINE_EXPECTED_TARGET_SHAPE`, `V3_ONLINE_EXPECTED_CAPTURE_HASH`,
+`V3_ONLINE_PREVIOUS_CAPTURE_SCHEMA` and
+`V3_ONLINE_PREVIOUS_CAPTURE_EVENTS_OID`. Source identity uses the online database
+identity hash (cluster identifier, database OID and name), rather than the drain
+manifest hash. The preserved previous journal must retain its original target
+binding, have no attached triggers, and differ from the new journal. This
+operation stores previous run/progress evidence before beginning a new cursor;
+it does not waive the operator's run deadline or resource guards.
+
+`online-reconcile -apply` streams every eligible source row through the same
+typed projection checks, writes only differences, and separately scans target
+keys to remove deletions and rows excluded by the fixed retention cutoff.
+Retired financial receipts are compared and repaired too. Each target repair
+commits with its cursor; failed pages roll back and leave the phase reconciling.
+Sync and Verify reject that phase. Snapshot rotation can resume the new cursor
+only while the new capture has remained continuous. A second capture gap needs
+another reviewed epoch and a fresh full reconciliation scan.
+
+The complete scan and exact checks still read and transfer data; this is not
+constant-time recovery or a guarantee of faster completion. Unique-value
+conflicts or changed structural dependencies fail rather than remap money.
+Log request IDs are normalized from complete duplicate groups at finish.
+Completion sets only `copied`, never `verified` or `finalized`: repeated Sync,
+full verification and all existing cutover/drain/backup gates still apply.
 
 ### Base archives and cumulative deltas
 

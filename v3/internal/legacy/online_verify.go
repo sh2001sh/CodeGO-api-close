@@ -35,6 +35,12 @@ func (m *Importer) VerifyOnline(ctx context.Context, opts OnlineOptions) (Online
 	if err != nil {
 		return r, err
 	}
+	if err := target.QueryRow(ctx, "SELECT phase FROM v3_migration_online.run WHERE singleton").Scan(&r.Phase); err != nil {
+		return r, err
+	}
+	if r.Phase != "copied" && r.Phase != "verified" {
+		return r, errors.New("legacy: complete the online baseline before verifying")
+	}
 	var complete bool
 	if err = target.QueryRow(ctx, "SELECT NOT EXISTS(SELECT 1 FROM v3_migration_online.progress WHERE NOT complete)").Scan(&complete); err != nil {
 		return r, err

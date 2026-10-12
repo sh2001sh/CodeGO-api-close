@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestOnlineDomainAdaptersStageExactProvenanceWithoutMoney(t *testing.T) {
@@ -116,6 +117,38 @@ func TestOnlineDomainAdaptersStageExactProvenanceWithoutMoney(t *testing.T) {
 	stage(projections)
 }
 
+type onlineSettlementCountingTx struct {
+	pgx.Tx
+	inserts, checks, maxRows int
+}
+
+func (tx *onlineSettlementCountingTx) count(query string, args []any) {
+	stage := onlineStage("v3_channelmarket.settlements")
+	if strings.HasPrefix(query, "INSERT INTO "+stage) {
+		tx.inserts++
+	} else if strings.HasPrefix(query, "SELECT EXISTS(SELECT 1 FROM "+stage) {
+		tx.checks++
+	} else {
+		return
+	}
+	var rows []json.RawMessage
+	if len(args) == 1 {
+		if data, ok := args[0].([]byte); ok && json.Unmarshal(data, &rows) == nil && len(rows) > tx.maxRows {
+			tx.maxRows = len(rows)
+		}
+	}
+}
+
+func (tx *onlineSettlementCountingTx) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
+	tx.count(query, args)
+	return tx.Tx.Exec(ctx, query, args...)
+}
+
+func (tx *onlineSettlementCountingTx) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
+	tx.count(query, args)
+	return tx.Tx.Query(ctx, query, args...)
+}
+
 func TestOnlineDomainMixedNullableSettlementDatesPreserveExactFacts(t *testing.T) {
 	source, target, _ := importTestDB(t)
 	ctx := context.Background()
@@ -145,7 +178,7 @@ func TestOnlineDomainMixedNullableSettlementDatesPreserveExactFacts(t *testing.T
  'reclaimed_amount',CASE WHEN n%3=2 THEN 95 ELSE 0 END,
  'released_at',CASE WHEN n%3=1 THEN '2026-09-30T09:00:00Z' ELSE NULL END,
  'reclaimed_at',CASE WHEN n%3=2 THEN '2026-09-30T09:00:00Z' ELSE NULL END)
- FROM marketplace.settlements s CROSS JOIN generate_series(1,600)n WHERE id='settlement-201' ORDER BY n`)
+ FROM marketplace.settlements s CROSS JOIN generate_series(1,4095)n WHERE id='settlement-201' ORDER BY n`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,14 +208,21 @@ func TestOnlineDomainMixedNullableSettlementDatesPreserveExactFacts(t *testing.T
 		t.Fatal(err)
 	}
 	metrics := onlineMetrics{}
-	if err = onlineInsertRows(ctx, write, "v3_channelmarket.settlements", []string{"id"}, values, metrics); err != nil {
+	counted := &onlineSettlementCountingTx{Tx: write}
+	if err = onlineInsertRows(ctx, counted, "v3_channelmarket.settlements", []string{"id"}, values, metrics); err != nil {
 		t.Fatal(err)
 	}
+	if counted.inserts != 9 || counted.checks != 9 || counted.maxRows != 512 {
+		t.Fatalf("mixed dates fragmented batches: inserts=%d checks=%d maxRows=%d", counted.inserts, counted.checks, counted.maxRows)
+	}
+	if values[0]["id"] != "mixed-1" || values[len(values)-1]["id"] != "mixed-4095" {
+		t.Fatal("grouping changed the caller's source order")
+	}
 	var exact bool
-	if err = write.QueryRow(ctx, "SELECT count(*)=600 AND count(*) FILTER(WHERE released_at IS NOT NULL)=200 AND count(*) FILTER(WHERE reclaimed_at IS NOT NULL)=200 AND bool_and((released_at IS NULL OR released_at='2026-09-30T09:00:00Z') AND (reclaimed_at IS NULL OR reclaimed_at='2026-09-30T09:00:00Z')) AND sum(gross_micro)=120000 AND sum(net_micro)=114000 FROM "+stage).Scan(&exact); err != nil || !exact {
+	if err = write.QueryRow(ctx, "SELECT count(*)=4095 AND count(*) FILTER(WHERE released_at IS NOT NULL)=1365 AND count(*) FILTER(WHERE reclaimed_at IS NOT NULL)=1365 AND bool_and((released_at IS NULL OR released_at='2026-09-30T09:00:00Z') AND (reclaimed_at IS NULL OR reclaimed_at='2026-09-30T09:00:00Z')) AND sum(gross_micro)=819000 AND sum(net_micro)=778050 FROM "+stage).Scan(&exact); err != nil || !exact {
 		t.Fatalf("mixed history changed: %v %v", exact, err)
 	}
-	if metrics["v3_channelmarket.settlements.rows"].Int64() != 600 || metrics["market.pending.7"].Int64() != 38000 {
+	if metrics["v3_channelmarket.settlements.rows"].Int64() != 4095 || metrics["market.pending.7"].Int64() != 259350 {
 		t.Fatalf("mixed history metrics changed: %v", metrics)
 	}
 	if err = write.Commit(ctx); err != nil {
@@ -197,11 +237,21 @@ func TestOnlineDomainMixedNullableSettlementDatesPreserveExactFacts(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = onlineInsertRows(ctx, rejected, "v3_channelmarket.settlements", []string{"id"}, []map[string]any{bad}, onlineMetrics{})
+	first := map[string]any{}
+	for field, value := range values[2] {
+		first[field] = value
+	}
+	first["id"], first["request_id"] = "rollback-first", "rollback-first-request"
+	err = onlineInsertRows(ctx, rejected, "v3_channelmarket.settlements", []string{"id"}, []map[string]any{first, bad}, onlineMetrics{})
 	_ = rejected.Rollback(ctx)
 	if err == nil {
 		t.Fatal("invalid settlement money accepted")
 	}
+	var count int
+	if err = target.QueryRow(ctx, "SELECT count(*) FROM "+stage).Scan(&count); err != nil || count != 4095 {
+		t.Fatalf("earlier shape escaped rollback: count=%d err=%v", count, err)
+	}
+	t.Logf("mixed dates: rows=4095 inserts=%d exact_checks=%d max_batch=%d; exact money, nullable dates, source order and late-failure rollback preserved", counted.inserts, counted.checks, counted.maxRows)
 	var native int
 	if err = target.QueryRow(ctx, "SELECT count(*) FROM v3_billing.ledger_entries").Scan(&native); err != nil || native != 0 {
 		t.Fatalf("history staging posted money: %d %v", native, err)

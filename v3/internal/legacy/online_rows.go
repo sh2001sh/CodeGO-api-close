@@ -158,6 +158,28 @@ func onlineDeleteRows(ctx context.Context, target pgx.Tx, table string, keys []s
 }
 
 func onlineInsertRows(ctx context.Context, target pgx.Tx, table string, keys []string, values []map[string]any, metrics onlineMetrics) error {
+	// Nullable dates make adjacent historical rows use different column sets.
+	// Group within this bounded source page so alternating shapes do not turn
+	// bulk insertion and its exact check into two network round trips per row.
+	// Preserve omitted columns/defaults and the order within each shape.
+	groups := map[string][]map[string]any{}
+	var shapes []string
+	for _, row := range values {
+		shape := cmRecordShape(cmRecord{values: row})
+		if _, exists := groups[shape]; !exists {
+			shapes = append(shapes, shape)
+		}
+		groups[shape] = append(groups[shape], row)
+	}
+	for _, shape := range shapes {
+		if err := onlineInsertShapeRows(ctx, target, table, keys, groups[shape], metrics); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func onlineInsertShapeRows(ctx context.Context, target pgx.Tx, table string, keys []string, values []map[string]any, metrics onlineMetrics) error {
 	start, bytes := 0, 2
 	var encodedRows [][]byte
 	for i, row := range values {

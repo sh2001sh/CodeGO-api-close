@@ -21,7 +21,8 @@ import (
 type onlineCopyBatchTracer struct {
 	reads, fetches, inserts, maxInsertRows       int
 	baselineDeletes, normalizations, exactChecks int
-	invalidInsert                                bool
+	invalidInsert, invalidNormalization          bool
+	earlyNormalization                           bool
 	logs                                         bool
 }
 
@@ -52,8 +53,16 @@ func (tracer *onlineCopyBatchTracer) TraceQueryStart(ctx context.Context, _ *pgx
 			tracer.exactChecks++
 		}
 	}
-	if strings.HasPrefix(query.SQL, "WITH repeated AS(") {
+	if strings.HasPrefix(query.SQL, "WITH batch AS MATERIALIZED(") {
 		tracer.normalizations++
+		data, ok := query.Args[0].([]byte)
+		var rows []json.RawMessage
+		if !ok || json.Unmarshal(data, &rows) != nil || len(rows) == 0 || len(rows) > exactBulkRows {
+			tracer.invalidNormalization = true
+		}
+		if tracer.reads != 4 || tracer.exactChecks != 34 {
+			tracer.earlyNormalization = true
+		}
 	}
 	return ctx
 }
@@ -92,8 +101,8 @@ func TestOnlineCopy4096PagesKeepExact512RowProjectionBatches(t *testing.T) {
 	if tracer.reads != 4 || tracer.fetches != 18 || tracer.inserts != 17 || tracer.maxInsertRows != 512 || tracer.invalidInsert {
 		t.Fatalf("copy pages=%d fetches=%d insert batches=%d largest=%d invalid=%t", tracer.reads, tracer.fetches, tracer.inserts, tracer.maxInsertRows, tracer.invalidInsert)
 	}
-	if tracer.baselineDeletes != 0 || tracer.normalizations != 1 || tracer.exactChecks != 34 {
-		t.Fatalf("copy replacement deletes=%d normalizations=%d exact checks=%d", tracer.baselineDeletes, tracer.normalizations, tracer.exactChecks)
+	if tracer.baselineDeletes != 0 || tracer.normalizations != 17 || tracer.exactChecks != 34 || tracer.invalidNormalization || tracer.earlyNormalization {
+		t.Fatalf("copy replacement deletes=%d normalization batches=%d exact checks=%d invalid=%t early=%t", tracer.baselineDeletes, tracer.normalizations, tracer.exactChecks, tracer.invalidNormalization, tracer.earlyNormalization)
 	}
 	var count, amount int64
 	if err := target.QueryRow(ctx, "SELECT count(*),sum(amount) FROM "+onlineStage("v3_billing.usage_logs")+" WHERE id>10000").Scan(&count, &amount); err != nil || count != 8192 || amount != 16384 {

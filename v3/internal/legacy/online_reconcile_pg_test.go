@@ -109,12 +109,21 @@ func TestOnlineRetainedPageAuthorizationLocksAndRejections(t *testing.T) {
 			case "wrong_owner":
 				runID = "different-retained-owner"
 			case "finalized":
+				if err := onlineAuthorize(ctx, tx, opts.RunID); err != nil {
+					t.Fatal(err)
+				}
 				if _, err := tx.Exec(ctx, "UPDATE v3_migration_online.run SET phase='finalized' WHERE singleton"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := tx.Exec(ctx, "SELECT set_config('codego.online_writer','',true)"); err != nil {
 					t.Fatal(err)
 				}
 			case "missing_progress":
 				spec.name = "missing-retained-progress"
 			case "bad_cursor":
+				if err := onlineAuthorize(ctx, tx, opts.RunID); err != nil {
+					t.Fatal(err)
+				}
 				if _, err := tx.Exec(ctx, `UPDATE v3_migration_online.progress SET complete=false,cursor='{"version":999}' WHERE name='logs'`); err != nil {
 					t.Fatal(err)
 				}

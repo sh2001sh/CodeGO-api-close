@@ -499,16 +499,18 @@ func (p *onlineProjector) matchRetainedInputs(ctx context.Context, spec onlineSp
 		if err != nil {
 			return nil, err
 		}
-		for _, row := range out {
-			if row.Schema == "v3_billing" && row.Table == "usage_logs" {
-				log, err := decodeHistoryLog(input.raw)
-				if err != nil {
-					return nil, err
-				}
-				if log.RequestID != "" {
-					delete(row.Values, "request_id")
-				}
+		// The event projection already contains the validated original request
+		// ID. Do not decode the same wide log/metadata again for its usage row.
+		if spec.name == "logs" && len(out) == 2 {
+			requestID, ok := out[0].Values["request_id"].(string)
+			if !ok {
+				return nil, errors.New("legacy: retained log request ID projection differs")
 			}
+			if requestID != "" {
+				delete(out[1].Values, "request_id")
+			}
+		}
+		for _, row := range out {
 			shape := row.Schema + "." + row.Table + ":" + cmRecordShape(cmRecord{values: row.Values})
 			if _, exists := groups[shape]; !exists {
 				shapes = append(shapes, shape)
@@ -522,6 +524,7 @@ func (p *onlineProjector) matchRetainedInputs(ctx context.Context, spec onlineSp
 		for len(items) > 0 {
 			n, bytes := 0, 2
 			var values []map[string]any
+			var encodedRows [][]byte
 			for n < len(items) && n < exactBulkRows {
 				encoded, err := exactBulkEncodeRow(items[n].row.Values)
 				if err != nil || len(encoded)+2 > onlineRowMaxBytes {
@@ -531,11 +534,18 @@ func (p *onlineProjector) matchRetainedInputs(ctx context.Context, spec onlineSp
 					break
 				}
 				values = append(values, items[n].row.Values)
+				encodedRows = append(encodedRows, encoded)
 				bytes += len(encoded) + 1
 				n++
 			}
 			row := items[0].row
-			checked, err := checkExactBulk(ctx, onlineStageTx{Tx: p.target, tables: []string{row.Schema + "." + row.Table}}, row.Schema, row.Table, row.Keys, values)
+			// Reuse the bytes already validated and sized above. The SQL still
+			// compares every typed field; only the duplicate JSON encoding goes.
+			name, columns, data, err := exactBulkEncodedInput(row.Schema, row.Table, row.Keys, values, encodedRows)
+			if err != nil {
+				return nil, err
+			}
+			checked, err := checkExactBulkData(ctx, onlineStageTx{Tx: p.target, tables: []string{row.Schema + "." + row.Table}}, name, row.Keys, columns, data)
 			if err != nil {
 				return nil, err
 			}

@@ -347,3 +347,84 @@ func TestOnlineRetainedComparisonIsReadOnlyAndPruningPagesAreBounded(t *testing.
 	}
 	t.Log("typed source projection compared in READ ONLY transaction; 2053 target keys traversed in five <=512-row pages")
 }
+
+func TestOnlineRetainedCachedLogComparisonDetectsMoneyMetadataAndEmptyRequestChanges(t *testing.T) {
+	m, source, target, opts := onlineMigrationFixture(t, false)
+	ctx := context.Background()
+	onlineRecoveryExec(t, source, `INSERT INTO migration_source.logs
+	 SELECT 10000+g,7,1700010000+g,2,'compare','alice','key','chat-model',1,1,1,0,false,13,11,'default','',
+	 CASE WHEN g%2=0 THEN '' ELSE 'compare-'||g END,'',
+	 jsonb_build_object('precise',9007199254740993::bigint,'payload',repeat('w',8192),'cached_tokens',23)::text
+	 FROM generate_series(1,513) g`)
+	retainedCopiedFixture(t, m, opts)
+	read, err := source.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = read.Rollback(ctx) }()
+	write, err := target.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = write.Rollback(ctx) }()
+	if err := onlineAuthorize(ctx, write, opts.RunID); err != nil {
+		t.Fatal(err)
+	}
+	sources, specs, err := onlineBindings(ctx, read, write, opts.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := loadOnlineProjector(ctx, read, write, sources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var logs onlineSpec
+	for _, spec := range specs {
+		if spec.name == "logs" {
+			logs = spec
+		}
+	}
+	// Each corruption must be found independently, including the empty source
+	// request ID that must remain part of the exact usage comparison.
+	for _, tc := range []struct{ label, sql string }{
+		{"money", "UPDATE " + onlineStage("v3_billing.usage_logs") + " SET amount=amount+1 WHERE id=10002"},
+		{"empty_request", "UPDATE " + onlineStage("v3_billing.usage_logs") + " SET request_id='wrong-empty-request' WHERE id=10002"},
+		{"precise_metadata", "UPDATE " + onlineStage("v3_audit.events") + ` SET metadata=jsonb_set(metadata,'{precise}','9007199254740992') WHERE id=10002`},
+	} {
+		if _, err := write.Exec(ctx, "SAVEPOINT corruption"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := write.Exec(ctx, tc.sql); err != nil {
+			t.Fatal(err)
+		}
+		var cursor json.RawMessage
+		dirty, checked := 0, 0
+		for {
+			inputs, err := onlineReadBatch(ctx, read, logs, cursor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(inputs) == 0 {
+				break
+			}
+			matches, err := p.matchRetainedInputs(ctx, logs, inputs)
+			if err != nil || len(matches) != len(inputs) {
+				t.Fatalf("%s comparison: %v", tc.label, err)
+			}
+			for _, match := range matches {
+				if !match {
+					dirty++
+				}
+			}
+			checked += len(inputs)
+			cursor = inputs[len(inputs)-1].key
+		}
+		if dirty != 1 || checked != 517 {
+			t.Fatalf("%s checked=%d dirty=%d", tc.label, checked, dirty)
+		}
+		if _, err := write.Exec(ctx, "ROLLBACK TO SAVEPOINT corruption"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Log("wide mixed empty/nonempty request IDs compared across pages; one-unit money and >2^53 metadata changes each detected exactly once")
+}

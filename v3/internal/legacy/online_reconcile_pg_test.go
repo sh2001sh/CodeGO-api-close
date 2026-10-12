@@ -5,6 +5,7 @@ package legacy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -84,6 +85,88 @@ func retainedRowXmin(t *testing.T, target *pgxpool.Pool, id int64) string {
 		t.Fatal(err)
 	}
 	return xmin
+}
+
+func TestOnlineRetainedPageAuthorizationLocksAndRejections(t *testing.T) {
+	m, _, target, opts := onlineMigrationFixture(t, false)
+	retainedCopiedFixture(t, m, opts)
+	ctx := context.Background()
+	p := &onlineProjector{}
+	var before, after string
+	state := `SELECT md5(jsonb_agg(to_jsonb(p) ORDER BY name)::text) FROM v3_migration_online.progress p`
+	if err := target.QueryRow(ctx, state).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"wrong_owner", "finalized", "missing_progress", "bad_cursor", "complete"} {
+		t.Run(mode, func(t *testing.T) {
+			tx, err := target.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback(ctx) }()
+			runID, spec := opts.RunID, onlineSpec{name: "logs"}
+			switch mode {
+			case "wrong_owner":
+				runID = "different-retained-owner"
+			case "finalized":
+				if _, err := tx.Exec(ctx, "UPDATE v3_migration_online.run SET phase='finalized' WHERE singleton"); err != nil {
+					t.Fatal(err)
+				}
+			case "missing_progress":
+				spec.name = "missing-retained-progress"
+			case "bad_cursor":
+				if _, err := tx.Exec(ctx, `UPDATE v3_migration_online.progress SET complete=false,cursor='{"version":999}' WHERE name='logs'`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// These cases must return before reading or repairing source rows.
+			_, complete, err := p.reconcilePage(ctx, nil, tx, runID, spec)
+			if mode == "complete" {
+				if err != nil || !complete {
+					t.Fatalf("authorized completed page: complete=%v err=%v", complete, err)
+				}
+				var writer string
+				if err := tx.QueryRow(ctx, "SELECT current_setting('codego.online_writer',true)").Scan(&writer); err != nil || writer != opts.RunID {
+					t.Fatalf("authorized writer setting %q: %v", writer, err)
+				}
+				for _, query := range []string{
+					"SELECT run_id FROM v3_migration_online.run WHERE singleton FOR UPDATE NOWAIT",
+					"SELECT name FROM v3_migration_online.progress WHERE name='logs' FOR UPDATE NOWAIT",
+				} {
+					other, err := target.Begin(ctx)
+					if err != nil {
+						t.Fatal(err)
+					}
+					_, err = other.Exec(ctx, query)
+					_ = other.Rollback(ctx)
+					if err == nil || !strings.Contains(err.Error(), "55P03") {
+						t.Fatalf("page did not retain ownership/progress lock: %v", err)
+					}
+				}
+			} else {
+				if err == nil || complete {
+					t.Fatalf("unsafe page accepted: complete=%v err=%v", complete, err)
+				}
+				if mode == "missing_progress" && !errors.Is(err, pgx.ErrNoRows) {
+					t.Fatalf("missing progress error changed: %v", err)
+				}
+				if mode == "wrong_owner" || mode == "finalized" {
+					var writer string
+					if !strings.Contains(err.Error(), "ownership or phase changed") {
+						t.Fatalf("ownership rejection changed: %v", err)
+					}
+					if err := tx.QueryRow(ctx, "SELECT coalesce(current_setting('codego.online_writer',true),'')").Scan(&writer); err != nil || writer != "" {
+						t.Fatalf("refused page enabled writer %q: %v", writer, err)
+					}
+				}
+			}
+		})
+	}
+	if err := target.QueryRow(ctx, state).Scan(&after); err != nil || after != before {
+		t.Fatalf("rejected/rolled-back pages changed progress: %v", err)
+	}
+	onlineRecoveryAssertNoMoney(t, target)
+	t.Log("wrong owner/finalized never enabled writer; missing progress and bad cursor rejected; both row locks held and rolled-back progress unchanged")
 }
 
 func TestOnlineRetainedReconciliationRepairsMissedInsertUpdateDeleteAndParents(t *testing.T) {

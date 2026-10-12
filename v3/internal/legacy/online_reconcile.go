@@ -294,14 +294,32 @@ func (m *Importer) ReconcileRetainedOnline(ctx context.Context, opts OnlineOptio
 
 func (p *onlineProjector) reconcilePage(ctx context.Context, source, target pgx.Tx, runID string, spec onlineSpec) (OnlineReconcileReport, bool, error) {
 	var r OnlineReconcileReport
-	if err := onlineAuthorize(ctx, target, runID); err != nil {
-		return r, false, err
-	}
 	var raw []byte
-	var complete bool
-	if err := target.QueryRow(ctx, "SELECT cursor,complete FROM v3_migration_online.progress WHERE name=$1 FOR UPDATE", spec.name).Scan(&raw, &complete); err != nil {
+	var id, phase string
+	var storedComplete *bool
+	// Lock ownership before progress, and enable the transaction-local writer
+	// only for that owner. One query avoids two cross-server round trips per
+	// page while preserving both row locks and rejection before any repair.
+	if err := target.QueryRow(ctx, `WITH owner AS MATERIALIZED (
+		SELECT run_id,phase FROM v3_migration_online.run WHERE singleton FOR UPDATE
+	), allowed AS MATERIALIZED (
+		SELECT set_config('codego.online_writer',$1,true) FROM owner
+		WHERE run_id=$1 AND phase<>'finalized'
+	)
+	SELECT owner.run_id,owner.phase,p.cursor,p.complete FROM owner
+	LEFT JOIN LATERAL (
+		SELECT cursor,complete FROM v3_migration_online.progress
+		WHERE name=$2 AND EXISTS(SELECT 1 FROM allowed) FOR UPDATE
+	) p ON true`, runID, spec.name).Scan(&id, &phase, &raw, &storedComplete); err != nil {
 		return r, false, err
 	}
+	if id != runID || phase == "finalized" {
+		return r, false, errors.New("legacy: online target ownership or phase changed")
+	}
+	if storedComplete == nil {
+		return r, false, pgx.ErrNoRows
+	}
+	complete := *storedComplete
 	if complete {
 		return r, true, nil
 	}

@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -539,6 +540,9 @@ func onlineDuplicateCount(ctx context.Context, target pgx.Tx, groups []map[strin
 }
 
 func onlineNormalizeLogs(ctx context.Context, target pgx.Tx, groups []map[string]any, all bool) error {
+	if all {
+		return onlineNormalizeAllLogs(ctx, target)
+	}
 	if !all && len(groups) == 0 {
 		return nil
 	}
@@ -559,6 +563,71 @@ func onlineNormalizeLogs(ctx context.Context, target pgx.Tx, groups []map[string
 	 WHERE u.created_at=e.created_at AND u.id=e.id AND e.event_type=2 AND u.request_id IS DISTINCT FROM CASE WHEN r.n>1 THEN e.request_id||':v2-log:'||e.id ELSE e.request_id END`
 	_, err := target.Exec(ctx, query, args...)
 	return err
+}
+
+// Keep each update bounded by event rows, even when one duplicate group spans
+// many pages. Counts still cover the entire group through online_log_group_idx.
+// The lateral lookup fence prevents a full usage hash join; tableoid/ctid then
+// locate only those tuples, including the correct usage partition.
+// All pages use the caller's transaction, so a late failure rolls everything back.
+func onlineNormalizeAllLogs(ctx context.Context, target pgx.Tx) error {
+	events, usage := onlineStage("v3_audit.events"), onlineStage("v3_billing.usage_logs")
+	query := `WITH batch AS MATERIALIZED(SELECT created_at,id,user_id,request_id FROM jsonb_populate_recordset(NULL::` + events + `,$1::jsonb)),
+	 groups AS MATERIALIZED(SELECT DISTINCT created_at,user_id,request_id FROM batch),
+	 repeated AS MATERIALIZED(SELECT g.*,(SELECT count(*) FROM ` + events + ` e
+	 WHERE e.created_at=g.created_at AND e.user_id=g.user_id AND e.request_id=g.request_id
+	 AND e.event_type=2 AND e.request_id<>'') n FROM groups g),
+	 matched AS MATERIALIZED(SELECT h.tableoid,h.ctid,
+	 CASE WHEN r.n>1 THEN e.request_id||':v2-log:'||e.id ELSE e.request_id END request_id
+	 FROM batch e JOIN repeated r USING(created_at,user_id,request_id)
+	 CROSS JOIN LATERAL(SELECT u.tableoid,u.ctid FROM ` + usage + ` u
+	 WHERE u.created_at=e.created_at AND u.id=e.id AND u.request_id IS DISTINCT FROM
+	 CASE WHEN r.n>1 THEN e.request_id||':v2-log:'||e.id ELSE e.request_id END OFFSET 0)h)
+	 UPDATE ` + usage + ` u SET request_id=m.request_id FROM matched m
+	 WHERE u.tableoid=m.tableoid AND u.ctid=m.ctid`
+	var afterID int64
+	first := true
+	for {
+		pageSQL := "SELECT created_at,id,user_id,request_id FROM " + events + " WHERE event_type=2 AND request_id<>''"
+		var args []any
+		if !first {
+			pageSQL += " AND id>$1::bigint"
+			args = []any{afterID}
+		}
+		pageSQL += fmt.Sprintf(" ORDER BY id LIMIT %d", exactBulkRows)
+		rows, err := target.Query(ctx, pageSQL, args...)
+		if err != nil {
+			return err
+		}
+		batch := make([]map[string]any, 0, exactBulkRows)
+		for rows.Next() {
+			var date time.Time
+			var id, userID int64
+			var requestID string
+			if err = rows.Scan(&date, &id, &userID, &requestID); err != nil {
+				rows.Close()
+				return err
+			}
+			batch = append(batch, map[string]any{"created_at": date, "id": id, "user_id": userID, "request_id": requestID})
+			afterID = id
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if len(batch) == 0 {
+			return nil
+		}
+		data, err := json.Marshal(batch)
+		if err != nil {
+			return err
+		}
+		if _, err = target.Exec(ctx, query, data); err != nil {
+			return err
+		}
+		first = false
+	}
 }
 
 func onlineSortedTables(specs []onlineSpec) []string {

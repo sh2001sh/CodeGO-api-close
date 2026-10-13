@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -311,7 +312,13 @@ func TestOnlineRetainedParallelInsufficientPoolsFailBeforeWork(t *testing.T) {
 func TestOnlineRetainedParallelWideDomainRows(t *testing.T) {
 	m, source, target, opts := retainedParallelFixture(t)
 	ctx := context.Background()
-	const width = 60 << 20
+	// The dedicated memory proof uses the production soft limit and exercises
+	// near-maximum rows. Race CI uses 4MiB rows, which still exceed a page after
+	// the other fields are encoded, without making the full online suite stall.
+	width := 4 << 20
+	if os.Getenv("GOMEMLIMIT") == "512MiB" {
+		width = 60 << 20
+	}
 	opts = retainedParallelPrepare(t, m, source, target, opts, func() {
 		for _, sql := range []string{
 			"UPDATE gateway.request_audits SET error_code=repeat('r',$1) WHERE request_id='kept-request'",
@@ -338,5 +345,25 @@ func TestOnlineRetainedParallelWideDomainRows(t *testing.T) {
 	}
 	retainedParallelAssertReleased(t, m, target)
 	onlineRecoveryAssertNoMoney(t, target)
-	t.Log("three 60MiB domain rows reconciled with exact fields and all connections released under the external memory budget")
+	t.Logf("three %dMiB domain rows reconciled with exact fields and all connections released under the external memory budget", width>>20)
+}
+
+func TestOnlineRetainedParallelSequentialOperationsReleaseCoordinator(t *testing.T) {
+	m, _, target, _ := onlineMigrationFixture(t, false)
+	ctx := context.Background()
+	for i := 0; i < 100; i++ {
+		conn, err := m.onlineConnection(ctx)
+		if err != nil {
+			t.Fatalf("consecutive operation %d: %v", i, err)
+		}
+		pid := conn.Conn().PgConn().PID()
+		closeOnlineConnection(conn)
+		var held bool
+		if err := target.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=$1
+		 AND database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND classid=0 AND objid=$2::oid AND objsubid=1 AND granted)`, pid, onlineLock).Scan(&held); err != nil || held {
+			t.Fatalf("operation %d returned before coordinator unlocked: held=%v err=%v", i, held, err)
+		}
+	}
+	retainedParallelAssertReleased(t, m, target)
+	t.Log("100 consecutive operations returned with coordinator locks released and no acquired connections")
 }

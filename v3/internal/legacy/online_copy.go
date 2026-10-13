@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -38,12 +39,28 @@ func (m *Importer) onlineConnection(ctx context.Context) (*pgxpool.Conn, error) 
 	return conn, nil
 }
 
-// Closing the checked-out connection releases its session lock even when the
-// operation's context has been cancelled. A pooled connection never retains it.
+// Explicitly unlock a live coordinator before sending Terminate: PostgreSQL
+// releases locks asynchronously on connection close, which could make the next
+// operation spuriously fail its try-lock. Always discard the physical connection,
+// including after cleanup failure or when it owns a source shared fence instead.
 func closeOnlineConnection(conn *pgxpool.Conn) {
 	if conn != nil {
 		raw := conn.Hijack()
-		_ = raw.Close(context.Background())
+		if !raw.IsClosed() {
+			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			var unlocked bool
+			err := raw.QueryRow(cleanup, "SELECT pg_advisory_unlock($1)", onlineLock).Scan(&unlocked)
+			cancel()
+			if err != nil {
+				// Keep diagnostics fixed: connection errors may contain credentials.
+				log.Print("legacy: online connection unlock failed; forcing connection closure")
+			}
+		}
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := raw.Close(cleanup); err != nil {
+			log.Print("legacy: online connection closure failed")
+		}
 	}
 }
 

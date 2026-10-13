@@ -50,6 +50,10 @@ type onlineProjector struct {
 	users               map[int64]bool
 	target              pgx.Tx
 	promptAnomalySchema bool
+	// Domains share the read token, but each projector owns its held flag.
+	// A wide source page keeps the token through its target commit or rollback.
+	reconcileReadToken chan struct{}
+	reconcileReadHeld  bool
 }
 
 type onlineSpec struct {

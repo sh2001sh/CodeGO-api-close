@@ -72,8 +72,32 @@ func rollbackReconcile(ctx context.Context, tx pgx.Tx) {
 	_ = tx.Rollback(cleanup)
 }
 
+func (p *onlineProjector) acquireReconcileRead(ctx context.Context) error {
+	if p.reconcileReadToken == nil {
+		return nil
+	}
+	if p.reconcileReadHeld {
+		return errors.New("legacy: retained reconciliation source read token is already held")
+	}
+	select {
+	case p.reconcileReadToken <- struct{}{}:
+		p.reconcileReadHeld = true
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (p *onlineProjector) releaseReconcileRead() {
+	if p.reconcileReadHeld {
+		<-p.reconcileReadToken
+		p.reconcileReadHeld = false
+	}
+}
+
 func reconcileSpecs(ctx context.Context, conn *pgxpool.Conn, source pgx.Tx, p *onlineProjector, runID string, specs []onlineSpec, coordinatorPID uint32) (OnlineReconcileReport, error) {
 	r := OnlineReconcileReport{RunID: runID, Phase: "reconciling"}
+	defer p.releaseReconcileRead()
 	for _, spec := range specs {
 		for {
 			target, err := conn.Begin(ctx)
@@ -92,8 +116,10 @@ func reconcileSpecs(ctx context.Context, conn *pgxpool.Conn, source pgx.Tx, p *o
 			}
 			if err != nil {
 				rollbackReconcile(ctx, target)
+				p.releaseReconcileRead()
 				return r, err
 			}
+			p.releaseReconcileRead()
 			// The report describes acknowledged commits from this invocation,
 			// including pages committed before another domain failed. It is not
 			// a claim that Applied=false means no earlier page was committed.
@@ -146,6 +172,12 @@ func (m *Importer) reconcileParallel(ctx context.Context, coordinator *pgxpool.C
 	}
 	workerCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	// Read one source page at a time. Ordinary pages release the token before
+	// projection and target comparison, preserving three-domain overlap. A wide
+	// page retains it through commit/rollback, so three legal 64 MiB inputs cannot
+	// simultaneously create large JSON buffers and target PostgreSQL workspaces.
+	p.reconcileReadToken = make(chan struct{}, 1)
+	p.reconcileReadHeld = false
 	type result struct {
 		report OnlineReconcileReport
 		err    error

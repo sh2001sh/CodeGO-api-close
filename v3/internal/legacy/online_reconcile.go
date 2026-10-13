@@ -334,9 +334,21 @@ func (p *onlineProjector) reconcilePageAuthorized(ctx context.Context, source, t
 	}
 	p.target = target
 	if !cursor.SourceDone {
+		// Acquire only after locking this spec's progress: a blocked parent page
+		// must not keep an independent domain from reading its source page.
+		if err := p.acquireReconcileRead(ctx); err != nil {
+			return r, false, err
+		}
 		inputs, err := onlineReadBatch(ctx, source, spec, cursor.Source)
 		if err != nil {
 			return r, false, err
+		}
+		pageBytes := 0
+		for _, input := range inputs {
+			pageBytes += len(input.key) + len(input.raw)
+		}
+		if pageBytes <= exactBulkBytes {
+			p.releaseReconcileRead()
 		}
 		if len(inputs) == 0 {
 			cursor.SourceDone = true

@@ -491,14 +491,17 @@ func (p *onlineProjector) matchRetainedInputs(ctx context.Context, spec onlineSp
 	groups := map[string][]item{}
 	var shapes []string
 	var keys []json.RawMessage
-	for i, input := range inputs {
+	for _, input := range inputs {
 		if len(input.raw) == 0 {
 			return nil, errors.New("legacy: retained comparison requires source rows")
 		}
-		out, err := p.project(ctx, spec, input.raw, parents)
-		if err != nil {
-			return nil, err
-		}
+	}
+	outputs, err := p.projectBatch(ctx, spec, inputs, parents)
+	if err != nil {
+		return nil, err
+	}
+	for i, input := range inputs {
+		out := outputs[i]
 		// The event projection already contains the validated original request
 		// ID. Do not decode the same wide log/metadata again for its usage row.
 		if spec.name == "logs" && len(out) == 2 {

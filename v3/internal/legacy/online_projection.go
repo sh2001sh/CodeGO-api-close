@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -138,6 +140,49 @@ func onlineGeneratedChannelBound(key string, before, after json.RawMessage, mark
 		return false
 	}
 	return old[0] == cmGeneratedCatalogID(id) && old[1] == c.owner && next[0] == c.catalogID && next[1] == c.owner
+}
+
+// Project only in memory against immutable snapshot dependencies. Database
+// reads, writes, exact checks and acknowledgements stay on the coordinator.
+// Contiguous ranges preserve input order and return the first input's error.
+func (p *onlineProjector) projectBatch(ctx context.Context, spec onlineSpec, inputs []onlineInput, parents map[string]bool) ([][]onlineProjection, error) {
+	workers := 1
+	if len(inputs) >= 512 && runtime.GOMAXPROCS(0) > 1 {
+		workers = 2
+	}
+	out := make([][]onlineProjection, len(inputs))
+	errs := make([]error, workers)
+	var wg sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		start, end := len(inputs)*worker/workers, len(inputs)*(worker+1)/workers
+		run := func() {
+			for i := start; i < end; i++ {
+				if err := ctx.Err(); err != nil {
+					errs[worker] = err
+					return
+				}
+				if len(inputs[i].raw) == 0 {
+					continue
+				}
+				out[i], errs[worker] = p.project(ctx, spec, inputs[i].raw, parents)
+				if errs[worker] != nil {
+					return
+				}
+			}
+		}
+		if workers == 1 {
+			run()
+		} else {
+			wg.Go(run)
+		}
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (p *onlineProjector) historicalAccounts() ([]onlineProjection, error) {

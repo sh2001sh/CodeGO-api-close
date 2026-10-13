@@ -383,7 +383,11 @@ func (p *onlineProjector) insert(ctx context.Context, spec onlineSpec, inputs []
 	var logGroups []map[string]any
 	projected := map[string][]map[string]any{}
 	targetKeys := map[string][]string{}
-	for _, input := range inputs {
+	outputs, err := p.projectBatch(ctx, spec, inputs, attemptParents)
+	if err != nil {
+		return err
+	}
+	for i, input := range inputs {
 		if len(input.raw) == 0 {
 			continue
 		}
@@ -394,11 +398,7 @@ func (p *onlineProjector) insert(ctx context.Context, spec onlineSpec, inputs []
 			}
 			logGroups = append(logGroups, map[string]any{"created_at": historyDate(l.CreatedAt), "user_id": l.UserID, "request_id": l.RequestID})
 		}
-		out, err := p.project(ctx, spec, input.raw, attemptParents)
-		if err != nil {
-			return err
-		}
-		for _, row := range out {
+		for _, row := range outputs[i] {
 			table := row.Schema + "." + row.Table
 			projected[table] = append(projected[table], row.Values)
 			targetKeys[table] = row.Keys

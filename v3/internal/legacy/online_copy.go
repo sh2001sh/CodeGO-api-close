@@ -389,7 +389,7 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 	byName := map[string]onlineSpec{}
 	accountEvents := map[string]bool{}
 	for _, table := range capture.Tables {
-		if table.Relation == sources["accounts"] || table.Relation == sources["users"] {
+		if table.Relation == sources["accounts"] {
 			accountEvents[table.Name] = true
 		}
 	}
@@ -437,8 +437,9 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 	if err = rows.Err(); err != nil {
 		return r, err
 	}
-	// Queue/log/ledger events do not alter historical account metadata. Keep
-	// unprocessed account events pending; their own bounded batch refreshes it.
+	// Historical account fields come from billing.accounts, not users. Wallet
+	// identities are already reserved while loading snapshot dependencies above.
+	// Keep unprocessed account events pending; their own batch refreshes metadata.
 	if refreshAccounts {
 		if err = onlineRefreshAccounts(ctx, target, p); err != nil {
 			return r, err

@@ -85,6 +85,11 @@ moving JSON projection online does not by itself eliminate those scan costs.
 The `online-sync` CLI reads at most 16,384 events per transaction; the Go API
 defaults to 4,096 unless `SyncEventLimit` is set (maximum 16,384). Event keys
 retain their 4 MiB budget and projections their 512-row/4 MiB batch bounds.
+Pages with at least 512 inputs use at most two in-memory projection workers
+when `GOMAXPROCS` permits two processors. Workers share immutable snapshot
+dependencies; SQL, input ordering, exact checks, commits and acknowledgement
+remain on the coordinator. User events reserve wallet identities without
+rewriting historical account metadata; `billing.accounts` events refresh it.
 Status counts read at most 4,096 pending events. A report with
 `pending_events_at_least: true` means `pending_events` is a lower bound, and
 must not be used to calculate backlog trends or an ETA. Below that threshold

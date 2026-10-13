@@ -69,9 +69,9 @@ func TestOnlineSyncNewUserAndAccountInSeparateBatches(t *testing.T) {
 func TestOnlineSyncAccountMetadataStillRefreshes(t *testing.T) {
 	m, source, target, opts := onlineMigrationFixture(t, false)
 	ctx := context.Background()
-	onlineRecoveryExec(t, source, `ALTER TABLE billing.accounts ADD COLUMN status text DEFAULT 'active', ADD COLUMN version bigint DEFAULT 0, ADD COLUMN metadata jsonb DEFAULT '{}'`)
+	onlineRecoveryExec(t, source, `ALTER TABLE billing.accounts ADD COLUMN status text DEFAULT 'active', ADD COLUMN version bigint DEFAULT 0, ADD COLUMN meta_json jsonb DEFAULT '{}'`)
 	onlineMigrationReady(t, m, opts)
-	onlineRecoveryExec(t, source, `UPDATE billing.accounts SET version=version+1,metadata='{"precise":9007199254740993}' WHERE account_id='wallet-7'`)
+	onlineRecoveryExec(t, source, `UPDATE billing.accounts SET version=version+1,meta_json='{"precise":9007199254740993}' WHERE account_id='wallet-7'`)
 	r, err := m.SyncOnline(ctx, opts)
 	if err != nil || r.Acknowledged != 1 || r.Pending != 0 {
 		t.Fatalf("account metadata report=%+v err=%v", r, err)

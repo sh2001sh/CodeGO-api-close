@@ -80,7 +80,13 @@ func reconcileSpecs(ctx context.Context, conn *pgxpool.Conn, source pgx.Tx, p *o
 			if err != nil {
 				return r, err
 			}
-			delta, complete, err := p.reconcilePageAuthorized(ctx, source, target, runID, spec, coordinatorPID)
+			var delta OnlineReconcileReport
+			var complete bool
+			if coordinatorPID == 0 {
+				delta, complete, err = p.reconcilePage(ctx, source, target, runID, spec)
+			} else {
+				delta, complete, err = p.reconcilePageAuthorized(ctx, source, target, runID, spec, coordinatorPID)
+			}
 			if err == nil {
 				err = target.Commit(ctx)
 			}

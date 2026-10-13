@@ -403,124 +403,9 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 	if err != nil {
 		return r, err
 	}
-	byName := map[string]onlineSpec{}
-	accountEvents := map[string]bool{}
-	for _, table := range capture.Tables {
-		if table.Relation == sources["accounts"] {
-			accountEvents[table.Name] = true
-		}
-	}
-	for _, spec := range specs {
-		for _, table := range capture.Tables {
-			if table.Relation == spec.source {
-				byName[table.Name] = spec
-			}
-		}
-	}
-	rows, err := source.Query(ctx, "SELECT id,table_name,row_key FROM v3_migration_capture.events WHERE NOT acked ORDER BY id LIMIT $1", eventLimit)
+	ids, err := onlineProjectPending(ctx, source, target, sources, specs, p, capture, eventLimit, false, &r)
 	if err != nil {
 		return r, err
-	}
-	var ids []int64
-	refreshAccounts := false
-	eventBytes := 0
-	work := map[string]map[string]json.RawMessage{}
-	for rows.Next() {
-		var id int64
-		var name string
-		var key []byte
-		if err = rows.Scan(&id, &name, &key); err != nil {
-			rows.Close()
-			return r, err
-		}
-		if len(key) > onlineRowMaxBytes {
-			rows.Close()
-			return r, errors.New("legacy: online source key exceeds 64 MiB limit")
-		}
-		if len(ids) > 0 && eventBytes+len(key) > exactBulkBytes {
-			break
-		}
-		eventBytes += len(key)
-		ids = append(ids, id)
-		refreshAccounts = refreshAccounts || accountEvents[name]
-		if spec, ok := byName[name]; ok {
-			if work[spec.name] == nil {
-				work[spec.name] = map[string]json.RawMessage{}
-			}
-			work[spec.name][string(key)] = key
-		}
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return r, err
-	}
-	// Historical account fields come from billing.accounts, not users. Wallet
-	// identities are already reserved while loading snapshot dependencies above.
-	// Keep unprocessed account events pending; their own batch refreshes metadata.
-	if refreshAccounts {
-		if err = onlineRefreshAccounts(ctx, target, p); err != nil {
-			return r, err
-		}
-	}
-	// All dirty keys are bounded by the original event batch. Only derived
-	// attempt keys can be numerous; stream them twice from this same snapshot.
-	keysBySpec := map[string][]json.RawMessage{}
-	for name, keys := range work {
-		for _, key := range keys {
-			keysBySpec[name] = append(keysBySpec[name], key)
-		}
-	}
-	if err = onlineRetentionParents(ctx, source, target, sources, keysBySpec); err != nil {
-		return r, err
-	}
-	for _, spec := range specs {
-		keys := keysBySpec[spec.name]
-		if len(keys) > 0 {
-			if err = p.delete(ctx, spec, keys); err != nil {
-				return r, err
-			}
-		}
-		if spec.name == "request_attempt_audits" && len(keysBySpec["request_audits"]) > 0 {
-			rows, err := onlineRelatedAttemptRows(ctx, source, spec, sources["request_audits"], keysBySpec["request_audits"], keys, false)
-			if err != nil {
-				return r, err
-			}
-			if err = onlineInputBatches(rows, func(inputs []onlineInput) error {
-				batchKeys := make([]json.RawMessage, len(inputs))
-				for i, input := range inputs {
-					batchKeys[i] = input.key
-				}
-				return p.delete(ctx, spec, batchKeys)
-			}); err != nil {
-				return r, err
-			}
-		}
-	}
-	// Only now insert projections: every old unique value has been released,
-	// including values held by rows in later byte-bounded batches.
-	for _, spec := range specs {
-		keys := keysBySpec[spec.name]
-		insertBatch := func(inputs []onlineInput) error {
-			if err := p.insert(ctx, spec, inputs); err != nil {
-				return err
-			}
-			r.Tables[spec.name] += int64(len(inputs))
-			return nil
-		}
-		if len(keys) > 0 {
-			if err = onlineCurrentBatches(ctx, source, spec, keys, insertBatch); err != nil {
-				return r, err
-			}
-		}
-		if spec.name == "request_attempt_audits" && len(keysBySpec["request_audits"]) > 0 {
-			rows, err := onlineRelatedAttemptRows(ctx, source, spec, sources["request_audits"], keysBySpec["request_audits"], keys, true)
-			if err != nil {
-				return r, err
-			}
-			if err = onlineInputBatches(rows, insertBatch); err != nil {
-				return r, err
-			}
-		}
 	}
 
 	// Empty snapshots are not a claim of no future writes. Finalize additionally
@@ -550,6 +435,143 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 	}
 	r.PendingAtLeast = r.Pending == 4096
 	return r, nil
+}
+
+// Share the exact bounded Sync projection with verification. In verification
+// every pending event visible in the fixed source snapshot must fit the batch;
+// a concurrent later commit stays pending for a subsequent Sync.
+func onlineProjectPending(ctx context.Context, source, target pgx.Tx, sources map[string]string, specs []onlineSpec, p *onlineProjector, capture OnlineCaptureReport, eventLimit int, requireAll bool, r *OnlineReport) ([]int64, error) {
+	var err error
+	byName := map[string]onlineSpec{}
+	accountEvents := map[string]bool{}
+	for _, table := range capture.Tables {
+		if table.Relation == sources["accounts"] {
+			accountEvents[table.Name] = true
+		}
+	}
+	for _, spec := range specs {
+		for _, table := range capture.Tables {
+			if table.Relation == spec.source {
+				byName[table.Name] = spec
+			}
+		}
+	}
+	rows, err := source.Query(ctx, "SELECT id,table_name,row_key FROM v3_migration_capture.events WHERE NOT acked ORDER BY id LIMIT $1", eventLimit)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int64
+	refreshAccounts := false
+	eventBytes := 0
+	work := map[string]map[string]json.RawMessage{}
+	for rows.Next() {
+		var id int64
+		var name string
+		var key []byte
+		if err = rows.Scan(&id, &name, &key); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if len(key) > onlineRowMaxBytes {
+			rows.Close()
+			return nil, errors.New("legacy: online source key exceeds 64 MiB limit")
+		}
+		if len(ids) > 0 && eventBytes+len(key) > exactBulkBytes {
+			break
+		}
+		eventBytes += len(key)
+		ids = append(ids, id)
+		refreshAccounts = refreshAccounts || accountEvents[name]
+		if spec, ok := byName[name]; ok {
+			if work[spec.name] == nil {
+				work[spec.name] = map[string]json.RawMessage{}
+			}
+			work[spec.name][string(key)] = key
+		}
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	if requireAll {
+		var remaining bool
+		if err = source.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM v3_migration_capture.events WHERE NOT acked AND id<>ALL($1::bigint[]))", ids).Scan(&remaining); err != nil {
+			return nil, err
+		}
+		if remaining {
+			return nil, errors.New("legacy: online verification catch-up exceeds bounded event budget; synchronize first")
+		}
+	}
+	// Historical account fields come from billing.accounts, not users. Wallet
+	// identities are already reserved while loading snapshot dependencies above.
+	// Keep unprocessed account events pending; their own batch refreshes metadata.
+	if refreshAccounts {
+		if err = onlineRefreshAccounts(ctx, target, p); err != nil {
+			return nil, err
+		}
+	}
+	// All dirty keys are bounded by the original event batch. Only derived
+	// attempt keys can be numerous; stream them twice from this same snapshot.
+	keysBySpec := map[string][]json.RawMessage{}
+	for name, keys := range work {
+		for _, key := range keys {
+			keysBySpec[name] = append(keysBySpec[name], key)
+		}
+	}
+	if err = onlineRetentionParents(ctx, source, target, sources, keysBySpec); err != nil {
+		return nil, err
+	}
+	for _, spec := range specs {
+		keys := keysBySpec[spec.name]
+		if len(keys) > 0 {
+			if err = p.delete(ctx, spec, keys); err != nil {
+				return nil, err
+			}
+		}
+		if spec.name == "request_attempt_audits" && len(keysBySpec["request_audits"]) > 0 {
+			rows, err := onlineRelatedAttemptRows(ctx, source, spec, sources["request_audits"], keysBySpec["request_audits"], keys, false)
+			if err != nil {
+				return nil, err
+			}
+			if err = onlineInputBatches(rows, func(inputs []onlineInput) error {
+				batchKeys := make([]json.RawMessage, len(inputs))
+				for i, input := range inputs {
+					batchKeys[i] = input.key
+				}
+				return p.delete(ctx, spec, batchKeys)
+			}); err != nil {
+				return nil, err
+			}
+		}
+	}
+	// Only now insert projections: every old unique value has been released,
+	// including values held by rows in later byte-bounded batches.
+	for _, spec := range specs {
+		keys := keysBySpec[spec.name]
+		insertBatch := func(inputs []onlineInput) error {
+			if err := p.insert(ctx, spec, inputs); err != nil {
+				return err
+			}
+			r.Tables[spec.name] += int64(len(inputs))
+			return nil
+		}
+		if len(keys) > 0 {
+			if err = onlineCurrentBatches(ctx, source, spec, keys, insertBatch); err != nil {
+				return nil, err
+			}
+		}
+		if spec.name == "request_attempt_audits" && len(keysBySpec["request_audits"]) > 0 {
+			rows, err := onlineRelatedAttemptRows(ctx, source, spec, sources["request_audits"], keysBySpec["request_audits"], keys, true)
+			if err != nil {
+				return nil, err
+			}
+			if err = onlineInputBatches(rows, insertBatch); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return ids, nil
 }
 
 // Parent-only changes affect all current children. Reading keys during deletion

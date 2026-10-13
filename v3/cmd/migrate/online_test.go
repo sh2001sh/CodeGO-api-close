@@ -17,7 +17,7 @@ import (
 )
 
 func TestOnlineFlagsKeepOfflineAssertionExplicit(t *testing.T) {
-	for _, command := range []string{"online-prepare", "online-copy", "online-sync", "online-verify", "online-reconcile-prepare", "online-reconcile", "online-channel-rebind", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta"} {
+	for _, command := range []string{"online-prepare", "online-copy", "online-sync", "online-verify", "online-verify-catchup", "online-reconcile-prepare", "online-reconcile", "online-channel-rebind", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta"} {
 		for _, apply := range []bool{false, true} {
 			for _, offline := range []bool{false, true} {
 				args := []string{command}

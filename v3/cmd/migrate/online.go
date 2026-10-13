@@ -19,7 +19,7 @@ import (
 
 func isOnlineCommand(command string) bool {
 	switch command {
-	case "online-prepare", "online-copy", "online-sync", "online-verify", "online-reconcile-prepare", "online-reconcile", "online-channel-rebind", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta":
+	case "online-prepare", "online-copy", "online-sync", "online-verify", "online-verify-catchup", "online-reconcile-prepare", "online-reconcile", "online-channel-rebind", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta":
 		return true
 	}
 	return false
@@ -154,7 +154,7 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 		return errors.New("V3_SECRET_KEY must be a valid base64 AES encryption key")
 	}
 	// Validate every required input before opening any database connection.
-	adminRequired := (command == "online-prepare" && apply) || command == "online-reconcile-prepare" || command == "online-sync" || command == "online-finalize"
+	adminRequired := (command == "online-prepare" && apply) || command == "online-reconcile-prepare" || command == "online-sync" || command == "online-verify-catchup" || command == "online-finalize"
 	for _, envName := range []string{"V3_SOURCE_PG_DSN", "V3_PG_DSN"} {
 		if os.Getenv(envName) == "" {
 			return fmt.Errorf("%s is required", envName)
@@ -225,6 +225,8 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 		report, err = importer.SyncOnline(ctx, options)
 	case "online-verify":
 		report, err = importer.VerifyOnline(ctx, options)
+	case "online-verify-catchup":
+		report, err = importer.VerifyOnlineCatchup(ctx, options)
 	default:
 		return errors.New("unsupported online command")
 	}

@@ -11,6 +11,23 @@ import (
 )
 
 func (m *Importer) VerifyOnline(ctx context.Context, opts OnlineOptions) (OnlineReport, error) {
+	return m.verifyOnline(ctx, opts, false)
+}
+
+// VerifyOnlineCatchup applies a bounded pending batch and verifies against the
+// same repeatable-read snapshot. It does not fence production writes or open
+// native accounts; only this snapshot's events are acknowledged after commit.
+func (m *Importer) VerifyOnlineCatchup(ctx context.Context, opts OnlineOptions) (OnlineReport, error) {
+	if opts.SourceAdmin == nil {
+		return OnlineReport{RunID: opts.RunID}, errors.New("legacy: online verification catch-up requires capture acknowledgement connection")
+	}
+	if err := ValidateOnlineCaptureSource(ctx, m.source, opts.SourceAdmin); err != nil {
+		return OnlineReport{RunID: opts.RunID}, err
+	}
+	return m.verifyOnline(ctx, opts, true)
+}
+
+func (m *Importer) verifyOnline(ctx context.Context, opts OnlineOptions, catchup bool) (OnlineReport, error) {
 	ctx = m.historyContext(ctx)
 	r := OnlineReport{RunID: opts.RunID, Tables: map[string]int64{}, LedgerHistoryMode: ledgerHistoryMode(ctx), HistoryCutoff: historyCutoffLabel(ctx)}
 	conn, err := m.onlineConnection(ctx)
@@ -48,12 +65,25 @@ func (m *Importer) VerifyOnline(ctx context.Context, opts OnlineOptions) (Online
 	if !complete {
 		return r, errors.New("legacy: online baseline is incomplete")
 	}
-	if err = onlineRequireQuiescent(ctx, source); err != nil {
-		return r, err
+	if !catchup {
+		if err = onlineRequireQuiescent(ctx, source); err != nil {
+			return r, err
+		}
 	}
 	p, err := loadOnlineProjector(ctx, source, target, sources)
 	if err != nil {
 		return r, err
+	}
+	var ids []int64
+	if catchup {
+		capture, err := ValidateOnlineCapture(ctx, source, opts.RunID)
+		if err != nil {
+			return r, err
+		}
+		ids, err = onlineProjectPending(ctx, source, target, sources, specs, p, capture, 16384, true, &r)
+		if err != nil {
+			return r, err
+		}
 	}
 	if err = onlineRefreshAccounts(ctx, target, p); err != nil {
 		return r, err
@@ -155,8 +185,31 @@ func (m *Importer) VerifyOnline(ctx context.Context, opts OnlineOptions) (Online
 	if _, err = target.Exec(ctx, "UPDATE v3_migration_online.run SET phase='verified',verified_at=clock_timestamp() WHERE singleton"); err != nil {
 		return r, err
 	}
+	if catchup {
+		if err = ValidateOnlineCaptureSource(ctx, m.source, opts.SourceAdmin); err != nil {
+			return r, err
+		}
+	}
 	if err = target.Commit(ctx); err != nil {
 		return r, err
+	}
+	if catchup {
+		if err = source.Commit(ctx); err != nil {
+			return r, err
+		}
+		if len(ids) > 0 {
+			if err = ValidateOnlineCaptureSource(ctx, m.source, opts.SourceAdmin); err != nil {
+				return r, err
+			}
+			if err = AckOnlineCapture(ctx, opts.SourceAdmin, opts.RunID, ids); err != nil {
+				return r, err
+			}
+		}
+		r.Acknowledged = int64(len(ids))
+		if err = m.source.QueryRow(ctx, "SELECT count(*) FROM (SELECT 1 FROM v3_migration_capture.events WHERE NOT acked LIMIT 4096) pending").Scan(&r.Pending); err != nil {
+			return r, err
+		}
+		r.PendingAtLeast = r.Pending == 4096
 	}
 	r.Phase = "verified"
 	r.Applied = true

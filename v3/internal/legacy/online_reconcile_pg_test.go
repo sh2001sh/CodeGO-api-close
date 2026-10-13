@@ -368,7 +368,7 @@ func TestOnlineRetainedComparisonIsReadOnlyAndPruningPagesAreBounded(t *testing.
 		scanned, pages := 0, 0
 		for {
 			keys, err := reconcileTargetKeys(ctx, ro, spec, spec.targets[0], cursor)
-			if err != nil || len(keys) > 512 {
+			if err != nil || len(keys) > onlineCopyBatchRows {
 				t.Fatalf("pruning page %d %v", len(keys), err)
 			}
 			if len(keys) == 0 {
@@ -378,11 +378,11 @@ func TestOnlineRetainedComparisonIsReadOnlyAndPruningPagesAreBounded(t *testing.
 			pages++
 			cursor = keys[len(keys)-1]
 		}
-		if scanned != 2053 || pages != 5 {
+		if scanned != 2053 || pages != 1 {
 			t.Fatalf("target key traversal lost rows: scanned=%d pages=%d", scanned, pages)
 		}
 	}
-	t.Log("typed source projection compared in READ ONLY transaction; 2053 target keys traversed in five <=512-row pages")
+	t.Log("typed source projection compared in READ ONLY transaction; 2053 target keys traversed in one <=4096-key page")
 }
 
 func TestOnlineRetainedCachedLogComparisonDetectsMoneyMetadataAndEmptyRequestChanges(t *testing.T) {

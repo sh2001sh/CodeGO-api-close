@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -328,8 +329,10 @@ func (p *onlineProjector) reconcilePage(ctx context.Context, source, target pgx.
 					changed = append(changed, inputs[i])
 				}
 			}
-			if err := p.apply(ctx, spec, changed); err != nil {
-				return r, false, err
+			if len(changed) > 0 {
+				if err := p.apply(ctx, spec, changed); err != nil {
+					return r, false, err
+				}
 			}
 			cursor.Source = inputs[len(inputs)-1].key
 			r.Scanned, r.Repaired = int64(len(inputs)), int64(len(changed))
@@ -355,8 +358,29 @@ func (p *onlineProjector) reconcilePage(ctx context.Context, source, target pgx.
 				if err != nil {
 					return r, false, err
 				}
-				if err := p.apply(ctx, spec, absent); err != nil {
-					return r, false, err
+				// Read more narrow keys per checkpoint, but retain the original
+				// replay bounds. All chunks and the cursor share this transaction.
+				for start := 0; start < len(absent); {
+					end, bytes := start, 2
+					for end < len(absent) && end-start < exactBulkRows {
+						encoded, err := json.Marshal(absent[end].key)
+						if err != nil {
+							return r, false, err
+						}
+						if len(encoded)+2 > onlineRowMaxBytes {
+							return r, false, errors.New("legacy: retained reconciliation encoded key exceeds 64 MiB")
+						}
+						size := len(encoded) + 1
+						if end > start && bytes+size > exactBulkBytes {
+							break
+						}
+						bytes += size
+						end++
+					}
+					if err := p.apply(ctx, spec, absent[start:end]); err != nil {
+						return r, false, err
+					}
+					start = end
 				}
 				cursor.TargetCursor = keys[len(keys)-1]
 				r.Pruned = int64(len(absent))
@@ -426,7 +450,7 @@ func reconcileTargetKeys(ctx context.Context, target pgx.Tx, spec onlineSpec, ta
 			query += " AND row_key>$2::jsonb"
 			args = append(args, cursor)
 		}
-		query += " ORDER BY row_key LIMIT 512"
+		query += " ORDER BY row_key LIMIT " + strconv.Itoa(onlineCopyBatchRows)
 	} else {
 		stage := onlineStage(table)
 		var fields, left, right []string
@@ -440,7 +464,7 @@ func reconcileTargetKeys(ctx context.Context, target pgx.Tx, spec onlineSpec, ta
 			query += " WHERE ROW(" + strings.Join(left, ",") + ")>(SELECT " + strings.Join(right, ",") + " FROM jsonb_populate_record(NULL::" + stage + ",$1::jsonb)e)"
 			args = append(args, cursor)
 		}
-		query += " ORDER BY " + strings.Join(left, ",") + " LIMIT 512"
+		query += " ORDER BY " + strings.Join(left, ",") + " LIMIT " + strconv.Itoa(onlineCopyBatchRows)
 	}
 	rows, err := target.Query(ctx, query, args...)
 	if err != nil {

@@ -15,6 +15,9 @@ import (
 type OnlineOptions struct {
 	RunID       string
 	SourceAdmin *pgxpool.Pool
+	// Zero retains the legacy 4096-event limit. The CLI can amortize setup
+	// across at most 16384 events without changing the 4 MiB key budget.
+	SyncEventLimit int
 }
 
 type OnlineReport struct {
@@ -24,6 +27,7 @@ type OnlineReport struct {
 	Copied            int64            `json:"copied_rows"`
 	Acknowledged      int64            `json:"acknowledged_events"`
 	Pending           int64            `json:"pending_events"`
+	PendingAtLeast    bool             `json:"pending_events_at_least,omitempty"`
 	Tables            map[string]int64 `json:"tables"`
 	LedgerHistoryMode string           `json:"ledger_history_mode"`
 	HistoryCutoff     string           `json:"history_cutoff,omitempty"`

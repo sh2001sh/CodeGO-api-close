@@ -82,6 +82,16 @@ records above 64 MiB fail explicitly and remain unacknowledged. The final
 window still validates foreign keys and financial SQL across the actual data;
 moving JSON projection online does not by itself eliminate those scan costs.
 
+The `online-sync` CLI reads at most 16,384 events per transaction; the Go API
+defaults to 4,096 unless `SyncEventLimit` is set (maximum 16,384). Event keys
+retain their 4 MiB budget and projections their 512-row/4 MiB batch bounds.
+Status counts read at most 4,096 pending events. A report with
+`pending_events_at_least: true` means `pending_events` is a lower bound, and
+must not be used to calculate backlog trends or an ETA. Below that threshold
+the count, including zero, is exact for that query's snapshot. Verification
+and finalization still check quiescence independently; zero does not prove
+that live writers have stopped.
+
 `online-unseal` is for resuming v2 during an aborted cutover. It only cancels the
 capture seal and does not restore deleted data, refund debits or migrate v3
 transactions back into v2. Once v3 accepts business writes, rolling back to a
@@ -109,6 +119,13 @@ manifest hash. The preserved previous journal must retain its original target
 binding, have no attached triggers, and differ from the new journal. This
 operation stores previous run/progress evidence before beginning a new cursor;
 it does not waive the operator's run deadline or resource guards.
+
+A generated public-only channel ID may become a real gateway binding during
+v2 traffic. Ordinary Sync rejects this change. A reviewed new epoch may adopt
+it only when the public ID and owner are unchanged, the old ID is its exact
+generated ID, and the new gateway channel exists. Full reconciliation then
+reprojects unchanged child rows too. Owner changes, deleted dependencies and
+changes between two real gateway bindings remain rejected.
 
 `online-reconcile -apply` streams every eligible source row through the same
 typed projection checks, writes only differences, and separately scans target

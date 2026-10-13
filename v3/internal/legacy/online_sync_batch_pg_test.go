@@ -81,6 +81,51 @@ func TestOnlineSync4096LaterFailureRollsBackEarlierProjectionBatches(t *testing.
 	onlineRecoveryAssertNoMoney(t, target)
 }
 
+func TestOnlineSync16384LaterFailureAndByteLimits(t *testing.T) {
+	// Run the same real late-failure and key-byte boundary proofs with the
+	// CLI's larger event allowance; projection and 4 MiB limits stay intact.
+	t.Run("late_failure", func(t *testing.T) {
+		m, source, target, opts := onlineMigrationFixture(t, false)
+		ctx := context.Background()
+		onlineMigrationReady(t, m, opts)
+		opts.SyncEventLimit = 16384
+		before := onlineRecoveryTotals(t, target)
+		onlineRecoveryExec(t, source, `INSERT INTO migration_source.logs
+ SELECT 350000+g,7,1700350000+g,2,'before larger bad','alice','key','chat-model',1,1,1,0,false,13,11,'default','','larger-before-bad-'||g,'','{}'
+ FROM generate_series(1,512)g;
+ INSERT INTO migration_source.logs VALUES(400000,7,1700400000,2,'bad','alice','key','chat-model',-1,1,1,0,false,13,11,'default','','larger-bad','','{}')`)
+		if _, err := m.SyncOnline(ctx, opts); err == nil {
+			t.Fatal("accepted invalid later projection")
+		}
+		var pending, acked int64
+		if err := source.QueryRow(ctx, "SELECT count(*) FILTER(WHERE NOT acked),count(*) FILTER(WHERE acked) FROM v3_migration_capture.events").Scan(&pending, &acked); err != nil || pending != 513 || acked != 0 || before != onlineRecoveryTotals(t, target) {
+			t.Fatalf("larger batch escaped rollback pending=%d acked=%d err=%v", pending, acked, err)
+		}
+		onlineRecoveryExec(t, source, "UPDATE migration_source.logs SET quota=1 WHERE id=400000")
+		if report, err := m.SyncOnline(ctx, opts); err != nil || report.Acknowledged != 514 || report.Pending != 0 || report.PendingAtLeast {
+			t.Fatalf("larger retry report=%+v err=%v", report, err)
+		}
+		if _, err := m.VerifyOnline(ctx, opts); err != nil {
+			t.Fatal(err)
+		}
+		onlineRecoveryAssertNoMoney(t, target)
+	})
+	t.Run("byte_limit", func(t *testing.T) {
+		m, source, target, opts := onlineMigrationFixture(t, false)
+		ctx := context.Background()
+		onlineMigrationReady(t, m, opts)
+		opts.SyncEventLimit = 16384
+		onlineRecoveryExec(t, source, "UPDATE migration_source.logs SET content=content||' larger byte budget' WHERE id IN(51,52,53)")
+		onlineRecoveryExec(t, source, "UPDATE v3_migration_capture.events SET row_key=row_key||jsonb_build_object('padding',repeat('k',2100000)) WHERE NOT acked")
+		for i := 0; i < 3; i++ {
+			if report, err := m.SyncOnline(ctx, opts); err != nil || report.Acknowledged != 1 || report.Pending != int64(2-i) {
+				t.Fatalf("larger byte-bound batch report=%+v err=%v", report, err)
+			}
+		}
+		onlineRecoveryAssertNoMoney(t, target)
+	})
+}
+
 func TestOnlineSync4096PreservesEventKeyByteLimits(t *testing.T) {
 	m, source, target, opts := onlineMigrationFixture(t, false)
 	ctx := context.Background()

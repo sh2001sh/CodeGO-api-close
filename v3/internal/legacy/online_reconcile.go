@@ -176,7 +176,7 @@ func (m *Importer) PrepareRetainedOnline(ctx context.Context, opts OnlineReconci
 	}
 	// Preserve the original receipt before refreshing dependencies or reserving
 	// identities for newly created users. A failure rolls the receipt back too.
-	if _, err := loadOnlineProjector(ctx, source, target, sources); err != nil {
+	if _, err := loadOnlineProjectorForEpoch(ctx, source, target, sources, true); err != nil {
 		return r, err
 	}
 	if err := BindOnlineCaptureTarget(ctx, opts.SourceAdmin, opts.RunID, targetIdentity); err != nil {

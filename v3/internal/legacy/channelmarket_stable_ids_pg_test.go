@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestOnlineGeneratedChannelMappingSurvivesNewChannels(t *testing.T) {
+func onlineGeneratedChannelFixture(t *testing.T) (*Importer, *pgxpool.Pool, *pgxpool.Pool, OnlineOptions) {
+	t.Helper()
 	source, target, crypto := importTestDB(t)
 	historyFixture(t, source)
 	ctx := context.Background()
@@ -39,6 +41,12 @@ func TestOnlineGeneratedChannelMappingSurvivesNewChannels(t *testing.T) {
 	if report, err := m.CopyOnline(ctx, opts); err != nil || report.Phase != "copied" {
 		t.Fatalf("baseline copy %+v: %v", report, err)
 	}
+	return m, source, target, opts
+}
+
+func TestOnlineGeneratedChannelMappingSurvivesNewChannels(t *testing.T) {
+	m, source, target, opts := onlineGeneratedChannelFixture(t)
+	ctx := context.Background()
 	var originalID, originalGross int64
 	stage := onlineStage("v3_channelmarket.settlements")
 	if err := target.QueryRow(ctx, "SELECT channel_id,gross_micro FROM "+stage+" WHERE id='settlement-201'").Scan(&originalID, &originalGross); err != nil {
@@ -90,4 +98,31 @@ func TestOnlineGeneratedChannelMappingSurvivesNewChannels(t *testing.T) {
 	if err := target.QueryRow(ctx, `SELECT nextval(pg_get_serial_sequence('v3_catalog.channels','id'))`).Scan(&nextID); err != nil || nextID <= originalID || nextID >= 1<<53 {
 		t.Fatalf("next channel ID is unsafe or collides: %d err=%v", nextID, err)
 	}
+}
+
+func TestOnlineRetainedGeneratedChannelBindingReprojectsUnchangedChildren(t *testing.T) {
+	m, source, target, opts := onlineGeneratedChannelFixture(t)
+	ctx := context.Background()
+	capture := retainedPauseFixture(t, source, opts)
+	onlineRecoveryExec(t, source, `UPDATE marketplace.channels SET internal_channel_id=13 WHERE id='legacy-public-201'`)
+	next := retainedNewEpochFixture(t, source, target, opts, capture)
+	if report, err := m.PrepareRetainedOnline(ctx, next); err != nil || !report.Applied || report.Phase != "reconciling" {
+		t.Fatalf("reviewed binding recovery %+v err=%v", report, err)
+	}
+	if _, err := m.SyncOnline(ctx, next.OnlineOptions); err == nil {
+		t.Fatal("sync accepted incomplete remapping reconciliation")
+	}
+	if report, err := m.ReconcileRetainedOnline(ctx, next.OnlineOptions); err != nil || report.Phase != "copied" || report.Repaired == 0 {
+		t.Fatalf("binding reconciliation %+v err=%v", report, err)
+	}
+	onlineMigrationSync(t, m, next.OnlineOptions)
+	var id, gross int64
+	if err := target.QueryRow(ctx, "SELECT channel_id,gross_micro FROM "+onlineStage("v3_channelmarket.settlements")+" WHERE id='settlement-201'").Scan(&id, &gross); err != nil || id != 13 || gross != 200 {
+		t.Fatalf("unchanged child not remapped exactly id=%d gross=%d err=%v", id, gross, err)
+	}
+	if _, err := m.VerifyOnline(ctx, next.OnlineOptions); err != nil {
+		t.Fatal(err)
+	}
+	onlineRecoveryAssertNoMoney(t, target)
+	t.Log("reviewed generated-to-real binding reprojected unchanged settlement and preserved exact money; sync rejected incomplete baseline")
 }

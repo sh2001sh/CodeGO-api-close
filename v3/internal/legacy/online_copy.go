@@ -337,6 +337,13 @@ func onlineRefreshAccounts(ctx context.Context, target pgx.Tx, p *onlineProjecto
 func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineReport, error) {
 	ctx = m.historyContext(ctx)
 	r := OnlineReport{RunID: opts.RunID, Tables: map[string]int64{}, LedgerHistoryMode: ledgerHistoryMode(ctx), HistoryCutoff: historyCutoffLabel(ctx)}
+	eventLimit := opts.SyncEventLimit
+	if eventLimit == 0 {
+		eventLimit = 4096
+	}
+	if eventLimit < 1 || eventLimit > 16384 {
+		return r, errors.New("legacy: online sync event limit must be between 1 and 16384")
+	}
 	if opts.SourceAdmin == nil {
 		return r, errors.New("legacy: online sync requires capture acknowledgement connection")
 	}
@@ -393,7 +400,7 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 			}
 		}
 	}
-	rows, err := source.Query(ctx, "SELECT id,table_name,row_key FROM v3_migration_capture.events WHERE NOT acked ORDER BY id LIMIT 4096")
+	rows, err := source.Query(ctx, "SELECT id,table_name,row_key FROM v3_migration_capture.events WHERE NOT acked ORDER BY id LIMIT $1", eventLimit)
 	if err != nil {
 		return r, err
 	}
@@ -516,9 +523,14 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 	}
 	r.Acknowledged = int64(len(ids))
 	r.Applied = true
-	if err = m.source.QueryRow(ctx, "SELECT count(*) FROM v3_migration_capture.events WHERE NOT acked").Scan(&r.Pending); err != nil {
+	// Status must not rescan millions of events after every bounded batch.
+	// Zero is still exact; positive counts at the limit explicitly mean at
+	// least that many committed events. Verify/finalize retain their separate
+	// exact quiescence and final-window budget checks.
+	if err = m.source.QueryRow(ctx, "SELECT count(*) FROM (SELECT 1 FROM v3_migration_capture.events WHERE NOT acked LIMIT 4096) pending").Scan(&r.Pending); err != nil {
 		return r, err
 	}
+	r.PendingAtLeast = r.Pending == 4096
 	return r, nil
 }
 

@@ -198,6 +198,7 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 	case "online-copy":
 		report, err = importer.CopyOnline(ctx, options)
 	case "online-sync":
+		options.SyncEventLimit = 16384
 		report, err = importer.SyncOnline(ctx, options)
 	case "online-verify":
 		report, err = importer.VerifyOnline(ctx, options)

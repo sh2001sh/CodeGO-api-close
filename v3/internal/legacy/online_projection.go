@@ -12,6 +12,10 @@ import (
 )
 
 func loadOnlineProjector(ctx context.Context, source, target pgx.Tx, sources map[string]string) (*onlineProjector, error) {
+	return loadOnlineProjectorForEpoch(ctx, source, target, sources, false)
+}
+
+func loadOnlineProjectorForEpoch(ctx context.Context, source, target pgx.Tx, sources map[string]string, reconcile bool) (*onlineProjector, error) {
 	promptAnomalySchema, err := historyPromptAnomalySchema(ctx, target)
 	if err != nil {
 		return nil, err
@@ -59,6 +63,12 @@ func loadOnlineProjector(ctx context.Context, source, target pgx.Tx, sources map
 			return nil, err
 		}
 		if !bytes.Equal(before.Bytes(), after.Bytes()) {
+			// Only a reviewed new epoch with a full reconciliation can replace
+			// a generated public-only ID with its now-bound gateway ID. Ordinary
+			// Sync must still reject this: unchanged child rows need reprojection.
+			if reconcile && onlineGeneratedChannelBound(key, raw, value, market) {
+				continue
+			}
 			return nil, errors.New("legacy: online structural dependency changed; rebuild the baseline")
 		}
 	}
@@ -115,6 +125,19 @@ func loadOnlineProjector(ctx context.Context, source, target pgx.Tx, sources map
 		}
 	}
 	return p, nil
+}
+
+func onlineGeneratedChannelBound(key string, before, after json.RawMessage, market *channelMarketData) bool {
+	if !strings.HasPrefix(key, "market.channel:") {
+		return false
+	}
+	id := strings.TrimPrefix(key, "market.channel:")
+	c := market.channels[id]
+	var old, next []int64
+	if c == nil || c.newCatalog || c.archiveParent || json.Unmarshal(before, &old) != nil || json.Unmarshal(after, &next) != nil || len(old) != 2 || len(next) != 2 {
+		return false
+	}
+	return old[0] == cmGeneratedCatalogID(id) && old[1] == c.owner && next[0] == c.catalogID && next[1] == c.owner
 }
 
 func (p *onlineProjector) historicalAccounts() ([]onlineProjection, error) {

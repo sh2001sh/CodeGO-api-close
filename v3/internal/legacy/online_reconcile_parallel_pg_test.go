@@ -91,7 +91,7 @@ func TestOnlineRetainedParallelDomainsSnapshotCaptureAndExactAmounts(t *testing.
 		t.Fatal(err)
 	}
 	defer func() { _ = block.Rollback(context.Background()) }()
-	if _, err := block.Exec(ctx, "SELECT name FROM v3_migration_online.progress WHERE name='request_audits' FOR UPDATE"); err != nil {
+	if _, err := block.Exec(ctx, "SELECT name FROM v3_migration_online.progress WHERE name='logs' FOR UPDATE"); err != nil {
 		t.Fatal(err)
 	}
 	type result struct {
@@ -100,7 +100,7 @@ func TestOnlineRetainedParallelDomainsSnapshotCaptureAndExactAmounts(t *testing.
 	}
 	done := make(chan result, 1)
 	go func() { r, err := m.ReconcileRetainedOnline(ctx, opts); done <- result{r, err} }()
-	// Funding and market must actually commit while request is blocked. A
+	// Funding and market must actually commit while logs are blocked. A
 	// goroutine count alone cannot detect singleton-row serialization.
 	deadline := time.Now().Add(20 * time.Second)
 	for {
@@ -114,13 +114,17 @@ func TestOnlineRetainedParallelDomainsSnapshotCaptureAndExactAmounts(t *testing.
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("funding and market did not commit while request domain was blocked")
+			t.Fatal("funding and market did not commit while logs were blocked")
 		}
 		select {
 		case r := <-done:
 			t.Fatalf("reconcile ended before blocked domain: %+v %v", r.report, r.err)
 		case <-time.After(25 * time.Millisecond):
 		}
+	}
+	var logsComplete bool
+	if err := target.QueryRow(ctx, "SELECT complete FROM v3_migration_online.progress WHERE name='logs'").Scan(&logsComplete); err != nil || logsComplete {
+		t.Fatalf("log checkpoint advanced despite held progress lock: complete=%v err=%v", logsComplete, err)
 	}
 	if m.source.Stat().AcquiredConns() > 4 || m.pool.Stat().AcquiredConns() > 4 {
 		t.Fatal("four-connection budget exceeded")
@@ -156,7 +160,7 @@ func TestOnlineRetainedParallelDomainsSnapshotCaptureAndExactAmounts(t *testing.
 		t.Fatalf("large integer capture lost precision: %d %v", amount, err)
 	}
 	onlineRecoveryAssertNoMoney(t, target)
-	t.Log("funding and market committed despite a blocked request domain; shared snapshot, unacked capture, exact large amounts and independent Verify passed")
+	t.Log("funding and market committed before logs completed; shared snapshot, unacked capture, exact large amounts and independent Verify passed")
 }
 
 func TestOnlineRetainedParallelLateWorkerFailureRollbackResume(t *testing.T) {
@@ -321,6 +325,7 @@ func TestOnlineRetainedParallelWideDomainRows(t *testing.T) {
 	}
 	opts = retainedParallelPrepare(t, m, source, target, opts, func() {
 		for _, sql := range []string{
+			"UPDATE migration_source.logs SET content=repeat('l',$1) WHERE id=51",
 			"UPDATE gateway.request_audits SET error_code=repeat('r',$1) WHERE request_id='kept-request'",
 			"UPDATE billing.funding_lots SET reference_id=repeat('f',$1) WHERE lot_id='funding-box-lot'",
 			"UPDATE marketplace.verification_runs SET summary=repeat('m',$1) WHERE id='verify-201'",
@@ -334,6 +339,7 @@ func TestOnlineRetainedParallelWideDomainRows(t *testing.T) {
 		t.Fatalf("wide parallel rows %+v %v", r, err)
 	}
 	for _, sql := range []string{
+		"SELECT length(content) FROM " + onlineStage("v3_audit.events") + " WHERE id=51",
 		"SELECT length(error_code) FROM " + onlineStage("v3_audit.request_audits") + " WHERE request_id='kept-request'",
 		"SELECT length(reference_id) FROM " + onlineStage("v3_billing.funding_lots") + " WHERE lot_id='funding-box-lot'",
 		"SELECT length(summary) FROM " + onlineStage("v3_channelmarket.verification_runs") + " WHERE id='verify-201'",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,9 +34,9 @@ func reconcileDomains(specs []onlineSpec) ([]onlineSpec, [reconcileDomainWorkers
 	var domains [reconcileDomainWorkers][]onlineSpec
 	for _, spec := range specs {
 		switch spec.name {
-		case "logs", "ledger_entries":
+		case "ledger_entries":
 			serial = append(serial, spec)
-		case "request_audits", "request_attempt_audits":
+		case "logs", "request_audits", "request_attempt_audits":
 			domains[0] = append(domains[0], spec)
 		case "funding_lots", "funding_allocations":
 			domains[1] = append(domains[1], spec)
@@ -46,12 +47,17 @@ func reconcileDomains(specs []onlineSpec) ([]onlineSpec, [reconcileDomainWorkers
 			domains[2] = append(domains[2], spec)
 		}
 	}
-	// The target request projection determines whether attempts are linked or
-	// orphaned. Keep parents first even if a caller supplies specs out of order.
+	// Logs write only events/usage rows and their own totals. They may overlap
+	// funding and market, while using the request domain's existing connection.
+	// Attempts depend on target requests; preserve parent order for any input.
+	requestOrder := map[string]int{"logs": 0, "request_audits": 1, "request_attempt_audits": 2}
+	sort.SliceStable(domains[0], func(i, j int) bool {
+		return requestOrder[domains[0][i].name] < requestOrder[domains[0][j].name]
+	})
 	for _, pair := range []struct {
 		domain int
 		first  string
-	}{{0, "request_audits"}, {1, "funding_lots"}} {
+	}{{1, "funding_lots"}} {
 		if len(domains[pair.domain]) == 2 && domains[pair.domain][0].name != pair.first {
 			domains[pair.domain][0], domains[pair.domain][1] = domains[pair.domain][1], domains[pair.domain][0]
 		}

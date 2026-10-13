@@ -95,8 +95,8 @@ step_integrationlist() { integration_packages; }
 # Integration suites may drop schemas and flush Redis. Both services are
 # disposable and inaccessible from the host or production networks.
 step_integration() {
-  # Keep both halves under the same ten-minute limit, including local "all".
   # The offline suite excludes exactly the tests selected by the online suite.
+  # The online race suite needs twenty minutes as retained recovery coverage grows.
   if [ "${V3_INTEGRATION_SHARD:-all}" = all ]; then
     local shard
     for shard in commerce ledger market core migration migration-online; do
@@ -109,12 +109,12 @@ step_integration() {
   selected=$(integration_packages)
   [ -n "$selected" ] || { echo 'integration shard has no packages' >&2; return 1; }
   local -a packages filters=()
-  local pg_image=mirror.gcr.io/library/postgres:15-alpine
+  local pg_image=mirror.gcr.io/library/postgres:15-alpine test_timeout=10m
   mapfile -t packages <<< "$selected"
   case "$V3_INTEGRATION_SHARD" in
     migration) filters=(-skip '^TestOnline') ;;
     # musl treats en_US sorting like C; the capture regression needs glibc.
-    migration-online) filters=(-run '^TestOnline'); pg_image=mirror.gcr.io/library/postgres:15-bookworm ;;
+    migration-online) filters=(-run '^TestOnline'); pg_image=mirror.gcr.io/library/postgres:15-bookworm; test_timeout=20m ;;
   esac
   docker network create "$net" >/dev/null
   NETWORKS+=("$net")
@@ -150,7 +150,7 @@ step_integration() {
     -e "V3_TEST_REDIS_ADDR=$rd:6379" \
     -e "CODEGO_TEST_REDIS_ADDR=$rd:6379" \
     -e "V3_TEST_COMMERCE_REDIS_ADDR=$rd:6379" "$LINT_IMG" \
-    go test -race -tags=pgintegration -count=1 -p 1 -timeout=10m "${filters[@]}" "${packages[@]}"
+    go test -race -tags=pgintegration -count=1 -p 1 -timeout="$test_timeout" "${filters[@]}" "${packages[@]}"
 }
 
 step_pgtest() {

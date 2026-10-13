@@ -28,4 +28,8 @@ func TestOnlineGeneratedBindingRejectsOwnerAndRealRemapping(t *testing.T) {
 			}
 		})
 	}
+	market.channels[id].archiveParent = true
+	if !onlineGeneratedChannelBound("market.channel:"+id, json.RawMessage(fmt.Sprintf("[%d,7]", cmGeneratedCatalogID(id))), json.RawMessage("[13,7]"), market) {
+		t.Fatal("validated deleted-parent archive rejected in a reviewed new epoch")
+	}
 }

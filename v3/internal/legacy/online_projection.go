@@ -66,7 +66,8 @@ func loadOnlineProjectorForEpoch(ctx context.Context, source, target pgx.Tx, sou
 		}
 		if !bytes.Equal(before.Bytes(), after.Bytes()) {
 			// Only a reviewed new epoch with a full reconciliation can replace
-			// a generated public-only ID with its now-bound gateway ID. Ordinary
+			// a generated public-only ID with its gateway ID, including a validated
+			// deleted-parent archive. Ordinary
 			// Sync must still reject this: unchanged child rows need reprojection.
 			if reconcile && onlineGeneratedChannelBound(key, raw, value, market) {
 				continue
@@ -136,9 +137,11 @@ func onlineGeneratedChannelBound(key string, before, after json.RawMessage, mark
 	id := strings.TrimPrefix(key, "market.channel:")
 	c := market.channels[id]
 	var old, next []int64
-	if c == nil || c.newCatalog || c.archiveParent || json.Unmarshal(before, &old) != nil || json.Unmarshal(after, &next) != nil || len(old) != 2 || len(next) != 2 {
+	if c == nil || c.newCatalog || json.Unmarshal(before, &old) != nil || json.Unmarshal(after, &next) != nil || len(old) != 2 || len(next) != 2 {
 		return false
 	}
+	// loadChannelMarketBase rejects missing active parents and validates both
+	// deletion records and their unique group before this comparison is reached.
 	return old[0] == cmGeneratedCatalogID(id) && old[1] == c.owner && next[0] == c.catalogID && next[1] == c.owner
 }
 

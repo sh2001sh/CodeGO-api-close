@@ -4,6 +4,7 @@ package legacy
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -30,6 +31,7 @@ func onlineGeneratedChannelFixture(t *testing.T) (*Importer, *pgxpool.Pool, *pgx
 		}
 	}
 	if _, err := source.Exec(ctx, `ALTER TABLE marketplace.channels ADD COLUMN base_url_ciphertext text; ALTER TABLE marketplace.channels ADD COLUMN credential_ciphertext text;
+	 ALTER TABLE marketplace.channels ADD COLUMN deleted_at timestamptz; ALTER TABLE marketplace.groups ADD COLUMN deleted_at timestamptz;
 	 UPDATE marketplace.channels SET internal_channel_id=0,base_url_ciphertext='https://example.invalid',credential_ciphertext='fixture-upstream-secret'`); err != nil {
 		t.Fatal(err)
 	}
@@ -125,4 +127,65 @@ func TestOnlineRetainedGeneratedChannelBindingReprojectsUnchangedChildren(t *tes
 	}
 	onlineRecoveryAssertNoMoney(t, target)
 	t.Log("reviewed generated-to-real binding reprojected unchanged settlement and preserved exact money; sync rejected incomplete baseline")
+}
+
+func TestOnlineRetainedGeneratedChannelDeletedBindingKeepsArchiveAndRejectsPartialDeletion(t *testing.T) {
+	for _, partial := range []bool{true, false} {
+		t.Run(fmt.Sprintf("partial=%t", partial), func(t *testing.T) {
+			m, source, target, opts := onlineGeneratedChannelFixture(t)
+			ctx := context.Background()
+			capture := retainedPauseFixture(t, source, opts)
+			onlineRecoveryExec(t, source, `INSERT INTO migration_source.channels SELECT 14,type,name,key,status,"group",models,base_url FROM migration_source.channels WHERE id=13;
+			 UPDATE marketplace.channels SET internal_channel_id=13,deleted_at='2026-10-01T00:00:00Z' WHERE id='legacy-public-201';
+			 DELETE FROM migration_source.channels WHERE id=13`)
+			if !partial {
+				onlineRecoveryExec(t, source, `UPDATE marketplace.groups SET deleted_at='2026-10-01T00:00:00Z' WHERE id='legacy-group-201'`)
+			}
+			next := retainedNewEpochFixture(t, source, target, opts, capture)
+			report, err := m.PrepareRetainedOnline(ctx, next)
+			if partial {
+				if err == nil {
+					t.Fatal("active group with missing gateway parent accepted")
+				}
+				var runID string
+				if err := target.QueryRow(ctx, "SELECT run_id FROM v3_migration_online.run").Scan(&runID); err != nil || runID != opts.RunID {
+					t.Fatal("rejected archive changed target ownership")
+				}
+				onlineRecoveryAssertNoMoney(t, target)
+				return
+			}
+			if err != nil || !report.Applied {
+				t.Fatalf("reviewed deleted binding %+v err=%v", report, err)
+			}
+			if _, err := m.SyncOnline(ctx, next.OnlineOptions); err == nil {
+				t.Fatal("sync accepted incomplete archive reconciliation")
+			}
+			if _, err := m.ReconcileRetainedOnline(ctx, next.OnlineOptions); err != nil {
+				t.Fatal(err)
+			}
+			onlineMigrationSync(t, m, next.OnlineOptions)
+			var exact bool
+			if err := target.QueryRow(ctx, "SELECT channel_id=13 AND gross_micro=200 AND net_micro=190 FROM "+onlineStage("v3_channelmarket.settlements")+" WHERE id='settlement-201'").Scan(&exact); err != nil || !exact {
+				t.Fatalf("archive child lost identity or money exact=%t err=%v", exact, err)
+			}
+			if _, err := m.VerifyOnline(ctx, next.OnlineOptions); err != nil {
+				t.Fatal(err)
+			}
+			onlineRecoveryAssertNoMoney(t, target)
+			if _, err := SealOnlineCapture(ctx, source, next.RunID); err != nil {
+				t.Fatal(err)
+			}
+			if r, err := m.FinalizeOnline(ctx, next.OnlineOptions); err != nil || !r.Applied || len(r.Issues) != 0 {
+				t.Fatalf("deleted binding finalization %+v err=%v", r, err)
+			}
+			if r, err := m.Check(ctx); err != nil || len(r.Issues) != 0 {
+				t.Fatalf("independent deleted binding check %+v err=%v", r, err)
+			}
+			var archived bool
+			if err := target.QueryRow(ctx, `SELECT status='disabled' AND base_url='' AND NOT EXISTS(SELECT 1 FROM v3_catalog.channel_credentials WHERE channel_id=13) FROM v3_catalog.channels WHERE id=13`).Scan(&archived); err != nil || !archived {
+				t.Fatalf("deleted binding is routable archived=%t err=%v", archived, err)
+			}
+			t.Log("generated ID rebound to deleted archive only after full reconciliation; exact settlement money preserved, archive disabled without credentials")
+		})
+	}
 }

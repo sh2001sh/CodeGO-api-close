@@ -5,6 +5,7 @@ package legacy
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -85,16 +86,39 @@ func TestOnlineVerifyCatchupBudgetRollback(t *testing.T) {
 	}
 }
 
+type onlineCatchupCancelTracer struct {
+	cancel context.CancelFunc
+	fired  atomic.Bool
+}
+
+func (tracer *onlineCatchupCancelTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.Contains(data.SQL, "UPDATE v3_migration_online.run SET phase='verified'") && tracer.fired.CompareAndSwap(false, true) {
+		tracer.cancel()
+	}
+	return ctx
+}
+func (*onlineCatchupCancelTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
 func TestOnlineVerifyCatchupLateFailureRollsBackProjectionAndAck(t *testing.T) {
 	m, source, target, opts := onlineMigrationFixture(t, false)
 	onlineCatchupReady(t, m, opts)
 	before := onlineRecoveryTotals(t, target)
-	onlineRecoveryExec(t, target, `CREATE FUNCTION v3_migration_online.reject_catchup_verify() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'injected late verification failure'; END$$;
- CREATE TRIGGER reject_catchup_verify BEFORE UPDATE ON v3_migration_online.run FOR EACH ROW WHEN(NEW.phase='verified') EXECUTE FUNCTION v3_migration_online.reject_catchup_verify()`)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tracer := &onlineCatchupCancelTracer{cancel: cancel}
+	config := target.Config().Copy()
+	config.ConnConfig.Tracer = tracer
+	traced, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer traced.Close()
+	clone := *m
+	clone.pool = traced
 	onlineRecoveryExec(t, source, `UPDATE migration_source.logs SET quota=57 WHERE id=51`)
-	r, err := m.VerifyOnlineCatchup(context.Background(), opts)
-	if err == nil || r.Applied || r.Acknowledged != 0 {
-		t.Fatalf("late error committed report=%+v err=%v", r, err)
+	r, err := clone.VerifyOnlineCatchup(ctx, opts)
+	if err == nil || r.Applied || r.Acknowledged != 0 || !tracer.fired.Load() {
+		t.Fatalf("late error committed or not injected report=%+v fired=%t err=%v", r, tracer.fired.Load(), err)
 	}
 	if onlineRecoveryTotals(t, target) != before {
 		t.Fatal("late failure changed totals")
@@ -103,7 +127,6 @@ func TestOnlineVerifyCatchupLateFailureRollsBackProjectionAndAck(t *testing.T) {
 	if err := source.QueryRow(context.Background(), "SELECT count(*) FROM v3_migration_capture.events WHERE NOT acked").Scan(&pending); err != nil || pending != 1 {
 		t.Fatalf("late failure pending=%d err=%v", pending, err)
 	}
-	onlineRecoveryExec(t, target, `DROP TRIGGER reject_catchup_verify ON v3_migration_online.run`)
 	if r, err := m.VerifyOnlineCatchup(context.Background(), opts); err != nil || !r.Applied || r.Acknowledged != 1 {
 		t.Fatalf("retry=%+v err=%v", r, err)
 	}

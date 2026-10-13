@@ -209,6 +209,9 @@ func (m *Importer) PrepareRetainedOnline(ctx context.Context, opts OnlineReconci
 func (m *Importer) ReconcileRetainedOnline(ctx context.Context, opts OnlineOptions) (OnlineReconcileReport, error) {
 	ctx = m.historyContext(ctx)
 	r := OnlineReconcileReport{RunID: opts.RunID}
+	if err := m.validateReconcilePools(); err != nil {
+		return r, err
+	}
 	conn, err := m.onlineConnection(ctx)
 	if err != nil {
 		return r, err
@@ -247,28 +250,19 @@ func (m *Importer) ReconcileRetainedOnline(ctx context.Context, opts OnlineOptio
 	if err := init.Commit(ctx); err != nil {
 		return r, err
 	}
-	for _, spec := range specs {
-		for {
-			target, err := conn.Begin(ctx)
-			if err != nil {
-				return r, err
-			}
-			delta, complete, err := p.reconcilePage(ctx, source, target, opts.RunID, spec)
-			if err == nil {
-				err = target.Commit(ctx)
-			}
-			if err != nil {
-				_ = target.Rollback(ctx)
-				return r, err
-			}
-			r.Scanned += delta.Scanned
-			r.Unchanged += delta.Unchanged
-			r.Repaired += delta.Repaired
-			r.Pruned += delta.Pruned
-			if complete {
-				break
-			}
-		}
+	serial, domains, err := reconcileDomains(specs)
+	if err != nil {
+		return r, err
+	}
+	delta, err := reconcileSpecs(ctx, conn, source, p, opts.RunID, serial, 0)
+	addReconcileReport(&r, delta)
+	if err != nil {
+		return r, err
+	}
+	delta, err = m.reconcileParallel(ctx, conn, source, p, opts.RunID, domains)
+	addReconcileReport(&r, delta)
+	if err != nil {
+		return r, err
 	}
 	finish, err := conn.Begin(ctx)
 	if err != nil {
@@ -277,6 +271,24 @@ func (m *Importer) ReconcileRetainedOnline(ctx context.Context, opts OnlineOptio
 	defer func() { _ = finish.Rollback(ctx) }()
 	if err := onlineAuthorize(ctx, finish, opts.RunID); err != nil {
 		return r, err
+	}
+	var phase string
+	if err := finish.QueryRow(ctx, "SELECT phase FROM v3_migration_online.run WHERE singleton").Scan(&phase); err != nil {
+		return r, err
+	}
+	if phase != "reconciling" {
+		return r, errors.New("legacy: retained reconciliation phase changed before completion")
+	}
+	names := make([]string, len(specs))
+	for i, spec := range specs {
+		names[i] = spec.name
+	}
+	var completed int
+	if err := finish.QueryRow(ctx, "SELECT count(*) FROM v3_migration_online.progress WHERE name=ANY($1::text[]) AND complete", names).Scan(&completed); err != nil {
+		return r, err
+	}
+	if completed != len(specs) {
+		return r, errors.New("legacy: retained reconciliation cannot finish with incomplete progress")
 	}
 	if sources["logs"] != "" {
 		if err := onlineNormalizeLogs(ctx, finish, nil, true); err != nil {
@@ -294,8 +306,18 @@ func (m *Importer) ReconcileRetainedOnline(ctx context.Context, opts OnlineOptio
 }
 
 func (p *onlineProjector) reconcilePage(ctx context.Context, source, target pgx.Tx, runID string, spec onlineSpec) (OnlineReconcileReport, bool, error) {
+	return p.reconcilePageAuthorized(ctx, source, target, runID, spec, 0)
+}
+
+func (p *onlineProjector) reconcilePageAuthorized(ctx context.Context, source, target pgx.Tx, runID string, spec onlineSpec, coordinatorPID uint32) (OnlineReconcileReport, bool, error) {
 	var r OnlineReconcileReport
-	if err := onlineAuthorize(ctx, target, runID); err != nil {
+	var err error
+	if coordinatorPID == 0 {
+		err = onlineAuthorize(ctx, target, runID)
+	} else {
+		err = onlineAuthorizeReconcileWorker(ctx, target, runID, coordinatorPID)
+	}
+	if err != nil {
 		return r, false, err
 	}
 	var raw []byte

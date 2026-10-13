@@ -54,11 +54,11 @@ func onlineRunID() (string, error) {
 
 // Do not attach connection errors: DSN parse diagnostics may contain secrets.
 // The failure remains explicit while the CLI output contains no credentials.
-func onlineConnect(ctx context.Context, envName, role string) (*pg.Pool, error) {
+func onlineConnect(ctx context.Context, envName, role string, maxConns int32) (*pg.Pool, error) {
 	if os.Getenv(envName) == "" {
 		return nil, fmt.Errorf("%s is required for %s", envName, role)
 	}
-	pool, err := pg.Connect(ctx, pg.Config{DSN: os.Getenv(envName), MaxConns: 2})
+	pool, err := pg.Connect(ctx, pg.Config{DSN: os.Getenv(envName), MaxConns: maxConns})
 	if err != nil {
 		return nil, fmt.Errorf("%s postgres connection failed", role)
 	}
@@ -91,7 +91,7 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 		return runOnlineRestoreDelta(ctx, runID, output)
 	}
 	if command == "online-seal" || command == "online-unseal" {
-		admin, err := onlineConnect(ctx, "V3_ONLINE_SOURCE_ADMIN_PG_DSN", "source capture administrator")
+		admin, err := onlineConnect(ctx, "V3_ONLINE_SOURCE_ADMIN_PG_DSN", "source capture administrator", 2)
 		if err != nil {
 			return err
 		}
@@ -150,19 +150,25 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 	if adminRequired && os.Getenv("V3_ONLINE_SOURCE_ADMIN_PG_DSN") == "" {
 		return errors.New("V3_ONLINE_SOURCE_ADMIN_PG_DSN is required for capture setup or acknowledgement")
 	}
-	source, err := onlineConnect(ctx, "V3_SOURCE_PG_DSN", "source reader")
+	// Retained reconciliation has one snapshot/lock coordinator and at most
+	// three domain workers. Other commands retain their original pool budget.
+	maxConns := int32(2)
+	if command == "online-reconcile" {
+		maxConns = 4
+	}
+	source, err := onlineConnect(ctx, "V3_SOURCE_PG_DSN", "source reader", maxConns)
 	if err != nil {
 		return err
 	}
 	defer source.Close()
-	target, err := onlineConnect(ctx, "V3_PG_DSN", "target")
+	target, err := onlineConnect(ctx, "V3_PG_DSN", "target", maxConns)
 	if err != nil {
 		return err
 	}
 	defer target.Close()
 	options := legacy.OnlineOptions{RunID: runID}
 	if adminRequired {
-		admin, err := onlineConnect(ctx, "V3_ONLINE_SOURCE_ADMIN_PG_DSN", "source capture administrator")
+		admin, err := onlineConnect(ctx, "V3_ONLINE_SOURCE_ADMIN_PG_DSN", "source capture administrator", 2)
 		if err != nil {
 			return err
 		}
@@ -239,7 +245,7 @@ func runOnlineArchive(ctx context.Context, command, runID string, output io.Writ
 	if err != nil {
 		return err
 	}
-	source, err := onlineConnect(ctx, "V3_SOURCE_PG_DSN", "source reader")
+	source, err := onlineConnect(ctx, "V3_SOURCE_PG_DSN", "source reader", 2)
 	if err != nil {
 		return err
 	}
@@ -318,7 +324,7 @@ func runOnlineRestoreDelta(ctx context.Context, runID string, output io.Writer) 
 			resultErr = errors.Join(resultErr, errors.New("cannot close delta archive"))
 		}
 	}()
-	target, err := onlineConnect(ctx, "V3_ONLINE_RESTORE_PG_DSN", "isolated restore")
+	target, err := onlineConnect(ctx, "V3_ONLINE_RESTORE_PG_DSN", "isolated restore", 2)
 	if err != nil {
 		return err
 	}

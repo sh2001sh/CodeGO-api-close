@@ -264,7 +264,12 @@ func (p *onlineProjector) project(ctx context.Context, spec onlineSpec, raw json
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		fields, err = onlineProjectionFields(l, map[string]string{"type": "event_type", "model_name": "model", "quota": "amount", "use_time": "duration_seconds", "token_id": "key_id", "group": "group_name"}, []string{"other", "Metadata", "CachedTokens"}, map[string]historyTime{"created_at": l.CreatedAt})
+		// These two potentially wide values are omitted by the scalar projection.
+		// Keep the validated originals for metadata/usage without encoding them
+		// twice only to discard them in historyJSONProjection.
+		scalars := l
+		scalars.Other, scalars.Metadata = "", nil
+		fields, err = onlineProjectionFields(scalars, map[string]string{"type": "event_type", "model_name": "model", "quota": "amount", "use_time": "duration_seconds", "token_id": "key_id", "group": "group_name"}, []string{"other", "Metadata", "CachedTokens"}, map[string]historyTime{"created_at": l.CreatedAt})
 		if err != nil {
 			return nil, err
 		}

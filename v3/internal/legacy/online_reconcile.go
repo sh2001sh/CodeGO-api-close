@@ -522,6 +522,11 @@ func (p *onlineProjector) matchRetainedInputs(ctx context.Context, spec onlineSp
 		}
 		keys = append(keys, input.key)
 	}
+	// Queue the bounded SELECTs on this same transaction. This changes network
+	// round trips only: every typed field and every result owner is still checked
+	// before any repair or cursor update can run.
+	var batch pgx.Batch
+	var checks [][]item
 	for _, shape := range shapes {
 		items := groups[shape]
 		for len(items) > 0 {
@@ -544,21 +549,52 @@ func (p *onlineProjector) matchRetainedInputs(ctx context.Context, spec onlineSp
 			row := items[0].row
 			// Reuse the bytes already validated and sized above. The SQL still
 			// compares every typed field; only the duplicate JSON encoding goes.
-			name, columns, data, err := exactBulkEncodedInput(row.Schema, row.Table, row.Keys, values, encodedRows)
+			_, columns, data, err := exactBulkEncodedInput(row.Schema, row.Table, row.Keys, values, encodedRows)
 			if err != nil {
 				return nil, err
 			}
-			checked, err := checkExactBulkData(ctx, onlineStageTx{Tx: p.target, tables: []string{row.Schema + "." + row.Table}}, name, row.Keys, columns, data)
-			if err != nil {
-				return nil, err
-			}
-			if len(checked) != n {
-				return nil, errors.New("legacy: retained comparison row count differs")
-			}
-			for i, ok := range checked {
-				matches[items[i].owner] = matches[items[i].owner] && ok
-			}
+			batch.Queue(exactBulkCheckQuery(onlineStage(row.Schema+"."+row.Table), row.Keys, columns), data)
+			checks = append(checks, items[:n])
 			items = items[n:]
+		}
+	}
+	if len(checks) > 0 {
+		err := func() (err error) {
+			results := p.target.SendBatch(ctx, &batch)
+			// Close consumes every remaining result on failure too. A returned
+			// error makes the caller roll back this whole page, not just one check.
+			defer func() { err = errors.Join(err, results.Close()) }()
+			for _, items := range checks {
+				rows, err := results.Query()
+				if err != nil {
+					return err
+				}
+				n := 0
+				for rows.Next() {
+					var match bool
+					if err := rows.Scan(&match); err != nil {
+						rows.Close()
+						return err
+					}
+					if n >= len(items) {
+						rows.Close()
+						return errors.New("legacy: retained comparison row count differs")
+					}
+					matches[items[n].owner] = matches[items[n].owner] && match
+					n++
+				}
+				rows.Close()
+				if err := rows.Err(); err != nil {
+					return err
+				}
+				if n != len(items) {
+					return errors.New("legacy: retained comparison row count differs")
+				}
+			}
+			return nil
+		}()
+		if err != nil {
+			return nil, err
 		}
 	}
 	data, err := json.Marshal(keys)

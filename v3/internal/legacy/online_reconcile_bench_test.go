@@ -3,6 +3,7 @@ package legacy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -13,6 +14,40 @@ import (
 // Isolate the real comparator's CPU work from PostgreSQL and network latency.
 // The synthetic responder preserves one result per submitted projection.
 type retainedBenchmarkTx struct{ pgx.Tx }
+
+func (tx retainedBenchmarkTx) SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults {
+	return &retainedBenchmarkBatch{tx: tx, ctx: ctx, batch: batch}
+}
+
+type retainedBenchmarkBatch struct {
+	pgx.BatchResults
+	tx    retainedBenchmarkTx
+	ctx   context.Context
+	batch *pgx.Batch
+	next  int
+}
+
+func (b *retainedBenchmarkBatch) Query() (pgx.Rows, error) {
+	if b.next >= b.batch.Len() {
+		return nil, errors.New("unexpected benchmark batch result")
+	}
+	query := b.batch.QueuedQueries[b.next]
+	b.next++
+	return b.tx.Query(b.ctx, query.SQL, query.Arguments...)
+}
+
+func (b *retainedBenchmarkBatch) Close() (err error) {
+	for b.next < b.batch.Len() {
+		rows, queryErr := b.Query()
+		if queryErr != nil {
+			err = errors.Join(err, queryErr)
+			continue
+		}
+		rows.Close()
+		err = errors.Join(err, rows.Err())
+	}
+	return err
+}
 
 func (retainedBenchmarkTx) Query(_ context.Context, query string, args ...any) (pgx.Rows, error) {
 	if strings.HasPrefix(query, "SELECT r.row_key,r.metrics") {

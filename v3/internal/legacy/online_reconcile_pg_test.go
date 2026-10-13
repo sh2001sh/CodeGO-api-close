@@ -33,6 +33,10 @@ func retainedPauseFixture(t *testing.T, source *pgxpool.Pool, opts OnlineOptions
 }
 
 func retainedNewEpochFixture(t *testing.T, source, target *pgxpool.Pool, previous OnlineOptions, capture OnlineCaptureReport) OnlineReconcilePrepareOptions {
+	return retainedNewEpochFixtureNamed(t, source, target, previous, capture, "retained-recovery-fixture-20261012", "v3_migration_capture_retained_fixture")
+}
+
+func retainedNewEpochFixtureNamed(t *testing.T, source, target *pgxpool.Pool, previous OnlineOptions, capture OnlineCaptureReport, nextRun, retiredSchema string) OnlineReconcilePrepareOptions {
 	t.Helper()
 	ctx := context.Background()
 	for _, table := range capture.Tables {
@@ -41,10 +45,10 @@ func retainedNewEpochFixture(t *testing.T, source, target *pgxpool.Pool, previou
 		}
 		onlineRecoveryExec(t, source, "DROP TRIGGER IF EXISTS "+pgx.Identifier{onlineCaptureFenceTrigger}.Sanitize()+" ON "+table.Relation)
 	}
-	onlineRecoveryExec(t, source, "ALTER SCHEMA v3_migration_capture RENAME TO v3_migration_capture_retained_fixture")
-	next := OnlineReconcilePrepareOptions{OnlineOptions: OnlineOptions{RunID: "retained-recovery-fixture-20261012", SourceAdmin: source}, PreviousRunID: previous.RunID}
-	next.PreviousCaptureSchema = "v3_migration_capture_retained_fixture"
-	if err := source.QueryRow(ctx, "SELECT 'v3_migration_capture_retained_fixture.events'::regclass::oid").Scan(&next.ExpectedPreviousCaptureEventsOID); err != nil {
+	onlineRecoveryExec(t, source, "ALTER SCHEMA v3_migration_capture RENAME TO "+pgx.Identifier{retiredSchema}.Sanitize())
+	next := OnlineReconcilePrepareOptions{OnlineOptions: OnlineOptions{RunID: nextRun, SourceAdmin: source}, PreviousRunID: previous.RunID}
+	next.PreviousCaptureSchema = retiredSchema
+	if err := source.QueryRow(ctx, "SELECT $1::regclass::oid", pgx.Identifier{retiredSchema, "events"}.Sanitize()).Scan(&next.ExpectedPreviousCaptureEventsOID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := SetupOnlineCapture(ctx, source, next.RunID, true); err != nil {
@@ -63,6 +67,39 @@ func retainedNewEpochFixture(t *testing.T, source, target *pgxpool.Pool, previou
 		t.Fatal(err)
 	}
 	return next
+}
+
+func TestOnlineRetainedSecondRecoveryPreservesPreviousReceiptsAndRows(t *testing.T) {
+	m, source, target, original := onlineMigrationFixture(t, false)
+	ctx := context.Background()
+	retainedCopiedFixture(t, m, original)
+	unchanged := retainedRowXmin(t, target, 53)
+	previous := original
+	for i, runID := range []string{"retained-first-recovery-20261013", "retained-second-recovery-20261013"} {
+		capture := retainedPauseFixture(t, source, previous)
+		onlineRecoveryExec(t, source, "UPDATE migration_source.logs SET quota=quota+1 WHERE id=51")
+		next := retainedNewEpochFixtureNamed(t, source, target, previous, capture, runID, "v3_retired_fixture_"+runID)
+		if _, err := m.PrepareRetainedOnline(ctx, next); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.ReconcileRetainedOnline(ctx, next.OnlineOptions); err != nil {
+			t.Fatal(err)
+		}
+		onlineMigrationSync(t, m, next.OnlineOptions)
+		var receipts int
+		if err := target.QueryRow(ctx, "SELECT count(*) FROM v3_migration_online.progress WHERE name LIKE 'recovery_previous:%'").Scan(&receipts); err != nil || receipts != i+1 {
+			t.Fatalf("recovery receipts=%d err=%v", receipts, err)
+		}
+		if retainedRowXmin(t, target, 53) != unchanged {
+			t.Fatal("second recovery rewrote identical row")
+		}
+		previous = next.OnlineOptions
+	}
+	if _, err := m.VerifyOnline(ctx, previous); err != nil {
+		t.Fatal(err)
+	}
+	onlineRecoveryAssertNoMoney(t, target)
+	t.Log("second gap recovery retained both previous run receipts and identical row xmin; no native money opened")
 }
 
 func retainedCopiedFixture(t *testing.T, m *Importer, opts OnlineOptions) {

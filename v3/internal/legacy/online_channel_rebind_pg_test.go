@@ -46,7 +46,7 @@ func channelRebindReview(t *testing.T, source, target *pgxpool.Pool, opts Online
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	r.ExpectedSourceIdentity, err = onlineDatabaseIdentity(ctx, tx)
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +79,7 @@ func channelRebindGuardedExec(t *testing.T, target *pgxpool.Pool, runID, query s
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if err := onlineAuthorize(ctx, tx, runID); err != nil {
 		t.Fatal(err)
 	}

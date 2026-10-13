@@ -17,7 +17,7 @@ import (
 )
 
 func TestOnlineFlagsKeepOfflineAssertionExplicit(t *testing.T) {
-	for _, command := range []string{"online-prepare", "online-copy", "online-sync", "online-verify", "online-reconcile-prepare", "online-reconcile", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta"} {
+	for _, command := range []string{"online-prepare", "online-copy", "online-sync", "online-verify", "online-reconcile-prepare", "online-reconcile", "online-channel-rebind", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta"} {
 		for _, apply := range []bool{false, true} {
 			for _, offline := range []bool{false, true} {
 				args := []string{command}
@@ -52,6 +52,19 @@ func TestOnlineFlagsKeepOfflineAssertionExplicit(t *testing.T) {
 	}
 	if _, apply, err := parseMigrateArgs([]string{"import", "-apply", "-offline"}); err != nil || !apply {
 		t.Fatalf("existing offline import contract changed: %v", err)
+	}
+}
+
+func TestOnlineChannelRebindReviewPrecedesAnyConnection(t *testing.T) {
+	t.Setenv("V3_ONLINE_MIGRATION_ID", "channel-rebind-cli-review-20261013")
+	t.Setenv("V3_ONLINE_EXPECTED_SOURCE_IDENTITY", "")
+	t.Setenv("V3_MIGRATION_LEDGER_HISTORY", "copy")
+	t.Setenv("V3_SOURCE_PG_DSN", "postgres://private-user:private-password@127.0.0.1:1/neondb")
+	t.Setenv("V3_PG_DSN", "postgres://private-user:private-password@127.0.0.1:1/neondb")
+	var output bytes.Buffer
+	err := run(context.Background(), []string{"online-channel-rebind", "-apply"}, &output)
+	if err == nil || !strings.Contains(err.Error(), "reviewed") || strings.Contains(err.Error(), "private-password") || output.Len() != 0 {
+		t.Fatalf("unreviewed rebind reached a connection: %v", err)
 	}
 }
 

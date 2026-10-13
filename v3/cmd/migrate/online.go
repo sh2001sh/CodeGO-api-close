@@ -19,7 +19,7 @@ import (
 
 func isOnlineCommand(command string) bool {
 	switch command {
-	case "online-prepare", "online-copy", "online-sync", "online-verify", "online-reconcile-prepare", "online-reconcile", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta":
+	case "online-prepare", "online-copy", "online-sync", "online-verify", "online-reconcile-prepare", "online-reconcile", "online-channel-rebind", "online-empty-schema-upgrade", "online-seal", "online-unseal", "online-finalize", "online-backup", "online-delta", "online-restore-delta":
 		return true
 	}
 	return false
@@ -136,6 +136,19 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 			return err
 		}
 	}
+	rebind := legacy.OnlineChannelRebindOptions{
+		OnlineOptions:            legacy.OnlineOptions{RunID: runID},
+		ExpectedSourceIdentity:   os.Getenv("V3_ONLINE_EXPECTED_SOURCE_IDENTITY"),
+		ExpectedTargetShape:      os.Getenv("V3_ONLINE_EXPECTED_TARGET_SHAPE"),
+		ExpectedCaptureHash:      os.Getenv("V3_ONLINE_EXPECTED_CAPTURE_HASH"),
+		ExpectedDependenciesHash: os.Getenv("V3_ONLINE_EXPECTED_DEPENDENCIES_HASH"),
+		ExpectedChangesHash:      os.Getenv("V3_ONLINE_EXPECTED_CHANNEL_CHANGES_HASH"),
+	}
+	if command == "online-channel-rebind" {
+		if err := legacy.ValidateOnlineChannelRebindOptions(rebind); err != nil {
+			return err
+		}
+	}
 	crypto, err := catalog.NewAESGCMFromBase64(os.Getenv("V3_SECRET_KEY"))
 	if err != nil {
 		return errors.New("V3_SECRET_KEY must be a valid base64 AES encryption key")
@@ -180,6 +193,10 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 		secret = os.Getenv("LEGACY_CRYPTO_SECRET")
 	}
 	importer := legacy.NewImporter(source.Pool, target.Pool, crypto).WithSourceCryptoSecret(secret).WithLedgerHistoryArchive(archiveLedger).WithHistoryCutoff(cutoff)
+	if command == "online-channel-rebind" {
+		report, err := importer.RebindOnlineChannels(ctx, rebind)
+		return encodeOnlineReport(output, report, err)
+	}
 	if command == "online-reconcile-prepare" {
 		reconcile.SourceAdmin = options.SourceAdmin
 		report, err := importer.PrepareRetainedOnline(ctx, reconcile)

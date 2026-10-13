@@ -80,7 +80,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 // flags, returning the subcommand name and whether -apply was set.
 func parseMigrateArgs(args []string) (command string, apply bool, err error) {
 	if len(args) == 0 {
-		return "", false, errors.New("usage: migrate schema | drain | files [-apply -offline] | background [-apply -offline] | import [-apply -offline] | check | ledger-check | online-{prepare,copy,sync,verify,reconcile-prepare,reconcile,empty-schema-upgrade,seal,unseal,finalize,backup,delta,restore-delta}")
+		return "", false, errors.New("usage: migrate schema | drain | files [-apply -offline] | background [-apply -offline] | import [-apply -offline] | check | ledger-check | online-{prepare,copy,sync,verify,reconcile-prepare,reconcile,channel-rebind,empty-schema-upgrade,seal,unseal,finalize,backup,delta,restore-delta}")
 	}
 	flags := flag.NewFlagSet("migrate "+args[0], flag.ContinueOnError)
 	applyFlag := flags.Bool("apply", false, "commit the import; default is dry-run")

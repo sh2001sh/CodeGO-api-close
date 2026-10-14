@@ -75,7 +75,11 @@ func onlineReadBatch(ctx context.Context, source pgx.Tx, spec onlineSpec, cursor
 		left[i] = "t." + quoted[i]
 		right[i] = "e." + quoted[i]
 	}
-	query := "SELECT to_jsonb(t) FROM " + spec.source + " t"
+	payload := "to_jsonb(t)"
+	if financialReconciliation(ctx, spec.name) {
+		payload = financialReconcilePayload(spec.name)
+	}
+	query := "SELECT " + payload + " FROM " + spec.source + " t"
 	where := " WHERE "
 	if predicate := historyWindow(ctx, spec.name, "t", spec.requests, spec.attempts); predicate != "TRUE" {
 		query += where + predicate

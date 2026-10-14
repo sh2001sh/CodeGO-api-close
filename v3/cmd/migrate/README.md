@@ -132,6 +132,13 @@ generated ID, and the new gateway channel exists. Full reconciliation then
 reprojects unchanged child rows too. Owner changes, deleted dependencies and
 changes between two real gateway bindings remain rejected.
 
+With `V3_ONLINE_HISTORY_VERIFICATION=financial`, retained reconciliation reads
+only log and request financial fields for comparison. It keeps unchanged
+diagnostic payloads and rereads each changed row in full from the same snapshot
+before replay. Funding, market, deletion checks, cursor transactions and the
+independent final financial verification remain mandatory. The default continues
+to compare every historical field.
+
 `online-reconcile -apply` streams every eligible source row through the same
 typed projection checks, writes only differences, and separately scans target
 keys to remove deletions and rows excluded by the fixed retention cutoff.

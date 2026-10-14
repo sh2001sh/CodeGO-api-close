@@ -18,8 +18,9 @@ type OnlineOptions struct {
 	// Zero retains the legacy 4096-event limit. The CLI can amortize setup
 	// across at most 16384 events without changing the 4 MiB key budget.
 	SyncEventLimit int
-	// Financial history verification compares exact monetary groups and counts,
-	// while omitting ordinary log text and request diagnostic fields.
+	// Financial history verification compares exact monetary groups and counts.
+	// Retained reconciliation compares narrow history financial fields, rereading
+	// complete source rows before repair; ordinary diagnostics remain unchanged.
 	FinancialHistoryVerification bool
 }
 

@@ -21,13 +21,14 @@ type OnlineReconcilePrepareOptions struct {
 }
 
 type OnlineReconcileReport struct {
-	RunID     string `json:"run_id"`
-	Phase     string `json:"phase"`
-	Applied   bool   `json:"applied"`
-	Scanned   int64  `json:"scanned_rows"`
-	Unchanged int64  `json:"unchanged_rows"`
-	Repaired  int64  `json:"repaired_rows"`
-	Pruned    int64  `json:"pruned_keys"`
+	RunID               string `json:"run_id"`
+	Phase               string `json:"phase"`
+	Applied             bool   `json:"applied"`
+	Scanned             int64  `json:"scanned_rows"`
+	Unchanged           int64  `json:"unchanged_rows"`
+	Repaired            int64  `json:"repaired_rows"`
+	Pruned              int64  `json:"pruned_keys"`
+	HistoryVerification string `json:"history_verification,omitempty"`
 }
 
 // Cursor and counters commit with each target repair. After a snapshot rotation
@@ -208,9 +209,15 @@ func (m *Importer) PrepareRetainedOnline(ctx context.Context, opts OnlineReconci
 // checks. Its result is merely 'copied': Sync and full Verify are still required.
 func (m *Importer) ReconcileRetainedOnline(ctx context.Context, opts OnlineOptions) (OnlineReconcileReport, error) {
 	ctx = m.historyContext(ctx)
+	if opts.FinancialHistoryVerification {
+		ctx = context.WithValue(ctx, financialReconciliationKey{}, true)
+	}
 	r := OnlineReconcileReport{RunID: opts.RunID}
 	if err := m.validateReconcilePools(); err != nil {
 		return r, err
+	}
+	if opts.FinancialHistoryVerification {
+		r.HistoryVerification = "financial"
 	}
 	conn, err := m.onlineConnection(ctx)
 	if err != nil {
@@ -364,7 +371,13 @@ func (p *onlineProjector) reconcilePageAuthorized(ctx context.Context, source, t
 				}
 			}
 			if len(changed) > 0 {
-				if err := p.apply(ctx, spec, changed); err != nil {
+				var err error
+				if financialReconciliation(ctx, spec.name) {
+					err = p.repairFinancialReconcilePage(ctx, source, spec, changed)
+				} else {
+					err = p.apply(ctx, spec, changed)
+				}
+				if err != nil {
 					return r, false, err
 				}
 			}
@@ -572,6 +585,9 @@ func (p *onlineProjector) matchRetainedInputs(ctx context.Context, spec onlineSp
 			}
 		}
 		for _, row := range out {
+			if financialReconciliation(ctx, spec.name) {
+				row = financialReconcileProjection(row)
+			}
 			shape := row.Schema + "." + row.Table + ":" + cmRecordShape(cmRecord{values: row.Values})
 			if _, exists := groups[shape]; !exists {
 				shapes = append(shapes, shape)

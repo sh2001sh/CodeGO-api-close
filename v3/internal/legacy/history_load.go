@@ -167,6 +167,12 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 		if onlineViewFrom(ctx) != nil && historyOnlineLargeSource(load.name) {
 			continue
 		}
+		if financialHistoryVerification(ctx) && aggregateHistorySource(load.name) {
+			if err := loadFinancialHistorySummary(ctx, d, load.name, load.table); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		visit := func(raw json.RawMessage) error {
 			d.counts[load.name]++
 			if err := load.decode(raw); err != nil {
@@ -261,6 +267,9 @@ func historyOnlineLargeSource(name string) bool {
 // replaying all committed changes and sealing the source. Small identity and
 // account records above still come from the final source snapshot.
 func (d *historyData) loadOnlineHistoryTotals(view *onlineView) error {
+	if view.amounts["verification.financial_history"] == "1" {
+		d.counts["financial_history_verification"] = 1
+	}
 	for _, name := range []string{"ledger_entries", "logs", "usage_logs", "request_audits", "request_attempt_audits", "request_attempt_audits_linked", "orphan_request_attempt_history", "usage_request_ids_disambiguated"} {
 		count := view.counts[name]
 		if count < 0 {

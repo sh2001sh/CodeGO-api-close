@@ -18,19 +18,23 @@ type OnlineOptions struct {
 	// Zero retains the legacy 4096-event limit. The CLI can amortize setup
 	// across at most 16384 events without changing the 4 MiB key budget.
 	SyncEventLimit int
+	// Financial history verification compares exact monetary groups and counts,
+	// while omitting ordinary log text and request diagnostic fields.
+	FinancialHistoryVerification bool
 }
 
 type OnlineReport struct {
-	RunID             string           `json:"run_id"`
-	Phase             string           `json:"phase"`
-	Applied           bool             `json:"applied"`
-	Copied            int64            `json:"copied_rows"`
-	Acknowledged      int64            `json:"acknowledged_events"`
-	Pending           int64            `json:"pending_events"`
-	PendingAtLeast    bool             `json:"pending_events_at_least,omitempty"`
-	Tables            map[string]int64 `json:"tables"`
-	LedgerHistoryMode string           `json:"ledger_history_mode"`
-	HistoryCutoff     string           `json:"history_cutoff,omitempty"`
+	RunID               string           `json:"run_id"`
+	Phase               string           `json:"phase"`
+	Applied             bool             `json:"applied"`
+	Copied              int64            `json:"copied_rows"`
+	Acknowledged        int64            `json:"acknowledged_events"`
+	Pending             int64            `json:"pending_events"`
+	PendingAtLeast      bool             `json:"pending_events_at_least,omitempty"`
+	Tables              map[string]int64 `json:"tables"`
+	LedgerHistoryMode   string           `json:"ledger_history_mode"`
+	HistoryCutoff       string           `json:"history_cutoff,omitempty"`
+	HistoryVerification string           `json:"history_verification,omitempty"`
 }
 
 type onlineProjection struct {

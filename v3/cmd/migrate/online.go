@@ -163,6 +163,10 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 	if adminRequired && os.Getenv("V3_ONLINE_SOURCE_ADMIN_PG_DSN") == "" {
 		return errors.New("V3_ONLINE_SOURCE_ADMIN_PG_DSN is required for capture setup or acknowledgement")
 	}
+	scope := os.Getenv("V3_ONLINE_HISTORY_VERIFICATION")
+	if scope != "" && scope != "full" && scope != "financial" {
+		return errors.New("V3_ONLINE_HISTORY_VERIFICATION must be full or financial")
+	}
 	// Retained reconciliation has one snapshot/lock coordinator and at most
 	// three domain workers. Other commands retain their original pool budget.
 	maxConns := int32(2)
@@ -179,7 +183,7 @@ func runOnline(ctx context.Context, command string, apply bool, output io.Writer
 		return err
 	}
 	defer target.Close()
-	options := legacy.OnlineOptions{RunID: runID}
+	options := legacy.OnlineOptions{RunID: runID, FinancialHistoryVerification: scope == "financial"}
 	if adminRequired {
 		admin, err := onlineConnect(ctx, "V3_ONLINE_SOURCE_ADMIN_PG_DSN", "source capture administrator", 2)
 		if err != nil {

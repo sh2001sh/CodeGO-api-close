@@ -217,6 +217,9 @@ func (m *Importer) checkHistory(ctx context.Context, target pgx.Tx, d *historyDa
 		if onlineViewFrom(ctx) != nil {
 			continue
 		}
+		if financialHistoryVerification(ctx) && aggregateHistorySource(c.name) {
+			continue
+		}
 		var err error
 		switch c.name {
 		case "logs":

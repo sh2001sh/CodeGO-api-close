@@ -30,6 +30,10 @@ func (m *Importer) VerifyOnlineCatchup(ctx context.Context, opts OnlineOptions) 
 func (m *Importer) verifyOnline(ctx context.Context, opts OnlineOptions, catchup bool) (OnlineReport, error) {
 	ctx = m.historyContext(ctx)
 	r := OnlineReport{RunID: opts.RunID, Tables: map[string]int64{}, LedgerHistoryMode: ledgerHistoryMode(ctx), HistoryCutoff: historyCutoffLabel(ctx)}
+	if opts.FinancialHistoryVerification {
+		ctx = context.WithValue(ctx, financialHistoryVerificationKey{}, true)
+		r.HistoryVerification = "financial"
+	}
 	conn, err := m.onlineConnection(ctx)
 	if err != nil {
 		return r, err
@@ -110,6 +114,11 @@ func (m *Importer) verifyOnline(ctx context.Context, opts OnlineOptions, catchup
 	if len(report.Issues) > 0 {
 		return r, errors.New("legacy: online historical projection differs from source")
 	}
+	if opts.FinancialHistoryVerification {
+		if err = checkFinancialHistoryGroups(ctx, source, staged, sources); err != nil {
+			return r, err
+		}
+	}
 	funding := *p.funding
 	funding.sources = map[string]string{}
 	for name, table := range p.funding.sources {
@@ -181,6 +190,11 @@ func (m *Importer) verifyOnline(ctx context.Context, opts OnlineOptions, catchup
 	// updater. This is expensive once, while V2 is still accepting traffic.
 	if err = onlineRebuildTotals(ctx, target, specs); err != nil {
 		return r, err
+	}
+	if opts.FinancialHistoryVerification {
+		if _, err = target.Exec(ctx, "INSERT INTO v3_migration_online.totals(name,value) VALUES('verification.financial_history',1)"); err != nil {
+			return r, err
+		}
 	}
 	if _, err = target.Exec(ctx, "UPDATE v3_migration_online.run SET phase='verified',verified_at=clock_timestamp() WHERE singleton"); err != nil {
 		return r, err

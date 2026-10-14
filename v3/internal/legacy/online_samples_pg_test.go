@@ -4,10 +4,31 @@ package legacy
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 )
+
+func TestOnlineSampledAcceptanceKeepsActualFundingDrains(t *testing.T) {
+	source, _, _ := importTestDB(t)
+	seedProjectionDrain(t, source)
+	ctx := context.Background()
+	r, err := DrainSource(ctx, source, SourceDrainOptions{SampledAcceptance: true})
+	if err != nil || !r.Completed || r.HistoryAcceptance != "sampled" || r.Report.Counts["historical_projection_classification_waived"] != 1 {
+		t.Fatalf("explicit sampled drain %+v %v", r, err)
+	}
+	if r.Checks["gateway_request_audits"].Present {
+		t.Fatal("waived history claimed checked")
+	}
+	if _, err = source.Exec(ctx, "UPDATE billing.reservations SET status='open' WHERE reservation_id='stale-reservation'"); err != nil {
+		t.Fatal(err)
+	}
+	r, err = DrainSource(ctx, source, SourceDrainOptions{SampledAcceptance: true})
+	if !errors.Is(err, ErrSourceDrainBlocked) || !r.Completed || r.Report.Counts["in_flight:billing_reservations"] != 1 {
+		t.Fatalf("actual pending charge accepted %+v %v", r, err)
+	}
+}
 
 func TestOnlineSampledAcceptanceDistinctAndRejectsBadMoney(t *testing.T) {
 	for _, corrupt := range []bool{false, true} {

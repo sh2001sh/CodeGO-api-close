@@ -140,7 +140,7 @@ func DrainSource(ctx context.Context, source *pgxpool.Pool, options SourceDrainO
 		return r, err
 	}
 	if options.SampledAcceptance {
-		ctx = context.WithValue(ctx, onlineContextKey{}, &onlineView{sampled:true})
+		ctx = context.WithValue(ctx, onlineContextKey{}, &onlineView{sampled: true})
 		r.HistoryAcceptance = "sampled"
 	}
 	if source == nil {
@@ -288,7 +288,9 @@ func (r *SourceDrainReport) collectProjectionEvidence(ctx context.Context, tx pg
 		assertions.WriteString("IF EXISTS(SELECT 1 FROM " + background + " WHERE COALESCE(status,'') NOT IN ('completed','failed','cancelled')) THEN RAISE EXCEPTION 'canonical_post_drain_failed'; END IF;\n")
 	}
 	for _, name := range []string{"request_executions", "request_audits"} {
-		if view := onlineViewFrom(ctx); view != nil && view.sampled { continue }
+		if view := onlineViewFrom(ctx); view != nil && view.sampled {
+			continue
+		}
 		table := projectionSource(sources, "gateway_", name)
 		if table == "" {
 			continue

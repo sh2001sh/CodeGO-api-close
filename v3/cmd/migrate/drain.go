@@ -13,8 +13,12 @@ import (
 
 func runDrain(ctx context.Context, output io.Writer) error {
 	options := legacy.SourceDrainOptions{ExportedSnapshot: os.Getenv("V3_DRAIN_SOURCE_SNAPSHOT"),
-		FrozenManifestSHA256: os.Getenv("V3_DRAIN_FROZEN_MANIFEST_SHA256"), SampledAcceptance: os.Getenv("V3_ONLINE_ACCEPTANCE")=="sampled"}
+		FrozenManifestSHA256: os.Getenv("V3_DRAIN_FROZEN_MANIFEST_SHA256"), SampledAcceptance: os.Getenv("V3_ONLINE_ACCEPTANCE") == "sampled"}
 	report, drainErr := legacy.NewSourceDrainReport(options)
+	if policy := os.Getenv("V3_ONLINE_ACCEPTANCE"); policy != "" && policy != "sampled" {
+		report.ErrorCode = "invalid_acceptance_policy"
+		drainErr = errors.New("V3_ONLINE_ACCEPTANCE must be sampled or unset")
+	}
 	if drainErr == nil {
 		if os.Getenv("V3_SOURCE_PG_DSN") == "" {
 			report.ErrorCode = "source_database_required"

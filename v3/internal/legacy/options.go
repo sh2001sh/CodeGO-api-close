@@ -170,6 +170,18 @@ func buildPrices(options map[string]string) (map[string]catalog.Price, error) {
 		if p.CacheWritePerMTok, err = decimalProduct(input.String(), write, "2000000"); err != nil {
 			return nil, err
 		}
+		// Integer display prices can lose a decimal coefficient immediately
+		// below an old quota half boundary. Preserve those quotes through the
+		// existing exact expression engine and round only the final charge.
+		for _, factor := range []string{"1", output, read, write} {
+			i, _ := new(big.Rat).SetString(input.String())
+			f, _ := new(big.Rat).SetString(factor)
+			if !i.Mul(i, f).Mul(i, big.NewRat(2000000, 1)).IsInt() {
+				p.Mode = "expression"
+				p.Rules = map[string]any{"legacy_v2_token_price": true, "expression": fmt.Sprintf("(p + c*(%s) + min(cr,len)*(%s) + min(cc+cc1h,max(0,len-cr))*(%s))*(%s)*2", output, read, write, input.String())}
+				break
+			}
+		}
 		prices[model] = p
 	}
 	for model, value := range maps["ModelPrice"] {

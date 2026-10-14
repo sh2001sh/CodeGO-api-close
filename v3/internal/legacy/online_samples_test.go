@@ -1,6 +1,11 @@
 package legacy
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/sh2001sh/new-api/v3/internal/billing/pricing"
+	"github.com/sh2001sh/new-api/v3/internal/gateway"
+)
 
 func TestWalletSamplesIncludeBalanceBoundariesWithoutChangingSource(t *testing.T) {
 	users := make([]sourceUser, 130)
@@ -41,5 +46,30 @@ func TestSampledNativeChargesUseOriginalDecimalCoefficients(t *testing.T) {
 	prices["tokens"] = p
 	if _, err = checkSampledPriceCharges(options, prices); err == nil {
 		t.Fatal("changed quote passed original-price comparison")
+	}
+}
+
+func TestImportedFractionalQuoteKeepsOldQuotaHalfBoundary(t *testing.T) {
+	options := map[string]string{"ModelRatio": `{"model":0.75}`, "CompletionRatio": `{"model":11.666666666666666}`}
+	prices, err := buildPrices(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := prices["model"]
+	usage := gateway.Usage{PromptTokens: 2048, CompletionTokens: 513, CachedTokens: 256, CacheWriteTokens: 128}
+	got, err := pricing.Price(usage, p, 1.2)
+	if err != nil || got != 14516 || p.OutputPerMTok != 17500000 {
+		t.Fatalf("actual=%d display=%d err=%v", got, p.OutputPerMTok, err)
+	}
+	if _, err = checkSampledPriceCharges(options, prices); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pricing.Price(gateway.Usage{PromptTokens: -1}, p, 1); err == nil {
+		t.Fatal("negative usage accepted")
+	}
+	p.Rules["expression"] = "p*999+c*999+cr+cc+cc1h"
+	prices["model"] = p
+	if _, err = checkSampledPriceCharges(options, prices); err == nil {
+		t.Fatal("changed exact quote passed original-price comparison")
 	}
 }

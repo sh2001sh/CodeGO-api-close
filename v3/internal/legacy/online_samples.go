@@ -234,7 +234,10 @@ func checkSampledPriceCharges(options map[string]string, prices map[string]catal
 			return nil
 		}
 		switch price.Mode {
-		case "per_token":
+		case "per_token", "expression":
+			if price.Mode == "expression" && price.Rules["legacy_v2_token_price"] != true {
+				continue
+			}
 			ratio, exists := maps["ModelRatio"][model]
 			if !exists {
 				return probes, errors.New("legacy: sampled token price lacks original ratio")

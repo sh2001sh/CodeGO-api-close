@@ -59,7 +59,7 @@ func (m *Importer) verifyOnline(ctx context.Context, opts OnlineOptions, catchup
 	if err := target.QueryRow(ctx, "SELECT phase FROM v3_migration_online.run WHERE singleton").Scan(&r.Phase); err != nil {
 		return r, err
 	}
-	if r.Phase != "copied" && r.Phase != "verified" {
+	if r.Phase != "copied" && r.Phase != "verified" && r.Phase != "sampled" {
 		return r, errors.New("legacy: complete the online baseline before verifying")
 	}
 	var complete bool
@@ -368,12 +368,25 @@ func onlineRebuildTotals(ctx context.Context, target pgx.Tx, specs []onlineSpec)
 }
 
 func onlineLoadView(ctx context.Context, target pgx.Tx, runID string) (*onlineView, error) {
+	return onlineLoadAcceptedView(ctx, target, runID, false)
+}
+
+func onlineLoadAcceptedView(ctx context.Context, target pgx.Tx, runID string, allowSamples bool) (*onlineView, error) {
 	v := &onlineView{runID: runID, counts: map[string]int64{}, amounts: map[string]string{}, marketCounts: map[string]int64{}, marketPending: map[int64]int64{}}
 	var phase string
 	if err := target.QueryRow(ctx, "SELECT phase FROM v3_migration_online.run WHERE singleton AND run_id=$1", runID).Scan(&phase); err != nil {
 		return nil, err
 	}
-	if phase != "verified" {
+	if phase == "sampled" && allowSamples {
+		var accepted bool
+		if err := target.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM v3_migration_online.totals WHERE name='acceptance.sampled' AND value=1)").Scan(&accepted); err != nil {
+			return nil, err
+		}
+		if !accepted {
+			return nil, errors.New("legacy: sampled acceptance receipt is missing")
+		}
+		v.sampled = true
+	} else if phase != "verified" {
 		return nil, errors.New("legacy: finalization requires a verified online baseline")
 	}
 	rows, err := target.Query(ctx, "SELECT name,value::text FROM v3_migration_online.totals")

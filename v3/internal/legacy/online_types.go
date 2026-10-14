@@ -22,6 +22,9 @@ type OnlineOptions struct {
 	// Retained reconciliation compares narrow history financial fields, rereading
 	// complete source rows before repair; ordinary diagnostics remain unchanged.
 	FinancialHistoryVerification bool
+	// SampledAcceptance is an explicit waiver of full historical verification.
+	// It never implies a verified history or bypasses source fencing/draining.
+	SampledAcceptance bool
 }
 
 type OnlineReport struct {
@@ -110,6 +113,7 @@ type onlineView struct {
 	amounts       map[string]string
 	marketPending map[int64]int64
 	marketCounts  map[string]int64
+	sampled       bool
 }
 
 func onlineViewFrom(ctx context.Context) *onlineView {

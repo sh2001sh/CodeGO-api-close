@@ -29,6 +29,7 @@ var drainSnapshot = regexp.MustCompile(`^[0-9A-Fa-f]{1,32}-[0-9A-Fa-f]{1,32}-[0-
 type SourceDrainOptions struct {
 	ExportedSnapshot     string
 	FrozenManifestSHA256 string
+	SampledAcceptance    bool
 }
 
 type SourceDrainIdentity struct {
@@ -88,6 +89,7 @@ type SourceDrainReport struct {
 	ProjectionAssertionSQL    string                      `json:"projection_assertion_sql"`
 	ProjectionAssertionSHA256 string                      `json:"projection_assertion_sha256"`
 	ErrorCode                 string                      `json:"error_code,omitempty"`
+	HistoryAcceptance         string                      `json:"history_acceptance,omitempty"`
 }
 
 // NewSourceDrainReport also fingerprints the actual running executable inode
@@ -136,6 +138,10 @@ func DrainSource(ctx context.Context, source *pgxpool.Pool, options SourceDrainO
 	r, err := NewSourceDrainReport(options)
 	if err != nil {
 		return r, err
+	}
+	if options.SampledAcceptance {
+		ctx = context.WithValue(ctx, onlineContextKey{}, &onlineView{sampled:true})
+		r.HistoryAcceptance = "sampled"
 	}
 	if source == nil {
 		r.ErrorCode = "source_database_required"
@@ -282,6 +288,7 @@ func (r *SourceDrainReport) collectProjectionEvidence(ctx context.Context, tx pg
 		assertions.WriteString("IF EXISTS(SELECT 1 FROM " + background + " WHERE COALESCE(status,'') NOT IN ('completed','failed','cancelled')) THEN RAISE EXCEPTION 'canonical_post_drain_failed'; END IF;\n")
 	}
 	for _, name := range []string{"request_executions", "request_audits"} {
+		if view := onlineViewFrom(ctx); view != nil && view.sampled { continue }
 		table := projectionSource(sources, "gateway_", name)
 		if table == "" {
 			continue

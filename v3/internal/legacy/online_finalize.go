@@ -131,7 +131,7 @@ func (m *Importer) FinalizeOnline(ctx context.Context, opts OnlineOptions) (Repo
 	if _, err = loadOnlineProjector(ctx, source, target, sources); err != nil {
 		return r, err
 	}
-	view, err := onlineLoadView(ctx, target, opts.RunID)
+	view, err := onlineLoadAcceptedView(ctx, target, opts.RunID, opts.SampledAcceptance)
 	if err != nil {
 		return r, err
 	}

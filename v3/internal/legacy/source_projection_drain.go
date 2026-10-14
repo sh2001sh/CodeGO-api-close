@@ -260,6 +260,13 @@ func auditDrainSQL(ctx context.Context, tx pgx.Tx, sources map[string]string, al
 }
 
 func validateProjectionDrains(ctx context.Context, source pgx.Tx, sources map[string]string, report *Report) error {
+	if view := onlineViewFrom(ctx); view != nil && view.sampled {
+		// Request projections cannot debit funds on V3 and are not replayed.
+		// Actual reservation, settlement, outbox and provider/task drains in
+		// validateSourceState still run. Do not label stale diagnostics drained.
+		report.Counts["historical_projection_classification_waived"] = 1
+		return nil
+	}
 	for _, item := range []struct {
 		name      string
 		predicate func(context.Context, pgx.Tx, map[string]string, string) (projectionDrainCondition, error)

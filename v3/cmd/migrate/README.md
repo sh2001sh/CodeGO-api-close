@@ -46,6 +46,16 @@ do not resume an older captured run by applying unrelated schema changes.
 | `online-reconcile` | `-apply` | Reconcile all source rows and target keys while preserving identical staging rows. |
 | `online-sync` | `-apply` | Apply captured changes and acknowledge committed work. |
 | `online-verify` | `-apply` | Run full verification and retain verification evidence. |
+| `online-accept-samples` | `-apply`, `V3_ONLINE_ACCEPTANCE=sampled` | Record explicit sampled acceptance after bounded snapshot catch-up. Check stratified wallet conversions, model price validity/rounding and financial projection samples. This sets `sampled`, never `verified`; `online-finalize` also requires the explicit policy. |
+
+Sampled acceptance is an operator waiver of full historical association and
+projection classification checks, not a full history verification receipt.
+Finalization still checks source sealing, capture quiescence, live reservations,
+settlements, outbox, provider/background tasks, canonical balances, restored
+secrets, and actual imported accounts and prices. Old execution evidence stays
+in the preserved source and is not replayed. Existing full and financial
+verification modes retain their checks. Incremental totals are reused as
+incremental evidence without claiming they were independently rebuilt.
 | `online-backup` | `-apply` | Create a snapshot-bound legacy base archive. |
 | `online-delta` | `-apply` | Export a cumulative source delta for isolated restore. |
 | `online-restore-delta` | `-apply` | Apply a delta only to an explicitly named isolated restore. |

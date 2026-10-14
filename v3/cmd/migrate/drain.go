@@ -13,7 +13,7 @@ import (
 
 func runDrain(ctx context.Context, output io.Writer) error {
 	options := legacy.SourceDrainOptions{ExportedSnapshot: os.Getenv("V3_DRAIN_SOURCE_SNAPSHOT"),
-		FrozenManifestSHA256: os.Getenv("V3_DRAIN_FROZEN_MANIFEST_SHA256")}
+		FrozenManifestSHA256: os.Getenv("V3_DRAIN_FROZEN_MANIFEST_SHA256"), SampledAcceptance: os.Getenv("V3_ONLINE_ACCEPTANCE")=="sampled"}
 	report, drainErr := legacy.NewSourceDrainReport(options)
 	if drainErr == nil {
 		if os.Getenv("V3_SOURCE_PG_DSN") == "" {

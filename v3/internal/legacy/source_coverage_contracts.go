@@ -49,6 +49,17 @@ func validateArchivedSourceContracts(ctx context.Context, source pgx.Tx, sources
 // Retain the detailed old execution tree after proving its parent's funding
 // terminal, even when its post-settlement projection never finished.
 func validateArchivedExecutionEvidence(ctx context.Context, source pgx.Tx, sources map[string]string, known map[string]bool, report *Report) error {
+	if view := onlineViewFrom(ctx); view != nil && view.sampled {
+		// These old execution trees remain in the preserved source, with no V3
+		// replay. Sampled acceptance does not claim their parent proof passed.
+		for _, name := range []string{"execution_attempts", "route_plans", "usage_evidence"} {
+			if table := projectionSource(sources, "gateway_", name); table != "" {
+				known[table] = true
+			}
+		}
+		report.Counts["historical_execution_evidence_verification_waived"] = 1
+		return nil
+	}
 	parent := sources["gateway_request_executions"]
 	if parent == "" {
 		parent = sources["request_executions"]

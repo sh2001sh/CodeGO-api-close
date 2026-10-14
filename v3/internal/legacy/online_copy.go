@@ -396,7 +396,7 @@ func (m *Importer) SyncOnline(ctx context.Context, opts OnlineOptions) (OnlineRe
 	if err = target.QueryRow(ctx, "SELECT phase FROM v3_migration_online.run WHERE singleton").Scan(&r.Phase); err != nil {
 		return r, err
 	}
-	if r.Phase != "copied" && r.Phase != "verified" {
+	if r.Phase != "copied" && r.Phase != "verified" && r.Phase != "sampled" {
 		return r, errors.New("legacy: complete the online baseline before synchronizing")
 	}
 	p, err := loadOnlineProjector(ctx, source, target, sources)

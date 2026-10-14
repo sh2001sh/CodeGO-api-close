@@ -116,6 +116,12 @@ func (d *fundingData) validateContext(ctx context.Context, report *Report) error
 	if invalid {
 		return nil
 	}
+	if view != nil && view.sampled {
+		// The operator accepted bounded financial samples instead of another
+		// historical association/group scan. Live drains above remain mandatory.
+		report.Counts["historical_funding_full_verification_waived"] = 1
+		return nil
+	}
 	return d.validateFundingSQL(ctx, report)
 }
 

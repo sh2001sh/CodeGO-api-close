@@ -1,0 +1,359 @@
+package app
+
+import (
+	"errors"
+	"fmt"
+	"github.com/sh2001sh/new-api/constant"
+	"github.com/sh2001sh/new-api/dto"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	commercestore "github.com/sh2001sh/new-api/internal/commerce/store"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	"gorm.io/gorm"
+	"strconv"
+	"strings"
+	"time"
+)
+
+func currentResetOpportunityMonth() string {
+	return time.Now().In(time.Local).Format("2006-01")
+}
+
+func buildSubscriptionResetOpportunitySummary(account *commerceschema.SubscriptionResetOpportunityAccount) commerceschema.SubscriptionResetOpportunitySummary {
+	summary := commerceschema.SubscriptionResetOpportunitySummary{
+		CurrentMonth: currentResetOpportunityMonth(),
+	}
+	if account == nil {
+		return summary
+	}
+	summary.AvailableCount = account.AvailableTotal
+	summary.EarnedTotal = account.EarnedTotal
+	summary.UsedTotal = account.UsedTotal
+	summary.LastUsedMonth = strings.TrimSpace(account.LastUsedMonth)
+	summary.UsedThisMonth = summary.LastUsedMonth != "" && summary.LastUsedMonth == summary.CurrentMonth
+	return summary
+}
+
+func getOrCreateSubscriptionResetOpportunityAccountTx(tx *gorm.DB, userID int) (*commerceschema.SubscriptionResetOpportunityAccount, error) {
+	if tx == nil {
+		tx = platformdb.DB
+	}
+	if userID <= 0 {
+		return nil, errors.New("invalid userId")
+	}
+
+	account := &commerceschema.SubscriptionResetOpportunityAccount{}
+	err := tx.Set("gorm:query_option", "FOR UPDATE").Where("user_id = ?", userID).First(account).Error
+	if err == nil {
+		return account, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	account = &commerceschema.SubscriptionResetOpportunityAccount{UserId: userID}
+	if err := tx.Create(account).Error; err != nil {
+		return nil, err
+	}
+	return account, nil
+}
+
+func countSuccessfulPaidMonthCardPurchasesTx(tx *gorm.DB, userID int, excludedSubscriptionTradeNo string) (int64, error) {
+	if tx == nil {
+		tx = platformdb.DB
+	}
+	if userID <= 0 {
+		return 0, nil
+	}
+	var monthCardCount int64
+	monthCardQuery := tx.Model(&commerceschema.SubscriptionOrder{}).
+		Joins("JOIN subscription_plans ON subscription_plans.id = subscription_orders.plan_id").
+		Where("subscription_orders.user_id = ? AND subscription_orders.status = ? AND subscription_orders.money > 0", userID, constant.TopUpStatusSuccess).
+		Where("subscription_plans.plan_type = ?", commerceschema.SubscriptionPlanTypeMonthly)
+	if excludedSubscriptionTradeNo = strings.TrimSpace(excludedSubscriptionTradeNo); excludedSubscriptionTradeNo != "" {
+		monthCardQuery = monthCardQuery.Where("subscription_orders.trade_no <> ?", excludedSubscriptionTradeNo)
+	}
+	if err := monthCardQuery.Count(&monthCardCount).Error; err != nil {
+		return 0, err
+	}
+	return monthCardCount, nil
+}
+
+// GetUserSubscriptionResetOpportunity returns the current reset-opportunity summary.
+func GetUserSubscriptionResetOpportunity(userID int) (*commerceschema.SubscriptionResetOpportunitySummary, error) {
+	if userID <= 0 {
+		return nil, errors.New("invalid userId")
+	}
+
+	account := &commerceschema.SubscriptionResetOpportunityAccount{}
+	err := platformdb.DB.Where("user_id = ?", userID).First(account).Error
+	if err == nil {
+		summary := buildSubscriptionResetOpportunitySummary(account)
+		return &summary, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		summary := buildSubscriptionResetOpportunitySummary(nil)
+		return &summary, nil
+	}
+	return nil, err
+}
+
+// AwardReferralSubscriptionResetOpportunityTx awards a reset opportunity for inviter when invitee first buys a month card.
+func AwardReferralSubscriptionResetOpportunityTx(tx *gorm.DB, inviteeID int, purchaseType string, orderSourceType string, orderSourceID string) error {
+	if tx == nil {
+		tx = platformdb.DB
+	}
+	if inviteeID <= 0 || strings.TrimSpace(purchaseType) != commercedomain.ReferralPurchaseTypeMonthCard {
+		return nil
+	}
+
+	inviterID, err := referralInviterIDTx(tx, inviteeID)
+	if err != nil || inviterID <= 0 {
+		return err
+	}
+	previousMonthCardCount, err := countSuccessfulPaidMonthCardPurchasesTx(tx, inviteeID, orderSourceID)
+	if err != nil {
+		return err
+	}
+	if previousMonthCardCount > 0 {
+		return nil
+	}
+
+	eventKey := fmt.Sprintf("referral-reset-opportunity:%d", inviteeID)
+	existing := &commerceschema.SubscriptionResetOpportunityLedger{}
+	if err := tx.Where("event_key = ?", eventKey).First(existing).Error; err == nil {
+		return nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	account, err := getOrCreateSubscriptionResetOpportunityAccountTx(tx, inviterID)
+	if err != nil {
+		return err
+	}
+	account.EarnedTotal++
+	account.AvailableTotal++
+	if err := tx.Save(account).Error; err != nil {
+		return err
+	}
+
+	ledger := &commerceschema.SubscriptionResetOpportunityLedger{
+		UserId:        inviterID,
+		RelatedUserId: inviteeID,
+		ChangeType:    commerceschema.SubscriptionResetOpportunityChangeEarn,
+		Delta:         1,
+		BalanceAfter:  account.AvailableTotal,
+		SourceType:    strings.TrimSpace(orderSourceType),
+		SourceRef:     strings.TrimSpace(orderSourceID),
+		EventKey:      eventKey,
+		Note:          "邀请新用户首购月卡赠送额度重置机会",
+	}
+	return tx.Create(ledger).Error
+}
+
+func referralInviterIDTx(tx *gorm.DB, inviteeID int) (int, error) {
+	user := &identityschema.User{}
+	if err := tx.Select("inviter_id").Where("id = ?", inviteeID).First(user).Error; err != nil {
+		return 0, err
+	}
+	return user.InviterId, nil
+}
+
+func currentCycleGroupBuyBonusQuotaTx(tx *gorm.DB, subscriptionID int, cycleStart, before int64) (int64, error) {
+	if tx == nil || subscriptionID <= 0 {
+		return 0, nil
+	}
+	var members []commerceschema.GroupBuyMember
+	query := tx.Where("user_subscription_id = ? AND bonus_granted = ? AND bonus_amount_usd > 0", subscriptionID, true)
+	if before > 0 {
+		query = query.Where("created_at <= ?", before)
+	}
+	if err := query.Find(&members).Error; err != nil {
+		return 0, err
+	}
+	bonusQuota := int64(0)
+	oldMemberIDs := make([]string, 0)
+	for _, member := range members {
+		if member.CreatedAt >= cycleStart {
+			bonusQuota += int64(quotaUnitsFromUSD(member.BonusAmountUSD))
+		} else {
+			oldMemberIDs = append(oldMemberIDs, fmt.Sprintf(":member:%d:", member.Id))
+		}
+	}
+	if len(oldMemberIDs) == 0 {
+		return bonusQuota, nil
+	}
+	var account billingschema.BillingAccount
+	if err := tx.Where("account_type = ? AND owner_type = ? AND owner_id = ? AND quota_unit = ?", "subscription", "user_subscription", subscriptionID, "quota").First(&account).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return bonusQuota, nil
+		}
+		return 0, err
+	}
+	var grants []billingschema.BillingLedgerEntry
+	grantQuery := tx.Where("account_id = ? AND reason_code = ? AND created_at >= ? AND idempotency_key LIKE ?", account.AccountID, "subscription_bonus", time.Unix(cycleStart, 0), "%group-buy:%")
+	if before > 0 {
+		// Runtime timestamps have second precision while ledger timestamps may
+		// include fractions of that second. Use an exclusive next-second bound.
+		grantQuery = grantQuery.Where("created_at < ?", time.Unix(before+1, 0))
+	}
+	if err := grantQuery.Find(&grants).Error; err != nil {
+		return 0, err
+	}
+	for _, grant := range grants {
+		for _, memberMarker := range oldMemberIDs {
+			if strings.Contains(grant.IdempotencyKey, memberMarker) {
+				bonusQuota += grant.Amount
+				break
+			}
+		}
+	}
+	return bonusQuota, nil
+}
+
+// UseUserSubscriptionResetOpportunity clears the preferred active subscription usage once per month.
+func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.SubscriptionResetOpportunityUseResult, error) {
+	if userID <= 0 {
+		return nil, errors.New("invalid userId")
+	}
+
+	now := commercestore.GetDBTimestamp()
+	currentMonth := currentResetOpportunityMonth()
+	setting, err := identitystore.LoadUserSetting(userID, false)
+	if err != nil {
+		setting = dto.UserSetting{}
+	}
+	explicitOrder := commercedomain.NormalizePositiveIntSlice(setting.SubscriptionOrderIds)
+	result := &commerceschema.SubscriptionResetOpportunityUseResult{}
+	var resetLog string
+
+	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		account, err := getOrCreateSubscriptionResetOpportunityAccountTx(tx, userID)
+		if err != nil {
+			return err
+		}
+		if account.AvailableTotal <= 0 {
+			return commerceschema.ErrSubscriptionResetOpportunityUnavailable
+		}
+		if strings.TrimSpace(account.LastUsedMonth) == currentMonth {
+			return commerceschema.ErrSubscriptionResetOpportunityMonthlyUsed
+		}
+
+		var subs []commerceschema.UserSubscription
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").
+			Where("user_id = ? AND status = ? AND end_time > ?", userID, "active", now).
+			Order("end_time asc, id asc").
+			Find(&subs).Error; err != nil {
+			return err
+		}
+		if len(subs) == 0 {
+			return commerceschema.ErrSubscriptionResetOpportunityNoActiveSub
+		}
+		subs, err = orderActiveUserSubscriptionsWithExplicitOrderTx(tx, subs, explicitOrder)
+		if err != nil {
+			return err
+		}
+		if len(subs) == 0 {
+			return commerceschema.ErrSubscriptionResetOpportunityNoActiveSub
+		}
+		activeIDs := make([]int, 0, len(subs))
+		activeCycleStarts := make(map[int]int64, len(subs))
+		for _, candidate := range subs {
+			activeIDs = append(activeIDs, candidate.Id)
+			activeCycleStarts[candidate.Id] = candidate.StartTime
+		}
+		var conversions []commerceschema.SubscriptionClaudeConversion
+		if err := tx.
+			Where("user_subscription_id IN ? AND status = ?", activeIDs, commerceschema.SubscriptionClaudeConversionStatusCompleted).
+			Find(&conversions).Error; err != nil {
+			return err
+		}
+		converted := make(map[int]struct{}, len(conversions))
+		for _, conversion := range conversions {
+			cycleStart, active := activeCycleStarts[conversion.UserSubscriptionId]
+			if active && conversion.CreatedAt >= cycleStart {
+				converted[conversion.UserSubscriptionId] = struct{}{}
+			}
+		}
+		eligibleSubs := subs[:0]
+		for _, candidate := range subs {
+			if _, wasConverted := converted[candidate.Id]; !wasConverted {
+				eligibleSubs = append(eligibleSubs, candidate)
+			}
+		}
+		if len(eligibleSubs) == 0 {
+			return commerceschema.ErrSubscriptionResetOpportunityConverted
+		}
+		subs = eligibleSubs
+
+		sub := subs[0]
+		result.UserSubscriptionId = sub.Id
+		result.AmountUsedBefore = sub.AmountUsed
+		result.PeriodUsedBefore = sub.PeriodUsed
+
+		plan, err := getSubscriptionPlanRecordTx(tx, sub.PlanId)
+		if err != nil {
+			return err
+		}
+		baseQuota := min(max(plan.TotalAmount, 0), sub.AmountTotal)
+		groupBuyBonusQuota, err := currentCycleGroupBuyBonusQuotaTx(tx, sub.Id, sub.StartTime, now)
+		if err != nil {
+			return err
+		}
+		// Only the plan quota and this cycle's group-buy reward are renewable.
+		// Fuel and all other top-ups remain consumed after a reset.
+		groupBuyBonusQuota = min(groupBuyBonusQuota, max(sub.AmountTotal-baseQuota, 0))
+		resettableQuota := baseQuota + groupBuyBonusQuota
+		sub.AmountUsed = max(sub.AmountUsed-resettableQuota, 0)
+		sub.PeriodUsed = 0
+		sub.ModelUsage = ""
+		if err := restoreSubscriptionLedgerBalanceAfterResetTx(tx, &sub, fmt.Sprintf("opportunity:%d:%s", userID, currentMonth)); err != nil {
+			return err
+		}
+		if err := tx.Save(&sub).Error; err != nil {
+			return err
+		}
+
+		account.UsedTotal++
+		account.AvailableTotal--
+		account.LastUsedMonth = currentMonth
+		if err := tx.Save(account).Error; err != nil {
+			return err
+		}
+
+		ledger := &commerceschema.SubscriptionResetOpportunityLedger{
+			UserId:        userID,
+			RelatedUserId: sub.Id,
+			ChangeType:    commerceschema.SubscriptionResetOpportunityChangeUse,
+			Delta:         -1,
+			BalanceAfter:  account.AvailableTotal,
+			UsedMonth:     currentMonth,
+			SourceType:    "user_subscription",
+			SourceRef:     strconv.Itoa(sub.Id),
+			EventKey:      fmt.Sprintf("use-reset-opportunity:%d:%s", userID, currentMonth),
+			Note:          "使用额度重置机会清空当前订阅已用额度",
+		}
+		if err := tx.Create(ledger).Error; err != nil {
+			return err
+		}
+
+		result.AmountUsedAfter = sub.AmountUsed
+		result.PeriodUsedAfter = sub.PeriodUsed
+		result.ClearedUsedAmount = result.AmountUsedBefore - result.AmountUsedAfter
+		result.ResetOpportunity = buildSubscriptionResetOpportunitySummary(account)
+		resetLog = fmt.Sprintf(
+			"subscription reset applied user_id=%d subscription_id=%d base_quota=%d group_buy_bonus_quota=%d non_resettable_quota=%d used_before=%d used_after=%d restored_amount=%d",
+			userID, sub.Id, baseQuota, groupBuyBonusQuota, max(sub.AmountTotal-resettableQuota, 0), result.AmountUsedBefore, result.AmountUsedAfter, result.ClearedUsedAmount,
+		)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	platformobservability.SysLog(resetLog)
+	return result, nil
+}

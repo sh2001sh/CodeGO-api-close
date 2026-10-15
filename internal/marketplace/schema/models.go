@@ -1,0 +1,432 @@
+package schema
+
+import (
+	"time"
+
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"gorm.io/gorm"
+)
+
+type Channel struct {
+	ID                               string         `json:"id" gorm:"column:id;primaryKey;size:64"`
+	OwnerUserID                      int            `json:"owner_user_id" gorm:"column:owner_user_id;index;not null"`
+	ProviderType                     string         `json:"provider_type" gorm:"column:provider_type;size:32;not null"`
+	SubmittedSourceLabel             string         `json:"submitted_source_label" gorm:"column:submitted_source_label;size:40"`
+	ApprovedSourceLabel              string         `json:"approved_source_label" gorm:"column:approved_source_label;size:40"`
+	SourceLabelStatus                string         `json:"source_label_status" gorm:"column:source_label_status;size:16;index"`
+	BaseURLCiphertext                string         `json:"-" gorm:"column:base_url_ciphertext;type:text;not null"`
+	CredentialCiphertext             string         `json:"-" gorm:"column:credential_ciphertext;type:text;not null"`
+	CredentialTail                   string         `json:"credential_tail" gorm:"column:credential_tail;size:12"`
+	CredentialVersion                int            `json:"credential_version" gorm:"column:credential_version;not null;default:1"`
+	DeclaredModels                   string         `json:"-" gorm:"column:declared_models;type:text"`
+	ModelPrices                      string         `json:"-" gorm:"column:model_prices;type:text"`
+	ModelVerificationResults         string         `json:"-" gorm:"column:model_verification_results;type:text"`
+	ConnectivityTestStatus           string         `json:"connectivity_test_status" gorm:"column:connectivity_test_status;size:24;index"`
+	ConnectivityTestCheckedAt        *time.Time     `json:"connectivity_test_checked_at" gorm:"column:connectivity_test_checked_at;index"`
+	ModelConsistencyStatus           string         `json:"model_consistency_status" gorm:"column:model_consistency_status;size:24;index"`
+	GPT56MappingResults              string         `json:"-" gorm:"column:gpt56_mapping_results;type:text"`
+	GPT56MappingStatus               string         `json:"gpt56_mapping_status" gorm:"column:gpt56_mapping_status;size:32;index"`
+	GPT56MappingCheckedAt            *time.Time     `json:"gpt56_mapping_checked_at" gorm:"column:gpt56_mapping_checked_at;index"`
+	GPT56MappingLevel                string         `json:"gpt56_mapping_level" gorm:"column:gpt56_mapping_level;size:32;index"`
+	GPT56MappingTrigger              string         `json:"gpt56_mapping_trigger" gorm:"column:gpt56_mapping_trigger;size:32;index"`
+	TransportCapabilities            string         `json:"-" gorm:"column:transport_capabilities;type:text"`
+	AutoProbeEnabled                 bool           `json:"auto_probe_enabled" gorm:"column:auto_probe_enabled;not null;default:false;index"`
+	AutoProbeIntervalMinutes         int            `json:"auto_probe_interval_minutes" gorm:"column:auto_probe_interval_minutes;not null;default:10"`
+	AutoProbeModel                   string         `json:"auto_probe_model" gorm:"column:auto_probe_model;size:128"`
+	AutoProbeLastStatus              string         `json:"auto_probe_last_status" gorm:"column:auto_probe_last_status;size:24;index"`
+	AutoProbeLastAt                  *time.Time     `json:"auto_probe_last_at" gorm:"column:auto_probe_last_at;index"`
+	PelicanProbeEnabled              bool           `json:"pelican_probe_enabled" gorm:"column:pelican_probe_enabled;not null;default:false;index"`
+	PelicanProbeDailyMinute          int            `json:"pelican_probe_daily_minute" gorm:"column:pelican_probe_daily_minute;not null;default:0"`
+	PelicanProbeModel                string         `json:"pelican_probe_model" gorm:"column:pelican_probe_model;size:128"`
+	PelicanProbeLastAt               *time.Time     `json:"pelican_probe_last_at" gorm:"column:pelican_probe_last_at;index"`
+	MaxConcurrency                   int            `json:"max_concurrency" gorm:"column:max_concurrency;not null;default:1"`
+	UserMaxConcurrency               int            `json:"user_max_concurrency" gorm:"column:user_max_concurrency;not null;default:0"`
+	QPS                              float64        `json:"qps" gorm:"column:qps;not null;default:1"`
+	MaintenanceWindow                string         `json:"maintenance_window" gorm:"column:maintenance_window;size:255"`
+	SensitiveWordInterceptionEnabled *bool          `json:"sensitive_word_interception_enabled" gorm:"column:sensitive_word_interception_enabled;default:true"`
+	MultiplierCardSupported          bool           `json:"multiplier_card_supported" gorm:"column:multiplier_card_supported;not null;default:false"`
+	MultiplierCardUserEnabled        bool           `json:"multiplier_card_user_enabled" gorm:"column:multiplier_card_user_enabled;not null;default:false"`
+	Status                           string         `json:"status" gorm:"column:status;size:24;index;not null"`
+	InternalChannelID                *int           `json:"internal_channel_id" gorm:"column:internal_channel_id;index"`
+	LastReviewReason                 string         `json:"last_review_reason" gorm:"column:last_review_reason;size:500"`
+	SourceLabelReviewReason          string         `json:"source_label_review_reason" gorm:"column:source_label_review_reason;size:500"`
+	CreatedAt                        time.Time      `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt                        time.Time      `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
+	DeletedAt                        gorm.DeletedAt `json:"-" gorm:"column:deleted_at;index"`
+}
+
+func (Channel) TableName() string { return tableName("channels") }
+
+// ChannelIDSequence allocates short, monotonic public marketplace channel IDs.
+type ChannelIDSequence struct {
+	ID        uint64    `json:"-" gorm:"primaryKey;autoIncrement"`
+	CreatedAt time.Time `json:"-" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (ChannelIDSequence) TableName() string { return tableName("channel_id_sequences") }
+
+func (channel *Channel) BeforeCreate(_ *gorm.DB) error {
+	if channel.ID == "" {
+		channel.ID = platformruntime.GetUUID()
+	}
+	return nil
+}
+
+type Group struct {
+	ID                 string         `json:"id" gorm:"column:id;primaryKey;size:64"`
+	ChannelID          string         `json:"channel_id" gorm:"column:channel_id;size:64;uniqueIndex;not null"`
+	OwnerUserID        int            `json:"owner_user_id" gorm:"column:owner_user_id;index;not null"`
+	PublicSlug         string         `json:"public_slug" gorm:"column:public_slug;size:80;uniqueIndex;not null"`
+	SystemDisplayName  string         `json:"system_display_name" gorm:"column:system_display_name;size:128;index;not null"`
+	InternalGroupName  string         `json:"-" gorm:"column:internal_group_name;size:64;uniqueIndex;not null"`
+	OwnerDisplayName   string         `json:"owner_display_name" gorm:"column:owner_display_name;size:128;index"`
+	SourceType         string         `json:"source_type" gorm:"column:source_type;size:32;not null"`
+	CreditPoolPolicy   string         `json:"credit_pool_policy" gorm:"column:credit_pool_policy;size:40;not null"`
+	Multiplier         float64        `json:"multiplier" gorm:"column:multiplier;not null"`
+	RoutingVersion     int            `json:"routing_version" gorm:"column:routing_version;not null;default:1"`
+	LifecycleStatus    string         `json:"lifecycle_status" gorm:"column:lifecycle_status;size:24;index;not null"`
+	VerificationStatus string         `json:"verification_status" gorm:"column:verification_status;size:24;index;not null"`
+	Visibility         string         `json:"visibility" gorm:"column:visibility;size:16;index;not null"`
+	PublishedAt        *time.Time     `json:"published_at" gorm:"column:published_at;index"`
+	VerificationDueAt  *time.Time     `json:"verification_due_at" gorm:"column:verification_due_at;index"`
+	CreatedAt          time.Time      `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt          time.Time      `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
+	DeletedAt          gorm.DeletedAt `json:"-" gorm:"column:deleted_at;index"`
+}
+
+func (Group) TableName() string { return tableName("groups") }
+
+// PelicanArtifact stores the latest successful, sanitized SVG per group and model.
+type PelicanArtifact struct {
+	GroupID       string    `json:"group_id" gorm:"column:group_id;primaryKey;size:128"`
+	ChannelID     string    `json:"channel_id" gorm:"column:channel_id;size:64;index"`
+	Model         string    `json:"model" gorm:"column:model;primaryKey;size:128"`
+	SVG           string    `json:"-" gorm:"column:svg;type:text;not null"`
+	Trigger       string    `json:"trigger" gorm:"column:trigger;size:16;not null"`
+	TriggerUserID int       `json:"-" gorm:"column:trigger_user_id;index"`
+	RequestID     string    `json:"request_id" gorm:"column:request_id;size:64"`
+	DurationMS    int64     `json:"duration_ms" gorm:"column:duration_ms;not null"`
+	GeneratedAt   time.Time `json:"generated_at" gorm:"column:generated_at;index;not null"`
+	UpdatedAt     time.Time `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
+}
+
+func (PelicanArtifact) TableName() string { return tableName("pelican_artifacts") }
+
+// GroupInvite is a revocable, hashed invitation for a non-public marketplace group.
+type GroupInvite struct {
+	ID        uint64     `json:"id" gorm:"primaryKey;autoIncrement"`
+	GroupID   string     `json:"group_id" gorm:"column:group_id;size:64;index;not null"`
+	CreatedBy int        `json:"created_by" gorm:"column:created_by;index;not null"`
+	TokenHash string     `json:"-" gorm:"column:token_hash;size:64;uniqueIndex;not null"`
+	ExpiresAt *time.Time `json:"expires_at" gorm:"column:expires_at;index"`
+	RevokedAt *time.Time `json:"revoked_at" gorm:"column:revoked_at;index"`
+	CreatedAt time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (GroupInvite) TableName() string { return tableName("group_invites") }
+
+// GroupAccess records users who accepted a private/unlisted group invitation.
+type GroupAccess struct {
+	ID              uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
+	GroupID         string    `json:"group_id" gorm:"column:group_id;size:64;uniqueIndex:uq_marketplace_group_access,priority:1;not null"`
+	UserID          int       `json:"user_id" gorm:"column:user_id;uniqueIndex:uq_marketplace_group_access,priority:2;index;not null"`
+	GrantedByInvite uint64    `json:"granted_by_invite" gorm:"column:granted_by_invite;index;not null"`
+	CreatedAt       time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+}
+
+// ChannelUserBlock prevents a channel owner from serving a specific consumer.
+type ChannelUserBlock struct {
+	ID        uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
+	ChannelID string    `json:"channel_id" gorm:"column:channel_id;size:64;uniqueIndex:uq_marketplace_channel_user_block,priority:1;not null"`
+	UserID    int       `json:"user_id" gorm:"column:user_id;uniqueIndex:uq_marketplace_channel_user_block,priority:2;index;not null"`
+	CreatedAt time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (ChannelUserBlock) TableName() string { return tableName("channel_user_blocks") }
+
+func (GroupAccess) TableName() string { return tableName("group_access") }
+
+type VerificationRun struct {
+	ID              string     `json:"id" gorm:"column:id;primaryKey;size:64"`
+	ChannelID       string     `json:"channel_id" gorm:"column:channel_id;size:64;index;not null"`
+	Status          string     `json:"status" gorm:"column:status;size:24;index;not null"`
+	Stage           string     `json:"stage" gorm:"column:stage;size:32"`
+	DetectorName    string     `json:"detector_name" gorm:"column:detector_name;size:64"`
+	DetectorVersion string     `json:"detector_version" gorm:"column:detector_version;size:32"`
+	RulesetVersion  string     `json:"ruleset_version" gorm:"column:ruleset_version;size:32"`
+	EvidenceHash    string     `json:"evidence_hash" gorm:"column:evidence_hash;size:128"`
+	Summary         string     `json:"summary" gorm:"column:summary;size:1000"`
+	StartedAt       *time.Time `json:"started_at" gorm:"column:started_at"`
+	CompletedAt     *time.Time `json:"completed_at" gorm:"column:completed_at"`
+	ExpiresAt       *time.Time `json:"expires_at" gorm:"column:expires_at;index"`
+	CreatedAt       time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (VerificationRun) TableName() string { return tableName("verification_runs") }
+
+func (run *VerificationRun) BeforeCreate(_ *gorm.DB) error {
+	if run.ID == "" {
+		run.ID = platformruntime.GetUUID()
+	}
+	return nil
+}
+
+// GPT56MappingRun preserves one complete detector cycle and its evidence.
+type GPT56MappingRun struct {
+	ID          string     `json:"id" gorm:"column:id;primaryKey;size:64"`
+	ChannelID   string     `json:"channel_id" gorm:"column:channel_id;size:64;index;not null"`
+	ParentRunID string     `json:"parent_run_id,omitempty" gorm:"column:parent_run_id;size:64;index"`
+	Level       string     `json:"level" gorm:"column:level;size:32;index;not null"`
+	Trigger     string     `json:"trigger" gorm:"column:trigger;size:32;index;not null"`
+	Status      string     `json:"status" gorm:"column:status;size:32;index;not null"`
+	Results     string     `json:"-" gorm:"column:results;type:text"`
+	StartedAt   time.Time  `json:"started_at" gorm:"column:started_at;index;not null"`
+	CompletedAt *time.Time `json:"completed_at" gorm:"column:completed_at;index"`
+	CreatedAt   time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (GPT56MappingRun) TableName() string { return tableName("gpt56_mapping_runs") }
+
+func (run *GPT56MappingRun) BeforeCreate(_ *gorm.DB) error {
+	if run.ID == "" {
+		run.ID = platformruntime.GetUUID()
+	}
+	return nil
+}
+
+type RankingSnapshot struct {
+	ID                       string    `json:"id" gorm:"column:id;primaryKey;size:64"`
+	GroupID                  string    `json:"group_id" gorm:"column:group_id;size:64;uniqueIndex:uq_marketplace_rank_snapshot,priority:1"`
+	WindowHours              int       `json:"window_hours" gorm:"column:window_hours;uniqueIndex:uq_marketplace_rank_snapshot,priority:2"`
+	RankingVersion           string    `json:"ranking_version" gorm:"column:ranking_version;size:32;uniqueIndex:uq_marketplace_rank_snapshot,priority:3"`
+	Rank                     int       `json:"rank" gorm:"column:rank;index"`
+	Score                    float64   `json:"score" gorm:"column:score"`
+	RawSuccessRate           float64   `json:"raw_success_rate" gorm:"column:raw_success_rate"`
+	WilsonSuccessRate        float64   `json:"wilson_success_rate" gorm:"column:wilson_success_rate"`
+	AvgTTFTMs                float64   `json:"avg_ttft_ms" gorm:"column:avg_ttft_ms"`
+	AttemptTTFTP50Ms         float64   `json:"attempt_ttft_p50_ms" gorm:"column:attempt_ttft_p50_ms"`
+	AttemptTTFTP95Ms         float64   `json:"attempt_ttft_p95_ms" gorm:"column:attempt_ttft_p95_ms"`
+	E2ETTFTP50Ms             float64   `json:"e2e_ttft_p50_ms" gorm:"column:e2e_ttft_p50_ms"`
+	E2ETTFTP95Ms             float64   `json:"e2e_ttft_p95_ms" gorm:"column:e2e_ttft_p95_ms"`
+	LatencySampleCount       int64     `json:"latency_sample_count" gorm:"column:latency_sample_count"`
+	AvgLatencyMs             float64   `json:"avg_latency_ms" gorm:"column:avg_latency_ms"`
+	AvgTPS                   float64   `json:"avg_tps" gorm:"column:avg_tps"`
+	CacheHitRate             float64   `json:"cache_hit_rate" gorm:"column:cache_hit_rate"`
+	AvgConsumerAmount        int64     `json:"avg_consumer_amount" gorm:"column:avg_consumer_amount;not null;default:0"`
+	AvgConsumerAmountByModel string    `json:"-" gorm:"column:avg_consumer_amount_by_model;type:text;not null;default:'{}'"`
+	RequestCount             int64     `json:"request_count" gorm:"column:request_count"`
+	IndependentConsumers     int64     `json:"independent_consumers" gorm:"column:independent_consumers"`
+	Observing                bool      `json:"observing" gorm:"column:observing;index"`
+	CalculatedAt             time.Time `json:"calculated_at" gorm:"column:calculated_at;index"`
+}
+
+func (RankingSnapshot) TableName() string { return tableName("ranking_snapshots") }
+
+func (snapshot *RankingSnapshot) BeforeCreate(_ *gorm.DB) error {
+	if snapshot.ID == "" {
+		snapshot.ID = platformruntime.GetUUID()
+	}
+	return nil
+}
+
+// MultiplierTrendSnapshot records the market state used to render historical
+// multiplier trends. One row is retained per group and 30-minute bucket.
+type MultiplierTrendSnapshot struct {
+	ID                uint64    `json:"-" gorm:"primaryKey;autoIncrement"`
+	GroupID           string    `json:"group_id" gorm:"column:group_id;size:64;not null;uniqueIndex:uq_marketplace_multiplier_snapshot,priority:1;index"`
+	ChannelID         string    `json:"channel_id" gorm:"column:channel_id;size:64;not null;index"`
+	SourceLabel       string    `json:"source_label" gorm:"column:source_label;size:40;not null;index"`
+	Models            string    `json:"-" gorm:"column:models;type:text;not null"`
+	Multiplier        float64   `json:"multiplier" gorm:"column:multiplier;not null"`
+	Reliable          bool      `json:"reliable" gorm:"column:reliable;not null;index"`
+	RequestCount      int64     `json:"request_count" gorm:"column:request_count;not null"`
+	WilsonSuccessRate float64   `json:"wilson_success_rate" gorm:"column:wilson_success_rate;not null"`
+	BucketStartedAt   time.Time `json:"bucket_started_at" gorm:"column:bucket_started_at;not null;uniqueIndex:uq_marketplace_multiplier_snapshot,priority:2;index"`
+	CapturedAt        time.Time `json:"captured_at" gorm:"column:captured_at;not null;index"`
+}
+
+func (MultiplierTrendSnapshot) TableName() string {
+	return tableName("multiplier_trend_snapshots")
+}
+
+// ChannelFeedback stores one user's current assessment of a marketplace channel.
+type ChannelFeedback struct {
+	ID        uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
+	ChannelID string    `json:"channel_id" gorm:"column:channel_id;size:64;not null;uniqueIndex:uq_marketplace_channel_feedback,priority:1;index"`
+	UserID    int       `json:"-" gorm:"column:user_id;not null;uniqueIndex:uq_marketplace_channel_feedback,priority:2;index"`
+	Status    string    `json:"status" gorm:"column:status;size:24;not null;index"`
+	CreatedAt time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
+}
+
+func (ChannelFeedback) TableName() string {
+	return tableName("channel_feedback")
+}
+
+type Settlement struct {
+	ID                     string     `json:"id" gorm:"column:id;primaryKey;size:64"`
+	RequestID              string     `json:"request_id" gorm:"column:request_id;size:64;uniqueIndex;not null"`
+	GroupID                string     `json:"group_id" gorm:"column:group_id;size:64;index;index:idx_marketplace_settlements_owner_group_created,priority:2;not null"`
+	OwnerUserID            int        `json:"owner_user_id" gorm:"column:owner_user_id;index;index:idx_marketplace_settlements_owner_group_created,priority:1;not null"`
+	ConsumerUserID         int        `json:"consumer_user_id" gorm:"column:consumer_user_id;index;not null"`
+	BillingSource          string     `json:"billing_source" gorm:"column:billing_source;size:24;not null;default:wallet"`
+	ConsumerAmount         int64      `json:"consumer_amount" gorm:"column:consumer_amount;not null"`
+	SettlementGrossAmount  int64      `json:"settlement_gross_amount" gorm:"column:settlement_gross_amount;not null;default:0"`
+	PlatformCommission     int64      `json:"platform_commission" gorm:"column:platform_commission;not null"`
+	TransactionFee         int64      `json:"transaction_fee" gorm:"column:transaction_fee;not null"`
+	OwnerNetAmount         int64      `json:"owner_net_amount" gorm:"column:owner_net_amount;not null"`
+	ReclaimedAmount        int64      `json:"reclaimed_amount" gorm:"column:reclaimed_amount;not null;default:0"`
+	Multiplier             float64    `json:"multiplier" gorm:"column:multiplier;not null"`
+	SubscriptionMultiplier float64    `json:"subscription_multiplier" gorm:"column:subscription_multiplier;not null;default:0"`
+	Status                 string     `json:"status" gorm:"column:status;size:24;index;not null"`
+	PendingAccountID       string     `json:"-" gorm:"column:pending_account_id;size:64"`
+	AvailableAt            time.Time  `json:"available_at" gorm:"column:available_at;index"`
+	ReleasedAt             *time.Time `json:"released_at" gorm:"column:released_at"`
+	ReclaimedAt            *time.Time `json:"reclaimed_at" gorm:"column:reclaimed_at"`
+	ForfeitedAt            *time.Time `json:"forfeited_at" gorm:"column:forfeited_at"`
+	CreatedAt              time.Time  `json:"created_at" gorm:"column:created_at;index:idx_marketplace_settlements_owner_group_created,priority:3;autoCreateTime"`
+}
+
+func (Settlement) TableName() string { return tableName("settlements") }
+
+// IncomeReclaim records a reclaim task and its committed progress. Each batch
+// commits its settlement changes and wallet transfer together, allowing a task
+// to resume safely after a worker or request interruption.
+type IncomeReclaim struct {
+	ID           string    `gorm:"primaryKey;size:64"`
+	Fingerprint  string    `gorm:"size:64;not null"`
+	Filter       string    `gorm:"type:text;not null;default:''"`
+	Status       string    `gorm:"size:16;not null;default:pending;index"`
+	Count        int       `gorm:"not null;default:0"`
+	Amount       int64     `gorm:"not null;default:0"`
+	OwnerAmounts string    `gorm:"type:text"`
+	BatchNumber  int       `gorm:"not null;default:0"`
+	ErrorMessage string    `gorm:"type:text;not null;default:''"`
+	CreatedAt    time.Time `gorm:"autoCreateTime"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime"`
+}
+
+func (IncomeReclaim) TableName() string { return tableName("income_reclaims") }
+
+func (settlement *Settlement) BeforeCreate(_ *gorm.DB) error {
+	if settlement.ID == "" {
+		settlement.ID = platformruntime.GetUUID()
+	}
+	return nil
+}
+
+// AutoRoutePoolMember stores one user-selected marketplace group in the
+// user's third-party automatic routing pool.
+type AutoRoutePoolMember struct {
+	ID          uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
+	OwnerUserID int       `json:"owner_user_id" gorm:"column:owner_user_id;not null;uniqueIndex:uq_marketplace_auto_pool_member,priority:1;index"`
+	GroupID     string    `json:"group_id" gorm:"column:group_id;size:64;not null;uniqueIndex:uq_marketplace_auto_pool_member,priority:2;index"`
+	Priority    int       `json:"priority" gorm:"column:priority;not null;default:0;index"`
+	CreatedAt   time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+}
+
+func (AutoRoutePoolMember) TableName() string { return tableName("auto_route_pool_members") }
+
+// AutoRoutePoolConfig stores routing policy for a user's automatic pool.
+type AutoRoutePoolConfig struct {
+	OwnerUserID            int       `json:"owner_user_id" gorm:"column:owner_user_id;primaryKey"`
+	Strategy               string    `json:"strategy" gorm:"column:strategy;size:16;not null;default:priority"`
+	MaxAttempts            int       `json:"max_attempts" gorm:"column:max_attempts;not null;default:3"`
+	FailureCooldownSeconds int       `json:"failure_cooldown_seconds" gorm:"column:failure_cooldown_seconds;not null;default:30"`
+	MaxMultiplier          float64   `json:"max_multiplier" gorm:"column:max_multiplier;not null;default:0"`
+	MultiplierWeight       int       `json:"multiplier_weight" gorm:"column:multiplier_weight;not null;default:35"`
+	SuccessWeight          int       `json:"success_weight" gorm:"column:success_weight;not null;default:25"`
+	CacheWeight            int       `json:"cache_weight" gorm:"column:cache_weight;not null;default:15"`
+	TTFTWeight             int       `json:"ttft_weight" gorm:"column:ttft_weight;not null;default:25"`
+	UpdatedAt              time.Time `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
+}
+
+type UserMultiplier struct {
+	ID         uint64  `gorm:"primaryKey"`
+	ChannelID  string  `gorm:"column:channel_id;uniqueIndex:uq_um,priority:1"`
+	UserID     int     `gorm:"column:user_id;uniqueIndex:uq_um,priority:2"`
+	Multiplier float64 `gorm:"column:multiplier"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+func (UserMultiplier) TableName() string { return tableName("user_multipliers") }
+
+type TimeRangeMultiplier struct {
+	ID             string    `json:"id" gorm:"primaryKey;size:64"`
+	ChannelID      string    `json:"channel_id" gorm:"column:channel_id;index"`
+	StartTimestamp int64     `json:"start_timestamp" gorm:"column:start_timestamp"`
+	EndTimestamp   int64     `json:"end_timestamp" gorm:"column:end_timestamp"`
+	Multiplier     float64   `json:"multiplier"`
+	Label          string    `json:"label,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+func (TimeRangeMultiplier) TableName() string { return tableName("time_range_multipliers") }
+
+type BargainRequest struct {
+	ID                 string     `json:"id" gorm:"primaryKey;size:64"`
+	GroupID            string     `json:"group_id" gorm:"column:group_id;index"`
+	UserID             int        `json:"user_id" gorm:"column:user_id;index"`
+	ProposedMultiplier float64    `json:"proposed_multiplier" gorm:"column:proposed_multiplier"`
+	CurrentMultiplier  float64    `json:"current_multiplier" gorm:"column:current_multiplier"`
+	Status             string     `json:"status" gorm:"column:status;index"`
+	Reason             string     `json:"reason,omitempty"`
+	ResolutionNote     string     `json:"resolution_note,omitempty" gorm:"column:admin_note"`
+	CreatedAt          time.Time  `json:"created_at"`
+	ResolvedAt         *time.Time `json:"resolved_at,omitempty"`
+}
+
+func (BargainRequest) TableName() string { return tableName("bargain_requests") }
+
+func (AutoRoutePoolConfig) TableName() string { return tableName("auto_route_pool_configs") }
+
+// RoutePool is a named, user-owned collection of marketplace routes. It is
+// intentionally separate from the legacy Auto pool so existing Auto keys keep
+// their current behavior while newly created keys bind to an explicit pool.
+type RoutePool struct {
+	ID                      string     `json:"id" gorm:"primaryKey;size:64"`
+	OwnerUserID             int        `json:"owner_user_id" gorm:"not null;index;uniqueIndex:uq_marketplace_route_pool_name,priority:1"`
+	Name                    string     `json:"name" gorm:"size:64;not null;uniqueIndex:uq_marketplace_route_pool_name,priority:2"`
+	Strategy                string     `json:"strategy" gorm:"size:16;not null;default:priority"`
+	MaxAttempts             int        `json:"max_attempts;not null;default:3"`
+	FailureCooldownSeconds  int        `json:"failure_cooldown_seconds;not null;default:30"`
+	MaxMultiplier           float64    `json:"max_multiplier;not null;default:0"`
+	CreatedAt               time.Time  `json:"created_at;autoCreateTime"`
+	UpdatedAt               time.Time  `json:"updated_at;autoUpdateTime"`
+	AutoBuildEnabled        bool       `json:"auto_build_enabled" gorm:"column:auto_build_enabled;not null;default:false"`
+	AutoBuildSchedule       string     `json:"auto_build_schedule" gorm:"column:auto_build_schedule;size:16;not null;default:interval"`
+	AutoBuildInterval       int        `json:"auto_build_interval" gorm:"column:auto_build_interval;not null;default:60"`
+	AutoBuildDailyTime      string     `json:"auto_build_daily_time" gorm:"column:auto_build_daily_time;size:5;not null;default:03:00"`
+	AutoBuildModel          string     `json:"auto_build_model" gorm:"column:auto_build_model;size:128;not null;default:''"`
+	AutoBuildModels         string     `json:"auto_build_models" gorm:"column:auto_build_models;type:text;not null;default:'[]'"`
+	AutoBuildConsumerWeight int        `json:"auto_build_consumer_weight" gorm:"column:auto_build_consumer_weight;not null;default:25"`
+	AutoBuildSuccessWeight  int        `json:"auto_build_success_weight" gorm:"column:auto_build_success_weight;not null;default:35"`
+	AutoBuildTTFTWeight     int        `json:"auto_build_ttft_weight" gorm:"column:auto_build_ttft_weight;not null;default:20"`
+	AutoBuildCacheWeight    int        `json:"auto_build_cache_weight" gorm:"column:auto_build_cache_weight;not null;default:20"`
+	AutoBuildSize           int        `json:"auto_build_size" gorm:"column:auto_build_size;not null;default:3"`
+	AutoBuildExplore        int        `json:"auto_build_explore" gorm:"column:auto_build_explore;not null;default:1"`
+	AutoBuildLastAt         *time.Time `json:"auto_build_last_at,omitempty"`
+	AutoBuildNextAt         *time.Time `json:"auto_build_next_at,omitempty"`
+	AutoBuildLastError      string     `json:"auto_build_last_error,omitempty" gorm:"column:auto_build_last_error;size:512"`
+}
+
+func (RoutePool) TableName() string { return tableName("route_pools") }
+
+type RoutePoolMember struct {
+	ID        uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
+	PoolID    string    `json:"pool_id" gorm:"size:64;not null;uniqueIndex:uq_marketplace_route_pool_member,priority:1;index"`
+	GroupID   string    `json:"group_id" gorm:"size:128;not null;uniqueIndex:uq_marketplace_route_pool_member,priority:2;index"`
+	Priority  int       `json:"priority;not null;default:0"`
+	CreatedAt time.Time `json:"created_at;autoCreateTime"`
+}
+
+func (RoutePoolMember) TableName() string { return tableName("route_pool_members") }
+
+func tableName(name string) string {
+	if platformdb.UsingPostgreSQL {
+		return "marketplace." + name
+	}
+	return "marketplace_" + name
+}

@@ -1,0 +1,380 @@
+openapi: 3.1.0
+info:
+  title: CodeGo v2 Control Plane API
+  version: 0.1.0-draft
+  description: |
+    CodeGo v2 控制面接口草案。用于管理后台、用户控制台和高风险管理操作。
+servers:
+  - url: https://api.codego.example.com
+    description: Production placeholder
+tags:
+  - name: identity
+  - name: commerce
+  - name: subscription-admin
+paths:
+  /api/control/identity/register:
+    post:
+      tags: [identity]
+      summary: 注册用户
+      operationId: registerIdentity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/control/identity/login:
+    post:
+      tags: [identity]
+      summary: 登录
+      operationId: loginIdentity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/control/commerce/products:
+    get:
+      tags: [commerce]
+      summary: 获取商品列表
+      operationId: listProducts
+      responses:
+        '200':
+          description: 商品列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+  /api/control/commerce/orders:
+    post:
+      tags: [commerce]
+      summary: 创建订单
+      operationId: createOrder
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '200':
+          description: 订单创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateOrderResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/control/commerce/orders/{order_id}/mark-paid:
+    post:
+      tags: [commerce]
+      summary: 标记订单已支付
+      operationId: markOrderPaid
+      parameters:
+        - $ref: '#/components/parameters/OrderID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkPaidRequest'
+      responses:
+        '200':
+          description: 标记成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStateResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/control/subscriptions/{subscription_id}/reset-quota:
+    post:
+      tags: [subscription-admin]
+      summary: 管理员手动重置订阅配额
+      operationId: resetSubscriptionQuota
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetSubscriptionQuotaRequest'
+      responses:
+        '200':
+          description: 重置成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetSubscriptionQuotaResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+components:
+  parameters:
+    OrderID:
+      name: order_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SubscriptionID:
+      name: subscription_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  responses:
+    ErrorResponse:
+      description: 统一错误响应
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, type, retryable, correlation_id]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            type:
+              type: string
+              enum: [business, validation, security, provider, infra]
+            retryable:
+              type: boolean
+            correlation_id:
+              type: string
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        verification_code:
+          type: string
+        invite_code:
+          type: string
+    RegisterResponse:
+      type: object
+      required: [user_id, status, requires_login]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [created, pending_verification, rejected]
+        requires_login:
+          type: boolean
+    LoginRequest:
+      type: object
+      required: [login, password]
+      properties:
+        login:
+          type: string
+        password:
+          type: string
+        otp_code:
+          type: string
+    LoginResponse:
+      type: object
+      required: [session_token, user, security_flags]
+      properties:
+        session_token:
+          type: string
+        user:
+          $ref: '#/components/schemas/ActorUser'
+        security_flags:
+          type: array
+          items:
+            type: string
+    ActorUser:
+      type: object
+      required: [user_id, display_name, role]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        role:
+          type: string
+          enum: [user, admin, root]
+    Product:
+      type: object
+      required: [product_id, code, title, status, pricing]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [draft, active, archived]
+        pricing:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductPrice'
+    ProductPrice:
+      type: object
+      required: [currency, amount, billing_mode]
+      properties:
+        currency:
+          type: string
+        amount:
+          type: string
+          description: Decimal string
+        billing_mode:
+          type: string
+          enum: [one_time, recurring, quota_pack]
+    CreateOrderRequest:
+      type: object
+      required: [product_id, payment_provider]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        payment_provider:
+          type: string
+        client_context:
+          type: object
+          additionalProperties: true
+    CreateOrderResponse:
+      type: object
+      required: [order_id, payment_attempt, next_action]
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        payment_attempt:
+          $ref: '#/components/schemas/PaymentAttempt'
+        next_action:
+          type: object
+          additionalProperties: true
+    PaymentAttempt:
+      type: object
+      required: [payment_attempt_id, status]
+      properties:
+        payment_attempt_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [created, awaiting_payment, paid, failed]
+    MarkPaidRequest:
+      type: object
+      required: [provider_event_id, provider_payload, paid_amount, paid_at]
+      properties:
+        provider_event_id:
+          type: string
+        provider_payload:
+          type: object
+          additionalProperties: true
+        paid_amount:
+          type: string
+          description: Decimal string
+        paid_at:
+          type: string
+          format: date-time
+    OrderStateResponse:
+      type: object
+      required: [order_id, payment_status, business_status]
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        payment_status:
+          type: string
+        business_status:
+          type: string
+    ResetSubscriptionQuotaRequest:
+      type: object
+      required: [reason]
+      properties:
+        advance_reset_time:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          minLength: 4
+          maxLength: 512
+    ResetSubscriptionQuotaResponse:
+      type: object
+      required: [subscription_id, reset_entry_id, new_period_usage]
+      properties:
+        subscription_id:
+          type: string
+          format: uuid
+        reset_entry_id:
+          type: string
+          format: uuid
+        new_period_usage:
+          type: object
+          required: [used_amount, remaining_amount, period_start_at, period_end_at]
+          properties:
+            used_amount:
+              type: string
+            remaining_amount:
+              type: string
+            period_start_at:
+              type: string
+              format: date-time
+            period_end_at:
+              type: string
+              format: date-time

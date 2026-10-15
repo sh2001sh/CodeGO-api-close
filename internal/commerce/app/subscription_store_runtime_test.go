@@ -1,0 +1,450 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"github.com/go-redis/redis/v8"
+	"github.com/sh2001sh/new-api/constant"
+	"github.com/sh2001sh/new-api/dto"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	"github.com/sh2001sh/new-api/internal/platform/cachex"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+	"testing"
+	"time"
+)
+
+func TestSubscriptionPlanTransactionReadsOwnChangesWithoutCachePollution(t *testing.T) {
+	for _, cached := range []bool{true, false} {
+		t.Run(fmt.Sprintf("cached=%t", cached), func(t *testing.T) {
+			db := setupRedemptionTestDB(t)
+			plan := insertSubscriptionResetAppTestPlan(t, 8652, 0, 1_000)
+			originalTitle := plan.Title
+			cache := getSubscriptionPlanCache()
+			key := subscriptionPlanCacheKey(plan.Id)
+			_, err := cache.DeleteMany([]string{key})
+			require.NoError(t, err)
+			t.Cleanup(func() { _, _ = cache.DeleteMany([]string{key}) })
+			if cached {
+				require.NoError(t, cache.SetWithTTL(key, *plan, time.Minute))
+			}
+			rollback := errors.New("roll back plan edit")
+			err = db.Transaction(func(tx *gorm.DB) error {
+				if err := tx.Model(plan).Update("title", "uncommitted plan").Error; err != nil {
+					return err
+				}
+				loaded, err := getSubscriptionPlanRecordTx(tx, plan.Id)
+				require.NoError(t, err)
+				assert.Equal(t, "uncommitted plan", loaded.Title)
+				return rollback
+			})
+			require.ErrorIs(t, err, rollback)
+			loaded, err := getSubscriptionPlanRecordTx(nil, plan.Id)
+			require.NoError(t, err)
+			assert.Equal(t, originalTitle, loaded.Title)
+		})
+	}
+}
+
+type subscriptionPlanRedisFailureHook struct{ requests int }
+
+func (h *subscriptionPlanRedisFailureHook) BeforeProcess(ctx context.Context, _ redis.Cmder) (context.Context, error) {
+	h.requests++
+	return ctx, errors.New("Redis must not run in the transaction")
+}
+func (*subscriptionPlanRedisFailureHook) AfterProcess(context.Context, redis.Cmder) error { return nil }
+func (h *subscriptionPlanRedisFailureHook) BeforeProcessPipeline(ctx context.Context, cmds []redis.Cmder) (context.Context, error) {
+	h.requests += len(cmds)
+	return ctx, errors.New("Redis must not run in the transaction")
+}
+func (*subscriptionPlanRedisFailureHook) AfterProcessPipeline(context.Context, []redis.Cmder) error {
+	return nil
+}
+
+func TestSubscriptionPlanTransactionDoesNotAccessRedis(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	plan := insertSubscriptionResetAppTestPlan(t, 8653, 0, 1_000)
+	originalCache := getSubscriptionPlanCache()
+	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
+	t.Cleanup(func() { subscriptionPlanCache = originalCache; _ = client.Close() })
+	hook := &subscriptionPlanRedisFailureHook{}
+	client.AddHook(hook)
+	subscriptionPlanCache = cachex.NewHybridCache[commerceschema.SubscriptionPlan](cachex.HybridCacheConfig[commerceschema.SubscriptionPlan]{
+		Namespace: cachex.Namespace(subscriptionPlanCacheNamespace), Redis: client,
+		RedisEnabled: func() bool { return true }, RedisCodec: cachex.JSONCodec[commerceschema.SubscriptionPlan]{},
+	})
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		loaded, err := getSubscriptionPlanRecordTx(tx, plan.Id)
+		require.NoError(t, err)
+		assert.Equal(t, plan.Title, loaded.Title)
+		return nil
+	}))
+	assert.Zero(t, hook.requests)
+	_, err := getSubscriptionPlanRecordTx(nil, plan.Id)
+	require.NoError(t, err)
+	assert.Positive(t, hook.requests, "non-transactional reads must retain the existing cache path")
+}
+
+func insertSubscriptionStoreTestUser(t *testing.T, id int, orderIDs []int) {
+	t.Helper()
+
+	user := &identityschema.User{
+		Id:       id,
+		Username: "subscription_store_test_user",
+		Status:   constant.UserStatusEnabled,
+	}
+	identitydomain.SetSetting(user, dto.UserSetting{
+		BillingPreference:    "subscription_first",
+		SubscriptionOrderIds: orderIDs,
+	})
+	require.NoError(t, platformdb.DB.Create(user).Error)
+}
+
+func insertSubscriptionStoreTestOrder(t *testing.T, tradeNo string, userID int, planID int, paymentProvider string) {
+	t.Helper()
+
+	order := &commerceschema.SubscriptionOrder{
+		UserId:          userID,
+		PlanId:          planID,
+		Money:           9.99,
+		TradeNo:         tradeNo,
+		PaymentMethod:   paymentProvider,
+		PaymentProvider: paymentProvider,
+		Status:          constant.TopUpStatusPending,
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, platformdb.DB.Create(order).Error)
+}
+
+func TestSubscriptionStoreLookupsAndCounts(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	insertSubscriptionResetAppTestUser(t, 8601, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 8602, 0, int64(platformruntime.QuotaPerUnit)*10)
+	insertSubscriptionStoreTestOrder(t, "subscription-store-order", 8601, plan.Id, commerceschema.PaymentProviderStripe)
+
+	now := time.Now().Unix()
+	require.NoError(t, db.Create(&commerceschema.UserSubscription{
+		Id:          8603,
+		UserId:      8601,
+		PlanId:      plan.Id,
+		AmountTotal: plan.TotalAmount,
+		StartTime:   now - 3600,
+		EndTime:     now + 86400,
+		Status:      "active",
+	}).Error)
+	require.NoError(t, db.Create(&commerceschema.UserSubscription{
+		Id:          8604,
+		UserId:      8601,
+		PlanId:      plan.Id,
+		AmountTotal: plan.TotalAmount,
+		StartTime:   now - 7200,
+		EndTime:     now - 3600,
+		Status:      "expired",
+	}).Error)
+
+	order := GetSubscriptionOrderByTradeNo("subscription-store-order")
+	require.NotNil(t, order)
+	assert.Equal(t, 8601, order.UserId)
+
+	userOrder, err := GetSubscriptionOrderByTradeNoForUser("subscription-store-order", 8601)
+	require.NoError(t, err)
+	assert.Equal(t, order.TradeNo, userOrder.TradeNo)
+
+	count, err := CountUserSubscriptionsByPlan(8601, plan.Id)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, count)
+
+	allSubs, err := GetAllUserSubscriptions(8601)
+	require.NoError(t, err)
+	require.Len(t, allSubs, 2)
+	assert.Equal(t, 8603, allSubs[0].Subscription.Id)
+	assert.Equal(t, 8604, allSubs[1].Subscription.Id)
+}
+
+func TestGetSubscriptionPlanInfoByUserSubscriptionID(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	insertSubscriptionResetAppTestUser(t, 8611, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 8612, 0, int64(platformruntime.QuotaPerUnit)*10)
+	now := time.Now().Unix()
+	sub := &commerceschema.UserSubscription{
+		Id:          8613,
+		UserId:      8611,
+		PlanId:      plan.Id,
+		AmountTotal: plan.TotalAmount,
+		StartTime:   now - 3600,
+		EndTime:     now + 86400,
+		Status:      "active",
+	}
+	require.NoError(t, db.Create(sub).Error)
+
+	info, err := GetSubscriptionPlanInfoByUserSubscriptionID(sub.Id)
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	assert.Equal(t, plan.Id, info.PlanId)
+	assert.Equal(t, plan.Title, info.PlanTitle)
+}
+
+func TestGetAllActiveUserSubscriptions_KeepsExhaustedDayPassVisibleAndSkipsBilling(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	require.NoError(t, db.AutoMigrate(&commerceschema.SubscriptionPreConsumeRecord{}))
+
+	now := time.Now().Unix()
+	dayQuota := int64(platformruntime.QuotaPerUnit)
+	monthQuota := int64(platformruntime.QuotaPerUnit) * 10
+
+	dayPlan := insertSubscriptionResetAppTestPlan(t, 9301, 1, dayQuota)
+	monthPlan := insertSubscriptionResetAppTestPlan(t, 9302, 0, monthQuota)
+
+	daySub := &commerceschema.UserSubscription{
+		Id:          9401,
+		UserId:      9301,
+		PlanId:      dayPlan.Id,
+		AmountTotal: dayPlan.TotalAmount,
+		AmountUsed:  dayPlan.TotalAmount,
+		StartTime:   now - 3600,
+		EndTime:     now + 86400,
+		Status:      "active",
+	}
+	monthSub := &commerceschema.UserSubscription{
+		Id:          9402,
+		UserId:      9301,
+		PlanId:      monthPlan.Id,
+		AmountTotal: monthPlan.TotalAmount,
+		StartTime:   now - 3600,
+		EndTime:     now + 30*86400,
+		Status:      "active",
+	}
+
+	insertSubscriptionStoreTestUser(t, 9301, []int{daySub.Id, monthSub.Id})
+	require.NoError(t, db.Create(daySub).Error)
+	require.NoError(t, db.Create(monthSub).Error)
+
+	activeSubs, err := GetAllActiveUserSubscriptions(9301)
+	require.NoError(t, err)
+	require.Len(t, activeSubs, 2)
+	assert.Equal(t, daySub.Id, activeSubs[0].Subscription.Id)
+	assert.Equal(t, monthSub.Id, activeSubs[1].Subscription.Id)
+
+	result, err := PreConsumeUserSubscription("subscription-ordering-req", 9301, "", int64(platformruntime.QuotaPerUnit))
+	require.NoError(t, err)
+	assert.Equal(t, monthSub.Id, result.UserSubscriptionId)
+	assert.EqualValues(t, platformruntime.QuotaPerUnit, result.PreConsumed)
+
+	var reloadedDay commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", daySub.Id).First(&reloadedDay).Error)
+	assert.Equal(t, dayPlan.TotalAmount, reloadedDay.AmountUsed)
+	assert.Equal(t, "active", reloadedDay.Status)
+
+	var reloadedMonth commerceschema.UserSubscription
+	require.NoError(t, db.Where("id = ?", monthSub.Id).First(&reloadedMonth).Error)
+	assert.EqualValues(t, platformruntime.QuotaPerUnit, reloadedMonth.AmountUsed)
+}
+
+func TestCompleteSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	insertSubscriptionResetAppTestUser(t, 202, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 301, 0, int64(platformruntime.QuotaPerUnit)*10)
+	insertSubscriptionStoreTestOrder(t, "sub-guard-order", 202, plan.Id, commerceschema.PaymentProviderStripe)
+
+	err := CompleteSubscriptionOrder("sub-guard-order", `{"provider":"epay"}`, commerceschema.PaymentProviderEpay, "alipay")
+	require.ErrorIs(t, err, commerceschema.ErrPaymentMethodMismatch)
+
+	var order commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("trade_no = ?", "sub-guard-order").First(&order).Error)
+	assert.Equal(t, constant.TopUpStatusPending, order.Status)
+
+	var subscriptionCount int64
+	require.NoError(t, db.Model(&commerceschema.UserSubscription{}).Where("user_id = ?", 202).Count(&subscriptionCount).Error)
+	assert.Zero(t, subscriptionCount)
+
+	var topUpCount int64
+	require.NoError(t, db.Model(&commerceschema.TopUp{}).Where("trade_no = ?", "sub-guard-order").Count(&topUpCount).Error)
+	assert.Zero(t, topUpCount)
+}
+
+func TestCompleteSubscriptionOrder_RestoresExpiredOrderAfterVerifiedPayment(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	insertSubscriptionResetAppTestUser(t, 492, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 493, 0, int64(platformruntime.QuotaPerUnit)*10)
+	insertSubscriptionStoreTestOrder(t, "sub-late-payment-order", 492, plan.Id, commerceschema.PaymentProviderXunhu)
+	require.NoError(t, db.Model(&commerceschema.SubscriptionOrder{}).
+		Where("trade_no = ?", "sub-late-payment-order").
+		Updates(map[string]any{
+			"status":             constant.TopUpStatusExpired,
+			"fulfillment_status": commerceschema.SubscriptionOrderFulfillmentPending,
+		}).Error)
+
+	require.NoError(t, CompleteSubscriptionOrder(
+		"sub-late-payment-order",
+		`{"status":"OD"}`,
+		commerceschema.PaymentProviderXunhu,
+		commerceschema.PaymentMethodXunhu,
+	))
+
+	var order commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("trade_no = ?", "sub-late-payment-order").First(&order).Error)
+	assert.Equal(t, constant.TopUpStatusSuccess, order.Status)
+	assert.Equal(t, commerceschema.SubscriptionOrderFulfillmentPending, order.FulfillmentStatus)
+	assert.Equal(t, commerceschema.PaymentMethodXunhu, order.PaymentMethod)
+}
+
+func TestPaidSubscriptionOrderRequiresWorkflowFulfillment(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	insertSubscriptionResetAppTestUser(t, 722, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 723, 0, int64(platformruntime.QuotaPerUnit)*10)
+	insertSubscriptionStoreTestOrder(t, "sub-workflow-order", 722, plan.Id, commerceschema.PaymentProviderStripe)
+
+	require.NoError(t, CompleteSubscriptionOrder("sub-workflow-order", `{"paid":true}`, commerceschema.PaymentProviderStripe, "card"))
+
+	var paid commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("trade_no = ?", "sub-workflow-order").First(&paid).Error)
+	assert.Equal(t, constant.TopUpStatusSuccess, paid.Status)
+	assert.Equal(t, commerceschema.SubscriptionOrderFulfillmentPending, paid.FulfillmentStatus)
+
+	var beforeCount int64
+	require.NoError(t, db.Model(&commerceschema.UserSubscription{}).Where("user_id = ?", paid.UserId).Count(&beforeCount).Error)
+	assert.Zero(t, beforeCount)
+
+	require.NoError(t, FulfillPaidSubscriptionOrder(paid.TradeNo))
+	require.NoError(t, FulfillPaidSubscriptionOrder(paid.TradeNo))
+
+	var fulfilled commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("trade_no = ?", paid.TradeNo).First(&fulfilled).Error)
+	assert.Equal(t, commerceschema.SubscriptionOrderFulfillmentCompleted, fulfilled.FulfillmentStatus)
+	var afterCount int64
+	require.NoError(t, db.Model(&commerceschema.UserSubscription{}).Where("user_id = ?", paid.UserId).Count(&afterCount).Error)
+	assert.EqualValues(t, 1, afterCount)
+}
+
+func TestFulfillPaidSubscriptionUpgradeAddsMonthlyPassDurationDifference(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	const userID = 724
+	insertSubscriptionStoreTestUser(t, userID, nil)
+
+	lite := &commerceschema.SubscriptionPlan{
+		Id: 725, Title: "Lite月卡", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierLite,
+		DurationUnit:   commerceschema.SubscriptionDurationMonth, DurationValue: 1,
+		PriceAmount: 49, TotalAmount: int64(platformruntime.QuotaPerUnit) * 350,
+	}
+	standard := &commerceschema.SubscriptionPlan{
+		Id: 726, Title: "Standard月卡", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierStandard,
+		DurationUnit:   commerceschema.SubscriptionDurationMonth, DurationValue: 1,
+		PriceAmount: 89, TotalAmount: int64(platformruntime.QuotaPerUnit) * 650,
+	}
+	require.NoError(t, db.Create(lite).Error)
+	require.NoError(t, db.Create(standard).Error)
+
+	now := platformruntime.GetTimestamp()
+	require.NoError(t, db.Create(&commerceschema.UserSubscription{
+		Id: 727, UserId: userID, PlanId: lite.Id, AmountTotal: lite.TotalAmount,
+		StartTime: now - 3600, EndTime: now + 86400, Status: "active",
+	}).Error)
+	require.NoError(t, db.Create(&commerceschema.BlindBoxProp{
+		UserId: userID, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+		Title: monthlyPassTitle(15 * 60), Status: commerceschema.BlindBoxPropStatusAvailable,
+		Multiplier: 0.1, DurationSeconds: 15 * 60, RemainingSeconds: 15 * 60,
+		BenefitReference: "monthly-pass-order:previous",
+	}).Error)
+	order := &commerceschema.SubscriptionOrder{
+		UserId: userID, PlanId: standard.Id, Money: standard.PriceAmount,
+		TradeNo: "sub-upgrade-monthly-pass", Status: constant.TopUpStatusSuccess,
+		FulfillmentStatus: commerceschema.SubscriptionOrderFulfillmentPending,
+		PaymentMethod:     "test", PaymentProvider: "test", CreateTime: now, CompleteTime: now,
+	}
+	require.NoError(t, db.Create(order).Error)
+
+	require.NoError(t, FulfillPaidSubscriptionOrder(order.TradeNo))
+	require.NoError(t, FulfillPaidSubscriptionOrder(order.TradeNo))
+
+	var prop commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND prop_type = ?", userID, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier).First(&prop).Error)
+	assert.EqualValues(t, 30*60, prop.RemainingSeconds)
+	assert.Equal(t, fmt.Sprintf("monthly-pass-order:previous|monthly-pass-order:%d", order.Id), prop.BenefitReference)
+
+	var fulfilled commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("id = ?", order.Id).First(&fulfilled).Error)
+	assert.Equal(t, commerceschema.SubscriptionOrderFulfillmentCompleted, fulfilled.FulfillmentStatus)
+}
+
+func TestExpireSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	insertSubscriptionResetAppTestUser(t, 303, 0)
+	plan := insertSubscriptionResetAppTestPlan(t, 401, 0, int64(platformruntime.QuotaPerUnit)*10)
+	insertSubscriptionStoreTestOrder(t, "sub-expire-guard", 303, plan.Id, commerceschema.PaymentProviderStripe)
+
+	err := ExpireSubscriptionOrder("sub-expire-guard", commerceschema.PaymentProviderCreem)
+	require.ErrorIs(t, err, commerceschema.ErrPaymentMethodMismatch)
+
+	var order commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("trade_no = ?", "sub-expire-guard").First(&order).Error)
+	assert.Equal(t, constant.TopUpStatusPending, order.Status)
+}
+
+func TestCreatePendingSubscriptionOrderWithDiscounts_ReleasesReservedPropOnExpire(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	user := &identityschema.User{
+		Id:       8812,
+		Username: "blind_box_prop_subscription_user",
+		Status:   constant.UserStatusEnabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	var prop *commerceschema.BlindBoxProp
+	err := db.Transaction(func(tx *gorm.DB) error {
+		var txErr error
+		prop, txErr = createBlindBoxPropTx(tx, user.Id, 3, "九折充值卡")
+		return txErr
+	})
+	require.NoError(t, err)
+	require.NotNil(t, prop)
+	require.Equal(t, commerceschema.BlindBoxPropTypeTopupDiscount90, prop.PropType)
+
+	order := &commerceschema.SubscriptionOrder{
+		UserId:          user.Id,
+		PlanId:          9901,
+		TradeNo:         "blind-box-subscription-discount-order",
+		Money:           100,
+		Status:          constant.TopUpStatusPending,
+		PaymentMethod:   "test",
+		PaymentProvider: "test",
+		CreateTime:      time.Now().Unix(),
+	}
+	appliedRate, err := CreatePendingSubscriptionOrderWithDiscounts(order, 100)
+	require.NoError(t, err)
+	assert.InDelta(t, 0.10, appliedRate, 0.0001)
+	assert.Equal(t, 90.0, order.Money)
+
+	var reserved commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("id = ?", prop.Id).First(&reserved).Error)
+	assert.Equal(t, commerceschema.BlindBoxPropStatusReserved, reserved.Status)
+	assert.Equal(t, commerceschema.BlindBoxPropOrderTypeSubscription, reserved.ReservedOrderType)
+	assert.Equal(t, order.TradeNo, reserved.ReservedOrderTradeNo)
+
+	require.NoError(t, ExpireSubscriptionOrder(order.TradeNo, "test"))
+
+	var released commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("id = ?", prop.Id).First(&released).Error)
+	assert.Equal(t, commerceschema.BlindBoxPropStatusAvailable, released.Status)
+	assert.Zero(t, released.ReservedAt)
+	assert.Empty(t, released.ReservedOrderType)
+	assert.Empty(t, released.ReservedOrderTradeNo)
+
+	var savedOrder commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("trade_no = ?", order.TradeNo).First(&savedOrder).Error)
+	assert.Equal(t, constant.TopUpStatusExpired, savedOrder.Status)
+}

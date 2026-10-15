@@ -1,0 +1,459 @@
+package app
+
+import (
+	"fmt"
+	"github.com/sh2001sh/new-api/constant"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	blindboxsettings "github.com/sh2001sh/new-api/internal/commerce/blindboxsettings"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+	"testing"
+	"time"
+)
+
+func TestOpenBlindBoxOrderByTradeNo_CreditsMatchingWallets(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	setting := blindboxsettings.Get()
+	originalSetting := setting
+	setting.Enabled = true
+	setting.SubscriptionPrizeProbability = 0
+	setting.PityThreshold = 999
+	setting.PityGuaranteeUSD = 0
+	setting.LowRewardThresholdUSD = 0
+	setting.FirstPurchaseGuaranteeUSD = 0.0001
+	t.Cleanup(func() {
+		blindboxsettings.Set(originalSetting)
+	})
+
+	plan := &commerceschema.SubscriptionPlan{
+		Id:               9509,
+		Title:            setting.SubscriptionPlanTitle,
+		Subtitle:         "盲盒月卡",
+		PriceAmount:      99,
+		Currency:         "CNY",
+		DurationUnit:     commerceschema.SubscriptionDurationMonth,
+		DurationValue:    1,
+		Enabled:          true,
+		TotalAmount:      100000,
+		PeriodAmount:     100000,
+		QuotaResetPeriod: commerceschema.SubscriptionResetMonthly,
+	}
+	require.NoError(t, db.Create(plan).Error)
+
+	testCases := []struct {
+		name       string
+		userID     int
+		username   string
+		tradeNo    string
+		rewardUSD  float64
+		walletType string
+	}{
+		{
+			name:       "legacy default wallet configuration",
+			userID:     8803,
+			username:   "blind_box_default_wallet_user",
+			tradeNo:    "blind-box-default-wallet-order",
+			rewardUSD:  1,
+			walletType: "default",
+		},
+		{
+			name:       "legacy claude wallet configuration",
+			userID:     8804,
+			username:   "blind_box_claude_wallet_user",
+			tradeNo:    "blind-box-claude-wallet-order",
+			rewardUSD:  2,
+			walletType: "claude",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			caseSetting := setting
+			caseSetting.Tiers = []blindboxsettings.TierSetting{
+				{Name: tc.name, MinUSD: tc.rewardUSD, MaxUSD: tc.rewardUSD, Probability: 1, WalletType: tc.walletType},
+			}
+			// The runtime now uses the unified balance blind-box pool as the
+			// canonical source. Keep both fields aligned so this test exercises
+			// wallet normalization instead of inheriting the global pool.
+			caseSetting.BalanceBlindBoxTiers = caseSetting.Tiers
+			blindboxsettings.Set(caseSetting)
+
+			user := &identityschema.User{
+				Id:          tc.userID,
+				Username:    tc.username,
+				Status:      constant.UserStatusEnabled,
+				AffCode:     fmt.Sprintf("AFF-BLIND-%d", tc.userID),
+				Quota:       100,
+				ClaudeQuota: 200,
+			}
+			require.NoError(t, db.Create(user).Error)
+
+			order := &commerceschema.BlindBoxOrder{
+				UserId:          user.Id,
+				Quantity:        1,
+				Money:           5,
+				TradeNo:         tc.tradeNo,
+				PaymentMethod:   "test",
+				PaymentProvider: "test",
+				Status:          constant.TopUpStatusSuccess,
+				CreateTime:      time.Now().Unix(),
+			}
+			require.NoError(t, db.Create(order).Error)
+
+			records, err := OpenBlindBoxOrderByTradeNo(order.TradeNo)
+			require.NoError(t, err)
+			require.Len(t, records, 1)
+			require.Regexp(t, `^\d{4}$`, records[0].LuckyNumber)
+			require.NotEmpty(t, records[0].LuckyDrawDate)
+			require.Greater(t, records[0].LuckyExpiresAt, time.Now().Unix())
+			var luckyNumbers int64
+			require.NoError(t, db.Model(&commerceschema.BlindBoxDailyLuckyNumber{}).
+				Where("blind_box_open_record_id = ?", records[0].Id).Count(&luckyNumbers).Error)
+			require.Equal(t, int64(1), luckyNumbers)
+			var savedUser identityschema.User
+			require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
+			assert.Equal(t, 100, savedUser.Quota)
+			if records[0].RewardType == commerceschema.BlindBoxRewardTypeProp {
+				assert.Empty(t, records[0].RewardWalletType)
+				assert.Equal(t, 200, savedUser.ClaudeQuota)
+			} else {
+				assert.Equal(t, string(commerceschema.BlindBoxRewardWalletTypeClaude), records[0].RewardWalletType)
+				assert.Equal(t, 200+int(records[0].CreditAmount), savedUser.ClaudeQuota)
+				snapshot := loadCommerceBillingSnapshot(t, user.Id, "claude_wallet")
+				assert.Equal(t, int64(savedUser.ClaudeQuota), snapshot.AvailableBalance)
+			}
+			var legacyAccounts int64
+			require.NoError(t, db.Model(&billingschema.BillingAccount{}).
+				Where("owner_type = ? AND owner_id = ? AND account_type = ?", "user", user.Id, "wallet").
+				Count(&legacyAccounts).Error)
+			assert.Zero(t, legacyAccounts)
+
+			var logs []auditschema.Log
+			require.NoError(t, db.Where("user_id = ? AND type = ?", user.Id, auditschema.LogTypeTopup).Order("id asc").Find(&logs).Error)
+			if records[0].RewardType == commerceschema.BlindBoxRewardTypeProp {
+				assert.Empty(t, logs)
+			} else {
+				require.Len(t, logs, 1)
+				assert.Contains(t, logs[0].Content, "盲盒开奖到账")
+				assert.Contains(t, logs[0].Content, "钱包：统一额度")
+				assert.Contains(t, logs[0].Content, fmt.Sprintf("开奖记录ID：%d", records[0].Id))
+			}
+		})
+	}
+}
+
+func TestOpenBlindBoxOrderByTradeNo_DoesNotDoubleCreditQuota(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	setting := blindboxsettings.Get()
+	originalSetting := setting
+	setting.Enabled = true
+	setting.SubscriptionPrizeProbability = 0
+	setting.PityThreshold = 999
+	setting.PityGuaranteeUSD = 0
+	setting.LowRewardThresholdUSD = 0
+	setting.FirstPurchaseGuaranteeUSD = 0.0001
+	setting.Tiers = []blindboxsettings.TierSetting{
+		{Name: "quota-tier", MinUSD: 1, MaxUSD: 1, Probability: 1, WalletType: "default"},
+	}
+	blindboxsettings.Set(setting)
+	t.Cleanup(func() {
+		blindboxsettings.Set(originalSetting)
+	})
+
+	plan := &commerceschema.SubscriptionPlan{
+		Id:               9510,
+		Title:            setting.SubscriptionPlanTitle,
+		Subtitle:         "盲盒月卡",
+		PriceAmount:      99,
+		Currency:         "CNY",
+		DurationUnit:     commerceschema.SubscriptionDurationMonth,
+		DurationValue:    1,
+		Enabled:          true,
+		TotalAmount:      100000,
+		PeriodAmount:     100000,
+		QuotaResetPeriod: commerceschema.SubscriptionResetMonthly,
+	}
+	require.NoError(t, db.Create(plan).Error)
+
+	user := &identityschema.User{
+		Id:       8813,
+		Username: "blind_box_double_credit_user",
+		Status:   constant.UserStatusEnabled,
+		Quota:    100,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	order := &commerceschema.BlindBoxOrder{
+		UserId:          user.Id,
+		Quantity:        1,
+		OpenedCount:     0,
+		Money:           5,
+		TradeNo:         "blind-box-double-credit-order",
+		PaymentMethod:   "test",
+		PaymentProvider: "test",
+		Status:          constant.TopUpStatusSuccess,
+		CreateTime:      time.Now().Unix(),
+		CompleteTime:    time.Now().Unix(),
+	}
+	require.NoError(t, db.Create(order).Error)
+
+	beforeQuota := user.Quota
+	records1, err := OpenBlindBoxOrderByTradeNo(order.TradeNo)
+	require.NoError(t, err)
+	require.Len(t, records1, 1)
+
+	var afterFirst identityschema.User
+	require.NoError(t, db.Where("id = ?", user.Id).First(&afterFirst).Error)
+	assert.Equal(t, beforeQuota, afterFirst.Quota)
+
+	records2, err := OpenBlindBoxOrderByTradeNo(order.TradeNo)
+	require.NoError(t, err)
+	assert.Len(t, records2, 0)
+
+	var afterSecond identityschema.User
+	require.NoError(t, db.Where("id = ?", user.Id).First(&afterSecond).Error)
+	assert.Equal(t, afterFirst.Quota, afterSecond.Quota)
+	assert.Equal(t, afterFirst.ClaudeQuota, afterSecond.ClaudeQuota)
+	if afterFirst.ClaudeQuota > 0 {
+		snapshot := loadCommerceBillingSnapshot(t, user.Id, "claude_wallet")
+		assert.Equal(t, int64(afterFirst.ClaudeQuota), snapshot.AvailableBalance)
+	}
+
+	var savedOrder commerceschema.BlindBoxOrder
+	require.NoError(t, db.Where("id = ?", order.Id).First(&savedOrder).Error)
+	assert.Equal(t, 1, savedOrder.OpenedCount)
+
+	var records int64
+	require.NoError(t, db.Model(&commerceschema.BlindBoxOpenRecord{}).Where("order_id = ?", order.Id).Count(&records).Error)
+	assert.Equal(t, int64(1), records)
+}
+
+func TestOpenBlindBoxOrderByTradeNo_UnifiedPoolIgnoresLegacyPityOverrides(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	setting := blindboxsettings.Get()
+	originalSetting := setting
+	setting.Enabled = true
+	setting.SubscriptionPrizeProbability = 0
+	setting.PityThreshold = 2
+	setting.PityGuaranteeUSD = 2
+	setting.LowRewardThresholdUSD = 2
+	setting.FirstPurchaseGuaranteeUSD = 0.0001
+	setting.Tiers = []blindboxsettings.TierSetting{
+		{Name: "0.9 倍率卡", Probability: 1, RewardType: commerceschema.BlindBoxRewardTypeProp},
+	}
+	blindboxsettings.Set(setting)
+	t.Cleanup(func() {
+		blindboxsettings.Set(originalSetting)
+	})
+
+	user := &identityschema.User{
+		Id:       8814,
+		Username: "blind_box_prop_pity_user",
+		Status:   constant.UserStatusEnabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	order := &commerceschema.BlindBoxOrder{
+		UserId:          user.Id,
+		Quantity:        2,
+		TradeNo:         "blind-box-prop-pity-order",
+		PaymentMethod:   "test",
+		PaymentProvider: "test",
+		Status:          constant.TopUpStatusSuccess,
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, db.Create(order).Error)
+
+	firstDraw, err := OpenBlindBoxes(user.Id, 1)
+	require.NoError(t, err)
+	require.Len(t, firstDraw, 1)
+	assert.False(t, firstDraw[0].IsPity)
+
+	var pityState commerceschema.BlindBoxPityState
+	require.NoError(t, db.Where("user_id = ?", user.Id).First(&pityState).Error)
+
+	secondDraw, err := OpenBlindBoxes(user.Id, 1)
+	require.NoError(t, err)
+	require.Len(t, secondDraw, 1)
+	assert.False(t, secondDraw[0].IsPity)
+
+	require.NoError(t, db.Where("user_id = ?", user.Id).First(&pityState).Error)
+	assert.Less(t, pityState.ConsecutiveLowRewards, blindboxsettings.Get().PityThreshold)
+}
+
+func TestOpenBlindBoxOrderByTradeNo_UnifiedPoolMergesMonthlyPassReward(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+
+	setting := blindboxsettings.Get()
+	originalSetting := setting
+	setting.Enabled = true
+	setting.SubscriptionPrizeProbability = 1
+	setting.SubscriptionPlanTitle = "盲盒Lite月卡"
+	setting.FirstPurchaseGuaranteeUSD = 0
+	blindboxsettings.Set(setting)
+	t.Cleanup(func() {
+		blindboxsettings.Set(originalSetting)
+	})
+
+	litePlan := &commerceschema.SubscriptionPlan{
+		Id: 9520, Title: setting.SubscriptionPlanTitle, PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierLite, DurationUnit: commerceschema.SubscriptionDurationMonth,
+		DurationValue: 1, Enabled: true, TotalAmount: 1750, PeriodAmount: 1750,
+	}
+	standardPlan := &commerceschema.SubscriptionPlan{
+		Id: 9521, Title: "测试Standard月卡", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		MembershipTier: commerceschema.SubscriptionMembershipTierStandard, DurationUnit: commerceschema.SubscriptionDurationMonth,
+		DurationValue: 1, Enabled: true, TotalAmount: 3250, PeriodAmount: 3250,
+	}
+	require.NoError(t, db.Create(litePlan).Error)
+	require.NoError(t, db.Create(standardPlan).Error)
+
+	user := &identityschema.User{Id: 8820, Username: "blind_box_subscription_reward_user", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	now := time.Now().Unix()
+	subscription := &commerceschema.UserSubscription{
+		Id: 9520, UserId: user.Id, PlanId: standardPlan.Id, AmountTotal: 3250, AmountUsed: 100,
+		PeriodAmount: 3250, Status: "active", StartTime: now - 60, EndTime: now + 86400,
+	}
+	require.NoError(t, db.Create(subscription).Error)
+	require.NoError(t, restoreSubscriptionLedgerBalanceAfterResetTx(db, subscription, "test-initial"))
+	require.NoError(t, db.Create(&commerceschema.BlindBoxProp{
+		UserId: user.Id, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier,
+		Title: "30 分钟 0.1 倍率卡", Status: commerceschema.BlindBoxPropStatusPaused,
+		Multiplier: 0.1, DurationSeconds: 1800, RemainingSeconds: 1357,
+		BenefitReference: "monthly-pass-backfill-test:9520",
+	}).Error)
+
+	order := &commerceschema.BlindBoxOrder{
+		UserId: user.Id, Quantity: 1, Money: 5, TradeNo: "blind-box-subscription-card-order",
+		PaymentMethod: "test", PaymentProvider: "test", Status: constant.TopUpStatusSuccess,
+		CreateTime: now, CompleteTime: now,
+	}
+	require.NoError(t, db.Create(order).Error)
+
+	records, err := OpenBlindBoxOrderByTradeNo(order.TradeNo)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.Equal(t, commerceschema.BlindBoxRewardTypeSubscription, records[0].RewardType)
+	require.Equal(t, subscription.Id, records[0].UserSubscriptionId)
+
+	var savedSubscription commerceschema.UserSubscription
+	require.NoError(t, db.First(&savedSubscription, subscription.Id).Error)
+	assert.Equal(t, int64(5000), savedSubscription.AmountTotal)
+	assert.Equal(t, int64(3250), savedSubscription.PeriodAmount)
+
+	var account billingschema.BillingAccount
+	require.NoError(t, db.Where("account_type = ? AND owner_type = ? AND owner_id = ?", "subscription", "user_subscription", subscription.Id).First(&account).Error)
+	var snapshot billingschema.BillingBalanceSnapshot
+	require.NoError(t, db.First(&snapshot, "account_id = ?", account.AccountID).Error)
+	assert.Equal(t, int64(4900), snapshot.AvailableBalance)
+}
+
+func TestAwardMonthlyPassPropMergesActiveCardTime(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 8821, Username: "monthly_pass_merge_active", Status: constant.UserStatusEnabled}
+	plan := &commerceschema.SubscriptionPlan{Id: 9522, Title: "Pro monthly", PlanType: commerceschema.SubscriptionPlanTypeMonthly, MembershipTier: commerceschema.SubscriptionMembershipTierPro}
+	require.NoError(t, db.Create(user).Error)
+	require.NoError(t, db.Create(plan).Error)
+	now := platformruntime.GetTimestamp()
+	card := &commerceschema.BlindBoxProp{UserId: user.Id, PropType: commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, Title: "45 分钟 0.1 倍率卡", Status: commerceschema.BlindBoxPropStatusActive, Multiplier: 0.1, DurationSeconds: 2700, ExpiresAt: now + 600}
+	require.NoError(t, db.Create(card).Error)
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { return awardMonthlyPassPropTx(tx, user.Id, plan, "merge-active:1") }))
+	var props []commerceschema.BlindBoxProp
+	require.NoError(t, db.Where("user_id = ? AND prop_type = ? AND status IN ?", user.Id, commerceschema.BlindBoxPropTypeMonthlyPassMultiplier, []string{commerceschema.BlindBoxPropStatusActive, commerceschema.BlindBoxPropStatusAvailable, commerceschema.BlindBoxPropStatusPaused}).Find(&props).Error)
+	require.Len(t, props, 1)
+	assert.InDelta(t, int64(3300), props[0].ExpiresAt-now, 3)
+}
+
+func TestApplyFirstPurchaseMinimumGuarantee(t *testing.T) {
+	tests := []struct {
+		name               string
+		isFirstPurchase    bool
+		rewardUSD          float64
+		rewardType         string
+		walletType         commerceschema.BlindBoxRewardWalletType
+		expectedRewardUSD  float64
+		expectedRewardType string
+		expectedWalletType commerceschema.BlindBoxRewardWalletType
+	}{
+		{
+			name:               "raises low ordinary quota",
+			isFirstPurchase:    true,
+			rewardUSD:          5,
+			rewardType:         commerceschema.BlindBoxRewardTypeQuota,
+			walletType:         commerceschema.BlindBoxRewardWalletTypeDefault,
+			expectedRewardUSD:  20,
+			expectedRewardType: commerceschema.BlindBoxRewardTypeQuota,
+			expectedWalletType: commerceschema.BlindBoxRewardWalletTypeDefault,
+		},
+		{
+			name:               "raises low claude quota",
+			isFirstPurchase:    true,
+			rewardUSD:          2,
+			rewardType:         commerceschema.BlindBoxRewardTypeClaudeQuota,
+			walletType:         commerceschema.BlindBoxRewardWalletTypeClaude,
+			expectedRewardUSD:  5,
+			expectedRewardType: commerceschema.BlindBoxRewardTypeClaudeQuota,
+			expectedWalletType: commerceschema.BlindBoxRewardWalletTypeClaude,
+		},
+		{
+			name:               "converts prop reward to ordinary guarantee",
+			isFirstPurchase:    true,
+			rewardUSD:          0,
+			rewardType:         commerceschema.BlindBoxRewardTypeProp,
+			walletType:         commerceschema.BlindBoxRewardWalletTypeDefault,
+			expectedRewardUSD:  20,
+			expectedRewardType: commerceschema.BlindBoxRewardTypeQuota,
+			expectedWalletType: commerceschema.BlindBoxRewardWalletTypeDefault,
+		},
+		{
+			name:               "keeps high claude quota",
+			isFirstPurchase:    true,
+			rewardUSD:          25,
+			rewardType:         commerceschema.BlindBoxRewardTypeClaudeQuota,
+			walletType:         commerceschema.BlindBoxRewardWalletTypeClaude,
+			expectedRewardUSD:  25,
+			expectedRewardType: commerceschema.BlindBoxRewardTypeClaudeQuota,
+			expectedWalletType: commerceschema.BlindBoxRewardWalletTypeClaude,
+		},
+		{
+			name:               "skips non first purchase",
+			isFirstPurchase:    false,
+			rewardUSD:          5,
+			rewardType:         commerceschema.BlindBoxRewardTypeQuota,
+			walletType:         commerceschema.BlindBoxRewardWalletTypeDefault,
+			expectedRewardUSD:  5,
+			expectedRewardType: commerceschema.BlindBoxRewardTypeQuota,
+			expectedWalletType: commerceschema.BlindBoxRewardWalletTypeDefault,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rewardUSD := tt.rewardUSD
+			rewardType := tt.rewardType
+			walletType := tt.walletType
+
+			applyFirstPurchaseMinimumGuarantee(
+				tt.isFirstPurchase,
+				20,
+				5,
+				&rewardUSD,
+				&rewardType,
+				&walletType,
+			)
+
+			assert.Equal(t, tt.expectedRewardUSD, rewardUSD)
+			assert.Equal(t, tt.expectedRewardType, rewardType)
+			assert.Equal(t, tt.expectedWalletType, walletType)
+		})
+	}
+}

@@ -1,0 +1,60 @@
+package config
+
+import (
+	"crypto/tls"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+var SessionSecret = uuid.New().String()
+var CryptoSecret = uuid.New().String()
+
+var DebugEnabled bool
+
+// SQLDebugEnabled is intentionally separate from application debug logging.
+// Production instances should keep GORM SQL tracing disabled unless explicitly opted in.
+var SQLDebugEnabled bool
+var MemoryCacheEnabled bool
+var IsMasterNode bool
+
+// NodeName identifies the current node in audit logs and clustered deployments.
+var NodeName string
+
+var TLSInsecureSkipVerify bool
+var InsecureTLSConfig = &tls.Config{InsecureSkipVerify: true}
+
+var RequestInterval time.Duration
+var SyncFrequency int
+var BatchUpdateInterval int
+
+var RelayTimeout int
+
+// RelayResponseHeaderTimeout optionally bounds text-model response-header waits.
+// Zero delegates first-response timing to the provider while connection and TLS
+// establishment retain their independent safety deadline.
+var RelayResponseHeaderTimeout int
+
+// ImageResponseHeaderTimeout bounds the initial wait for synchronous image
+// generation/edit responses. Image providers commonly spend longer preparing
+// an image before sending response headers, so text-model first-byte limits do
+// not apply to these endpoints.
+var ImageResponseHeaderTimeout int
+var RelayMaxIdleConns int
+var RelayMaxIdleConnsPerHost int
+var RelayMaxConnsPerHost int
+var RelayIdleConnTimeoutSeconds int
+var RelayTLSHandshakeTimeoutSeconds int
+var GroupStatusCacheSeconds int
+var RelayMaxConcurrentRequests int
+
+// UserMaxConcurrentRequests caps all relay requests for selected account IDs,
+// across tokens, models and channels. Missing accounts are unrestricted.
+var UserMaxConcurrentRequests map[int]int
+
+var RequestAbuseGuardEnabled bool
+
+// RelayMaxConcurrentUploads limits requests whose bodies are still being read.
+// Keeping this separate prevents slow clients from occupying upstream slots.
+var RelayMaxConcurrentUploads int
+var TrustedProxies []string

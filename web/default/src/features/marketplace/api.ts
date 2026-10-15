@@ -1,0 +1,953 @@
+import { api } from '@/lib/api'
+import { MOCK_AUTO_ROUTE_POOL, MOCK_MARKETPLACE_GROUPS } from './lib/mock-data'
+import type {
+  GroupModelRequestStatus,
+  ChannelFormValues,
+  ChannelUpdateValues,
+  GroupFilters,
+  MarketplaceChannel,
+  MarketplaceAutoRoutePool,
+  MarketplaceAutoRoutePoolConfig,
+  MarketplaceRoutePool,
+  MarketplaceRoutePoolAutoBuild,
+  MarketplaceRoutePoolSummary,
+  MarketplaceGroupList,
+  MarketplaceGroupStatus,
+  MarketplaceOwnerUsageLogResult,
+  MarketplaceOwnerUsageLogFilters,
+  MarketplaceMultiplierTrend,
+  ChannelFeedbackSummary,
+  AdminMarketplaceChannelFilters,
+  AdminOwnerIncomeResult,
+  AdminOwnerIncomeReleaseResult,
+  TokenOption,
+  MarketplaceBatchTest,
+  MarketplaceObservability,
+  MarketplaceBargainRequestList,
+  MarketplaceOwnerUsageResult,
+  MarketplaceTimeRangeMultiplier,
+  MarketplaceOwnerMultiplierItem,
+  MarketplaceMultiplierNotice,
+  SecurityAuditEvent,
+  SecurityAuditEventFilters,
+  SecurityAuditEventList,
+  MarketplaceChannelUserBlockList,
+} from './types'
+
+interface ApiResponse<T = unknown> {
+  success: boolean
+  message?: string
+  data?: T
+}
+
+export async function createMarketplaceBargainRequest(input: {
+  groupId: string
+  proposedMultiplier: number
+  reason: string
+}) {
+  const response = await api.post<ApiResponse>(
+    `/api/marketplace/groups/${input.groupId}/bargain-requests`,
+    { proposed_multiplier: input.proposedMultiplier, reason: input.reason }
+  )
+  return requireData(response.data)
+}
+
+export async function getMyMarketplaceBargainRequests(status = '') {
+  const response = await api.get<ApiResponse<MarketplaceBargainRequestList>>(
+    `/api/marketplace/channels/mine/bargain-requests?status=${encodeURIComponent(status)}`
+  )
+  return requireData(response.data)
+}
+
+export async function resolveMarketplaceBargainRequest(input: {
+  id: string
+  action: 'approve' | 'reject'
+  resolutionNote: string
+}) {
+  const response = await api.post<ApiResponse>(
+    `/api/marketplace/channels/mine/bargain-requests/${input.id}/resolve`,
+    { action: input.action, resolution_note: input.resolutionNote }
+  )
+  return requireData(response.data)
+}
+
+export async function getMyMarketplaceUserUsage(
+  input: {
+    channelId?: string
+    startTimestamp?: number
+    endTimestamp?: number
+    search?: string
+    sort?: 'requests' | 'amount' | 'recent'
+    direction?: 'asc' | 'desc'
+    page?: number
+    pageSize?: number
+  } = {}
+) {
+  const params = new URLSearchParams()
+  if (input.channelId) params.set('channel_id', input.channelId)
+  if (input.startTimestamp)
+    params.set('start_timestamp', String(input.startTimestamp))
+  if (input.endTimestamp)
+    params.set('end_timestamp', String(input.endTimestamp))
+  if (input.search) params.set('search', input.search)
+  if (input.sort) params.set('sort', input.sort)
+  if (input.direction) params.set('direction', input.direction)
+  if (input.page) params.set('page', String(input.page))
+  if (input.pageSize) params.set('page_size', String(input.pageSize))
+  const query = params.toString()
+  const response = await api.get<ApiResponse<MarketplaceOwnerUsageResult>>(
+    `/api/marketplace/channels/mine/user-usage${query ? `?${query}` : ''}`
+  )
+  return requireData(response.data)
+}
+
+export async function setMarketplaceUserMultiplier(input: {
+  channelId: string
+  userId: number
+  multiplier: number | null
+}) {
+  const response = await api.post<ApiResponse>(
+    `/api/marketplace/channels/${input.channelId}/user-multiplier`,
+    { user_id: input.userId, multiplier: input.multiplier }
+  )
+  return requireData(response.data)
+}
+
+export async function getOwnerMultipliers() {
+  const response = await api.get<
+    ApiResponse<{ items: MarketplaceOwnerMultiplierItem[]; total: number }>
+  >('/api/marketplace/channels/mine/user-multipliers')
+  return requireData(response.data)
+}
+export async function batchSetMarketplaceUserMultipliers(input: {
+  targets: Array<{ channel_id: string; user_id: number }>
+  multiplier: number | null
+}) {
+  const response = await api.post<ApiResponse<{ changed_count: number }>>(
+    '/api/marketplace/channels/mine/user-multipliers/batch',
+    {
+      targets: input.targets,
+      action: input.multiplier == null ? 'clear' : 'set',
+      multiplier: input.multiplier,
+    }
+  )
+  return requireData(response.data)
+}
+export async function getMarketplaceMultiplierNotices() {
+  const response = await api.get<ApiResponse<MarketplaceMultiplierNotice[]>>(
+    '/api/marketplace/multiplier-notices'
+  )
+  return requireData(response.data)
+}
+export async function readMarketplaceMultiplierNotice(id: number) {
+  await api.post(`/api/marketplace/multiplier-notices/${id}/read`)
+}
+
+export async function getMarketplaceTimeRangeMultipliers(channelId: string) {
+  const response = await api.get<ApiResponse<MarketplaceTimeRangeMultiplier[]>>(
+    `/api/marketplace/channels/${channelId}/time-range-multipliers`
+  )
+  return requireData(response.data)
+}
+
+export async function createMarketplaceTimeRangeMultiplier(input: {
+  channelId: string
+  startTimestamp: number
+  endTimestamp: number
+  multiplier: number
+  label: string
+}) {
+  const response = await api.post<ApiResponse<MarketplaceTimeRangeMultiplier>>(
+    `/api/marketplace/channels/${input.channelId}/time-range-multipliers`,
+    {
+      start_timestamp: input.startTimestamp,
+      end_timestamp: input.endTimestamp,
+      multiplier: input.multiplier,
+      label: input.label,
+    }
+  )
+  return requireData(response.data)
+}
+
+export async function deleteMarketplaceTimeRangeMultiplier(input: {
+  channelId: string
+  ruleId: string
+}) {
+  const response = await api.delete<ApiResponse>(
+    `/api/marketplace/channels/${input.channelId}/time-range-multipliers/${input.ruleId}`
+  )
+  return requireData(response.data)
+}
+
+export interface MarketplaceBatchWelfareResult {
+  success_count: number
+  failed_count: number
+  details: Array<{
+    user_id: string
+    status: 'success' | 'failed'
+    error?: string
+  }>
+}
+
+export async function sendMarketplaceBatchWelfare(input: {
+  channelId: string
+  userIds: string[]
+  type: 'transfer' | 'blind_box'
+  amount: number
+}) {
+  const response = await api.post<ApiResponse<MarketplaceBatchWelfareResult>>(
+    `/api/marketplace/channels/${input.channelId}/batch-welfare`,
+    { user_ids: input.userIds, type: input.type, amount: input.amount }
+  )
+  return requireData(response.data)
+}
+
+export async function submitMarketplaceChannelFeedback(input: {
+  groupId: string
+  status: 'passed' | 'failed' | 'questionable'
+}) {
+  const response = await api.post<ApiResponse<ChannelFeedbackSummary>>(
+    `/api/marketplace/groups/${input.groupId}/feedback`,
+    { status: input.status }
+  )
+  return requireData(response.data)
+}
+
+function requireData<T>(response: ApiResponse<T>): T {
+  if (!response.success || response.data == null) {
+    throw new Error(response.message || '请求失败')
+  }
+  return response.data
+}
+
+export async function getMarketplaceGroupStatus() {
+  const response = await api.get<ApiResponse<MarketplaceGroupStatus[]>>(
+    '/api/marketplace/group-status'
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceGroupModelStatus(slug: string) {
+  const response = await api.get<ApiResponse<GroupModelRequestStatus[]>>(
+    `/api/marketplace/groups/${encodeURIComponent(slug)}/model-status`
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceGroups(filters: GroupFilters) {
+  const params = new URLSearchParams()
+  Object.entries(filters).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) =>
+        params.append(key === 'models' ? 'model' : key, item)
+      )
+    } else if (value !== '') {
+      params.set(key, String(value))
+    }
+  })
+  try {
+    const response = await api.get<ApiResponse<MarketplaceGroupList>>(
+      `/api/marketplace/groups?${params.toString()}`
+    )
+    return requireData(response.data)
+  } catch (error) {
+    if (!import.meta.env.DEV) throw error
+    const search = filters.search.trim().toLowerCase()
+    const filtered = MOCK_MARKETPLACE_GROUPS.filter((item) => {
+      const searchable = [
+        item.id,
+        item.channel_id,
+        item.public_slug,
+        item.system_display_name,
+        item.source_label,
+        item.provider_type,
+        ...item.models,
+      ]
+        .join(' ')
+        .toLowerCase()
+      if (search && !searchable.includes(search)) return false
+      if (filters.source && item.source_label !== filters.source) return false
+      if (
+        filters.provider &&
+        item.provider_type.toLowerCase() !== filters.provider.toLowerCase()
+      )
+        return false
+      if (
+        (filters.models?.length ?? 0) > 0 &&
+        !filters.models?.some((selectedModel) =>
+          item.models.some((model) =>
+            model.toLowerCase().includes(selectedModel.trim().toLowerCase())
+          )
+        )
+      )
+        return false
+      if (
+        filters.model &&
+        !item.models.some((model) =>
+          model.toLowerCase().includes(filters.model.trim().toLowerCase())
+        )
+      )
+        return false
+      return true
+    })
+    const start = (filters.page - 1) * filters.page_size
+    const items = filtered.slice(start, start + filters.page_size)
+    const cheapest = [...items].sort((a, b) => a.multiplier - b.multiplier)[0]
+    const fastest = [...items].sort((a, b) => a.avg_ttft_ms - b.avg_ttft_ms)[0]
+    const toHighlight = (item: (typeof items)[number] | undefined) =>
+      item
+        ? {
+            group_id: item.id,
+            system_display_name: item.system_display_name,
+            score: item.score,
+            multiplier: item.multiplier,
+            avg_ttft_ms: item.avg_ttft_ms,
+            attempt_ttft_p50_ms: item.attempt_ttft_p50_ms,
+          }
+        : undefined
+    return {
+      items,
+      highlights: {
+        best: toHighlight(items[0]),
+        cheapest: toHighlight(cheapest),
+        fastest: toHighlight(fastest),
+      },
+      total: filtered.length,
+      page: filters.page,
+      page_size: filters.page_size,
+      ranked_count: filtered.length,
+      window_hours: filters.window_hours,
+    }
+  }
+}
+
+export async function getMarketplaceModels() {
+  const response = await api.get<ApiResponse<string[]>>(
+    '/api/marketplace/models'
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceMultiplierTrends(input: {
+  rangeHours: number
+  model: string
+}) {
+  const params = new URLSearchParams({ range_hours: String(input.rangeHours) })
+  if (input.model) params.set('model', input.model)
+  const response = await api.get<ApiResponse<MarketplaceMultiplierTrend>>(
+    `/api/marketplace/multiplier-trends?${params.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function getMyMarketplaceChannels() {
+  const response = await api.get<ApiResponse<MarketplaceChannel[]>>(
+    '/api/marketplace/channels/mine'
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceChannelUserBlocks(input: {
+  channelId: string
+  page?: number
+  pageSize?: number
+}) {
+  const params = new URLSearchParams({
+    page: String(input.page ?? 1),
+    page_size: String(input.pageSize ?? 20),
+  })
+  const response = await api.get<ApiResponse<MarketplaceChannelUserBlockList>>(
+    `/api/marketplace/channels/${encodeURIComponent(input.channelId)}/user-blocks?${params.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function getAdminOwnerIncomeReclaim(operationId: string) {
+  const response = await api.get<ApiResponse<AdminOwnerIncomeReleaseResult>>(
+    `/api/marketplace/admin/owner-income/reclaims/${encodeURIComponent(operationId)}`
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceAutoRoutePool() {
+  try {
+    const response = await api.get<ApiResponse<MarketplaceAutoRoutePool>>(
+      '/api/marketplace/auto-route-pool'
+    )
+    return requireData(response.data)
+  } catch (error) {
+    if (!import.meta.env.DEV) throw error
+    return MOCK_AUTO_ROUTE_POOL
+  }
+}
+
+export async function updateMarketplaceAutoRoutePool(input: {
+  groupIds: string[]
+  config?: Partial<MarketplaceAutoRoutePoolConfig>
+}) {
+  try {
+    const response = await api.put<ApiResponse<MarketplaceAutoRoutePool>>(
+      '/api/marketplace/auto-route-pool',
+      { group_ids: input.groupIds, config: input.config }
+    )
+    return requireData(response.data)
+  } catch (error) {
+    if (!import.meta.env.DEV) throw error
+    const items = input.groupIds.map((id, index) => {
+      const source = MOCK_MARKETPLACE_GROUPS.find((group) => group.id === id)
+      return {
+        group_id: id,
+        source_type: source?.source_type ?? 'marketplace_user',
+        public_slug: source?.public_slug ?? id,
+        system_display_name: source?.system_display_name ?? id,
+        source_label: source?.source_label ?? '第三方市场',
+        lifecycle_status: 'active' as const,
+        multiplier: source?.multiplier ?? 1,
+        availability: 0.98,
+        success_rate: source?.success_rate ?? 0.96,
+        cache_hit_rate: source?.cache_hit_rate ?? 0.3,
+        avg_latency_ms: source?.avg_latency_ms ?? 800,
+        latest_request_status: 'healthy',
+        metrics_available: true,
+        route_score: source?.score ?? 80,
+        observing: false,
+        request_count: source?.request_count ?? 0,
+        models: source?.models ?? [],
+        selected: true,
+        priority: index + 1,
+      }
+    })
+    return {
+      token_group: 'auto' as const,
+      selected_count: items.length,
+      items,
+      config: input.config ?? {
+        strategy: 'priority' as const,
+        max_attempts: 3,
+        failure_cooldown_seconds: 30,
+        max_multiplier: 0,
+      },
+    }
+  }
+}
+
+export async function getMarketplaceRoutePools() {
+  const response = await api.get<ApiResponse<MarketplaceRoutePoolSummary[]>>(
+    '/api/marketplace/route-pools'
+  )
+  return requireData(response.data)
+}
+
+export async function createMarketplaceRoutePool(
+  input:
+    | string
+    | {
+        name: string
+        groupIds?: string[]
+        config?: Partial<MarketplaceAutoRoutePoolConfig>
+      }
+) {
+  const payload =
+    typeof input === 'string'
+      ? { name: input }
+      : { name: input.name, group_ids: input.groupIds, config: input.config }
+  const response = await api.post<ApiResponse<MarketplaceRoutePool>>(
+    '/api/marketplace/route-pools',
+    payload
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceRoutePool(id: string) {
+  const response = await api.get<ApiResponse<MarketplaceRoutePool>>(
+    `/api/marketplace/route-pools/${encodeURIComponent(id)}`
+  )
+  return requireData(response.data)
+}
+
+export async function updateMarketplaceRoutePool(input: {
+  id: string
+  name?: string
+  groupIds: string[]
+  config?: Partial<MarketplaceAutoRoutePoolConfig>
+  autoBuild?: Partial<MarketplaceRoutePoolAutoBuild>
+}) {
+  const response = await api.put<ApiResponse<MarketplaceRoutePool>>(
+    `/api/marketplace/route-pools/${encodeURIComponent(input.id)}`,
+    {
+      name: input.name,
+      group_ids: input.groupIds,
+      config: input.config,
+      auto_build: input.autoBuild,
+    }
+  )
+  return requireData(response.data)
+}
+
+export async function runMarketplaceRoutePoolAutoBuild(id: string) {
+  const response = await api.post<ApiResponse<MarketplaceRoutePool>>(
+    `/api/marketplace/route-pools/${encodeURIComponent(id)}/auto-build/run`
+  )
+  return requireData(response.data)
+}
+
+export async function deleteMarketplaceRoutePool(id: string) {
+  const response = await api.delete<ApiResponse>(
+    `/api/marketplace/route-pools/${encodeURIComponent(id)}`
+  )
+  if (!response.data.success)
+    throw new Error(response.data.message || '删除路由池失败')
+}
+
+export async function bindMarketplaceRoutePoolToken(input: {
+  poolId: string
+  tokenId: number
+}) {
+  const response = await api.post<
+    ApiResponse<{ token_id: number; pool_id: string }>
+  >(
+    `/api/marketplace/route-pools/${encodeURIComponent(input.poolId)}/bind-token`,
+    { token_id: input.tokenId }
+  )
+  if (!response.data.success)
+    throw new Error(response.data.message || '绑定失败')
+  return requireData(response.data)
+}
+
+export async function startMarketplaceBatchTest(input: {
+  groupIds: string[]
+  model: string
+}) {
+  const response = await api.post<ApiResponse<MarketplaceBatchTest>>(
+    '/api/marketplace/batch-tests',
+    { group_ids: input.groupIds, model: input.model }
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceBatchTest(id: string) {
+  const response = await api.get<ApiResponse<MarketplaceBatchTest>>(
+    `/api/marketplace/batch-tests/${encodeURIComponent(id)}`
+  )
+  return requireData(response.data)
+}
+
+export async function getMarketplaceObservability(input?: {
+  startTimestamp?: number
+  endTimestamp?: number
+}) {
+  const params = new URLSearchParams()
+  if (input?.startTimestamp)
+    params.set('start_timestamp', String(input.startTimestamp))
+  if (input?.endTimestamp)
+    params.set('end_timestamp', String(input.endTimestamp))
+  const response = await api.get<ApiResponse<MarketplaceObservability>>(
+    `/api/marketplace/channels/mine/observability?${params.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function getMyMarketplaceUsageLogs(
+  params: MarketplaceOwnerUsageLogFilters,
+  signal?: AbortSignal
+) {
+  const search = new URLSearchParams({
+    page: String(params.page),
+    page_size: String(params.pageSize),
+  })
+  if (params.channelId) search.set('channel_id', params.channelId)
+  if (params.summaryOnly) search.set('summary_only', 'true')
+  if (params.status) search.set('status', params.status)
+  if (params.modelName) search.set('model_name', params.modelName)
+  if (params.requestId) search.set('request_id', params.requestId)
+  if (params.upstreamRequestId) {
+    search.set('upstream_request_id', params.upstreamRequestId)
+  }
+  if (params.externalUserId) {
+    search.set('external_user_id', params.externalUserId)
+  }
+  if (params.search) search.set('search', params.search)
+  if (params.startTimestamp) {
+    search.set('start_timestamp', String(params.startTimestamp))
+  }
+  if (params.endTimestamp) {
+    search.set('end_timestamp', String(params.endTimestamp))
+  }
+  const response = await api.get<ApiResponse<MarketplaceOwnerUsageLogResult>>(
+    `/api/marketplace/channels/mine/logs?${search.toString()}`,
+    // React Query owns cancellation/deduplication; remounts must not reuse an
+    // aborted promise from the global GET cache. Errors appear in the panel.
+    { signal, disableDuplicate: true, skipErrorHandler: true } as Record<
+      string,
+      unknown
+    >
+  )
+  return requireData(response.data)
+}
+
+export async function exportMyMarketplaceUsageLogs(
+  params: MarketplaceOwnerUsageLogFilters
+) {
+  const search = new URLSearchParams()
+  if (params.channelId) search.set('channel_id', params.channelId)
+  if (params.status) search.set('status', params.status)
+  if (params.modelName) search.set('model_name', params.modelName)
+  if (params.requestId) search.set('request_id', params.requestId)
+  if (params.upstreamRequestId)
+    search.set('upstream_request_id', params.upstreamRequestId)
+  if (params.externalUserId)
+    search.set('external_user_id', params.externalUserId)
+  if (params.search) search.set('search', params.search)
+  if (params.startTimestamp)
+    search.set('start_timestamp', String(params.startTimestamp))
+  if (params.endTimestamp)
+    search.set('end_timestamp', String(params.endTimestamp))
+  const response = await api.get<Blob>(
+    `/api/marketplace/channels/mine/logs/export?${search.toString()}`,
+    {
+      responseType: 'blob',
+      disableDuplicate: true,
+      skipBusinessError: true,
+      skipErrorHandler: true,
+    } as Record<string, unknown>
+  )
+  if (
+    String(response.headers['content-type'] ?? '').includes('application/json')
+  ) {
+    const payload = JSON.parse(await response.data.text()) as ApiResponse
+    throw new Error(payload.message || '渠道日志导出失败')
+  }
+  return response.data
+}
+
+export async function createMarketplaceChannel(values: ChannelFormValues) {
+  const response = await api.post<ApiResponse<MarketplaceChannel>>(
+    '/api/marketplace/channels',
+    values
+  )
+  return requireData(response.data)
+}
+
+export async function updateMarketplaceChannel(
+  channelId: string,
+  values: ChannelUpdateValues,
+  admin: boolean
+) {
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.patch<ApiResponse<MarketplaceChannel>>(
+    `${prefix}/channels/${channelId}`,
+    values
+  )
+  return requireData(response.data)
+}
+
+export async function deleteMarketplaceChannel(
+  channelId: string,
+  admin: boolean
+) {
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.delete<ApiResponse>(
+    `${prefix}/channels/${channelId}`
+  )
+  if (!response.data.success) {
+    throw new Error(response.data.message || '删除渠道失败')
+  }
+}
+
+export async function fetchMarketplaceModels(
+  values: Pick<ChannelFormValues, 'provider_type' | 'base_url' | 'api_key'>
+) {
+  const response = await api.post<ApiResponse<string[]>>(
+    '/api/marketplace/channels/fetch-models',
+    values
+  )
+  return requireData(response.data)
+}
+
+export async function queueMarketplaceVerification(
+  channelId: string,
+  admin = false
+) {
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.post<ApiResponse<{ queued: boolean }>>(
+    `${prefix}/channels/${channelId}/verify`
+  )
+  return requireData(response.data)
+}
+
+export async function queueMarketplaceConnectivityTest(
+  channelId: string,
+  admin = false
+) {
+  return queueMarketplaceChannelAction(channelId, 'test', admin)
+}
+
+export async function retryMarketplaceFailedConnectivity(
+  channelId: string,
+  admin = false
+) {
+  return queueMarketplaceChannelAction(channelId, 'test/failed', admin)
+}
+
+export async function removeMarketplaceFailedModel(input: {
+  channelId: string
+  model: string
+  admin?: boolean
+}) {
+  const prefix = input.admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.post<ApiResponse<MarketplaceChannel>>(
+    `${prefix}/channels/${input.channelId}/models/remove-failed`,
+    { model: input.model }
+  )
+  return requireData(response.data)
+}
+
+export async function pauseMarketplaceVerification(
+  channelId: string,
+  admin = false
+) {
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.post<ApiResponse<{ paused: boolean }>>(
+    `${prefix}/channels/${channelId}/verification/pause`
+  )
+  return requireData(response.data)
+}
+
+async function queueMarketplaceChannelAction(
+  channelId: string,
+  action: 'detect' | 'test' | 'test/failed',
+  admin: boolean
+) {
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.post<ApiResponse<{ queued: boolean }>>(
+    `${prefix}/channels/${channelId}/${action}`
+  )
+  return requireData(response.data)
+}
+
+export async function setMarketplaceChannelPaused(
+  channelId: string,
+  paused: boolean
+) {
+  const action = paused ? 'pause' : 'resume'
+  const response = await api.post<ApiResponse>(
+    `/api/marketplace/channels/${channelId}/${action}`
+  )
+  if (!response.data.success)
+    throw new Error(response.data.message || '请求失败')
+}
+
+export async function setMarketplaceChannelUserBlock(input: {
+  channelId: string
+  userId?: number
+  userExternalId?: string
+  blocked: boolean
+}) {
+  const response = await api.post<ApiResponse>(
+    `/api/marketplace/channels/${input.channelId}/user-block`,
+    {
+      user_id: input.userId,
+      user_external_id: input.userExternalId,
+      blocked: input.blocked,
+    }
+  )
+  if (!response.data.success)
+    throw new Error(response.data.message || '操作失败')
+}
+
+export async function setAdminMarketplaceChannelPaused(
+  channelId: string,
+  paused: boolean
+) {
+  const response = await api.post<ApiResponse>(
+    `/api/marketplace/admin/channels/${channelId}/${paused ? 'pause' : 'resume'}`
+  )
+  if (!response.data.success)
+    throw new Error(response.data.message || '请求失败')
+}
+
+export async function bindMarketplaceToken(groupId: string, tokenId: number) {
+  const response = await api.post<
+    ApiResponse<{ token_id: number; group_id: string }>
+  >(`/api/marketplace/groups/${encodeURIComponent(groupId)}/bind-token`, {
+    token_id: tokenId,
+  })
+  if (!response.data.success)
+    throw new Error(response.data.message || '绑定失败')
+  return requireData(response.data)
+}
+
+export async function createMarketplaceGroupInvite(groupId: string) {
+  const response = await api.post<
+    ApiResponse<{
+      token: string
+      group_id: string
+      group_name: string
+      expires_at?: string
+    }>
+  >(`/api/marketplace/groups/${groupId}/invite`)
+  return requireData(response.data)
+}
+
+export async function acceptMarketplaceGroupInvite(token: string) {
+  const response = await api.post<
+    ApiResponse<{
+      group_id: string
+      group_name: string
+      expires_at?: string
+    }>
+  >('/api/marketplace/invites/accept', { token })
+  return requireData(response.data)
+}
+
+export async function getTokenOptions(): Promise<TokenOption[]> {
+  const response = await api.get<ApiResponse<{ items: TokenOption[] }>>(
+    '/api/token/?p=1&size=50'
+  )
+  return requireData(response.data).items
+}
+
+export async function getAdminMarketplaceChannels(
+  filters: AdminMarketplaceChannelFilters
+) {
+  const search = new URLSearchParams()
+  if (filters.search) search.set('search', filters.search)
+  if (filters.status) search.set('status', filters.status)
+  if (filters.source) search.set('source', filters.source)
+  if (filters.provider) search.set('provider', filters.provider)
+  if (filters.verification) search.set('verification', filters.verification)
+  if (filters.ownerSearch) search.set('owner_search', filters.ownerSearch)
+  if (filters.startTimestamp) {
+    search.set('start_timestamp', String(filters.startTimestamp))
+  }
+  if (filters.endTimestamp) {
+    search.set('end_timestamp', String(filters.endTimestamp))
+  }
+  const response = await api.get<
+    ApiResponse<{
+      items: MarketplaceChannel[]
+      total: number
+      page: number
+      page_size: number
+    }>
+  >(`/api/marketplace/admin/channels?${search.toString()}`)
+  return requireData(response.data)
+}
+
+export async function getAdminOwnerIncome(
+  filters: Pick<
+    AdminMarketplaceChannelFilters,
+    'ownerSearch' | 'startTimestamp' | 'endTimestamp'
+  >
+) {
+  const search = new URLSearchParams()
+  if (filters.ownerSearch) search.set('owner_search', filters.ownerSearch)
+  if (filters.startTimestamp) {
+    search.set('start_timestamp', String(filters.startTimestamp))
+  }
+  if (filters.endTimestamp) {
+    search.set('end_timestamp', String(filters.endTimestamp))
+  }
+  const response = await api.get<ApiResponse<AdminOwnerIncomeResult>>(
+    `/api/marketplace/admin/owner-income?${search.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function releaseAdminOwnerIncome(
+  filters: Pick<
+    AdminMarketplaceChannelFilters,
+    'ownerSearch' | 'ownerUserIds' | 'startTimestamp' | 'endTimestamp'
+  > & { maxAmount?: number; operationId: string }
+) {
+  const search = new URLSearchParams()
+  if (filters.ownerSearch) search.set('owner_search', filters.ownerSearch)
+  if (filters.ownerUserIds?.length)
+    search.set('owner_user_ids', filters.ownerUserIds.join(','))
+  if (filters.startTimestamp)
+    search.set('start_timestamp', String(filters.startTimestamp))
+  if (filters.endTimestamp)
+    search.set('end_timestamp', String(filters.endTimestamp))
+  if (filters.maxAmount && filters.maxAmount > 0)
+    search.set('max_amount', String(filters.maxAmount))
+  search.set('operation_id', filters.operationId)
+  const response = await api.post<ApiResponse<AdminOwnerIncomeReleaseResult>>(
+    `/api/marketplace/admin/owner-income/release?${search.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function reviewMarketplaceChannel(
+  channelId: string,
+  approved: boolean,
+  reason: string
+) {
+  const response = await api.post<ApiResponse<MarketplaceChannel>>(
+    `/api/marketplace/admin/channels/${channelId}/review`,
+    { approved, reason }
+  )
+  return requireData(response.data)
+}
+
+export async function getSecurityAuditEvents(
+  filters: SecurityAuditEventFilters,
+  admin = false
+) {
+  const params = securityAuditParams(filters)
+  params.set('page', String(filters.page))
+  params.set('page_size', String(filters.pageSize))
+  const prefix = admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.get<ApiResponse<SecurityAuditEventList>>(
+    `${prefix}/security-audit/events?${params.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function exportSecurityAuditEvents(
+  filters: SecurityAuditEventFilters
+) {
+  const params = securityAuditParams(filters)
+  const response = await api.get<Blob>(
+    `/api/marketplace/security-audit/events/export?${params.toString()}`,
+    {
+      responseType: 'blob',
+      disableDuplicate: true,
+      skipBusinessError: true,
+      skipErrorHandler: true,
+    } as Record<string, unknown>
+  )
+  const contentType = String(response.headers['content-type'] ?? '')
+  if (contentType.includes('application/json')) {
+    const payload = JSON.parse(await response.data.text()) as ApiResponse
+    throw new Error(payload.message || '安全审计日志导出失败')
+  }
+  return response.data
+}
+
+function securityAuditParams(filters: SecurityAuditEventFilters) {
+  const params = new URLSearchParams()
+  if (filters.source) params.set('source', filters.source)
+  if (filters.reviewStatus) params.set('review_status', filters.reviewStatus)
+  if (filters.channelId) params.set('channel_id', filters.channelId)
+  if (filters.model) params.set('model', filters.model)
+  if (filters.search) params.set('search', filters.search)
+  if (filters.startTimestamp)
+    params.set('start_timestamp', String(filters.startTimestamp))
+  if (filters.endTimestamp)
+    params.set('end_timestamp', String(filters.endTimestamp))
+  return params
+}
+
+export async function updateSecurityAuditEvent(input: {
+  id: string
+  status: SecurityAuditEvent['review_status']
+  note: string
+  admin?: boolean
+}) {
+  const prefix = input.admin ? '/api/marketplace/admin' : '/api/marketplace'
+  const response = await api.patch<ApiResponse<SecurityAuditEvent>>(
+    `${prefix}/security-audit/events/${input.id}`,
+    { status: input.status, note: input.note }
+  )
+  return requireData(response.data)
+}

@@ -18,8 +18,6 @@ web/dist
 .env
 .env.production
 .env.production.final
-.env.*
-!.env.example
 one-api
 new-api
 /__debug_bin*
@@ -58,25 +56,31 @@ web/default/e2e/
 token_estimator_test.go
 skills-lock.json
 
-# Backend logs (already committed, cleaning up)
-.backend-*.log
-.frontend-*.log
-.tmp-*.log
-backend-*.log
-frontend-*.log
-ctrl.*.log
+# Local dependencies, build caches, investigation output, and archives
+node_modules/
+/.gocache*/
+/.gotmp*/
+/.gopath*/
+/.tmp*/
+/.impeccable/
+/output/
+/test-results/
+*.rdb
+*.dump
+*.bundle
+*.zip
+*.tar
+*.tar.gz
+*.sql.gz
 
-# Binaries
-control-api*.exe
-gateway-api.exe
-db-migrate.exe
-ledger-*.exe
-group-buy-*.exe
-workflow-worker.exe
-v2-verify.exe
-
-# Databases
-*.db
-*.db-journal
-*.db-shm
-*.db-wal
+# Local access files must stay outside source control
+/cert.pem
+/key.pem
+/new-sever.txt
+/new-sql.txt
+/new-cpa.txt
+/community_server.txt
+/cpa-env.txt
+/cf_r2.txt
+/pro-test.txt
+/qwen3guard-api.txt

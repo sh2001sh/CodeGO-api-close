@@ -1,101 +1,214 @@
-# V3 image-only template for a NEW deployment using external PostgreSQL/Redis.
-# Existing production deployments retain their own ports, volumes and networks.
-x-backend: &backend
-  restart: unless-stopped
-  stop_grace_period: 60s
-  environment: &environment
-    V3_PG_DSN: ${V3_PG_DSN:?set the existing PostgreSQL DSN}
-    V3_REDIS_ADDR: ${V3_REDIS_ADDR:?set the existing Redis address}
-    V3_REDIS_PASSWORD: ${V3_REDIS_PASSWORD:-}
-    V3_SECRET_KEY: ${V3_SECRET_KEY:?set the existing encryption key}
-    V3_SESSION_SECRET: ${V3_SESSION_SECRET:?set the existing session signing key}
-    V3_PUBLIC_URL: ${V3_PUBLIC_URL:?set the public HTTPS origin}
-    V3_INTERNAL_GATEWAY_URL: http://gateway:3001
-    V3_TRUSTED_PROXY_CIDRS: ${V3_TRUSTED_PROXY_CIDRS:-}
-    V3_BILLING_WAL_DIR: /data/wal
-    V3_FILES_DIR: /data/files
-    V3_LOG_DIR: /data/logs
+# CodeGo v2 production runtime.
+#
+# Required .env values: SQL_DSN, REDIS_CONN_STRING, POSTGRES_PASSWORD.
+# Start the v2 runtime: docker compose up -d
+# Start an intentionally supplied pre-v2 fallback image: docker compose --profile legacy up -d legacy-api
 
 services:
-  migrate:
-    <<: *backend
-    image: ${V3_IMAGE_REPOSITORY:-ghcr.io/sh2001sh/codego-api}:${V3_IMAGE_TAG:?set sha-COMMIT7}-migrate-amd64
-    profiles: [operations]
-    command: [schema]
-    restart: 'no'
-
-  worker:
-    <<: *backend
-    image: ${V3_IMAGE_REPOSITORY:-ghcr.io/sh2001sh/codego-api}:${V3_IMAGE_TAG:?set sha-COMMIT7}-worker-amd64
-    environment:
-      <<: *environment
-      V3_PG_MAX_CONNS: ${V3_WORKER_PG_MAX_CONNS:-6}
-      V3_LEDGER_CONSUMERS: ${V3_LEDGER_CONSUMERS:-2}
-      V3_LEDGER_BATCH_SIZE: ${V3_LEDGER_BATCH_SIZE:-16}
-      V3_AUDIT_SAMPLE_RETENTION_DAYS: ${V3_AUDIT_SAMPLE_RETENTION_DAYS:-30}
-    volumes:
-      - worker-wal:/data/wal
-      - gateway-files:/data/files
-      - service-logs:/data/logs
-    healthcheck:
-      test: [CMD-SHELL, wget -q -O /dev/null http://127.0.0.1:9102/metrics]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-
-  gateway:
-    <<: *backend
-    image: ${V3_IMAGE_REPOSITORY:-ghcr.io/sh2001sh/codego-api}:${V3_IMAGE_TAG:?set sha-COMMIT7}-gateway-amd64
-    command: [-addr, '0.0.0.0:3001']
-    environment:
-      <<: *environment
-      V3_PG_MAX_CONNS: ${V3_GATEWAY_PG_MAX_CONNS:-4}
-    volumes:
-      - gateway-wal:/data/wal
-      - gateway-files:/data/files
-      - service-logs:/data/logs
-    healthcheck:
-      test: [CMD-SHELL, wget -q -O /dev/null http://127.0.0.1:3001/readyz]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-
-  control:
-    <<: *backend
-    image: ${V3_IMAGE_REPOSITORY:-ghcr.io/sh2001sh/codego-api}:${V3_IMAGE_TAG:?set sha-COMMIT7}-control-amd64
-    command: [-addr, '0.0.0.0:3000']
-    environment:
-      <<: *environment
-      V3_PG_MAX_CONNS: ${V3_CONTROL_PG_MAX_CONNS:-3}
-    volumes:
-      - service-logs:/data/logs
-    healthcheck:
-      test: [CMD-SHELL, wget -q -O /dev/null http://127.0.0.1:3000/readyz]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-
-  web:
-    image: ${V3_IMAGE_REPOSITORY:-ghcr.io/sh2001sh/codego-api}:${V3_IMAGE_TAG:?set sha-COMMIT7}-web-amd64
-    ports:
-      - '127.0.0.1:${V3_WEB_PORT:-8080}:80'
+  db-migrate:
+    image: ${NEW_API_IMAGE:-s2644752646/new-api}:${NEW_API_VERSION:-latest}-db-migrate
+    environment: &migration-environment
+      SQL_DSN: ${SQL_DSN:?set SQL_DSN in .env}
+      SQL_MAX_OPEN_CONNS: ${SQL_MAX_OPEN_CONNS:-20}
+      SQL_MAX_IDLE_CONNS: ${SQL_MAX_IDLE_CONNS:-5}
+      SQL_MAX_LIFETIME: ${SQL_MAX_LIFETIME:-300}
+      TZ: ${TZ:-Asia/Shanghai}
+      NODE_TYPE: master
     depends_on:
-      gateway:
+      postgres:
         condition: service_healthy
-      control:
+    restart: "no"
+
+  ledger-backfill:
+    image: ${NEW_API_IMAGE:-s2644752646/new-api}:${NEW_API_VERSION:-latest}-ledger-backfill
+    command: ["--apply"]
+    environment:
+      <<: *migration-environment
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  v2-verify:
+    image: ${NEW_API_IMAGE:-s2644752646/new-api}:${NEW_API_VERSION:-latest}-v2-verify
+    profiles: ["verify"]
+    environment:
+      <<: *migration-environment
+    depends_on:
+      ledger-backfill:
+        condition: service_completed_successfully
+    restart: "no"
+
+  control-api:
+    image: ${NEW_API_IMAGE:-s2644752646/new-api}:${NEW_API_VERSION:-latest}-control-api
+    environment: &runtime-environment
+      SQL_DSN: ${SQL_DSN:?set SQL_DSN in .env}
+      SQL_MAX_OPEN_CONNS: ${SQL_MAX_OPEN_CONNS:-20}
+      SQL_MAX_IDLE_CONNS: ${SQL_MAX_IDLE_CONNS:-5}
+      SQL_MAX_LIFETIME: ${SQL_MAX_LIFETIME:-300}
+      REDIS_CONN_STRING: ${REDIS_CONN_STRING:?set REDIS_CONN_STRING in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      TOPUP_PENDING_EXPIRY_MINUTES: ${TOPUP_PENDING_EXPIRY_MINUTES:-3}
+      TZ: ${TZ:-Asia/Shanghai}
+      NODE_TYPE: master
+      CONTROL_PORT: "3000"
+      NODE_NAME: ${CONTROL_NODE_NAME:-control-api-1}
+      TEMPORAL_HOSTPORT: ${TEMPORAL_HOSTPORT:-temporal:7233}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
+      OIDC_SIGNING_PRIVATE_KEY_FILE: ${OIDC_SIGNING_PRIVATE_KEY_FILE:-}
+      OIDC_SIGNING_PRIVATE_KEY_BASE64: ${OIDC_SIGNING_PRIVATE_KEY_BASE64:-}
+      OIDC_SIGNING_KEY_ID: ${OIDC_SIGNING_KEY_ID:-codego-oidc-1}
+      CODEGO_COMMUNITY_API_SECRET: ${CODEGO_COMMUNITY_API_SECRET:-}
+    ports:
+      - "${CONTROL_PORT:-3000}:3000"
+    depends_on: &runtime-depends-on
+      postgres:
         condition: service_healthy
-      worker:
-        condition: service_healthy
+      redis:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+      ledger-backfill:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_started
     healthcheck:
-      test: [CMD-SHELL, wget -q -O /dev/null http://127.0.0.1/healthz]
-      interval: 10s
-      timeout: 5s
-      retries: 30
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -Eq '\"success\":[[:space:]]*true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
-    stop_grace_period: 60s
+
+  gateway-api:
+    image: ${NEW_API_IMAGE:-s2644752646/new-api}:${NEW_API_VERSION:-latest}-gateway-api
+    environment:
+      <<: *runtime-environment
+      NODE_TYPE: slave
+      GATEWAY_PORT: "3001"
+      NODE_NAME: ${GATEWAY_NODE_NAME:-gateway-api-1}
+      FILE_STORAGE_PATH: /var/lib/new-api/files
+      FILE_STORAGE_USER_LIMIT_MB: ${FILE_STORAGE_USER_LIMIT_MB:-1024}
+      FILE_STORAGE_RETENTION_DAYS: ${FILE_STORAGE_RETENTION_DAYS:-30}
+      FILE_STORAGE_CLEANUP_INTERVAL_MINUTES: ${FILE_STORAGE_CLEANUP_INTERVAL_MINUTES:-60}
+      FILE_DELIVERY_BASE_URL: ${FILE_DELIVERY_BASE_URL:-}
+      FILE_DELIVERY_SIGNING_SECRET: ${FILE_DELIVERY_SIGNING_SECRET:-}
+      FILE_DELIVERY_TTL_MINUTES: ${FILE_DELIVERY_TTL_MINUTES:-15}
+      # Keep the Go heap below the host-wide 90% protection threshold. The
+      # gateway shares an 8 GiB host with Control, Temporal and Docker.
+      GOMEMLIMIT: ${GATEWAY_GOMEMLIMIT:-2600MiB}
+      GOGC: ${GATEWAY_GOGC:-60}
+      RELAY_MAX_CONCURRENT_REQUESTS: ${GATEWAY_MAX_CONCURRENT_REQUESTS:-112}
+      REDIS_POOL_SIZE: ${GATEWAY_REDIS_POOL_SIZE:-64}
+      CHANNEL_CONCURRENCY_REDIS_TIMEOUT_MS: ${CHANNEL_CONCURRENCY_REDIS_TIMEOUT_MS:-350}
+      CHANNEL_CONCURRENCY_REDIS_RESERVE_ATTEMPTS: ${CHANNEL_CONCURRENCY_REDIS_RESERVE_ATTEMPTS:-1}
+      PROMPT_AUDIT_MODE: ${PROMPT_AUDIT_MODE:-off}
+      PROMPT_AUDIT_GROUPS: ${PROMPT_AUDIT_GROUPS:-}
+      PROMPT_AUDIT_SCANNERS: ${PROMPT_AUDIT_SCANNERS:-}
+      PROMPT_AUDIT_BASE_URL: ${PROMPT_AUDIT_BASE_URL:-}
+      PROMPT_AUDIT_API_KEY: ${PROMPT_AUDIT_API_KEY:-}
+      PROMPT_AUDIT_MODEL: ${PROMPT_AUDIT_MODEL:-Qwen/Qwen3Guard-Gen-0.6B}
+      PROMPT_AUDIT_TIMEOUT_MS: ${PROMPT_AUDIT_TIMEOUT_MS:-8000}
+      PROMPT_AUDIT_INPUT_LIMIT: ${PROMPT_AUDIT_INPUT_LIMIT:-2000}
+      PROMPT_AUDIT_LATEST_TURN_ONLY: ${PROMPT_AUDIT_LATEST_TURN_ONLY:-true}
+      PROMPT_AUDIT_BLOCK_CONTROVERSIAL: ${PROMPT_AUDIT_BLOCK_CONTROVERSIAL:-true}
+      PROMPT_AUDIT_QUEUE_CAPACITY: ${PROMPT_AUDIT_QUEUE_CAPACITY:-256}
+      PROMPT_AUDIT_WORKERS: ${PROMPT_AUDIT_WORKERS:-1}
+      PROMPT_AUDIT_GLOBAL_CONCURRENCY: ${PROMPT_AUDIT_GLOBAL_CONCURRENCY:-1}
+      PROMPT_AUDIT_PER_NODE_CONCURRENCY: ${PROMPT_AUDIT_PER_NODE_CONCURRENCY:-1}
+      PROMPT_AUDIT_ENDPOINTS_JSON: ${PROMPT_AUDIT_ENDPOINTS_JSON:-}
+    ports:
+      - "${GATEWAY_PORT:-3001}:3001"
+    volumes:
+      - ${FILE_STORAGE_HOST_PATH:-/mnt/codego-data/files}:/var/lib/new-api/files
+    depends_on: *runtime-depends-on
+    restart: unless-stopped
+
+  workflow-worker:
+    image: ${NEW_API_IMAGE:-s2644752646/new-api}:${NEW_API_VERSION:-latest}-workflow-worker
+    environment:
+      <<: *runtime-environment
+      TEMPORAL_HOSTPORT: ${TEMPORAL_HOSTPORT:-temporal:7233}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      NODE_NAME: ${WORKFLOW_NODE_NAME:-workflow-worker-1}
+    depends_on:
+      <<: *runtime-depends-on
+    restart: unless-stopped
+
+  ledger-worker:
+    image: ${NEW_API_IMAGE:-s2644752646/new-api}:${NEW_API_VERSION:-latest}-ledger-worker
+    environment:
+      <<: *runtime-environment
+      NODE_NAME: ${LEDGER_NODE_NAME:-ledger-worker-1}
+      DATA_ARCHIVE_DIR: /var/lib/new-api/archive
+      LOG_ARCHIVE_RETENTION_DAYS: ${LOG_ARCHIVE_RETENTION_DAYS:-90}
+      GATEWAY_EXECUTION_ARCHIVE_RETENTION_DAYS: ${GATEWAY_EXECUTION_ARCHIVE_RETENTION_DAYS:-90}
+      DATA_ARCHIVE_BATCH_SIZE: ${DATA_ARCHIVE_BATCH_SIZE:-2000}
+      DATA_ARCHIVE_INTERVAL_MINUTES: ${DATA_ARCHIVE_INTERVAL_MINUTES:-1}
+    volumes:
+      - ${DATA_ARCHIVE_HOST_PATH:-/mnt/codego-data/archive}:/var/lib/new-api/archive
+    depends_on: *runtime-depends-on
+    restart: unless-stopped
+
+  # This service is deliberately opt-in and must point to a known pre-v2 image.
+  # It is not a compatibility alias for a v2 control-api image.
+  legacy-api:
+    image: ${NEW_API_LEGACY_IMAGE:-s2644752646/new-api:legacy-image-must-be-configured}
+    profiles: ["legacy"]
+    environment:
+      SQL_DSN: ${SQL_DSN:?set SQL_DSN in .env}
+      REDIS_CONN_STRING: ${REDIS_CONN_STRING:?set REDIS_CONN_STRING in .env}
+      TZ: ${TZ:-Asia/Shanghai}
+      NODE_TYPE: master
+      NODE_NAME: ${LEGACY_NODE_NAME:-legacy-api-1}
+    ports:
+      - "${LEGACY_PORT:-3002}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-newapi}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-newapi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-newapi}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
 
 volumes:
-  worker-wal:
-  gateway-wal:
-  gateway-files:
-  service-logs:
+  postgres-data:
+  redis-data:

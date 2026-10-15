@@ -1,0 +1,14 @@
+{
+  "translation.Group quota (USD)": "Group quota (USD)",
+  "translation.{{count}}-person group": "{{count}}-person group",
+  "translation.Pay the base price first; the group bonus is issued after five people join or 48 hours pass.": "Pay the base price first; the group bonus is issued after five people join or 48 hours pass.",
+  "translation.This plan does not support group purchases; settlement completes immediately.": "This plan does not support group purchases; settlement completes immediately.",
+  "translation.Join group purchase": "Join group purchase",
+  "translation.Individual purchase": "Individual purchase",
+  "translation.Bonus: +{{amount}} USD": "Bonus: +{{amount}} USD",
+  "translation.Suitable for ongoing development and team usage. Consecutive renewals can unlock tiered bonus quota.": "Suitable for ongoing development and team usage. Consecutive renewals can unlock tiered bonus quota.",
+  "translation.Choose a starter card, monthly plan, or short-term quota pack. Group-enabled plans show the final quota for groups of 2, 3, or 5.": "Choose a starter card, monthly plan, or short-term quota pack. Group-enabled plans show the final quota for groups of 2, 3, or 5.",
+  "translation.Review the base quota and validity first, then compare the final quota for individual, 2-person, 3-person, and 5-person purchases.": "Review the base quota and validity first, then compare the final quota for individual, 2-person, 3-person, and 5-person purchases.",
+  "translation.Useful for daily or weekly peaks. Group bonuses are issued when the group fills or after 48 hours.": "Useful for daily or weekly peaks. Group bonuses are issued when the group fills or after 48 hours.",
+  "translation.Group buying": "Group buying"
+}

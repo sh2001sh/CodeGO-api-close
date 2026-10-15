@@ -1,0 +1,181 @@
+import { memo, useMemo } from 'react'
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
+import {
+  classifyRequestHealth,
+  getRequestHealthLabel,
+  type RequestHealthStatus,
+} from '@/lib/request-health'
+import { cn } from '@/lib/utils'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  normalizeRecentRequestSeries,
+  resolveRecentRequestStatus,
+} from '../lib/recent-request-series'
+import type { MarketplaceGroup } from '../types'
+
+export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
+  group: Pick<
+    MarketplaceGroup,
+    'recent_request_series' | 'recent_request_bucket_seconds'
+  >
+  compact?: boolean
+  segmentCount?: number
+}) {
+  const { t, i18n } = useTranslation()
+  const bucketSeconds = props.group.recent_request_bucket_seconds || 900
+  const segmentCount =
+    props.segmentCount ?? props.group.recent_request_series?.length ?? 24
+  const series = useMemo(
+    () =>
+      normalizeRecentRequestSeries(
+        props.group.recent_request_series,
+        bucketSeconds,
+        undefined,
+        segmentCount
+      ),
+    [bucketSeconds, props.group.recent_request_series, segmentCount]
+  )
+  const formatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(i18n.language, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }),
+    [i18n.language]
+  )
+  const latestStatus = resolveRecentRequestStatus(series)
+  const bucketLabel = formatBucketDuration(bucketSeconds, t)
+  const windowLabel = formatBucketDuration(bucketSeconds * segmentCount, t)
+  const threshold = t(
+    '每个色块代表 {{duration}}：大于 90% 绿色，75% 至 90% 黄色，低于 75% 红色，灰色表示无请求',
+    { duration: bucketLabel }
+  )
+
+  return (
+    <div
+      className='mt-1.5 w-full min-w-0'
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      {!props.compact && (
+        <div className='mb-1 flex items-center justify-between gap-2 text-[11px]'>
+          <span className='text-muted-foreground'>
+            {t('近 {{window}} · 每格 {{duration}}', {
+              window: windowLabel,
+              duration: bucketLabel,
+            })}
+          </span>
+          <RequestStatus status={latestStatus} t={t} />
+        </div>
+      )}
+      <div
+        className='flex w-full gap-0.5'
+        aria-label={t('近 {{window}}请求状态。{{threshold}}', {
+          window: windowLabel,
+          threshold,
+        })}
+      >
+        {series.map((bucket, index) => {
+          const range = formatBucketRange(bucket.ts, bucketSeconds, formatter)
+          const summary = buildBucketSummary(bucket, t)
+          return (
+            <Tooltip key={`${bucket.ts}-${index}`}>
+              <TooltipTrigger
+                render={
+                  <button
+                    type='button'
+                    aria-label={t('{{range}}，{{summary}}', { range, summary })}
+                    className={cn(
+                      'focus-visible:ring-ring h-3 min-w-0 flex-1 rounded-sm transition-[filter,box-shadow] hover:brightness-90 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none',
+                      bucketTone(bucket)
+                    )}
+                  />
+                }
+              />
+              <TooltipContent side='top' role='tooltip' className='max-w-none'>
+                <div className='space-y-0.5'>
+                  <div className='font-medium'>{range}</div>
+                  <div className='text-xs opacity-90'>{summary}</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )
+        })}
+      </div>
+    </div>
+  )
+})
+
+function formatBucketDuration(bucketSeconds: number, t: TFunction) {
+  if (bucketSeconds % 3600 === 0) {
+    if (bucketSeconds === 3600) return t('1 hour')
+    return t('{{count}} 小时', { count: bucketSeconds / 3600 })
+  }
+  if (bucketSeconds === 60) return t('1 minute')
+  return t('{{count}} 分钟', {
+    count: Math.max(1, Math.round(bucketSeconds / 60)),
+  })
+}
+
+function RequestStatus(props: { status: RequestHealthStatus; t: TFunction }) {
+  const label = props.t(getRequestHealthLabel(props.status))
+  let tone = 'bg-muted text-muted-foreground'
+  if (props.status === 'healthy') {
+    tone = 'bg-success/12 text-success'
+  } else if (props.status === 'unstable') {
+    tone = 'bg-warning/15 text-warning-foreground'
+  } else if (props.status === 'failed') {
+    tone = 'bg-destructive/12 text-destructive'
+  }
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium',
+        tone
+      )}
+    >
+      <span className='size-1.5 rounded-full bg-current' aria-hidden='true' />
+      {label}
+    </span>
+  )
+}
+
+function bucketTone(bucket: MarketplaceGroup['recent_request_series'][number]) {
+  const status = classifyRequestHealth(
+    bucket.success_rate,
+    bucket.request_count
+  )
+  if (status === 'healthy') return 'bg-success'
+  if (status === 'unstable') return 'bg-warning'
+  if (status === 'failed') return 'bg-destructive'
+  return 'bg-muted'
+}
+
+function buildBucketSummary(
+  bucket: MarketplaceGroup['recent_request_series'][number],
+  t: TFunction
+) {
+  if (bucket.request_count <= 0) {
+    return t('暂无请求')
+  }
+  return t('{{count}} 次请求，成功率 {{rate}}%', {
+    count: bucket.request_count,
+    rate: bucket.success_rate.toFixed(1),
+  })
+}
+
+function formatBucketRange(
+  ts: number,
+  bucketSeconds: number,
+  formatter: Intl.DateTimeFormat
+) {
+  return `${formatter.format(new Date(ts * 1000))} - ${formatter.format(
+    new Date((ts + bucketSeconds) * 1000)
+  )}`
+}

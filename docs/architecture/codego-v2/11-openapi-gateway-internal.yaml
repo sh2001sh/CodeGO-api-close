@@ -1,0 +1,564 @@
+openapi: 3.1.0
+info:
+  title: CodeGo v2 Gateway and Internal API
+  version: 0.1.0-draft
+  description: |
+    CodeGo v2 网关面和内部服务接口草案。
+servers:
+  - url: https://gateway.codego.example.com
+    description: Gateway placeholder
+tags:
+  - name: gateway-chat
+  - name: gateway-task
+  - name: internal-billing
+  - name: internal-workflow
+paths:
+  /v2/chat/completions:
+    post:
+      tags: [gateway-chat]
+      summary: OpenAI 兼容对话接口
+      operationId: createChatCompletion
+      parameters:
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: 同步成功
+          headers:
+            X-CodeGo-Request-Id:
+              schema:
+                type: string
+            X-CodeGo-Provider:
+              schema:
+                type: string
+            X-CodeGo-Model:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+        '202':
+          description: 流式响应由 SSE 返回
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+  /v2/tasks/video:
+    post:
+      tags: [gateway-task]
+      summary: 提交视频任务
+      operationId: submitVideoTask
+      parameters:
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AsyncTaskSubmitRequest'
+      responses:
+        '200':
+          description: 提交成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncTaskSubmitResponse'
+  /v2/tasks/{public_task_id}:
+    get:
+      tags: [gateway-task]
+      summary: 查询异步任务状态
+      operationId: getAsyncTask
+      parameters:
+        - $ref: '#/components/parameters/Authorization'
+        - $ref: '#/components/parameters/PublicTaskID'
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncTaskStateResponse'
+  /internal/billing/reservations:
+    post:
+      tags: [internal-billing]
+      summary: 创建预留金额
+      operationId: createReservation
+      parameters:
+        - $ref: '#/components/parameters/InternalServiceToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReservationRequest'
+      responses:
+        '200':
+          description: 预留创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateReservationResponse'
+  /internal/billing/settlements:
+    post:
+      tags: [internal-billing]
+      summary: 结算预留金额
+      operationId: settleReservation
+      parameters:
+        - $ref: '#/components/parameters/InternalServiceToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSettlementRequest'
+      responses:
+        '200':
+          description: 结算成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSettlementResponse'
+  /internal/billing/refunds:
+    post:
+      tags: [internal-billing]
+      summary: 退款或释放额度
+      operationId: refundReference
+      parameters:
+        - $ref: '#/components/parameters/InternalServiceToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRefundRequest'
+      responses:
+        '200':
+          description: 退款成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateRefundResponse'
+  /internal/workflows/tasks:
+    post:
+      tags: [internal-workflow]
+      summary: 创建任务工作流记录
+      operationId: createTaskWorkflow
+      parameters:
+        - $ref: '#/components/parameters/InternalServiceToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskWorkflowRequest'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTaskWorkflowResponse'
+  /internal/workflows/tasks/{workflow_id}/snapshots:
+    post:
+      tags: [internal-workflow]
+      summary: 记录任务快照
+      operationId: recordTaskSnapshot
+      parameters:
+        - $ref: '#/components/parameters/InternalServiceToken'
+        - $ref: '#/components/parameters/WorkflowID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordTaskSnapshotRequest'
+      responses:
+        '200':
+          description: 记录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordTaskSnapshotResponse'
+  /internal/workflows/tasks/{workflow_id}/finalize:
+    post:
+      tags: [internal-workflow]
+      summary: 终结工作流
+      operationId: finalizeTaskWorkflow
+      parameters:
+        - $ref: '#/components/parameters/InternalServiceToken'
+        - $ref: '#/components/parameters/WorkflowID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinalizeTaskWorkflowRequest'
+      responses:
+        '200':
+          description: 终结成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinalizeTaskWorkflowResponse'
+components:
+  parameters:
+    Authorization:
+      name: Authorization
+      in: header
+      required: true
+      schema:
+        type: string
+    InternalServiceToken:
+      name: Authorization
+      in: header
+      required: true
+      schema:
+        type: string
+        description: Bearer internal service token
+    RequestID:
+      name: X-Request-Id
+      in: header
+      required: true
+      schema:
+        type: string
+    IdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+    PublicTaskID:
+      name: public_task_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WorkflowID:
+      name: workflow_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    ErrorResponse:
+      description: 统一错误响应
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, type, retryable, correlation_id]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            type:
+              type: string
+            retryable:
+              type: boolean
+            correlation_id:
+              type: string
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+        stream:
+          type: boolean
+          default: false
+        max_tokens:
+          type: integer
+          minimum: 1
+          maximum: 262144
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        metadata:
+          type: object
+          additionalProperties: true
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                additionalProperties: true
+        name:
+          type: string
+    ChatCompletionResponse:
+      type: object
+      required: [id, object, created, model, choices, usage]
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+        created:
+          type: integer
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        usage:
+          $ref: '#/components/schemas/Usage'
+    Usage:
+      type: object
+      required: [prompt_tokens, completion_tokens, total_tokens]
+      properties:
+        prompt_tokens:
+          type: integer
+        completion_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+    AsyncTaskSubmitRequest:
+      type: object
+      required: [model, duration, size]
+      properties:
+        model:
+          type: string
+        duration:
+          type: integer
+          minimum: 1
+        size:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    AsyncTaskSubmitResponse:
+      type: object
+      required: [public_task_id, workflow_id, status, reservation_id]
+      properties:
+        public_task_id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        reservation_id:
+          type: string
+          format: uuid
+    AsyncTaskStateResponse:
+      type: object
+      required: [public_task_id, status, progress, updated_at]
+      properties:
+        public_task_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        result_url:
+          type: string
+        terminal_reason:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    CreateReservationRequest:
+      type: object
+      required: [request_id, account_id, reserved_amount, reason_code]
+      properties:
+        request_id:
+          type: string
+        workflow_id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        reserved_amount:
+          type: string
+        reason_code:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    CreateReservationResponse:
+      type: object
+      required: [reservation_id, status, reserved_amount]
+      properties:
+        reservation_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        reserved_amount:
+          type: string
+    CreateSettlementRequest:
+      type: object
+      required: [reservation_id, actual_amount, usage_evidence_id, reason_code]
+      properties:
+        reservation_id:
+          type: string
+          format: uuid
+        actual_amount:
+          type: string
+        usage_evidence_id:
+          type: string
+          format: uuid
+        reason_code:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    CreateSettlementResponse:
+      type: object
+      required: [settlement_id, delta_amount, status]
+      properties:
+        settlement_id:
+          type: string
+          format: uuid
+        delta_amount:
+          type: string
+        status:
+          type: string
+    CreateRefundRequest:
+      type: object
+      required: [reference_type, reference_id, reason_code]
+      properties:
+        reference_type:
+          type: string
+        reference_id:
+          type: string
+        reason_code:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    CreateRefundResponse:
+      type: object
+      required: [refund_entry_ids, status]
+      properties:
+        refund_entry_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        status:
+          type: string
+    CreateTaskWorkflowRequest:
+      type: object
+      required: [public_task_id, provider, channel_id, reservation_id, task_kind, submit_payload]
+      properties:
+        public_task_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        channel_id:
+          type: integer
+        reservation_id:
+          type: string
+          format: uuid
+        task_kind:
+          type: string
+        submit_payload:
+          type: object
+          additionalProperties: true
+    CreateTaskWorkflowResponse:
+      type: object
+      required: [workflow_id, state]
+      properties:
+        workflow_id:
+          type: string
+          format: uuid
+        state:
+          type: string
+    RecordTaskSnapshotRequest:
+      type: object
+      required: [provider_state]
+      properties:
+        provider_state:
+          type: string
+        provider_progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        raw_payload:
+          type: object
+          additionalProperties: true
+        result_url:
+          type: string
+        failure_reason:
+          type: string
+    RecordTaskSnapshotResponse:
+      type: object
+      required: [snapshot_id]
+      properties:
+        snapshot_id:
+          type: string
+          format: uuid
+    FinalizeTaskWorkflowRequest:
+      type: object
+      required: [terminal_state]
+      properties:
+        terminal_state:
+          type: string
+          enum: [succeeded, failed, timeout, cancelled]
+        result_url:
+          type: string
+        result_meta:
+          type: object
+          additionalProperties: true
+        settlement_hint:
+          type: object
+          additionalProperties: true
+    FinalizeTaskWorkflowResponse:
+      type: object
+      required: [workflow_id, terminal_state, settlement_status]
+      properties:
+        workflow_id:
+          type: string
+          format: uuid
+        terminal_state:
+          type: string
+        settlement_status:
+          type: string

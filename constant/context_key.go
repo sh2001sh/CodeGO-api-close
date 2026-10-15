@@ -1,0 +1,141 @@
+package constant
+
+type ContextKey string
+
+const (
+	ContextKeyTokenCountMeta  ContextKey = "token_count_meta"
+	ContextKeyPromptTokens    ContextKey = "prompt_tokens"
+	ContextKeyEstimatedTokens ContextKey = "estimated_tokens"
+
+	ContextKeyOriginalModel    ContextKey = "original_model"
+	ContextKeyRequestStartTime ContextKey = "request_start_time"
+
+	/* token related keys */
+	ContextKeyTokenUnlimited                  ContextKey = "token_unlimited_quota"
+	ContextKeyTokenKey                        ContextKey = "token_key"
+	ContextKeyTokenId                         ContextKey = "token_id"
+	ContextKeyTokenGroup                      ContextKey = "token_group"
+	ContextKeyTokenSpecificChannelId          ContextKey = "specific_channel_id"
+	ContextKeyTokenModelLimitEnabled          ContextKey = "token_model_limit_enabled"
+	ContextKeyTokenModelLimit                 ContextKey = "token_model_limit"
+	ContextKeyTokenCrossGroupRetry            ContextKey = "token_cross_group_retry"
+	ContextKeyTokenMarketplaceMultiplierLimit ContextKey = "token_marketplace_multiplier_limit"
+	ContextKeyZeroHourActive                  ContextKey = "zero_hour_active"
+	ContextKeyMonthlyPassActive               ContextKey = "monthly_pass_active"
+	ContextKeyMarketplaceGroupID              ContextKey = "marketplace_group_id"
+	ContextKeyMarketplaceOwnerID              ContextKey = "marketplace_owner_id"
+	ContextKeyMarketplaceSourceType           ContextKey = "marketplace_source_type"
+	ContextKeyMarketplaceCreditPolicy         ContextKey = "marketplace_credit_policy"
+	ContextKeyMarketplaceMultiplier           ContextKey = "marketplace_multiplier"
+	ContextKeyMarketplaceModelPrices          ContextKey = "marketplace_model_prices"
+	ContextKeyUnifiedAutoBindings             ContextKey = "unified_auto_bindings"
+	ContextKeyUnifiedAutoIndex                ContextKey = "unified_auto_index"
+
+	/* channel related keys */
+	ContextKeyChannelId                      ContextKey = "channel_id"
+	ContextKeyChannelScope                   ContextKey = "channel_scope"
+	ContextKeyOfficialChannelOnly            ContextKey = "official_channel_only"
+	ContextKeyOfficialChannelFallback        ContextKey = "official_channel_fallback"
+	ContextKeyChannelName                    ContextKey = "channel_name"
+	ContextKeyChannelCreateTime              ContextKey = "channel_create_time"
+	ContextKeyChannelBaseUrl                 ContextKey = "base_url"
+	ContextKeyChannelType                    ContextKey = "channel_type"
+	ContextKeyChannelSetting                 ContextKey = "channel_setting"
+	ContextKeyChannelOtherSetting            ContextKey = "channel_other_setting"
+	ContextKeyChannelParamOverride           ContextKey = "param_override"
+	ContextKeyChannelHeaderOverride          ContextKey = "header_override"
+	ContextKeyChannelOrganization            ContextKey = "channel_organization"
+	ContextKeyChannelAutoBan                 ContextKey = "auto_ban"
+	ContextKeyChannelModelMapping            ContextKey = "model_mapping"
+	ContextKeyChannelStatusCodeMapping       ContextKey = "status_code_mapping"
+	ContextKeyChannelSensitiveWords          ContextKey = "channel_sensitive_word_interception_enabled"
+	ContextKeyMultiplierCardSupported        ContextKey = "multiplier_card_supported"
+	ContextKeyMultiplierCardUserEnabled      ContextKey = "multiplier_card_user_enabled"
+	ContextKeyChannelIsMultiKey              ContextKey = "channel_is_multi_key"
+	ContextKeyChannelMultiKeyIndex           ContextKey = "channel_multi_key_index"
+	ContextKeyChannelKey                     ContextKey = "channel_key"
+	ContextKeyChannelResponsesCapabilities   ContextKey = "channel_responses_capabilities"
+	ContextKeyResponsesCompactionRequirement ContextKey = "responses_compaction_requirement"
+
+	ContextKeyAutoGroup           ContextKey = "auto_group"
+	ContextKeyAutoGroupIndex      ContextKey = "auto_group_index"
+	ContextKeyAutoGroupRetryIndex ContextKey = "auto_group_retry_index"
+	// ContextKeyRetryFallbackChannelID keeps the first failed channel available
+	// for one retry when its original group has no alternate healthy route.
+	ContextKeyRetryFallbackChannelID      ContextKey = "retry_fallback_channel_id"
+	ContextKeyNativeBackground            ContextKey = "responses_native_background"
+	ContextKeyBackgroundResumeID          ContextKey = "responses_background_resume_id"
+	ContextKeyBackgroundResumeCursor      ContextKey = "responses_background_resume_cursor"
+	ContextKeyResponsesReplayForbidden    ContextKey = "responses_replay_forbidden"
+	ContextKeyUpstreamRequestAccepted     ContextKey = "upstream_request_accepted"
+	ContextKeyResponsesGenericUpstream400 ContextKey = "responses_generic_upstream_400"
+
+	/* user related keys */
+	ContextKeyUserId      ContextKey = "id"
+	ContextKeyUserSetting ContextKey = "user_setting"
+	ContextKeyUserQuota   ContextKey = "user_quota"
+	ContextKeyUserStatus  ContextKey = "user_status"
+	ContextKeyUserEmail   ContextKey = "user_email"
+	ContextKeyUserGroup   ContextKey = "user_group"
+	ContextKeyUsingGroup  ContextKey = "group"
+	ContextKeyUserName    ContextKey = "username"
+	// ContextKeyBypassModelRequestLimits is populated during token authentication
+	// from the administrator-managed user setting.
+	ContextKeyBypassModelRequestLimits ContextKey = "bypass_model_request_limits"
+
+	ContextKeyLocalCountTokens ContextKey = "local_count_tokens"
+
+	ContextKeySystemPromptOverride ContextKey = "system_prompt_override"
+
+	// ContextKeyFileSourcesToCleanup stores file sources that need cleanup when request ends
+	ContextKeyFileSourcesToCleanup ContextKey = "file_sources_to_cleanup"
+	// ContextKeyResolvedFileReferences marks requests containing validated local
+	// file_id references. Their upstream representation is selected per attempt.
+	ContextKeyResolvedFileReferences ContextKey = "resolved_file_references"
+
+	// ContextKeyAdminRejectReason stores an admin-only reject/block reason extracted from upstream responses.
+	// It is not returned to end users, but can be persisted into consume/error logs for debugging.
+	ContextKeyAdminRejectReason ContextKey = "admin_reject_reason"
+
+	// ContextKeyResponseBodyDelivered indicates at least one business response payload
+	// has been successfully written to the downstream client for the current request.
+	ContextKeyResponseBodyDelivered ContextKey = "response_body_delivered"
+	// ContextKeyResponsesStreamRetrySafe marks a Responses API stream whose
+	// protocol events may have started before any meaningful model output.
+	ContextKeyResponsesStreamRetrySafe ContextKey = "responses_stream_retry_safe"
+	// ContextKeyResponsesTerminalSent prevents the generic finalizer from
+	// appending a second terminal event after response.failed was emitted.
+	ContextKeyResponsesTerminalSent ContextKey = "responses_terminal_sent"
+	// ContextKeyUpstreamTerminalError marks an explicit upstream error event.
+	// Billing must refund these failures even if partial output preceded them.
+	ContextKeyUpstreamTerminalError ContextKey = "upstream_terminal_error"
+	// ContextKeyCyberPolicyResponseForwarded prevents the generic error finalizer
+	// from appending a sanitized error after the upstream policy event was sent.
+	ContextKeyCyberPolicyResponseForwarded ContextKey = "cyber_policy_response_forwarded"
+	ContextKeySecurityAuditPromptBody      ContextKey = "security_audit_prompt_body"
+	// ContextKeyStreamContentDelivered is set once retrying would duplicate text
+	// or tool arguments already delivered to the client.
+	ContextKeyStreamContentDelivered ContextKey = "stream_content_delivered"
+	// ContextKeyRelayAttemptStage is the authoritative downstream commitment
+	// stage for a single upstream attempt. It prevents retry decisions from
+	// inferring replay safety from unrelated response-writer details.
+	ContextKeyRelayAttemptStage ContextKey = "relay_attempt_stage"
+	// ContextKeyStreamWorkerContext is an internal cancellation context used to
+	// interrupt pacing and downstream writes when an upstream attempt aborts.
+	ContextKeyStreamWorkerContext ContextKey = "stream_worker_context"
+	// ContextKeyClientGone marks a downstream connection that was cancelled or
+	// closed. Such a disconnect must not be attributed to an upstream channel.
+	ContextKeyClientGone ContextKey = "client_gone"
+	// ContextKeyRateLimitRetry marks a retry following an upstream 429. Automatic
+	// pools may use the bounded cross-fault-domain emergency probe in this case.
+	ContextKeyRateLimitRetry ContextKey = "rate_limit_retry"
+
+	// ContextKeyImageWorkspaceCaptureResponse indicates the current request should
+	// capture the JSON response body for image workspace persistence.
+	ContextKeyImageWorkspaceCaptureResponse ContextKey = "image_workspace_capture_response"
+	ContextKeyImageWorkspaceResponseBody    ContextKey = "image_workspace_response_body"
+
+	// ContextKeyLanguage stores the user's language preference for i18n
+	ContextKeyLanguage ContextKey = "language"
+	ContextKeyIsStream ContextKey = "is_stream"
+)

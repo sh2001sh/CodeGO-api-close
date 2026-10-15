@@ -1,0 +1,457 @@
+package execution
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/sh2001sh/new-api/dto"
+	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
+	"github.com/sh2001sh/new-api/types"
+)
+
+var rejectedResponsesFieldPattern = regexp.MustCompile(`(?i)(?:unknown|unsupported)\s+(?:parameter|field)\s*(?::|=|is)?\s*["']?([a-zA-Z0-9_.\[\]-]+)`)
+
+// isGenericInvalidRequestParametersError identifies the generic 400 returned
+// by OpenAI-compatible gateways without identifying a rejected field. Do not
+// assume this is transient or strip meaningful tools from the request.
+func isGenericInvalidRequestParametersError(apiErr *types.NewAPIError) bool {
+	if apiErr == nil || apiErr.StatusCode != 400 {
+		return false
+	}
+	message := strings.ToLower(strings.TrimSpace(apiErr.Error()))
+	return message == "invalid request parameters. check the request and try again." ||
+		message == "invalid request parameters"
+}
+
+// isOpaqueResponsesUpstreamFailure identifies compatibility gateways that
+// reject a Responses request without exposing any actionable client error.
+// Before semantic output, another provider may still support the same body.
+func isOpaqueResponsesUpstreamFailure(apiErr *types.NewAPIError) bool {
+	if apiErr == nil || apiErr.StatusCode != http.StatusBadRequest {
+		return false
+	}
+	message := strings.ToLower(strings.TrimSpace(apiErr.Error()))
+	return message == "upstream request failed" || message == "upstream request failed."
+}
+
+func shouldNormalizeResponsesCompatibilityBody(body []byte) bool {
+	return bytes.Contains(body, []byte(`"transformer_metadata"`)) ||
+		bytes.Contains(body, []byte(`"client_metadata"`)) ||
+		bytes.Contains(body, []byte(`"include"`)) ||
+		bytes.Contains(body, []byte(`"namespace"`)) ||
+		bytes.Contains(body, []byte(`"function_call_output"`)) ||
+		bytes.Contains(body, []byte(`"custom_tool_call_output"`)) ||
+		bytes.Contains(body, []byte(`"tool_search_output"`)) ||
+		bytes.Contains(body, []byte(`"additional_tools"`)) ||
+		bytes.Contains(body, []byte(`"agent_message"`)) ||
+		bytes.Contains(body, []byte(`"compaction"`)) ||
+		(bytes.Contains(body, []byte(`"input_text"`)) && bytes.Contains(body, []byte(`"assistant"`)))
+}
+
+func summarizeResponsesRequestShape(body []byte) string {
+	var payload map[string]json.RawMessage
+	if platformencoding.Unmarshal(body, &payload) != nil {
+		return `{"decode_error":true}`
+	}
+	shape := map[string]any{
+		"top_level_fields": sortedRawKeys(payload),
+		"body_bytes":       len(body),
+	}
+	var items []map[string]json.RawMessage
+	if platformencoding.Unmarshal(payload["input"], &items) == nil {
+		itemTypes := make(map[string]int)
+		itemFields := make(map[string]map[string]struct{})
+		contentTypes := make(map[string]int)
+		for _, item := range items {
+			itemType := rawString(item["type"])
+			if itemType == "" {
+				itemType = "<empty>"
+			}
+			itemTypes[itemType]++
+			if itemFields[itemType] == nil {
+				itemFields[itemType] = make(map[string]struct{})
+			}
+			for key := range item {
+				itemFields[itemType][key] = struct{}{}
+			}
+			var parts []map[string]json.RawMessage
+			if platformencoding.Unmarshal(item["content"], &parts) == nil {
+				for _, part := range parts {
+					contentTypes[rawString(part["type"])]++
+				}
+			}
+		}
+		fields := make(map[string][]string, len(itemFields))
+		for itemType, keys := range itemFields {
+			values := make([]string, 0, len(keys))
+			for key := range keys {
+				values = append(values, key)
+			}
+			sort.Strings(values)
+			fields[itemType] = values
+		}
+		shape["input_count"] = len(items)
+		shape["input_types"] = itemTypes
+		shape["input_fields"] = fields
+		shape["content_types"] = contentTypes
+	}
+	var tools []map[string]json.RawMessage
+	if platformencoding.Unmarshal(payload["tools"], &tools) == nil {
+		toolTypes := make(map[string]int)
+		for _, tool := range tools {
+			toolTypes[rawString(tool["type"])]++
+		}
+		shape["tool_count"] = len(tools)
+		shape["tool_types"] = toolTypes
+	}
+	encoded, err := platformencoding.Marshal(shape)
+	if err != nil {
+		return `{"encode_error":true}`
+	}
+	return string(encoded)
+}
+
+func sortedRawKeys(values map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// normalizeResponsesCompatibilityBody repairs deterministic compatibility
+// issues without changing message content or valid provider-specific fields.
+func normalizeResponsesCompatibilityBody(body []byte) ([]byte, bool, error) {
+	var payload map[string]json.RawMessage
+	if err := platformencoding.Unmarshal(body, &payload); err != nil {
+		return nil, false, err
+	}
+	changed := false
+	if raw, ok := payload["input"]; ok {
+		request := &dto.OpenAIResponsesRequest{Input: raw, Tools: payload["tools"]}
+		if reasoningRaw := payload["reasoning"]; len(reasoningRaw) > 0 {
+			_ = platformencoding.Unmarshal(reasoningRaw, &request.Reasoning)
+		}
+		if delegationChanged, err := request.NormalizeCodexDelegationBootstrap(); err != nil {
+			return nil, false, err
+		} else if delegationChanged {
+			changed = true
+		}
+		if agentMessageChanged, err := request.NormalizeCodexAgentMessages(); err != nil {
+			return nil, false, err
+		} else if agentMessageChanged {
+			changed = true
+		}
+		if additionalToolsChanged, err := request.LiftCodexAdditionalTools(); err != nil {
+			return nil, false, err
+		} else if additionalToolsChanged {
+			changed = true
+		}
+		if metadataChanged, err := request.StripCodexMessageMetadata(); err != nil {
+			return nil, false, err
+		} else if metadataChanged {
+			changed = true
+		}
+		if request.NormalizePortableReasoningEffort() {
+			changed = true
+		}
+		if changed {
+			payload["input"] = request.Input
+			if len(request.Tools) > 0 {
+				payload["tools"] = request.Tools
+			}
+			if request.Reasoning != nil {
+				reasoning, _ := platformencoding.Marshal(request.Reasoning)
+				payload["reasoning"] = reasoning
+			}
+		}
+	}
+	if _, ok := payload["transformer_metadata"]; ok {
+		delete(payload, "transformer_metadata")
+		changed = true
+	}
+	if _, ok := payload["client_metadata"]; ok {
+		delete(payload, "client_metadata")
+		changed = true
+	}
+	if raw, ok := payload["include"]; ok {
+		normalized, includeChanged := normalizeResponsesInclude(raw)
+		if includeChanged {
+			changed = true
+			if len(normalized) == 0 {
+				delete(payload, "include")
+			} else {
+				payload["include"] = normalized
+			}
+		}
+	}
+	if raw, ok := payload["input"]; ok {
+		normalized, inputChanged, err := normalizeResponsesInput(raw, hasNonEmptyRawString(payload["previous_response_id"]))
+		if err != nil {
+			return nil, false, err
+		}
+		if inputChanged {
+			payload["input"] = normalized
+			changed = true
+		}
+	}
+	if !changed {
+		return body, false, nil
+	}
+	normalized, err := platformencoding.Marshal(payload)
+	return normalized, true, err
+}
+
+// normalizeResponsesBackgroundFalse removes an explicit false Background
+// flag. Omitting the field is the only portable representation for providers
+// that do not implement the parameter at all.
+func normalizeResponsesBackgroundFalse(body []byte) ([]byte, bool, error) {
+	if !bytes.Contains(body, []byte(`"background"`)) {
+		return body, false, nil
+	}
+	var payload map[string]json.RawMessage
+	if err := platformencoding.Unmarshal(body, &payload); err != nil {
+		return nil, false, err
+	}
+	raw, ok := payload["background"]
+	if !ok {
+		return body, false, nil
+	}
+	var background bool
+	if err := platformencoding.Unmarshal(raw, &background); err != nil || background {
+		return body, false, nil
+	}
+	delete(payload, "background")
+	normalized, err := platformencoding.Marshal(payload)
+	if err != nil {
+		return nil, false, err
+	}
+	return normalized, true, nil
+}
+
+func normalizeResponsesInclude(raw json.RawMessage) (json.RawMessage, bool) {
+	var values []string
+	if platformencoding.Unmarshal(raw, &values) != nil {
+		return raw, false
+	}
+	filtered := make([]string, 0, len(values))
+	changed := false
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), "usage") {
+			changed = true
+			continue
+		}
+		filtered = append(filtered, value)
+	}
+	if !changed {
+		return raw, false
+	}
+	if len(filtered) == 0 {
+		return nil, true
+	}
+	normalized, err := platformencoding.Marshal(filtered)
+	if err != nil {
+		return raw, false
+	}
+	return normalized, true
+}
+
+func normalizeResponsesInput(raw json.RawMessage, hasPreviousResponse bool) (json.RawMessage, bool, error) {
+	var items []map[string]json.RawMessage
+	if err := platformencoding.Unmarshal(raw, &items); err != nil {
+		return raw, false, nil
+	}
+	changed := false
+	if !hasPreviousResponse {
+		// The latest official compaction item carries the state of everything
+		// before it. Replaying that prefix defeats compaction and can make strict
+		// upstreams reject a multi-megabyte request with a generic 400.
+		latestCompaction := -1
+		for index, item := range items {
+			if itemType := rawString(item["type"]); itemType == "compaction" || itemType == "compaction_summary" {
+				latestCompaction = index
+			}
+		}
+		if latestCompaction > 0 {
+			items = items[latestCompaction:]
+			changed = true
+		}
+	}
+	callIDs := make(map[string]struct{})
+	for _, item := range items {
+		itemType := rawString(item["type"])
+		if itemType == "message" && strings.EqualFold(rawString(item["role"]), "assistant") {
+			var parts []map[string]json.RawMessage
+			if platformencoding.Unmarshal(item["content"], &parts) == nil {
+				contentChanged := false
+				for _, part := range parts {
+					if rawString(part["type"]) == "input_text" {
+						part["type"] = json.RawMessage(`"output_text"`)
+						contentChanged = true
+					}
+				}
+				if contentChanged {
+					item["content"], _ = platformencoding.Marshal(parts)
+					changed = true
+				}
+			}
+		}
+		if isResponsesFunctionCall(itemType) {
+			if _, ok := item["arguments"]; !ok && itemType == "function_call" {
+				item["arguments"] = json.RawMessage(`"{}"`)
+				changed = true
+			}
+			if callID := rawString(item["call_id"]); callID != "" {
+				callIDs[callID] = struct{}{}
+			}
+		}
+	}
+	if !hasPreviousResponse {
+		filtered := items[:0]
+		for _, item := range items {
+			if isResponsesFunctionOutput(rawString(item["type"])) {
+				callID := rawString(item["call_id"])
+				if _, ok := callIDs[callID]; callID == "" || !ok {
+					changed = true
+					continue
+				}
+			}
+			filtered = append(filtered, item)
+		}
+		items = filtered
+	}
+	if !changed {
+		return raw, false, nil
+	}
+	normalized, err := platformencoding.Marshal(items)
+	return normalized, true, err
+}
+
+func normalizeRejectedResponsesField(body []byte, apiErr *types.NewAPIError) ([]byte, string, bool) {
+	if apiErr == nil || apiErr.StatusCode != 400 {
+		return nil, "", false
+	}
+	openAIError, ok := apiErr.RelayError.(types.OpenAIError)
+	if !ok {
+		return nil, "", false
+	}
+	code := strings.ToLower(fmt.Sprint(openAIError.Code))
+	field := strings.TrimSpace(openAIError.Param)
+	if field == "" {
+		matches := rejectedResponsesFieldPattern.FindStringSubmatch(openAIError.Message)
+		if len(matches) == 2 {
+			field = matches[1]
+		}
+	}
+	message := strings.ToLower(openAIError.Message)
+	explicitUnsupported := strings.Contains(message, "unsupported parameter") || strings.Contains(message, "unknown parameter")
+	if code != "unknown_parameter" && code != "unsupported_parameter" && code != "invalid_request_error" && !explicitUnsupported {
+		return nil, "", false
+	}
+	if code == "invalid_request_error" && !explicitUnsupported {
+		return nil, "", false
+	}
+	if !isAllowedResponsesRejectedField(field) {
+		return nil, "", false
+	}
+	normalized, changed := removeResponsesRejectedField(body, field)
+	return normalized, field, changed
+}
+
+func normalizeUndecryptableReasoningRetry(body []byte, apiErr *types.NewAPIError) ([]byte, bool) {
+	if apiErr == nil || apiErr.StatusCode != http.StatusBadRequest || len(body) == 0 {
+		return nil, false
+	}
+	message := strings.ToLower(apiErr.Error())
+	if !strings.Contains(message, "encrypted content") ||
+		(!strings.Contains(message, "could not be verified") && !strings.Contains(message, "could not be decrypted")) {
+		return nil, false
+	}
+	var payload map[string]json.RawMessage
+	if platformencoding.Unmarshal(body, &payload) != nil {
+		return nil, false
+	}
+	var items []map[string]json.RawMessage
+	if platformencoding.Unmarshal(payload["input"], &items) != nil {
+		return nil, false
+	}
+	filtered := make([]map[string]json.RawMessage, 0, len(items))
+	changed := false
+	for _, item := range items {
+		if rawString(item["type"]) == "reasoning" && len(item["encrypted_content"]) > 0 {
+			changed = true
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	if !changed {
+		return nil, false
+	}
+	payload["input"], _ = platformencoding.Marshal(filtered)
+	normalized, err := platformencoding.Marshal(payload)
+	return normalized, err == nil
+}
+
+func removeResponsesRejectedField(body []byte, field string) ([]byte, bool) {
+	var payload map[string]json.RawMessage
+	if platformencoding.Unmarshal(body, &payload) != nil {
+		return nil, false
+	}
+	if field == "max_output_tokens" || field == "max_tool_calls" || field == "transformer_metadata" {
+		if _, ok := payload[field]; !ok {
+			return nil, false
+		}
+		delete(payload, field)
+		normalized, err := platformencoding.Marshal(payload)
+		return normalized, err == nil
+	}
+	matches := regexp.MustCompile(`^input\[(\d+)\]\.namespace$`).FindStringSubmatch(field)
+	if len(matches) != 2 {
+		return nil, false
+	}
+	index, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return nil, false
+	}
+	var items []map[string]json.RawMessage
+	if platformencoding.Unmarshal(payload["input"], &items) != nil || index < 0 || index >= len(items) {
+		return nil, false
+	}
+	if _, ok := items[index]["namespace"]; !ok {
+		return nil, false
+	}
+	delete(items[index], "namespace")
+	payload["input"], err = platformencoding.Marshal(items)
+	if err != nil {
+		return nil, false
+	}
+	normalized, err := platformencoding.Marshal(payload)
+	return normalized, err == nil
+}
+
+func isAllowedResponsesRejectedField(field string) bool {
+	return field == "max_output_tokens" || field == "max_tool_calls" || field == "transformer_metadata" || regexp.MustCompile(`^input\[\d+\]\.namespace$`).MatchString(field)
+}
+
+func isResponsesFunctionCall(itemType string) bool {
+	return itemType == "function_call" || itemType == "custom_tool_call" || itemType == "tool_search_call"
+}
+
+func isResponsesFunctionOutput(itemType string) bool {
+	return itemType == "function_call_output" || itemType == "custom_tool_call_output" || itemType == "tool_search_output"
+}
+
+func rawString(raw json.RawMessage) string {
+	var value string
+	_ = platformencoding.Unmarshal(raw, &value)
+	return strings.TrimSpace(value)
+}
+
+func hasNonEmptyRawString(raw json.RawMessage) bool { return rawString(raw) != "" }

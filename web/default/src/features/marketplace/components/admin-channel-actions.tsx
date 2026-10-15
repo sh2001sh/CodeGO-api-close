@@ -1,0 +1,171 @@
+import {
+  Activity,
+  CirclePause,
+  Pencil,
+  Trash2,
+} from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import {
+  useAdminMarketplaceVerification,
+  useMarketplaceMutations,
+} from '../hooks'
+import { failedConnectivityModels } from '../lib/verification'
+import { isImageGenerationModel } from '../lib/model-capabilities'
+import type { MarketplaceChannel } from '../types'
+
+export function AdminChannelActions(props: {
+  channel: MarketplaceChannel
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const { t } = useTranslation()
+  const connectivityTest = useAdminMarketplaceVerification('test')
+  const connectivityRetry = useAdminMarketplaceVerification('retry-test')
+  const verificationPause = useAdminMarketplaceVerification('pause')
+  const channelMutations = useMarketplaceMutations()
+  const channel = props.channel
+  const failedCount = failedConnectivityModels(
+    channel.model_verification_results
+  ).length
+  const verifiableDeclaredCount = channel.declared_models.filter(
+    (model) => !isImageGenerationModel(model)
+  ).length
+  const retryConnectivity =
+    failedCount > 0 ||
+    (channel.connectivity_test_status === 'failed' && verifiableDeclaredCount > 0)
+  const retryConnectivityCount = failedCount > 0 ? failedCount : verifiableDeclaredCount
+  const connectivityRunning = ['queued', 'running'].includes(
+    channel.connectivity_test_status
+  )
+
+  const runConnectivityTest = () => {
+    const mutation = retryConnectivity ? connectivityRetry : connectivityTest
+    mutation.mutate(channel.id, {
+      onSuccess: () =>
+        toast.info(
+          retryConnectivity
+            ? t('正在重新测试 {{count}} 个失败模型', {
+                count: retryConnectivityCount,
+              })
+            : t('模型连通性测试已开始，页面会自动更新结果')
+        ),
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : t('测试启动失败')),
+    })
+  }
+
+  return (
+    <div className='flex shrink-0 flex-wrap items-center gap-2'>
+      <Button
+        variant='default'
+        size='sm'
+        disabled={
+          connectivityTest.isPending ||
+          connectivityRetry.isPending ||
+          connectivityRunning
+        }
+        onClick={runConnectivityTest}
+      >
+        <Activity />
+        {connectivityRunning
+          ? t('测试中')
+          : retryConnectivity
+            ? t('重试失败模型（{{count}}）', { count: retryConnectivityCount })
+            : t('测试连通性')}
+      </Button>
+      {isVerificationRunning(channel) && (
+        <Button
+          variant='outline'
+          size='sm'
+          disabled={verificationPause.isPending}
+          onClick={() =>
+            verificationPause.mutate(channel.id, {
+              onSuccess: () => toast.success(t('检测已暂停，可以重新开始')),
+              onError: (error) =>
+                toast.error(
+                  error instanceof Error ? error.message : t('暂停检测失败')
+                ),
+            })
+          }
+        >
+          <CirclePause />
+          {verificationPause.isPending ? t('正在暂停') : t('暂停检测')}
+        </Button>
+      )}
+      {['active', 'degraded'].includes(channel.lifecycle_status) && (
+        <Button
+          variant='outline'
+          size='sm'
+          disabled={channelMutations.adminPause.isPending}
+          onClick={() =>
+            channelMutations.adminPause.mutate(
+              { id: channel.id, paused: true },
+              {
+                onSuccess: () =>
+                  toast.success(t('渠道已暂停，冻结额度已保留')),
+                onError: (error) =>
+                  toast.error(
+                    error instanceof Error ? error.message : t('暂停渠道失败')
+                  ),
+              }
+            )
+          }
+        >
+          <CirclePause />
+          {t('暂停渠道（保留额度）')}
+        </Button>
+      )}
+      <Button
+        variant='outline'
+        size='sm'
+        disabled={channelMutations.adminPause.isPending}
+        onClick={() =>
+          channelMutations.adminPause.mutate(
+            {
+              id: channel.id,
+              paused: ['active', 'degraded'].includes(channel.lifecycle_status),
+            },
+            {
+              onSuccess: () =>
+                toast.success(
+                  t(
+                    !['active', 'degraded'].includes(channel.lifecycle_status)
+                      ? '渠道已恢复'
+                      : '渠道已关停，冻结额度已清理'
+                  )
+                ),
+              onError: (error) =>
+                toast.error(
+                  error instanceof Error ? error.message : t('操作失败')
+                ),
+            }
+          )
+        }
+      >
+        <CirclePause />
+        {channel.lifecycle_status === 'suspended'
+          ? t('恢复渠道')
+          : t('关停并清理冻结额度')}
+      </Button>
+      <Button variant='outline' size='sm' onClick={props.onEdit}>
+        <Pencil />
+        {t('编辑渠道')}
+      </Button>
+      <Button
+        variant='ghost'
+        size='sm'
+        className='text-destructive hover:text-destructive'
+        onClick={props.onDelete}
+      >
+        <Trash2 />
+        {t('删除')}
+      </Button>
+    </div>
+  )
+}
+
+function isVerificationRunning(channel: MarketplaceChannel) {
+  return ['queued', 'running'].includes(channel.connectivity_test_status)
+}

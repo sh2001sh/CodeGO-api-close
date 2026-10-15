@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package codego.v2.events;
+
+option go_package = "github.com/codego/codego-v2/contracts/events;events";
+
+message EventEnvelope {
+  string event_id = 1;
+  string event_type = 2;
+  string aggregate_type = 3;
+  string aggregate_id = 4;
+  string request_id = 5;
+  string trace_id = 6;
+  string occurred_at = 7;
+  bytes payload = 8;
+  map<string, string> metadata = 9;
+}
+
+message ReservationCreated {
+  string reservation_id = 1;
+  string account_id = 2;
+  string request_id = 3;
+  string workflow_id = 4;
+  string reason_code = 5;
+  string reserved_amount = 6;
+  string currency = 7;
+}
+
+message SettlementCompleted {
+  string settlement_id = 1;
+  string reservation_id = 2;
+  string account_id = 3;
+  string usage_evidence_id = 4;
+  string actual_amount = 5;
+  string delta_amount = 6;
+  string reference_type = 7;
+  string reference_id = 8;
+}
+
+message RefundCompleted {
+  string refund_id = 1;
+  string account_id = 2;
+  string reference_type = 3;
+  string reference_id = 4;
+  string amount = 5;
+  string reason_code = 6;
+}
+
+message RequestExecutionRecorded {
+  string request_execution_id = 1;
+  string request_id = 2;
+  string route_plan_id = 3;
+  string provider_code = 4;
+  string model_name = 5;
+  bool stream = 6;
+  string terminal_state = 7;
+}
+
+message TaskWorkflowTerminal {
+  string workflow_id = 1;
+  string public_task_id = 2;
+  string provider_code = 3;
+  string terminal_state = 4;
+  string settlement_status = 5;
+  string result_url = 6;
+}

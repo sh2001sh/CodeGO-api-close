@@ -1,59 +1,34 @@
-# CodeGo V3
+# CodeGO API · V2
 
-CodeGo is an AI API gateway with account management, credit billing, channel routing, and a marketplace.
+当前维护版本为 V2，代码基线为生产版本 `2a543bef367e16e79450ae0a549a6d10e2994cac`。后续修复在 `main` 上进行。
 
-The Go module lives in `v3/`; the React application lives in `web/app/`. The root V2 server, frontend, and release workflows have been removed. The independent V3 legacy importer remains available for database migration.
+## 开发与验证
 
-## Run locally
+需要 Go 1.26、Bun 及 Node.js。先构建网页，后编译后端（控制服务会嵌入网页资源）：
 
-Requirements: Go matching `v3/go.mod`, Bun, Docker Compose, and Bash for backend verification.
-
-Copy `.env.example` to a private `.env`, generate separate 32-byte base64 values for `V3_SECRET_KEY` and `V3_SESSION_SECRET`, and set an isolated `V3_TEST_PG_PASSWORD`.
-
-```bash
-make dev
-docker compose --env-file .env -f v3/deploy/compose.test.yaml -p codego-v3-dev ps
+```sh
+cd web/default
+bun install --frozen-lockfile
+bun run build
+cd ../..
+go build -p 1 ./cmd/...
+go test -p 1 ./internal/billing/app ./internal/gateway/execution/providers/openai
 ```
 
-The local application listens on `http://localhost:18083`. PostgreSQL, Redis, WAL, and uploaded files belong to this isolated Compose project. `make stop` preserves its volumes. Use `make dev-web` for the frontend development server.
+后端入口位于 `cmd/`；前端位于 `web/default/`。V2 架构文档见 [docs/architecture/codego-v2](docs/architecture/codego-v2)。本地配置使用 `.env.example`，真实服务器凭据与数据库文件存放在仓库之外。
 
-## Verify
+## 镜像与生产
 
-```bash
-make verify
-make verify-web
-```
+`main` 推送后由 GitHub Actions 构建 V2 镜像。生产部署工作流只接受手动触发，代码推送和镜像构建不会自动切流。生产仍使用已验证的各服务固定镜像；恢复代码无需迁移数据库。
 
-The backend checks use disposable databases. Deployment acceptance instructions, browser checks, configuration details, and migration commands are in [v3/deploy/README.md](v3/deploy/README.md). The architecture is described in [v3/README.md](v3/README.md).
+镜像仓库：`ghcr.io/sh2001sh/codego-api`。V2 运行配置见 [docker-compose.yml](docker-compose.yml)。
 
-## Build and release
+## V3 归档
 
-```bash
-docker build -f Dockerfile --build-arg SERVICE=gateway -t codego-gateway .
-docker build -f v3/deploy/Dockerfile.web -t codego-web .
-```
+V3 已停止维护，已提交代码保留在 [`archive/v3-before-v2-20261015`](https://github.com/sh2001sh/CodeGO-api-close/tree/archive/v3-before-v2-20261015)。V3 源码与构建流程已从 `main` 移除。
 
-Backend `SERVICE` values are `gateway`, `control`, `worker`, and `migrate`. The V3 GitHub workflow verifies the backend, frontend, browsers, and isolated stack, then publishes five images for `main`, `v3-rebuild`, and pushed tags:
+临时日志、浏览器会话、测试快照和本地运维文件不纳入源码。分析报告整理在 [docs/reports](docs/reports)。
 
-```text
-ghcr.io/sh2001sh/codego-api:sha-<7-character-commit>-gateway-amd64
-ghcr.io/sh2001sh/codego-api:sha-<7-character-commit>-control-amd64
-ghcr.io/sh2001sh/codego-api:sha-<7-character-commit>-worker-amd64
-ghcr.io/sh2001sh/codego-api:sha-<7-character-commit>-migrate-amd64
-ghcr.io/sh2001sh/codego-api:sha-<7-character-commit>-web-amd64
-```
+## 许可
 
-`docker-compose.yml` is an image-only V3 template for a new installation with external PostgreSQL and Redis. Set `V3_IMAGE_TAG` to the verified immutable revision. Schema migration is an explicit operation:
-
-```bash
-docker compose --env-file .env --profile operations run --rm migrate schema
-docker compose --env-file .env up -d worker gateway control web
-```
-
-For an existing installation, keep its deployment directory, environment, ports, volumes, network, and database configuration. The manual V3 deployment workflow updates image references in an existing JSON Compose file; it does not copy this template over production or run a database migration. It requires the exact full commit, a successful verification run for that commit, pinned SSH host keys, and the existing remote deployment path.
-
-Runtime and capacity notes: [production operations](docs/production-performance-and-concurrency-guide.zh-CN.md).
-
-## License
-
-See [LICENSE](LICENSE), [NOTICE](NOTICE), and [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
+保留上游版权与 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md)。

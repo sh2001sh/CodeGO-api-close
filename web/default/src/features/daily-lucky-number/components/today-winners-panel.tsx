@@ -1,0 +1,266 @@
+import { useMemo, useState } from 'react'
+import i18n from '@/i18n/config'
+import {
+  AlertCircle,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+  Trophy,
+} from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
+import { Skeleton } from '@/components/ui/skeleton'
+import { formatLuckyDate } from '../lib'
+import type { LuckyPublicWin } from '../types'
+import {
+  type WinnerFilter,
+  WinnerFilters,
+  WinnerList,
+} from './today-winners-list'
+
+const PAGE_SIZE = 8
+export function TodayWinnersPanel(props: {
+  records?: LuckyPublicWin[]
+  drawDate?: string
+  timezone: string
+  loading?: boolean
+  error?: boolean
+  onRetry: () => void
+}) {
+  const view = useWinnerPanelView(props.records, props.drawDate)
+
+  return (
+    <section className='app-page-shell overflow-hidden'>
+      <PanelHeader
+        drawDate={props.drawDate}
+        timezone={props.timezone}
+        count={view.records.length}
+      />
+      {props.error ? (
+        <ErrorState onRetry={props.onRetry} />
+      ) : props.loading ? (
+        <LoadingState />
+      ) : view.records.length === 0 ? (
+        <EmptyState hasDraw={Boolean(props.drawDate)} />
+      ) : (
+        <>
+          <WinnerFilters
+            filter={view.filter}
+            counts={view.counts}
+            total={view.records.length}
+            onChange={(value) => {
+              view.setFilter(value)
+              view.setPage(1)
+            }}
+          />
+          {view.visible.length > 0 ? (
+            <WinnerList records={view.visible} />
+          ) : (
+            <div className='text-muted-foreground px-4 py-8 text-center text-sm'>
+              <Trans i18nKey={'今日暂无该档位的中奖记录'} />
+            </div>
+          )}
+          <PanelFooter
+            page={view.page}
+            pageCount={view.pageCount}
+            total={view.filtered.length}
+            pageMayBeTruncated={view.pageMayBeTruncated}
+            onPrevious={() => view.setPage((value) => Math.max(1, value - 1))}
+            onNext={() =>
+              view.setPage((value) => Math.min(view.pageCount, value + 1))
+            }
+          />
+        </>
+      )}
+    </section>
+  )
+}
+
+function useWinnerPanelView(
+  records: LuckyPublicWin[] | undefined,
+  drawDate: string | undefined
+) {
+  const [filter, setFilter] = useState<WinnerFilter>('all')
+  const [page, setPage] = useState(1)
+  const todayRecords = useMemo(
+    () =>
+      drawDate
+        ? (records ?? [])
+            .filter((item) => item.draw_date === drawDate)
+            .sort((a, b) => b.matched_digits - a.matched_digits)
+        : [],
+    [drawDate, records]
+  )
+  const counts = useMemo(
+    () =>
+      [1, 2, 3, 4].map(
+        (digits) =>
+          todayRecords.filter((item) => item.matched_digits === digits).length
+      ),
+    [todayRecords]
+  )
+  const filtered =
+    filter === 'all'
+      ? todayRecords
+      : todayRecords.filter((item) => item.matched_digits === filter)
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount)
+  const visible = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  )
+
+  return {
+    filter,
+    setFilter,
+    page: safePage,
+    setPage,
+    records: todayRecords,
+    counts,
+    filtered,
+    visible,
+    pageCount,
+    pageMayBeTruncated:
+      todayRecords.length > 0 &&
+      todayRecords.length === (records?.length ?? 0) &&
+      todayRecords.length >= 20,
+  }
+}
+
+function PanelHeader(props: {
+  drawDate?: string
+  timezone: string
+  count: number
+}) {
+  useTranslation()
+  return (
+    <div className='border-border/70 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-5'>
+      <div className='flex items-center gap-3'>
+        <span className='bg-primary/10 text-primary flex size-9 items-center justify-center rounded-lg'>
+          <Trophy className='size-4' aria-hidden='true' />
+        </span>
+        <div>
+          <h2 className='text-foreground text-base font-semibold'>
+            <Trans i18nKey={'今日中奖名单'} />
+          </h2>
+          <p className='text-muted-foreground mt-0.5 text-xs'>
+            {props.count > 0
+              ? i18n.t('已加载 {{param0}} 条中奖记录', { param0: props.count })
+              : i18n.t('按命中位数查看奖励结果')}
+          </p>
+        </div>
+      </div>
+      {props.drawDate ? (
+        <span className='text-muted-foreground inline-flex items-center gap-1.5 text-xs'>
+          <CalendarDays className='size-3.5' aria-hidden='true' />
+          {formatLuckyDate(props.drawDate, props.timezone, 'zh-CN')}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function PanelFooter(props: {
+  page: number
+  pageCount: number
+  total: number
+  pageMayBeTruncated: boolean
+  onPrevious: () => void
+  onNext: () => void
+}) {
+  useTranslation()
+  return (
+    <div className='border-border/70 bg-muted/15 flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 sm:px-5'>
+      <span className='text-muted-foreground inline-flex items-center gap-2 text-xs'>
+        <ShieldCheck className='size-3.5' aria-hidden='true' />
+        {props.pageMayBeTruncated
+          ? i18n.t('名单较长，已按页展示')
+          : i18n.t('仅展示中奖尾号和套餐档位')}
+      </span>
+      {props.total > 0 && props.pageCount > 1 ? (
+        <div className='flex items-center gap-1.5'>
+          <Button
+            variant='ghost'
+            size='icon-sm'
+            onClick={props.onPrevious}
+            disabled={props.page <= 1}
+            aria-label={i18n.t('上一页')}
+          >
+            <ChevronLeft aria-hidden='true' />
+          </Button>
+          <span className='text-muted-foreground min-w-20 text-center text-xs tabular-nums'>
+            <Trans i18nKey={'第'} /> {props.page} / {props.pageCount}{' '}
+            <Trans i18nKey={'页'} />
+          </span>
+          <Button
+            variant='ghost'
+            size='icon-sm'
+            onClick={props.onNext}
+            disabled={props.page >= props.pageCount}
+            aria-label={i18n.t('下一页')}
+          >
+            <ChevronRight aria-hidden='true' />
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ErrorState(props: { onRetry: () => void }) {
+  return (
+    <Alert variant='destructive' className='m-4 sm:m-5'>
+      <AlertCircle aria-hidden='true' />
+      <AlertDescription className='flex flex-wrap items-center justify-between gap-3'>
+        <span>
+          <Trans i18nKey={'中奖名单暂时加载失败，请稍后重试。'} />
+        </span>
+        <Button variant='outline' size='sm' onClick={props.onRetry}>
+          <Trans i18nKey={'重试'} />
+        </Button>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function LoadingState() {
+  return (
+    <div className='space-y-3 p-4 sm:p-5'>
+      <Skeleton className='h-14 w-full' />
+      <Skeleton className='h-28 w-full' />
+    </div>
+  )
+}
+
+function EmptyState(props: { hasDraw: boolean }) {
+  useTranslation()
+  return (
+    <Empty className='min-h-48 border-0'>
+      <EmptyHeader>
+        <EmptyMedia variant='icon'>
+          <Trophy aria-hidden='true' />
+        </EmptyMedia>
+        <EmptyTitle>
+          {props.hasDraw
+            ? i18n.t('今天暂时没有中奖记录')
+            : i18n.t('今日尚未开奖')}
+        </EmptyTitle>
+        <EmptyDescription>
+          {props.hasDraw
+            ? i18n.t('中奖记录将在结算完成后按命中档位展示。')
+            : i18n.t('开奖后将会在这里展示当日中奖名单。')}
+        </EmptyDescription>
+      </EmptyHeader>
+    </Empty>
+  )
+}

@@ -1,0 +1,38 @@
+name: Verify V2
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: oven-sh/setup-bun@v2
+      - name: Build V2 frontend
+        working-directory: web/default
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+      - name: Build V2 services
+        run: go build -p 1 ./cmd/...
+      - name: Test billing and stream handling
+        run: go test -p 1 ./internal/billing/app ./internal/gateway/execution/providers/openai

@@ -1,0 +1,131 @@
+services:
+  db-migrate:
+    build:
+      context: .
+      args:
+        APP_PATH: ./cmd/db-migrate
+    environment: &migration-environment
+      SQL_DSN: ${SQL_DSN:?set SQL_DSN in .env}
+      SQL_MAX_OPEN_CONNS: ${SQL_MAX_OPEN_CONNS:-20}
+      SQL_MAX_IDLE_CONNS: ${SQL_MAX_IDLE_CONNS:-5}
+      SQL_MAX_LIFETIME: ${SQL_MAX_LIFETIME:-300}
+      TZ: ${TZ:-Asia/Shanghai}
+      NODE_TYPE: master
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  control-api:
+    build:
+      context: .
+      args:
+        APP_PATH: ./cmd/control-api
+    environment: &runtime-environment
+      SQL_DSN: ${SQL_DSN:?set SQL_DSN in .env}
+      SQL_MAX_OPEN_CONNS: ${SQL_MAX_OPEN_CONNS:-20}
+      SQL_MAX_IDLE_CONNS: ${SQL_MAX_IDLE_CONNS:-5}
+      SQL_MAX_LIFETIME: ${SQL_MAX_LIFETIME:-300}
+      REDIS_CONN_STRING: ${REDIS_CONN_STRING:-redis://redis:6379}
+      TZ: ${TZ:-Asia/Shanghai}
+      NODE_TYPE: master
+      CONTROL_PORT: "3000"
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
+      OIDC_SIGNING_PRIVATE_KEY_FILE: ${OIDC_SIGNING_PRIVATE_KEY_FILE:-}
+      OIDC_SIGNING_PRIVATE_KEY_BASE64: ${OIDC_SIGNING_PRIVATE_KEY_BASE64:-}
+      OIDC_SIGNING_KEY_ID: ${OIDC_SIGNING_KEY_ID:-codego-oidc-1}
+      CODEGO_COMMUNITY_API_SECRET: ${CODEGO_COMMUNITY_API_SECRET:-}
+    ports:
+      - "3000:3000"
+    depends_on: &runtime-depends-on
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  gateway-api:
+    build:
+      context: .
+      args:
+        APP_PATH: ./cmd/gateway-api
+    environment:
+      <<: *runtime-environment
+      NODE_TYPE: slave
+      GATEWAY_PORT: "3001"
+      FILE_STORAGE_PATH: /var/lib/new-api/files
+      FILE_STORAGE_USER_LIMIT_MB: ${FILE_STORAGE_USER_LIMIT_MB:-1024}
+      FILE_STORAGE_RETENTION_DAYS: ${FILE_STORAGE_RETENTION_DAYS:-30}
+      FILE_STORAGE_CLEANUP_INTERVAL_MINUTES: ${FILE_STORAGE_CLEANUP_INTERVAL_MINUTES:-60}
+      FILE_DELIVERY_BASE_URL: ${FILE_DELIVERY_BASE_URL:-}
+      FILE_DELIVERY_SIGNING_SECRET: ${FILE_DELIVERY_SIGNING_SECRET:-}
+      FILE_DELIVERY_TTL_MINUTES: ${FILE_DELIVERY_TTL_MINUTES:-15}
+    ports:
+      - "3001:3001"
+    volumes:
+      - ${FILE_STORAGE_HOST_PATH:-/mnt/codego-data/files}:/var/lib/new-api/files
+    depends_on: *runtime-depends-on
+    restart: unless-stopped
+
+  workflow-worker:
+    build:
+      context: .
+      args:
+        APP_PATH: ./cmd/workflow-worker
+    environment:
+      <<: *runtime-environment
+      TEMPORAL_HOSTPORT: temporal:7233
+    depends_on:
+      <<: *runtime-depends-on
+      temporal:
+        condition: service_started
+    restart: unless-stopped
+
+  ledger-worker:
+    build:
+      context: .
+      args:
+        APP_PATH: ./cmd/ledger-worker
+    environment: *runtime-environment
+    depends_on: *runtime-depends-on
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-newapi}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-newapi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-newapi}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

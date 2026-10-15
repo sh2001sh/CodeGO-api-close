@@ -1,0 +1,299 @@
+package execution
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
+	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
+	gatewayproviders "github.com/sh2001sh/new-api/internal/gateway/execution/providers"
+	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
+	"github.com/sh2001sh/new-api/types"
+	"github.com/stretchr/testify/require"
+)
+
+type rejectingResponsesAdaptor struct {
+	gatewayproviders.SyncAdaptor
+	requests int
+	body     []byte
+	message  string
+}
+
+func (a *rejectingResponsesAdaptor) DoRequest(_ *gin.Context, _ *relaycommon.RelayInfo, body io.Reader) (any, error) {
+	a.requests++
+	a.body, _ = io.ReadAll(body)
+	message := a.message
+	if message == "" {
+		message = "Invalid request parameters. Check the request and try again."
+	}
+	payload, _ := json.Marshal(map[string]any{"error": map[string]any{"message": message, "type": "invalid_request_error"}})
+	return &http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(payload))}, nil
+}
+
+func TestGenericResponses400DoesNotReplayOrRewriteRejectedBody(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	payload := []byte(`{"model":"gpt-6-astra","input":[{"type":"function_call_output","call_id":"call_1","output":"result"}],"tools":[{"type":"web_search"}]}`)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(payload))
+	adaptor := &rejectingResponsesAdaptor{}
+	_, apiErr := sendResponsesWithCompatibility(ctx, &relaycommon.RelayInfo{}, adaptor, bytes.NewReader(payload), payload)
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	require.Equal(t, 1, adaptor.requests)
+	require.Equal(t, payload, adaptor.body)
+	require.True(t, ctx.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)))
+}
+
+func TestOpaqueResponses400AllowsOuterRouteFallback(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	payload := []byte(`{"model":"gpt-5.6-sol","input":"hello","stream":true}`)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(payload))
+	adaptor := &rejectingResponsesAdaptor{message: "Upstream request failed"}
+
+	_, apiErr := sendResponsesWithCompatibility(ctx, &relaycommon.RelayInfo{}, adaptor, bytes.NewReader(payload), payload)
+
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	require.Equal(t, 1, adaptor.requests)
+	require.Equal(t, payload, adaptor.body)
+	require.True(t, ctx.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)))
+}
+
+func TestExplicitResponses400DoesNotAllowOuterRouteFallback(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	payload := []byte(`{"model":"gpt-5.6-sol","input":"hello","stream":true}`)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(payload))
+	adaptor := &rejectingResponsesAdaptor{message: "Invalid request parameters: input is required"}
+
+	_, apiErr := sendResponsesWithCompatibility(ctx, &relaycommon.RelayInfo{}, adaptor, bytes.NewReader(payload), payload)
+
+	require.NotNil(t, apiErr)
+	require.False(t, ctx.GetBool(string(constant.ContextKeyResponsesGenericUpstream400)))
+}
+
+func TestTryResponsesOriginalBodyFastPathReusesExactBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	payload := []byte(`{"model":"gpt-5","input":[{"role":"user","content":"hello"}],"stream":true}`)
+	req := httptest.NewRequest("POST", "/v1/responses", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = req
+	info := &relaycommon.RelayInfo{
+		RelayMode:       gatewaycontract.RelayModeResponses,
+		OriginModelName: "gpt-5",
+		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5"},
+	}
+
+	body, ok, err := tryResponsesOriginalBodyFastPath(ctx, info)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, payload, body)
+}
+
+func TestTryResponsesOriginalBodyFastPathRejectsRewriteCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name    string
+		payload string
+		mutate  func(*relaycommon.RelayInfo)
+	}{
+		{name: "model mapping", payload: `{"model":"gpt-5","stream":true}`, mutate: func(info *relaycommon.RelayInfo) { info.IsModelMapped = true }},
+		{name: "compatibility field", payload: `{"model":"gpt-5","stream":true,"include":["usage"]}`, mutate: func(info *relaycommon.RelayInfo) {}},
+		{name: "disabled field", payload: `{"model":"gpt-5","stream":true,"store":true}`, mutate: func(info *relaycommon.RelayInfo) { info.ChannelOtherSettings.DisableStore = true }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := []byte(tt.payload)
+			req := httptest.NewRequest("POST", "/v1/responses", bytes.NewReader(payload))
+			req.Header.Set("Content-Type", "application/json")
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = req
+			info := &relaycommon.RelayInfo{RelayMode: gatewaycontract.RelayModeResponses, OriginModelName: "gpt-5", ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5"}}
+			tt.mutate(info)
+			_, ok, err := tryResponsesOriginalBodyFastPath(ctx, info)
+			require.NoError(t, err)
+			require.False(t, ok)
+		})
+	}
+}
+
+func TestTryResponsesOriginalBodyFastPathRejectsResolvedFileBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/responses", bytes.NewReader([]byte(`{"model":"gpt-5","stream":true}`)))
+	ctx.Set(string(constant.ContextKeyResolvedFileReferences), true)
+	info := &relaycommon.RelayInfo{RelayMode: gatewaycontract.RelayModeResponses, OriginModelName: "gpt-5", ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5"}}
+	_, ok, err := tryResponsesOriginalBodyFastPath(ctx, info)
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
+func TestForceResponsesStreamBodyAddsStreamTrue(t *testing.T) {
+	storage, err := platformhttpx.CreateBodyStorage([]byte(`{"model":"gpt-5","input":"hello"}`))
+	require.NoError(t, err)
+	defer storage.Close()
+
+	body, fastPath, err := forceResponsesStreamBody(storage)
+
+	require.NoError(t, err)
+	require.False(t, fastPath)
+	require.JSONEq(t, `{"model":"gpt-5","input":"hello","stream":true}`, string(body))
+}
+
+func TestForceResponsesStreamBodyOverridesStreamFalse(t *testing.T) {
+	storage, err := platformhttpx.CreateBodyStorage([]byte(`{"model":"gpt-5","input":"hello","stream":false}`))
+	require.NoError(t, err)
+	defer storage.Close()
+
+	body, fastPath, err := forceResponsesStreamBody(storage)
+
+	require.NoError(t, err)
+	require.False(t, fastPath)
+	require.JSONEq(t, `{"model":"gpt-5","input":"hello","stream":true}`, string(body))
+}
+
+func TestForceResponsesStreamBodyReusesAlreadyStreamingBody(t *testing.T) {
+	storage, err := platformhttpx.CreateBodyStorage([]byte(`{"model":"gpt-5","input":"hello","stream":true}`))
+	require.NoError(t, err)
+	defer storage.Close()
+
+	body, fastPath, err := forceResponsesStreamBody(storage)
+	require.NoError(t, err)
+	require.True(t, fastPath)
+	require.Equal(t, []byte(`{"model":"gpt-5","input":"hello","stream":true}`), body)
+}
+
+func TestBuildRemoteCompactionV2BodyPreservesProtocolFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(nil)
+	payload := []byte(`{"model":"gpt-5-alias","input":[{"type":"compaction_trigger"}],"stream":true,"store":true,"prompt_cache_key":"cache-1","reasoning":{"effort":"high"}}`)
+	storage, err := platformhttpx.CreateBodyStorage(payload)
+	require.NoError(t, err)
+	defer storage.Close()
+	ctx.Set(platformhttpx.KeyBodyStorage, storage)
+
+	body, size, err := buildRemoteCompactionV2Body(ctx, "gpt-5-alias", "gpt-5-alias", nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(payload)), size)
+	actual, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.Equal(t, payload, actual)
+}
+
+func TestBuildRemoteCompactionV2BodyMapsOnlyModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(nil)
+	storage, err := platformhttpx.CreateBodyStorage([]byte(`{"model":"gpt-5-alias","stream":true,"store":true,"prompt_cache_key":"cache-1"}`))
+	require.NoError(t, err)
+	defer storage.Close()
+	ctx.Set(platformhttpx.KeyBodyStorage, storage)
+
+	body, _, err := buildRemoteCompactionV2Body(ctx, "gpt-5-alias", "gpt-5-upstream", nil)
+	require.NoError(t, err)
+	actual, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"model":"gpt-5-upstream","stream":true,"store":true,"prompt_cache_key":"cache-1"}`, string(actual))
+}
+
+func TestNormalizeRemoteCompactionV2BodyMovesTriggerToEndAndForcesStream(t *testing.T) {
+	body, changed, err := normalizeRemoteCompactionV2Body([]byte(`{"model":"gpt-5","stream":false,"input":[{"type":"compaction_trigger"},{"type":"message","role":"user","content":"tail"},{"type":"compaction_trigger"}]}`), "gpt-5", "gpt-5")
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{"model":"gpt-5","stream":true,"input":[{"type":"message","role":"user","content":"tail"},{"type":"compaction_trigger"}]}`, string(body))
+}
+
+func TestBuildRemoteCompactionV1ViaV2BodyAddsSingleTerminalTrigger(t *testing.T) {
+	body, err := buildRemoteCompactionV1ViaV2Body([]byte(`{"model":"gpt-6-astra","input":[{"type":"message","role":"user","content":"hello"},{"type":"compaction_trigger"}],"stream":false}`))
+	require.NoError(t, err)
+	require.JSONEq(t, `{"model":"gpt-6-astra","input":[{"type":"message","role":"user","content":"hello"},{"type":"compaction_trigger"}],"stream":true,"store":false}`, string(body))
+}
+
+func TestRemoteCompactionV2AsV1ResponseExtractsCompletedEnvelope(t *testing.T) {
+	response := &http.Response{Body: io.NopCloser(strings.NewReader(
+		"data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"compaction\"}}\n\n" +
+			"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"object\":\"response\",\"output\":[{\"type\":\"compaction\",\"encrypted_content\":\"opaque\"}],\"usage\":{\"input_tokens\":12,\"output_tokens\":3,\"total_tokens\":15}}}\n\n",
+	))}
+
+	body, usage, err := remoteCompactionV2AsV1Response(response)
+	require.NoError(t, err)
+	require.Equal(t, 12, usage.InputTokens)
+	require.Equal(t, 3, usage.OutputTokens)
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(body, &result))
+	require.Equal(t, "response.compaction", result["object"])
+	require.Len(t, result["output"], 1)
+}
+
+func TestRemoteCompactionV2BodyCanBeNormalizedForPortableUpstream(t *testing.T) {
+	body, changed, err := normalizeRemoteCompactionV2Body([]byte(`{
+		"model":"gpt-6-astra",
+		"stream":false,
+		"client_metadata":{"thread_id":"private"},
+		"input":[
+			{"type":"additional_tools","tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}]},
+			{"type":"agent_message","author":"/root/worker","content":[{"type":"input_text","text":"done"}]},
+			{"type":"compaction_trigger"}
+		]
+	}`), "gpt-6-astra", "gpt-6-astra")
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	body, changed, err = normalizeResponsesCompatibilityBody(body)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{
+		"model":"gpt-6-astra",
+		"stream":true,
+		"tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}],
+		"input":[
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"done"}]},
+			{"type":"compaction_trigger"}
+		]
+	}`, string(body))
+}
+
+func TestNormalizeRemoteCompactionV1BodyRemovesStreamAndServerOwnedInputIDs(t *testing.T) {
+	body, changed, err := normalizeRemoteCompactionV1Body([]byte(`{
+		"model":"gpt-5",
+		"stream":true,
+		"input":[
+			{"type":"message","id":"msg_0707148ece7e1dd8016aa8019f172087d1b1d111cf7def5267","role":"assistant","content":[]},
+			{"type":"function_call_output","id":"fc_foreign","call_id":"call_1","output":"ok"}
+		],
+		"previous_response_id":"resp_1"
+	}`))
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{
+		"model":"gpt-5",
+		"input":[
+			{"type":"message","role":"assistant","content":[]},
+			{"type":"function_call_output","call_id":"call_1","output":"ok"}
+		],
+		"previous_response_id":"resp_1"
+	}`, string(body))
+}
+
+func TestNormalizePreviousResponseIDRetryRemovesStaleAnchor(t *testing.T) {
+	err := types.WithOpenAIError(types.OpenAIError{Code: "previous_response_not_found", Type: "invalid_request_error", Message: "Previous response is not available"}, 400)
+	retry, ok := normalizePreviousResponseIDRetry([]byte(`{"model":"gpt-5","previous_response_id":"resp_old","input":[{"type":"message","role":"user","content":"continue"}]}`), err)
+	require.True(t, ok)
+	require.JSONEq(t, `{"model":"gpt-5","input":[{"type":"message","role":"user","content":"continue"}]}`, string(retry))
+}
+
+func TestHasRemoteCompactionTrigger(t *testing.T) {
+	require.True(t, hasRemoteCompactionTrigger(json.RawMessage(`[{"type":"message"},{"type":"compaction_trigger"}]`)))
+	require.False(t, hasRemoteCompactionTrigger(json.RawMessage(`[{"type":"message"}]`)))
+}
+
+func TestNormalizedCompactionParallelToolCallsDefaultsRequiredBoolean(t *testing.T) {
+	require.JSONEq(t, "false", string(normalizedCompactionParallelToolCalls(nil)))
+	require.JSONEq(t, "false", string(normalizedCompactionParallelToolCalls(json.RawMessage("null"))))
+	require.JSONEq(t, "true", string(normalizedCompactionParallelToolCalls(json.RawMessage("true"))))
+}

@@ -32,7 +32,7 @@ test('real whole conversion and bound card preserve consent, expiry and independ
       { encoding: 'utf8' },
     ).trim()
   await page.goto('/sign-up')
-  await page.getByLabel('用户名', { exact: true }).fill(username)
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill(username)
   await page.getByLabel('邮箱', { exact: true }).fill(`${username}@example.test`)
   await page.getByLabel('密码', { exact: true }).fill(`Test-${crypto.randomUUID()}`)
   await page.getByRole('checkbox', { name: /我已阅读并同意/ }).check()
@@ -135,7 +135,7 @@ test('real whole conversion and bound card preserve consent, expiry and independ
   sql(
     `INSERT INTO v3_commerce.subscription_reset_opportunity_accounts(user_id,earned_total,available_total) VALUES(${user},2,2)`,
   )
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   const select = page.getByRole('combobox', { name: '需要转余额的老套餐', exact: true })
   await expect(select.locator(`option[value="${expired.id}"]`)).toHaveAttribute('disabled')
   await select.selectOption(String(old.id))
@@ -232,7 +232,7 @@ test('real whole conversion and bound card preserve consent, expiry and independ
   await expect(page.getByRole('status').filter({ hasText: '分段核定已保存' })).toBeVisible()
   expect(sql(`SELECT state FROM v3_commerce.subscriptions WHERE id=${periodic.id}`)).toBe('active')
 
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await page
     .getByRole('combobox', { name: '需要转余额的老套餐', exact: true })
     .selectOption(String(periodic.id))

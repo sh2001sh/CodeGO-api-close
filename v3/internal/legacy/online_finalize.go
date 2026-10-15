@@ -128,8 +128,16 @@ func (m *Importer) FinalizeOnline(ctx context.Context, opts OnlineOptions) (Repo
 	if err = onlineRequireQuiescent(ctx, source); err != nil {
 		return r, err
 	}
-	if _, err = loadOnlineProjector(ctx, source, target, sources); err != nil {
+	projector, err := loadOnlineProjector(ctx, source, target, sources)
+	if err != nil {
 		return r, err
+	}
+	var currentPending map[int64]int64
+	if opts.SampledAcceptance {
+		currentPending, err = projector.repairSampledPendingMarket(ctx, source, sources)
+		if err != nil {
+			return r, err
+		}
 	}
 	var view *onlineView
 	if opts.SampledAcceptance {
@@ -139,6 +147,9 @@ func (m *Importer) FinalizeOnline(ctx context.Context, opts OnlineOptions) (Repo
 	}
 	if err != nil {
 		return r, err
+	}
+	if currentPending != nil {
+		view.marketPending = currentPending
 	}
 	if err = target.Commit(ctx); err != nil {
 		return r, err
@@ -251,7 +262,19 @@ func onlineRestoreRelationships(ctx context.Context, target pgx.Tx, specs []onli
 		if c.table == "v3_billing.historical_accounts" {
 			continue
 		}
-		if _, err = target.Exec(ctx, "ALTER TABLE "+pgx.Identifier(strings.Split(c.table, ".")).Sanitize()+" ADD CONSTRAINT "+pgx.Identifier{c.name}.Sanitize()+" "+c.definition); err != nil {
+		definition := c.definition
+		if view := onlineViewFrom(ctx); view != nil && view.sampled && !strings.Contains(strings.ToUpper(definition), "NOT VALID") {
+			var partitioned bool
+			if err = target.QueryRow(ctx, "SELECT relkind='p' FROM pg_class WHERE oid=$1::regclass", c.table).Scan(&partitioned); err != nil {
+				return err
+			}
+			// PostgreSQL requires partitioned FK roots to be validated when added.
+			// Ordinary tables retain the accepted deferred historical validation.
+			if !partitioned {
+				definition += " NOT VALID"
+			}
+		}
+		if _, err = target.Exec(ctx, "ALTER TABLE "+pgx.Identifier(strings.Split(c.table, ".")).Sanitize()+" ADD CONSTRAINT "+pgx.Identifier{c.name}.Sanitize()+" "+definition); err != nil {
 			return err
 		}
 	}

@@ -37,7 +37,6 @@ export default function GroupFavoritesPage() {
     <>
       <PageHeader
         title="分组收藏"
-        description="保存常用分组，随时查看模型与价格，再进入市场选择路由。"
         action={
           <Link to="/channel-market" className="button button-secondary">
             {t('浏览渠道市场')}
@@ -60,7 +59,6 @@ export default function GroupFavoritesPage() {
         (favorites.data.items.length === 0 ? (
           <EmptyState
             title="尚未收藏分组"
-            description="在渠道市场点击收藏分组，之后可在这里快速找到。"
             action={
               <Link to="/channel-market" className="button button-primary">
                 {t('浏览渠道市场')}

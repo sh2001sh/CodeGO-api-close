@@ -202,6 +202,11 @@ func (s *Service) persistChannelUpdateTx(ctx context.Context, tx pgx.Tx, channel
 	if _, e = tx.Exec(ctx, `UPDATE v3_catalog.channels SET name=$2,provider=$3,base_url=$4,max_concurrency=$5,max_user_concurrency=$6,multiplier_card_supported=$7,status=CASE WHEN $8 THEN 'disabled' ELSE status END,settings=jsonb_set(settings,'{market}',coalesce(settings->'market','{}')||$9::jsonb||jsonb_build_object('remark',$10::text)) WHERE id=$1`, channel, r.Name, nativeProvider(r.Provider), r.BaseURL, r.MaxConcurrency, r.UserMaxConcurrency, r.MultiplierCardSupported, configChanged, settings, r.Remark); e != nil {
 		return e
 	}
+	if !r.AutoProbeEnabled {
+		if _, e = tx.Exec(ctx, `UPDATE v3_channelmarket.verification_runs SET status='paused',completed_at=$2,summary='Automatic probe disabled' WHERE channel_id=$1 AND trigger='auto_probe' AND status IN ('queued','running')`, channel, s.cfg.Now()); e != nil {
+			return e
+		}
+	}
 	if _, keyChanged := fields["api_key"]; keyChanged {
 		if s.enc == nil {
 			return ErrUnavailable

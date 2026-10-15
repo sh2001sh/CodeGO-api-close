@@ -20,7 +20,6 @@ export const settingGroups: readonly SettingGroupDef[] = [
   { id: 'payment', label: '支付', description: '支付活动与折扣策略' },
   { id: 'billing', label: '计费与额度', description: '计费模式、表达式与订阅策略' },
   { id: 'model', label: '模型与部署', description: '外部算力部署服务配置' },
-  { id: 'blindbox', label: '盲盒与活动', description: '盲盒与活动相关的路由配置' },
   { id: 'mail', label: '邮件', description: 'SMTP 发信配置' },
   { id: 'other', label: '其他', description: '内容安全与敏感词策略' },
 ]

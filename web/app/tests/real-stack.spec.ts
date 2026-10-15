@@ -10,7 +10,7 @@ test('real container registration, key creation, pages and authorization boundar
 }) => {
   const username = `browser_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
   await page.goto('/sign-up')
-  await page.getByLabel('用户名', { exact: true }).fill(username)
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill(username)
   await page.getByLabel('邮箱', { exact: true }).fill(`${username}@example.test`)
   await page.getByLabel('密码', { exact: true }).fill(`Test-${crypto.randomUUID()}`)
   await page.getByRole('checkbox', { name: /我已阅读并同意/ }).check()
@@ -29,7 +29,6 @@ test('real container registration, key creation, pages and authorization boundar
     ['/wallet', '钱包'],
     ['/orders', '订单'],
     ['/usage-logs', '使用日志'],
-    ['/blind-box', '盲盒'],
     ['/profile', '个人资料'],
     ['/channel-market', '渠道市场'],
     ['/my-channels', '渠道工作台'],

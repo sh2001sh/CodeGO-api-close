@@ -3,6 +3,32 @@ import { fixtureAPI, user } from './fixtures'
 
 test.beforeEach(async ({ page }) => fixtureAPI(page))
 
+test('email password login submits complete addresses longer than the username limit', async ({
+  page,
+}) => {
+  const address = 'long-account-address-for-mail-login@example.test'
+  await page.route('**/api/user/login', (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      username: address,
+      password: 'valid-password',
+    })
+    return route.fulfill({ status: 401, json: { success: false, message: '身份验证失败' } })
+  })
+  await page.goto('/sign-in')
+  const identifier = page.getByLabel('用户名或邮箱', { exact: true })
+  await expect(identifier).toHaveAttribute('maxlength', '254')
+  await identifier.fill(address)
+  await page.getByLabel('密码', { exact: true }).fill('valid-password')
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveText('身份验证失败')
+  await expect(identifier).toHaveValue(address)
+  await page.screenshot({
+    path: test.info().outputPath('email-login.png'),
+    fullPage: true,
+    animations: 'disabled',
+  })
+})
+
 test('password login waits for a successful second factor and keeps rejected proofs on the challenge', async ({
   page,
 }) => {
@@ -21,7 +47,7 @@ test('password login waits for a successful second factor and keeps rejected pro
     return route.fulfill({ json: { success: true, data: { user } } })
   })
   await page.goto('/sign-in')
-  await page.getByLabel('用户名', { exact: true }).fill('operator')
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill('operator')
   await page.getByLabel('密码', { exact: true }).fill('valid-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.getByRole('button', { name: '验证并登录', exact: true })).toBeVisible()
@@ -48,7 +74,7 @@ test('email registration reports sender failure and forwards invitation and veri
   await page.getByRole('button', { name: '发送邮箱验证码', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveText('邮箱服务未配置')
   await expect(page.getByText('验证码已发送，请查看邮箱。', { exact: true })).toHaveCount(0)
-  await page.getByLabel('用户名', { exact: true }).fill('newuser')
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill('newuser')
   await page.getByLabel('密码', { exact: true }).fill('long-password')
   await page.getByLabel('邮箱验证码', { exact: true }).fill('mail-proof')
   await page.getByRole('checkbox', { name: /我已阅读并同意/ }).check()

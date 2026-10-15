@@ -25,7 +25,6 @@ const pages: Record<string, string> = {
   '/wallet': '钱包',
   '/orders': '订单',
   '/packages': '套餐',
-  '/blind-box': '盲盒',
   '/notifications': '消息通知',
   '/profile': '个人设置',
   '/sign-in': '登录',

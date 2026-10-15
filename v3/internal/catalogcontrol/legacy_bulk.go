@@ -38,21 +38,21 @@ func (s *Server) legacyDeleteChannelBatch(w http.ResponseWriter, r *http.Request
 		fail(w, 400, "invalid_ids", "Expected 1 to 10000 positive channel identifiers")
 		return
 	}
-	tag, err := s.pool.Exec(r.Context(), `DELETE FROM v3_catalog.channels WHERE id=ANY($1::bigint[])`, req.IDs)
+	count, err := s.deleteChannels(r.Context(), req.IDs, false)
 	if err != nil {
 		s.dbError(w, err)
 		return
 	}
-	respond(w, 200, tag.RowsAffected())
+	respond(w, 200, count)
 }
 
 func (s *Server) legacyDeleteDisabledChannels(w http.ResponseWriter, r *http.Request) {
-	tag, err := s.pool.Exec(r.Context(), `DELETE FROM v3_catalog.channels WHERE status IN ('disabled','auto_disabled')`)
+	count, err := s.deleteChannels(r.Context(), nil, true)
 	if err != nil {
 		s.dbError(w, err)
 		return
 	}
-	respond(w, 200, tag.RowsAffected())
+	respond(w, 200, count)
 }
 
 func (s *Server) legacyBatchSetChannelTag(w http.ResponseWriter, r *http.Request) {

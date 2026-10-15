@@ -4,19 +4,31 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
 
+// Apply every filter before LIMIT/OFFSET so searches can find channels beyond
+// the current page. The same predicate serves both administration endpoints.
+func channelFilters(r *http.Request) (string, []any) {
+	q := r.URL.Query()
+	where := ` WHERE ` + visibleCatalogChannel + ` AND ($1='' OR c.name ILIKE '%'||$1||'%' OR c.id::text=$1 OR coalesce(c.tag,'') ILIKE '%'||$1||'%')
+	AND ($2='' OR EXISTS(SELECT 1 FROM v3_catalog.channel_groups cg WHERE cg.channel_id=c.id AND cg.group_name=$2))
+	AND ($3='' OR EXISTS(SELECT 1 FROM v3_catalog.channel_models cm WHERE cm.channel_id=c.id AND cm.model=$3))
+	AND ($4='' OR c.status=$4) AND ($5='' OR c.tag=$5) AND ($6='' OR c.provider=$6)`
+	return where, []any{strings.TrimSpace(q.Get("keyword")), strings.TrimSpace(q.Get("group")), strings.TrimSpace(q.Get("model")), q.Get("status"), q.Get("tag"), q.Get("provider")}
+}
+
 func (s *Server) listChannels(w http.ResponseWriter, r *http.Request) {
 	p, n := page(r)
-	filter := r.URL.Query().Get("keyword")
+	where, args := channelFilters(r)
 	var total int64
-	if err := s.pool.QueryRow(r.Context(), `SELECT count(*) FROM v3_catalog.channels WHERE ($1='' OR name ILIKE '%'||$1||'%')`, filter).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(r.Context(), `SELECT count(*) FROM v3_catalog.channels c`+where, args...).Scan(&total); err != nil {
 		s.dbError(w, err)
 		return
 	}
-	rows, err := s.pool.Query(r.Context(), channelSelect+` WHERE ($1='' OR c.name ILIKE '%'||$1||'%') ORDER BY c.id DESC LIMIT $2 OFFSET $3`, filter, n, (p-1)*n)
+	rows, err := s.pool.Query(r.Context(), channelSelect+where+` ORDER BY c.id DESC LIMIT $7 OFFSET $8`, append(args, n, (p-1)*n)...)
 	if err != nil {
 		s.dbError(w, err)
 		return
@@ -43,7 +55,7 @@ func (s *Server) getChannel(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	c, err := scanChannel(s.pool.QueryRow(r.Context(), channelSelect+` WHERE c.id=$1`, id))
+	c, err := scanChannel(s.pool.QueryRow(r.Context(), channelSelect+` WHERE c.id=$1 AND `+visibleCatalogChannel, id))
 	if err != nil {
 		s.dbError(w, err)
 		return
@@ -96,12 +108,12 @@ func (s *Server) deleteChannel(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	tag, err := s.pool.Exec(r.Context(), `DELETE FROM v3_catalog.channels WHERE id=$1`, id)
+	count, err := s.deleteChannels(r.Context(), []int64{id}, false)
 	if err != nil {
 		s.dbError(w, err)
 		return
 	}
-	if tag.RowsAffected() == 0 {
+	if count == 0 {
 		s.dbError(w, pgx.ErrNoRows)
 		return
 	}

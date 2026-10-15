@@ -24,22 +24,43 @@ var commerceSourceNames = []string{
 type commerceRow map[string]json.RawMessage
 
 type commerceData struct {
-	rows              map[string][]commerceRow
-	plans             map[int64]commerceRow
-	users             map[int64]bool
-	options           map[string]string
-	snapshot          map[int64][2]int64
-	reservationStates map[string][]string
-	refundOrigins     []commerceRefundOrigin
-	completedRequests map[string]int64
-	renewableBonuses  map[int64]*big.Int
-	resetUsed         map[int64]bool
+	rows                               map[string][]commerceRow
+	plans                              map[int64]commerceRow
+	users                              map[int64]bool
+	options                            map[string]string
+	snapshot                           map[int64][2]int64
+	reservationStates                  map[string][]string
+	refundOrigins                      []commerceRefundOrigin
+	refundOriginsWaived                int64
+	completedRequests                  map[string]int64
+	renewableBonuses                   map[int64]*big.Int
+	resetUsed                          map[int64]bool
+	terminalPreconsumeHistoryPreserved bool
+	historicalBonusRecurrenceWaived    bool
+	preservedSourceCounts              map[string]int64
+	walletCanonical                    map[int64]int64
 }
 
 func loadCommerce(ctx context.Context, source pgx.Tx, sources map[string]string) (*commerceData, error) {
-	d := &commerceData{rows: map[string][]commerceRow{}, plans: map[int64]commerceRow{}, users: map[int64]bool{}, snapshot: map[int64][2]int64{}, reservationStates: map[string][]string{}}
+	d := &commerceData{rows: map[string][]commerceRow{}, plans: map[int64]commerceRow{}, users: map[int64]bool{}, snapshot: map[int64][2]int64{}, reservationStates: map[string][]string{}, preservedSourceCounts: map[string]int64{}}
+	sampled := onlineViewFrom(ctx) != nil && onlineViewFrom(ctx).sampled
 	for _, name := range append(append([]string{}, commerceSourceNames...), "users") {
-		raw, err := loadRows(ctx, source, sources[name])
+		subscriptionTrades := map[string]bool{}
+		if sampled && name == "top_ups" {
+			for _, order := range d.rows["subscription_orders"] {
+				trade, _ := order.text("trade_no")
+				subscriptionTrades[trade] = true
+			}
+		}
+		table := sources[name]
+		if view := onlineViewFrom(ctx); view != nil && view.sampled && name == "subscription_pre_consume_records" && table != "" {
+			// The frozen canonical accounts retain the actual funds. Completed
+			// request receipts stay in the preserved V2 source under the user's
+			// history waiver; unknown and nonterminal states must still fail.
+			table = "(SELECT * FROM " + table + " WHERE status IS NULL OR status NOT IN ('consumed','refunded','settled','completed'))"
+			d.terminalPreconsumeHistoryPreserved = true
+		}
+		raw, err := loadRows(ctx, source, table)
 		if err != nil {
 			return nil, fmt.Errorf("legacy: load commerce table %s: %w", name, err)
 		}
@@ -47,6 +68,29 @@ func loadCommerce(ctx context.Context, source pgx.Tx, sources map[string]string)
 			row := commerceRow{}
 			if err = json.Unmarshal(encoded, &row); err != nil {
 				return nil, fmt.Errorf("legacy: decode commerce table %s: %w", name, err)
+			}
+			if sampled && name == "top_ups" {
+				amount, _ := row.integer("amount")
+				trade, _ := row.text("trade_no")
+				mirror := amount == 0 && trade != "" && subscriptionTrades[trade]
+				if mirror {
+					d.preservedSourceCounts["subscription_payment_mirrors"]++
+					continue
+				}
+				state, _ := row.text("status")
+				if amount > 9223372036854 && (state == "expired" || state == "failed" || state == "canceled") {
+					// No paid lot may disappear: loadRefundOrigins below still rejects
+					// any real topup attribution whose original order is not present.
+					d.preservedSourceCounts["unpaid_oversize_topups"]++
+					continue
+				}
+			}
+			if sampled && name == "wallet_transfers" {
+				state, _ := row.text("status")
+				if state == "reversed" {
+					d.preservedSourceCounts["reversed_wallet_transfers"]++
+					continue
+				}
 			}
 			d.rows[name] = append(d.rows[name], row)
 			if name == "subscription_plans" {
@@ -70,8 +114,30 @@ func loadCommerce(ctx context.Context, source pgx.Tx, sources map[string]string)
 	if err = d.loadCompletedRequests(ctx, source, sources); err != nil {
 		return nil, err
 	}
-	if err = d.loadRenewableBonuses(ctx, source, sources); err != nil {
-		return nil, err
+	if view := onlineViewFrom(ctx); view != nil && view.sampled {
+		// Preserve the actual current balances, but do not resurrect historical
+		// group awards as recurring credits under the user's V3 bonus retirement.
+		d.historicalBonusRecurrenceWaived = true
+	} else {
+		if err = d.loadRenewableBonuses(ctx, source, sources); err != nil {
+			return nil, err
+		}
+	}
+	if sampled {
+		subscriptions := map[int64]bool{}
+		for _, row := range d.rows["user_subscriptions"] {
+			id, _ := row.integer("id")
+			subscriptions[id] = true
+		}
+		for _, row := range d.rows["subscription_orders"] {
+			id, _ := row.integer("target_subscription_id")
+			state, _ := row.text("status")
+			fulfilled, _ := row.text("fulfillment_status")
+			if id > 0 && !subscriptions[id] && state == "success" && fulfilled == "completed" {
+				row["target_subscription_id"] = json.RawMessage(`0`)
+				d.preservedSourceCounts["settled_order_deleted_subscription_links"]++
+			}
+		}
 	}
 	reservationTable := sources["billing_reservations"]
 	if reservationTable == "" {

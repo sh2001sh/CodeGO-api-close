@@ -92,7 +92,7 @@ func walletRewardStateTx(ctx context.Context, tx pgx.Tx, account int64, now time
 	}
 	var permanent credits.Micro
 	if err := tx.QueryRow(ctx, `SELECT coalesce(sum(remaining_amount),0)::bigint FROM v3_billing.funding_lots
-	 WHERE account_id=$1 AND non_transferable`, account).Scan(&permanent); err != nil {
+	 WHERE account_id=$1 AND non_transferable AND remaining_amount>0`, account).Scan(&permanent); err != nil {
 		return 0, 0, err
 	}
 	locked, err = locked.Add(permanent)

@@ -40,7 +40,6 @@ export default function RatioSyncPage() {
   return (
     <>
       <PageHeader title="上游倍率同步" />
-      <p>{t('先获取上游差异，再核对要应用的价格。获取差异不会修改现有价格。')}</p>
       <ErrorMessage error={error ?? channels.error ?? prices.error ?? fetch.error ?? apply.error} />
       {channels.isPending && <Loading />}
       <form
@@ -162,7 +161,7 @@ export default function RatioSyncPage() {
             </section>
           ))}
           {!Object.keys(fetch.data.differences).length && (
-            <p className="empty-state">{t('未发现可比较的价格差异，请同时检查上游获取结果。')}</p>
+            <p className="empty-state">{t('暂无价格差异')}</p>
           )}
         </>
       )}

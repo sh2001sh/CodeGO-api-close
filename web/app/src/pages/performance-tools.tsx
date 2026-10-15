@@ -179,7 +179,7 @@ export default function PerformanceToolsPage() {
               </form>
             </>
           ) : (
-            <p className="notice">{t('当前服务输出容器日志，未启用本地日志文件管理。')}</p>
+            <p className="notice">{t('本地日志文件管理未启用')}</p>
           ))}
         {clean.data && (
           <p role="status">

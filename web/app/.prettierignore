@@ -6,6 +6,7 @@ node_modules
 output/
 .impeccable/
 test-results*/
+artifacts/
 tests/zz-*
 *.tsbuildinfo
 .*-task.md

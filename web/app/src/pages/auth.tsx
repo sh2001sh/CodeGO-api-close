@@ -91,7 +91,6 @@ export default function AuthPage(props: { register?: boolean }) {
               verify.mutate(String(new FormData(event.currentTarget).get('code')).trim())
             }}
           >
-            <p className="muted">{t('输入验证器的验证码，或输入一个尚未使用的备用码。')}</p>
             <Field name="code" label="两步验证码或备用码" required maxLength={32} />
             <ErrorMessage error={verify.error} />
             <Button type="submit" disabled={verify.isPending}>
@@ -109,7 +108,13 @@ export default function AuthPage(props: { register?: boolean }) {
           </form>
         ) : (
           <form onSubmit={submit} className="form-stack">
-            <Field name="username" label="用户名" required maxLength={32} />
+            <Field
+              name="username"
+              label={props.register ? '用户名' : '用户名或邮箱'}
+              required
+              maxLength={props.register ? 32 : 254}
+              autoComplete="username"
+            />
             {props.register && (
               <>
                 <Field name="display_name" label="显示名称" maxLength={100} />

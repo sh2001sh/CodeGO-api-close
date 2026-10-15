@@ -69,30 +69,5 @@ func (s *Service) redeemSubscriptionTx(ctx context.Context, tx pgx.Tx, user int6
 }
 
 func (s *Service) redeemBoxesTx(ctx context.Context, tx pgx.Tx, user int64, operation string, result *RedemptionResult) error {
-	if s.cfg.CashBoxes == nil {
-		return ErrProviderUnavailable
-	}
-	var poolID int64
-	rows, err := tx.Query(ctx, `SELECT id FROM v3_marketplace.blind_box_pools WHERE scope='standard' AND enabled ORDER BY id LIMIT 2`)
-	if err != nil {
-		return err
-	}
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[int64])
-	if err != nil {
-		return err
-	}
-	if len(ids) != 1 {
-		return ErrProviderUnavailable
-	}
-	poolID = ids[0]
-	o, err := s.cfg.CashBoxes.CreateBoxOrderTx(ctx, tx, marketplace.BoxOrderInput{UserID: user, PoolID: poolID, Quantity: result.BlindBoxQuantity,
-		TradeNo: operation, Currency: "cny", PaymentProvider: "redemption", PaymentMethod: "redemption", Source: "redemption"})
-	if err != nil {
-		return cashBoxError(err)
-	}
-	if _, err = s.cfg.CashBoxes.CompleteBoxOrderTx(ctx, tx, user, operation, 0, "cny"); err != nil {
-		return cashBoxError(err)
-	}
-	result.BlindBoxOrderID = o.ID
-	return nil
+	return marketplace.ErrBlindBoxesDisabled
 }

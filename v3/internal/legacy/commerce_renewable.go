@@ -253,6 +253,9 @@ func (cycle *commerceBonusCycle) walkDelayedGrants(ctx context.Context, source p
 	if table == "" {
 		return nil
 	}
+	if view := onlineViewFrom(ctx); view != nil && view.sampled {
+		return cycle.walkDelayedGrantsByAccount(ctx, source, table, before)
+	}
 	accounts := make([]string, 0)
 	var earliest int64
 	for account, sub := range cycle.accountSubs {
@@ -296,6 +299,46 @@ func (cycle *commerceBonusCycle) walkDelayedGrants(ctx context.Context, source p
 		}
 	}
 	return rows.Err()
+}
+
+// Use the existing (account_id,created_at) index with each subscription's own
+// cycle start. The former shared earliest date made PostgreSQL scan unrelated
+// accounts and old cycles. addDelayedGrant retains the same final checks.
+func (cycle *commerceBonusCycle) walkDelayedGrantsByAccount(ctx context.Context, source pgx.Tx, table string, before int64) error {
+	for account, sub := range cycle.accountSubs {
+		if len(cycle.oldMarkers[sub]) == 0 {
+			continue
+		}
+		start, err := cycle.subs[sub].integer("start_time")
+		if err != nil {
+			return err
+		}
+		rows, err := source.Query(ctx, "SELECT to_jsonb(t) FROM "+table+` t WHERE account_id=$1
+		 AND reason_code='subscription_bonus' AND strpos(idempotency_key,'group-buy:')>0
+		 AND created_at >= $2 AND created_at < $3`, account, time.Unix(start, 0).UTC(), time.Unix(before, 0).UTC().Add(time.Second))
+		if err != nil {
+			return fmt.Errorf("legacy: read delayed group renewal grants: %w", err)
+		}
+		for rows.Next() {
+			var raw json.RawMessage
+			if err = rows.Scan(&raw); err == nil {
+				var row commerceRow
+				if err = json.Unmarshal(raw, &row); err == nil {
+					err = cycle.addDelayedGrant(row, before)
+				}
+			}
+			if err != nil {
+				rows.Close()
+				return err
+			}
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func commerceAddRenewable(bonuses map[int64]*big.Int, sub, amount int64) error {

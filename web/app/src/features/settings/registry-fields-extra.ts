@@ -1,4 +1,4 @@
-// Settings field definitions: blind box routing, mail and other (sensitive words).
+// Settings field definitions: mail and other (sensitive words).
 // Split out of registry.ts to stay under the 400-line file limit.
 // Every key is grounded in a confirmed live (non-test) read in the v3 Go backend.
 //
@@ -7,16 +7,6 @@
 import type { SettingFieldDef } from './registry-types'
 
 export const extraFields: readonly SettingFieldDef[] = [
-  // 盲盒与活动 — v3/internal/gateway/routing/card.go:12
-  {
-    key: 'blind_box_setting.multiplier_card_route_group',
-    label: '倍率卡路由分组',
-    description: '倍率卡请求路由到的分组名',
-    type: 'string',
-    group: 'blindbox',
-    placeholder: '纯Pro号池',
-  },
-
   // 邮件 — v3/cmd/internal/boot/mail.go:80
   { key: 'SMTPServer', label: 'SMTP 服务器地址', type: 'string', group: 'mail' },
   { key: 'SMTPPort', label: 'SMTP 端口', type: 'number', group: 'mail', placeholder: '587' },

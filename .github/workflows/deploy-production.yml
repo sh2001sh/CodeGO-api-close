@@ -1,193 +1,88 @@
-name: Legacy v2 production deployment (manual)
+name: Deploy verified CodeGo V3 images
 
 on:
   workflow_dispatch:
     inputs:
-      legacy_revision:
-        description: 'Exact legacy v2 commit to deploy; this workflow must never deploy the v3 branch'
+      revision:
+        description: 'Exact 40-character commit with a successful V3 verification and published images'
         required: true
         type: string
+      compose_file:
+        description: 'Existing V3 JSON Compose filename in PRODUCTION_DEPLOY_PATH'
+        required: true
+        default: compose.json
+        type: string
+
+concurrency:
+  group: codego-v3-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
+    timeout-minutes: 60
     steps:
-      - name: Check out built revision
-        uses: actions/checkout@v4
+      - name: Require a verified immutable revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]]
+          gh api --method GET "repos/$GH_REPO/actions/workflows/v3-verify.yml/runs" \
+            -f head_sha="$REVISION" -f status=completed -f event=push -f per_page=100 \
+            | jq -e '.workflow_runs | any(.head_sha == env.REVISION and .conclusion == "success")' >/dev/null
+      - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.legacy_revision }}
-      - name: Resolve explicitly selected legacy revision
-        id: revision
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve deploy configuration
-        id: config
-        shell: bash
+          ref: ${{ inputs.revision }}
+      - name: Validate deployment configuration
         env:
-          PRODUCTION_DEPLOY_HOST: ${{ secrets.PRODUCTION_DEPLOY_HOST }}
-          PRODUCTION_DEPLOY_USER: ${{ secrets.PRODUCTION_DEPLOY_USER }}
-          PRODUCTION_DEPLOY_SSH_KEY: ${{ secrets.PRODUCTION_DEPLOY_SSH_KEY }}
-          PRODUCTION_DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          DEPLOY_HOST: ${{ secrets.PRODUCTION_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.PRODUCTION_DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          DEPLOY_SSH_KEY: ${{ secrets.PRODUCTION_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.PRODUCTION_DEPLOY_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-          missing=()
-          for key in \
-            PRODUCTION_DEPLOY_HOST \
-            PRODUCTION_DEPLOY_USER \
-            PRODUCTION_DEPLOY_SSH_KEY \
-            PRODUCTION_DEPLOY_PATH; do
-            if [ -z "${!key:-}" ]; then
-              missing+=("$key")
-            fi
+          for key in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            if [ -z "${!key:-}" ]; then echo "Missing deployment configuration: $key" >&2; exit 1; fi
           done
-
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "summary=Skipping production deploy because required secrets are missing: ${missing[*]}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "enabled=true" >> "$GITHUB_OUTPUT"
-          echo "summary=Production deploy is configured." >> "$GITHUB_OUTPUT"
-
-      - name: Prepare SSH key
-        if: steps.config.outputs.enabled == 'true'
-        shell: bash
-        env:
-          PRODUCTION_DEPLOY_HOST: ${{ secrets.PRODUCTION_DEPLOY_HOST }}
-          PRODUCTION_DEPLOY_PORT: ${{ secrets.PRODUCTION_DEPLOY_PORT }}
-          PRODUCTION_DEPLOY_SSH_KEY: ${{ secrets.PRODUCTION_DEPLOY_SSH_KEY }}
-        run: |
-          set -euo pipefail
           mkdir -p "$HOME/.ssh"
-          printf '%s\n' "$PRODUCTION_DEPLOY_SSH_KEY" > "$HOME/.ssh/new-api-production"
-          chmod 600 "$HOME/.ssh/new-api-production"
-          touch "$HOME/.ssh/known_hosts"
-          ssh-keyscan -p "${PRODUCTION_DEPLOY_PORT:-22}" -H "$PRODUCTION_DEPLOY_HOST" >> "$HOME/.ssh/known_hosts"
-
-      - name: Sync deployment compose file
-        if: steps.config.outputs.enabled == 'true'
-        shell: bash
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/codego-v3-production"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/codego-v3-production" "$HOME/.ssh/known_hosts"
+      - name: Update existing V3 runtime without resetting configuration
         env:
-          PRODUCTION_DEPLOY_HOST: ${{ secrets.PRODUCTION_DEPLOY_HOST }}
-          PRODUCTION_DEPLOY_PORT: ${{ secrets.PRODUCTION_DEPLOY_PORT }}
-          PRODUCTION_DEPLOY_USER: ${{ secrets.PRODUCTION_DEPLOY_USER }}
-          PRODUCTION_DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          DEPLOY_HOST: ${{ secrets.PRODUCTION_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.PRODUCTION_DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.PRODUCTION_DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          DEPLOY_COMMIT_SHA: ${{ inputs.revision }}
+          DEPLOY_COMPOSE_FILE: ${{ inputs.compose_file }}
         run: |
           set -euo pipefail
-          port="${PRODUCTION_DEPLOY_PORT:-22}"
-          ssh_key="$HOME/.ssh/new-api-production"
-          ssh_target="${PRODUCTION_DEPLOY_USER}@${PRODUCTION_DEPLOY_HOST}"
-
-          ssh -i "$ssh_key" -p "$port" "$ssh_target" "mkdir -p '$PRODUCTION_DEPLOY_PATH'"
-          scp -i "$ssh_key" -P "$port" "docker-compose.yml" "$ssh_target:$PRODUCTION_DEPLOY_PATH/docker-compose.yml"
-
-      - name: Deploy CodeGo v2 runtime
-        if: steps.config.outputs.enabled == 'true'
-        shell: bash
+          printf -v q_path '%q' "$DEPLOY_PATH"
+          printf -v q_revision '%q' "$DEPLOY_COMMIT_SHA"
+          printf -v q_compose '%q' "$DEPLOY_COMPOSE_FILE"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -i "$HOME/.ssh/codego-v3-production" -p "${DEPLOY_PORT:-22}" \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_PATH=$q_path DEPLOY_COMMIT_SHA=$q_revision DEPLOY_COMPOSE_FILE=$q_compose python3 -" \
+            < .github/scripts/deploy-v3-existing.py
+      - name: Verify public application
         env:
-          PRODUCTION_DEPLOY_HOST: ${{ secrets.PRODUCTION_DEPLOY_HOST }}
-          PRODUCTION_DEPLOY_PORT: ${{ secrets.PRODUCTION_DEPLOY_PORT }}
-          PRODUCTION_DEPLOY_USER: ${{ secrets.PRODUCTION_DEPLOY_USER }}
-          PRODUCTION_DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
-          PRODUCTION_DEPLOY_SERVICE: ${{ secrets.PRODUCTION_DEPLOY_SERVICE }}
-          PRODUCTION_DEPLOY_POST_COMMAND: ${{ secrets.PRODUCTION_DEPLOY_POST_COMMAND }}
-          DEPLOY_COMMIT_SHA: ${{ steps.revision.outputs.sha }}
+          PUBLIC_URL: ${{ secrets.PRODUCTION_PUBLIC_BASE_URL }}
         run: |
           set -euo pipefail
-          port="${PRODUCTION_DEPLOY_PORT:-22}"
-          ssh_key="$HOME/.ssh/new-api-production"
-          ssh_target="${PRODUCTION_DEPLOY_USER}@${PRODUCTION_DEPLOY_HOST}"
-          deploy_version="sha-${DEPLOY_COMMIT_SHA:0:7}"
-          service="${PRODUCTION_DEPLOY_SERVICE:-}"
-          post_command="${PRODUCTION_DEPLOY_POST_COMMAND:-}"
-
-          printf -v q_path '%q' "$PRODUCTION_DEPLOY_PATH"
-          printf -v q_version '%q' "$deploy_version"
-          printf -v q_service '%q' "$service"
-          printf -v q_post '%q' "$post_command"
-
-          ssh -i "$ssh_key" -p "$port" "$ssh_target" \
-            "DEPLOY_PATH=$q_path DEPLOY_VERSION=$q_version DEPLOY_SERVICE=$q_service POST_COMMAND=$q_post bash -s" <<'EOF'
-          set -euo pipefail
-          cd "$DEPLOY_PATH"
-          compose_env=(env "NEW_API_VERSION=$DEPLOY_VERSION")
-
-          if [ -n "$DEPLOY_SERVICE" ]; then
-            "${compose_env[@]}" docker compose pull "$DEPLOY_SERVICE"
-            "${compose_env[@]}" docker compose up -d "$DEPLOY_SERVICE"
-          else
-            "${compose_env[@]}" docker compose pull
-            "${compose_env[@]}" docker compose up -d
-          fi
-
-          if [ -z "$DEPLOY_SERVICE" ]; then
-            "${compose_env[@]}" docker compose ps --format json > /tmp/codego-v2-compose-status.json
-            for runtime_service in control-api gateway-api workflow-worker ledger-worker; do
-              if ! grep -Eq "\"Service\":\"${runtime_service}\"" /tmp/codego-v2-compose-status.json; then
-                echo "CodeGo v2 runtime service '${runtime_service}' is not present in docker compose status" >&2
-                cat /tmp/codego-v2-compose-status.json >&2
-                exit 1
-              fi
-            done
-
-            verify_success=0
-            for _ in $(seq 1 24); do
-              if "${compose_env[@]}" docker compose --profile verify run --rm v2-verify --strict; then
-                verify_success=1
-                break
-              fi
-              sleep 5
-            done
-            if [ "$verify_success" -ne 1 ]; then
-              echo "CodeGo v2 migration verification failed" >&2
-              exit 1
-            fi
-          fi
-
-          if [ -n "$POST_COMMAND" ]; then
-            eval "$POST_COMMAND"
-          fi
-          EOF
-
-      - name: Verify public health endpoint
-        if: steps.config.outputs.enabled == 'true'
-        shell: bash
-        env:
-          PRODUCTION_PUBLIC_BASE_URL: ${{ secrets.PRODUCTION_PUBLIC_BASE_URL }}
-          DEPLOY_COMMIT_SHA: ${{ steps.revision.outputs.sha }}
-        run: |
-          set -euo pipefail
-          base_url="${PRODUCTION_PUBLIC_BASE_URL:-https://codegoai.com}"
-          base_url="${base_url%/}"
-          expected_version="sha-${DEPLOY_COMMIT_SHA:0:7}"
-
-          success=0
-          for _ in $(seq 1 24); do
-            response_headers=$(mktemp)
-            if curl --fail --silent --show-error -D "$response_headers" "${base_url}/api/status" >/tmp/new-api-status.json; then
-              deployed_version=$(awk 'BEGIN { IGNORECASE=1 } /^x-new-api-version:/ { sub(/^[^:]*:[[:space:]]*/, ""); gsub(/[[:space:]]+$/, ""); print; exit }' "$response_headers")
-              if grep -Eq '"success"[[:space:]]*:[[:space:]]*true' /tmp/new-api-status.json && [ "$deployed_version" = "$expected_version" ]; then
-                success=1
-                rm -f "$response_headers"
-                break
-              fi
-            fi
-            rm -f "$response_headers"
-            sleep 5
-          done
-
-          if [ "$success" -ne 1 ]; then
-            echo "Production health check failed for ${base_url}/api/status" >&2
-            cat /tmp/new-api-status.json 2>/dev/null || true
-            exit 1
-          fi
-
-      - name: Deployment summary
-        shell: bash
-        run: |
-          echo "### Production deploy" >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ steps.config.outputs.summary }}" >> "$GITHUB_STEP_SUMMARY"
+          base_url="${PUBLIC_URL:-https://codegoai.com}"
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "${base_url%/}/api/status" \
+            | jq -e '.success == true' >/dev/null
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -f "$HOME/.ssh/codego-v3-production"

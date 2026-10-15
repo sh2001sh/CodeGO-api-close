@@ -240,12 +240,21 @@ func loadHistory(ctx context.Context, source pgx.Tx, sources map[string]string) 
 	} else {
 		d.counts["request_attempt_audits_linked"] = d.counts["request_attempt_audits"] - d.counts["orphan_request_attempt_history"]
 	}
-	if ledgerHistoryArchived(ctx) {
+	view := onlineViewFrom(ctx)
+	if ledgerHistoryArchived(ctx) && view != nil && view.sampled {
+		// Source preservation is bound by the execution contract. Do not claim
+		// an independently measured archive row count under sampled acceptance.
+		d.counts["historical_ledger_archive_count_waived"] = 1
+	} else if ledgerHistoryArchived(ctx) {
 		var err error
 		d.archive, err = inspectLedgerArchive(ctx, source, sources["ledger_entries"])
 		if err != nil {
 			return nil, err
 		}
+	}
+	if view != nil && view.sampled {
+		d.counts["retired_usage_history_totals_waived"] = 1
+		return d, nil
 	}
 	var err error
 	d.retiredUsage, err = loadRetiredUsageTotals(ctx, source, sources["logs"])

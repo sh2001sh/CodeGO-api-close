@@ -67,7 +67,7 @@ export function Integration(props: { model: string }) {
           </div>
           <div>
             <dt>{t('计费')}</dt>
-            <dd>{t('按模型计价规则、用量与分组倍率结算')}</dd>
+            <dd>credits</dd>
           </div>
         </dl>
       </div>

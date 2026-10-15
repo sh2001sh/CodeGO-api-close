@@ -14,7 +14,6 @@ import { keysOptions, sessionOptions, walletOptions, resourceOptions } from './l
 import { Shell } from './components/shell'
 import { Button, ErrorMessage, Loading } from './components/ui'
 import { useTranslation } from './lib/i18n'
-import { boxHistoryOptions } from './features/box-history'
 import { safeLocalReturn } from './lib/auth-navigation'
 import { PageMetadata } from './components/page-metadata'
 
@@ -199,50 +198,18 @@ const keys = createRoute({
 const wallet = createRoute({
   getParentRoute: () => authenticated,
   path: '/wallet',
-  loader: ({ context }) =>
-    Promise.all([
-      context.queryClient.ensureQueryData(walletOptions()),
-      import('./features/commerce/subscription-values').then((module) =>
-        context.queryClient.ensureQueryData(module.subscriptionConversionsOptions()),
-      ),
-      import('./features/commerce/refunds').then((module) =>
-        context.queryClient.ensureQueryData(module.refundsOptions()),
-      ),
-      import('./features/commerce/subscription-actions').then((module) =>
-        context.queryClient.ensureQueryData(module.subscriptionPreferenceOptions()),
-      ),
-      context.queryClient.ensureQueryData(
-        resourceOptions('payment-methods', (signal) =>
-          api.GET('/api/commerce/providers', { signal }).then(unwrap),
-        ),
-      ),
-      context.queryClient.ensureQueryData(
-        resourceOptions('plans', (signal) =>
-          api.GET('/api/subscription/plans', { signal }).then((result) => unwrap(result)),
-        ),
-      ),
-      context.queryClient.ensureQueryData(
-        resourceOptions('subscriptions', (signal) =>
-          api.GET('/api/subscription/self', { signal }).then((result) => unwrap(result)),
-        ),
-      ),
-    ]),
+  validateSearch: (search: { section?: string }): { section?: string } => ({
+    section: ['topup', 'subscriptions', 'plans', 'conversion', 'redemption', 'refunds'].includes(
+      search.section ?? '',
+    )
+      ? search.section
+      : undefined,
+  }),
   component: lazyRouteComponent(() => import('./pages/wallet')),
 })
 const logs = createRoute({
   getParentRoute: () => authenticated,
   path: '/usage-logs',
-  loader: ({ context }) =>
-    context.queryClient.ensureQueryData(
-      resourceOptions(
-        'logs',
-        (signal) =>
-          api
-            .GET('/api/log/self', { signal, params: { query: { page_size: 50 } } })
-            .then((result) => unwrap(result)),
-        ['', ''],
-      ),
-    ),
   component: lazyRouteComponent(() => import('./pages/logs')),
 })
 const orders = createRoute({
@@ -271,16 +238,9 @@ const groupBuy = createRoute({
 const blindBox = createRoute({
   getParentRoute: () => authenticated,
   path: '/blind-box',
-  loader: ({ context }) =>
-    Promise.all([
-      context.queryClient.ensureQueryData(boxHistoryOptions()),
-      context.queryClient.ensureQueryData(
-        resourceOptions('boxes', (signal) =>
-          api.GET('/api/blind-box/self', { signal }).then((result) => unwrap(result)),
-        ),
-      ),
-    ]),
-  component: lazyRouteComponent(() => import('./pages/blind-box')),
+  beforeLoad: () => {
+    throw redirect({ to: '/dashboard', replace: true })
+  },
 })
 const community = createRoute({
   getParentRoute: () => root,
@@ -448,17 +408,6 @@ const myChannels = createRoute({
 const marketAdmin = createRoute({
   getParentRoute: () => admin,
   path: '/market-admin',
-  loader: async ({ context }) => {
-    const [page, reports] = await Promise.all([
-      import('./pages/market-admin'),
-      import('./features/channelmarket/reports'),
-    ])
-    return Promise.all([
-      context.queryClient.ensureQueryData(page.marketAdminOptions()),
-      context.queryClient.ensureQueryData(reports.incomeOptions(true)),
-      context.queryClient.ensureQueryData(reports.securityOptions(true)),
-    ])
-  },
   component: lazyRouteComponent(() => import('./pages/market-admin')),
 })
 const transfers = createRoute({
@@ -525,11 +474,23 @@ const playground = createRoute({
 })
 const billingHistory = lazyPage(authenticated, '/billing', () => import('./pages/billing-history'))
 const audit = lazyPage(authenticated, '/audit', () => import('./pages/audit'))
-const packages = lazyPage(authenticated, '/packages', () => import('./pages/packages'))
+const packages = createRoute({
+  getParentRoute: () => authenticated,
+  path: '/packages',
+  beforeLoad: () => {
+    throw redirect({ to: '/wallet', search: { section: 'plans' }, replace: true })
+  },
+})
 const adminLogs = lazyPage(admin, '/admin/logs', () => import('./pages/admin-logs'))
 const modelCatalog = lazyPage(admin, '/admin/models', () => import('./pages/model-catalog'))
 const adminOrders = lazyPage(admin, '/admin/orders', () => import('./pages/admin-orders'))
-const blindBoxAdmin = lazyPage(admin, '/admin/blind-box', () => import('./pages/blind-box-admin'))
+const blindBoxAdmin = createRoute({
+  getParentRoute: () => admin,
+  path: '/admin/blind-box',
+  beforeLoad: () => {
+    throw redirect({ to: '/subscriptions', replace: true })
+  },
+})
 
 const routeTree = root.addChildren([
   site.addChildren([

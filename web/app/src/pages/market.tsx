@@ -306,7 +306,6 @@ export default function MarketPage() {
     >
       <PageHeader
         title="渠道市场"
-        description="按模型比较实际报价与服务质量，再选择分组。倍率仅是计费系数。"
         action={
           <Link
             to={signedIn ? '/my-channels' : '/sign-in'}
@@ -486,17 +485,6 @@ export default function MarketPage() {
                   <span>{t('可访问分组')}</span>
                   <strong>{pagination?.total ?? groups.length}</strong>
                 </div>
-                <p className="subtle market-quote-note">
-                  {t('报价已包含分组倍率，单位为 credits；动态计价与不同计费单位分开展示。')}{' '}
-                  {t('厂商标签由渠道主选择，仅供筛选参考。')}
-                </p>
-                <p className="market-comparison-hint" id="market-compare-hint">
-                  {t(
-                    model
-                      ? '选择二至四个分组加入比较。列表概览覆盖全部模型，比较表与详情使用所选模型数据。'
-                      : '先选择一个模型，再勾选分组比较报价、预估费用与真实服务质量。',
-                  )}
-                </p>
                 {model && comparisonGroups.length > 0 && (
                   <MarketComparison
                     key={model}
@@ -516,13 +504,6 @@ export default function MarketPage() {
                   <Button variant="quiet" onClick={() => setComparison({ model, ids: [] })}>
                     {t('清空比较')}
                   </Button>
-                )}
-                {sort === 'recommended' && (
-                  <p className="subtle market-quote-note">
-                    {t(
-                      '优先展示有足够近期请求样本的分组，再按成功率置信下界排序；同分比较所选模型报价。',
-                    )}
-                  </p>
                 )}
                 {routeSearch.group && !selectedQuery.isPending && selectedQuery.error && (
                   <p className="notice" role="status">
@@ -569,7 +550,6 @@ export default function MarketPage() {
                                   !comparisonIds.includes(group.group_id))
                               }
                               onChange={() => toggleComparison(group.group_id)}
-                              aria-describedby="market-compare-hint"
                               aria-label={`${t('加入比较')} ${group.system_display_name}`}
                             />
                             {t('加入比较')}
@@ -841,7 +821,6 @@ export default function MarketPage() {
                           {relatedGroups(groups, group, model).length > 0 && (
                             <div className="market-related">
                               <h3>{t('相关分组')}</h3>
-                              <p className="subtle">{t('按共同厂商标签与支持的模型推荐。')}</p>
                               <ul>
                                 {relatedGroups(groups, group, model).map((related) => (
                                   <li key={related.group_id}>

@@ -34,10 +34,10 @@ func (s *Service) QueueVerification(ctx context.Context, a Actor, channel int64)
 		if e != nil {
 			return e
 		}
-		if _, e = tx.Exec(ctx, `UPDATE v3_channelmarket.groups SET lifecycle_status='verifying',verification_status=$2 WHERE id=$1`, group, result.Status); e != nil {
+		if _, e = tx.Exec(ctx, `UPDATE v3_channelmarket.groups SET lifecycle_status=CASE WHEN lifecycle_status='active' THEN lifecycle_status ELSE 'verifying' END,verification_status=CASE WHEN lifecycle_status='active' THEN verification_status ELSE $2 END WHERE id=$1`, group, result.Status); e != nil {
 			return e
 		}
-		if _, e = tx.Exec(ctx, `UPDATE v3_catalog.channels SET status='disabled' WHERE id=$1`, channel); e != nil {
+		if _, e = tx.Exec(ctx, `UPDATE v3_catalog.channels SET status='disabled' WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM v3_channelmarket.groups WHERE channel_id=$1 AND lifecycle_status='active')`, channel); e != nil {
 			return e
 		}
 		return syncCommunity(ctx, tx, channel)
@@ -54,7 +54,7 @@ func (s *Service) PauseVerification(ctx context.Context, a Actor, channel int64)
 		if _, e = tx.Exec(ctx, `UPDATE v3_channelmarket.verification_runs SET status='paused',completed_at=$2 WHERE channel_id=$1 AND status IN ('queued','running')`, channel, s.cfg.Now()); e != nil {
 			return e
 		}
-		if _, e = tx.Exec(ctx, `UPDATE v3_channelmarket.groups SET verification_status='paused' WHERE id=$1`, group); e != nil {
+		if _, e = tx.Exec(ctx, `UPDATE v3_channelmarket.groups SET verification_status='paused' WHERE id=$1 AND lifecycle_status<>'active'`, group); e != nil {
 			return e
 		}
 		return syncCommunity(ctx, tx, channel)
@@ -88,8 +88,21 @@ func (s *Service) ProcessVerification(ctx context.Context, limit int) (int, erro
 		if err != nil {
 			return done, err
 		}
-		results, status, err := s.runVerificationProbesTx(ctx, decrypter, pending)
+		runCtx, cancel := context.WithCancel(ctx)
+		watchDone := make(chan error, 1)
+		go s.watchVerification(runCtx, cancel, pending.run.ID, watchDone)
+		results, status, err := s.runVerificationProbesTx(runCtx, decrypter, pending)
+		cancel()
+		if watchErr := <-watchDone; watchErr != nil && ctx.Err() == nil {
+			return done, watchErr
+		}
 		if err != nil {
+			if ctx.Err() == nil && errors.Is(err, context.Canceled) {
+				// An owner paused/deleted the channel or disabled the automatic
+				// probe while its upstream request was in flight.
+				done++
+				continue
+			}
 			return done, err
 		}
 		if err = s.saveVerificationResultTx(ctx, pending, results, status); err != nil {
@@ -100,15 +113,44 @@ func (s *Service) ProcessVerification(ctx context.Context, limit int) (int, erro
 	return done, nil
 }
 
+// Settings changes are committed by the control process, so cancellation must
+// be observed across processes. A single watcher per run also interrupts a slow
+// upstream request rather than waiting for the next declared model.
+func (s *Service) watchVerification(ctx context.Context, cancel context.CancelFunc, id string, done chan<- error) {
+	var failure error
+	defer func() { done <- failure }()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		var running bool
+		err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM v3_channelmarket.verification_runs v JOIN v3_catalog.channels c ON c.id=v.channel_id JOIN v3_channelmarket.groups g ON g.channel_id=c.id WHERE v.id=$1 AND v.status='running' AND g.deleted_at IS NULL AND (v.trigger<>'auto_probe' OR (c.status='enabled' AND g.lifecycle_status='active' AND c.settings->'market'->>'auto_probe_enabled'='true')))`, id).Scan(&running)
+		if err != nil || !running {
+			if err != nil && ctx.Err() == nil {
+				failure = err
+			}
+			cancel()
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 // claimNextVerificationRunTx reclaims stale running runs, then locks and
 // marks the oldest queued run as running.
 func (s *Service) claimNextVerificationRunTx(ctx context.Context) (pendingVerificationRun, error) {
 	var pending pendingVerificationRun
 	err := s.transaction(ctx, func(tx pgx.Tx) error {
+		if _, e := tx.Exec(ctx, `UPDATE v3_channelmarket.verification_runs v SET status='paused',completed_at=$1,summary='Automatic probe disabled or channel inactive' WHERE v.trigger='auto_probe' AND v.status IN ('queued','running') AND NOT EXISTS(SELECT 1 FROM v3_catalog.channels c JOIN v3_channelmarket.groups g ON g.channel_id=c.id WHERE c.id=v.channel_id AND c.status='enabled' AND g.lifecycle_status='active' AND g.deleted_at IS NULL AND c.settings->'market'->>'auto_probe_enabled'='true')`, s.cfg.Now()); e != nil {
+			return e
+		}
 		if _, e := tx.Exec(ctx, `UPDATE v3_channelmarket.verification_runs SET status='queued',started_at=NULL WHERE status='running' AND started_at<$1`, s.cfg.Now().Add(-time.Hour)); e != nil {
 			return e
 		}
-		e := tx.QueryRow(ctx, `SELECT v.id,v.channel_id,c.provider,c.base_url,k.secret,CASE WHEN v.target_model<>'' THEN ARRAY[v.target_model] ELSE ARRAY(SELECT model FROM v3_catalog.channel_models WHERE channel_id=c.id ORDER BY model) END,v.trigger FROM v3_channelmarket.verification_runs v JOIN v3_catalog.channels c ON c.id=v.channel_id JOIN v3_channelmarket.groups g ON g.channel_id=c.id AND g.deleted_at IS NULL AND g.lifecycle_status<>'deleted' JOIN LATERAL(SELECT secret FROM v3_catalog.channel_credentials WHERE channel_id=c.id AND status='enabled' ORDER BY id LIMIT 1) k ON true WHERE v.status='queued' ORDER BY v.created_at,v.id LIMIT 1 FOR UPDATE OF v SKIP LOCKED`).Scan(&pending.run.ID, &pending.run.ChannelID, &pending.probe.Provider, &pending.probe.BaseURL, &pending.encrypted, &pending.models, &pending.trigger)
+		e := tx.QueryRow(ctx, `SELECT v.id,v.channel_id,c.provider,c.base_url,k.secret,CASE WHEN v.target_model<>'' THEN ARRAY[v.target_model] ELSE ARRAY(SELECT model FROM v3_catalog.channel_models WHERE channel_id=c.id ORDER BY model) END,v.trigger FROM v3_channelmarket.verification_runs v JOIN v3_catalog.channels c ON c.id=v.channel_id JOIN v3_channelmarket.groups g ON g.channel_id=c.id AND g.deleted_at IS NULL AND g.lifecycle_status<>'deleted' LEFT JOIN LATERAL(SELECT secret FROM v3_catalog.channel_credentials WHERE channel_id=c.id AND status='enabled' AND (expires_at IS NULL OR expires_at>$1) ORDER BY id LIMIT 1) k ON true WHERE v.status='queued' AND (v.trigger<>'auto_probe' OR (c.status='enabled' AND g.lifecycle_status='active' AND c.settings->'market'->>'auto_probe_enabled'='true')) ORDER BY v.created_at,v.id LIMIT 1 FOR UPDATE OF v SKIP LOCKED`, s.cfg.Now()).Scan(&pending.run.ID, &pending.run.ChannelID, &pending.probe.Provider, &pending.probe.BaseURL, &pending.encrypted, &pending.models, &pending.trigger)
 		if e != nil {
 			return e
 		}
@@ -124,8 +166,12 @@ func (s *Service) claimNextVerificationRunTx(ctx context.Context) (pendingVerifi
 func (s *Service) runVerificationProbesTx(ctx context.Context, decrypter interface{ Decrypt([]byte) ([]byte, error) }, pending pendingVerificationRun) ([]ModelTest, string, error) {
 	p := pending.probe
 	secret, err := decrypter.Decrypt(pending.encrypted)
-	if err != nil {
-		return nil, "", err
+	if err != nil || len(secret) == 0 {
+		results := make([]ModelTest, 0, len(pending.models))
+		for _, model := range pending.models {
+			results = append(results, ModelTest{Model: model, Status: "failed", Error: "渠道凭据不可用", TestedAt: s.cfg.Now()})
+		}
+		return results, "failed", nil
 	}
 	p.Secret = string(secret)
 	passed := len(pending.models) > 0
@@ -206,7 +252,7 @@ func (s *Service) saveVerificationResultTx(ctx context.Context, pending pendingV
 			_, e = tx.Exec(ctx, `UPDATE v3_catalog.channels SET settings=jsonb_set(settings,'{market}',coalesce(settings->'market','{}')||jsonb_build_object('auto_probe_last_status',$2::text,'auto_probe_last_at',$3::timestamptz)) WHERE id=$1`, pending.run.ChannelID, status, s.cfg.Now())
 			return e
 		}
-		if _, e = tx.Exec(ctx, `UPDATE v3_channelmarket.groups SET verification_status=$2 WHERE channel_id=$1 AND deleted_at IS NULL`, pending.run.ChannelID, status); e != nil {
+		if _, e = tx.Exec(ctx, `UPDATE v3_channelmarket.groups SET verification_status=$2 WHERE channel_id=$1 AND deleted_at IS NULL AND lifecycle_status<>'active'`, pending.run.ChannelID, status); e != nil {
 			return e
 		}
 		return syncCommunity(ctx, tx, pending.run.ChannelID)

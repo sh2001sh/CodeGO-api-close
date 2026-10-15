@@ -13,7 +13,7 @@ const labels: Record<RequestTone, string> = {
   empty: '无请求',
 }
 
-/** Only persisted request buckets supplied by the server; probe results are unrelated. */
+/** Persisted traffic and connectivity samples retain separate denominators. */
 export function RecentRequests(props: { group: Schema['ChannelMarketChannelView'] }) {
   const { t, locale } = useTranslation()
   const series = props.group.recent_request_series
@@ -31,13 +31,13 @@ export function RecentRequests(props: { group: Schema['ChannelMarketChannelView'
     <div className="market-recent">
       <div className="market-recent-heading">
         <span>{t('近 6 小时请求')}</span>
-        <span className="subtle">{t('每格 1 小时')}</span>
       </div>
       <ol className="market-recent-slots" aria-label={t('近 6 小时请求')}>
         {series.slice(-6).map((item) => {
           const tone = requestTone(item.request_count, item.success_rate)
           const start = Number(item.ts) * 1000
-          const detail = `${time.format(start)} – ${time.format(start + bucket * 1000)} · ${t('请求数')} ${String(item.request_count)} · ${BigInt(item.request_count) === 0n ? t('无请求') : `${t('成功率')} ${percent.format(item.success_rate / 100)}`}`
+          const probes = BigInt(item.probe_count ?? 0)
+          const detail = `${time.format(start)} – ${time.format(start + bucket * 1000)} · ${t('请求数')} ${String(item.request_count)} · ${BigInt(item.request_count) === 0n ? t('无请求') : `${t('成功率')} ${percent.format(item.success_rate / 100)}`}${probes > 0n ? ` · ${t('探针')} ${String(probes)} · ${t('探针成功率')} ${percent.format((item.probe_success_rate ?? 0) / 100)}` : ''}`
           return (
             <li key={String(item.ts)}>
               <span

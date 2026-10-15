@@ -21,7 +21,7 @@ test('real OIDC issuer resumes authorization after password login and preserves 
   const username = `oidc_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
   const password = `Test-${crypto.randomUUID()}`
   await page.goto('/sign-up')
-  await page.getByLabel('用户名', { exact: true }).fill(username)
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill(username)
   await page.getByLabel('邮箱', { exact: true }).fill(`${username}@example.test`)
   await page.getByLabel('密码', { exact: true }).fill(password)
   await page.getByRole('checkbox', { name: /我已阅读并同意/ }).check()
@@ -49,7 +49,7 @@ test('real OIDC issuer resumes authorization after password login and preserves 
   expect(authorization.origin).toBe(url)
   expect(authorization.pathname).toBe('/api/oidc/authorize')
   expect(Object.fromEntries(authorization.searchParams)).toEqual(Object.fromEntries(query))
-  await page.getByLabel('用户名', { exact: true }).fill(username)
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill(username)
   await page.getByLabel('密码', { exact: true }).fill(password)
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await page.waitForURL(

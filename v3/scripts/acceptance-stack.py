@@ -9,6 +9,7 @@ No production payment credentials or external model endpoint is used.
 
 import argparse
 import gzip
+import hashlib
 import json
 import re
 import secrets
@@ -277,29 +278,24 @@ def main():
         codes = check("redemption listing hides raw codes", request("/api/redemption/", token=token))
         assert redemption["key"] not in json.dumps(codes)
         check("group buy listing available", request("/api/group-buy/list", token=token))
-        check("blind box inventory available", request("/api/blind-box/self", token=token))
-        check("empty blind box inventory rejected", request("/api/blind-box/inventory/open", "POST", {"request_id": "empty-" + suffix, "count": 1}, token=token), 409)
+        check("historical blind box inventory available", request("/api/blind-box/self", token=token))
+        other_id = other["user"]["id"]
+        def retired_box_finances():
+            return sql(f"SELECT id,balance FROM v3_billing.accounts WHERE owner_type='user' AND kind='wallet' AND owner_id IN ({user_id},{other_id}) ORDER BY id"), sql(f"SELECT count(*) FROM v3_marketplace.blind_box_items WHERE owner_user_id IN ({user_id},{other_id})")
+        box_finances_before = retired_box_finances()
         pool_body = {"name": "acceptance-" + suffix, "enabled": True, "price_micro": 100, "daily_limit": 2, "rewards": [{"kind": "credits", "title": "fixture", "weight": 1, "amount_micro": 50}]}
         check("ordinary user cannot configure blind box pool", request("/api/blind-box/admin/pools", "PUT", pool_body, token=other["access_token"]), 403)
-        pool = check("configure deterministic blind box reward", request("/api/blind-box/admin/pools", "PUT", pool_body, token=token, origin=args.url))["data"]
-        buy = {"request_id": "buy-" + suffix, "pool_id": pool["id"], "count": 2}
-        purchase = check("purchase blind boxes from wallet", request("/api/blind-box/inventory/purchase", "POST", buy, token=token))["data"]
-        purchase_replay = check("blind box purchase replay", request("/api/blind-box/inventory/purchase", "POST", buy, token=token))["data"]
-        assert purchase_replay["id"] == purchase["id"]
-        check("blind box daily limit enforced", request("/api/blind-box/inventory/purchase", "POST", {**buy, "request_id": "limit-" + suffix, "count": 1}, token=token), 429)
-        opened_body = {"request_id": "open-" + suffix, "count": 1}
-        opened = check("open box and credit reward", request("/api/blind-box/inventory/open", "POST", opened_body, token=token))["data"]
-        replay_open = check("box reward replay is idempotent", request("/api/blind-box/inventory/open", "POST", opened_body, token=token))["data"]
-        assert opened == replay_open and opened[0]["reward"]["amount_micro"] == 50
-        gift = {"request_id": "gift-" + suffix, "recipient_id": other["user"]["id"], "count": 1}
-        check("gift remaining box", request("/api/blind-box/inventory/gift", "POST", gift, token=token))
-        check("gift replay is idempotent", request("/api/blind-box/inventory/gift", "POST", gift, token=token))
-        check("recipient opens gifted box", request("/api/blind-box/inventory/open", "POST", {"request_id": "receive-" + suffix, "count": 1}, token=other["access_token"]))
-        assert request("/api/billing/balance", token=token)[1]["data"]["balance_micro"] == 999902
-        assert request("/api/billing/balance", token=other["access_token"])[1]["data"]["balance_micro"] == 50
-        passed.append("blind box purchase and rewards preserve exact money across owners")
-        print("PASS blind box purchase and rewards preserve exact money across owners", flush=True)
-        check("disable fixture reward pool", request("/api/blind-box/admin/pools", "PUT", {**pool, "enabled": False}, token=token, origin=args.url))
+        check("blind box pool configuration retired", request("/api/blind-box/admin/pools", "PUT", pool_body, token=token, origin=args.url), 410)
+        for name, path, body in [
+            ("purchase", "/api/blind-box/inventory/purchase", {"request_id": "buy-" + suffix, "pool_id": 1, "count": 2}),
+            ("open", "/api/blind-box/inventory/open", {"request_id": "open-" + suffix, "count": 1}),
+            ("gift", "/api/blind-box/inventory/gift", {"request_id": "gift-" + suffix, "recipient_id": other_id, "count": 1}),
+            ("cash checkout", "/api/blind-box/pay", {"count": 1}),
+        ]:
+            check("blind box " + name + " retired", request(path, "POST", body, token=token), 410)
+        assert retired_box_finances() == box_finances_before, "retired blind box routes changed money or inventory"
+        assert request("/api/billing/balance", token=token)[1]["data"]["balance_micro"] == 1000052
+        assert request("/api/billing/balance", token=other["access_token"])[1]["data"]["balance_micro"] == 0
         plan = check("create redeemable subscription", request("/api/subscription/admin/plans", "POST", {"name": "redeem-" + suffix, "currency": "usd", "price_minor": 100, "credits": 5000, "period_seconds": 86400, "reset_period": "never", "enabled": True, "model_limits": {"acceptance-chat": 700}}, token=token, origin=args.url))["data"]
         sub_code = check("issue subscription redemption", request("/api/redemption/", "POST", {"name": "sub-" + suffix, "redeem_type": "subscription", "plan_id": plan["id"]}, token=token, origin=args.url))["data"]
         sub_body = {"key": sub_code["key"]}
@@ -308,17 +304,18 @@ def main():
         assert sub_result == sub_replay and sub_result["redeem_type"] == "subscription" and sub_result["credits"] == 0 and sub_result["user_subscription_id"] > 0
         assert sql(f"SELECT count(*) FROM v3_commerce.subscriptions WHERE id={sub_result['user_subscription_id']} AND user_id={user_id} AND model_limits='{{\"acceptance-chat\":700}}'::jsonb") == "1"
         check("subscription redemption owner enforced", request("/api/commerce/redemptions/redeem", "POST", sub_body, token=other["access_token"]), 409)
-        standard_pool = check("configure standard sealed inventory", request("/api/blind-box/admin/pools", "PUT", {**pool_body, "name": "standard-" + suffix, "scope": "standard", "daily_limit": 100}, token=token, origin=args.url))["data"]
-        box_code = check("issue sealed box redemption", request("/api/redemption/", "POST", {"name": "boxes-" + suffix, "redeem_type": "blind_box", "blind_box_quantity": 3}, token=token, origin=args.url))["data"]
-        box_body = {"key": box_code["key"]}
-        box_result = check("redeem sealed box entitlement", request("/api/commerce/redemptions/redeem", "POST", box_body, token=token))["data"]
-        box_replay = check("sealed box redemption replay", request("/api/commerce/redemptions/redeem", "POST", box_body, token=token))["data"]
-        assert box_result == box_replay and box_result["redeem_type"] == "blind_box" and box_result["credits"] == 0 and box_result["blind_box_quantity"] == 3
-        assert sql(f"SELECT count(*) FROM v3_marketplace.blind_box_items WHERE owner_user_id={user_id} AND status='available'") == "3"
-        assert request("/api/billing/balance", token=token)[1]["data"]["balance_micro"] == 999902
-        check("box redemption owner enforced", request("/api/commerce/redemptions/redeem", "POST", box_body, token=other["access_token"]), 409)
+        check("new sealed box redemption retired", request("/api/redemption/", "POST", {"name": "boxes-" + suffix, "redeem_type": "blind_box", "blind_box_quantity": 3}, token=token, origin=args.url), 410)
+        # Seed a pre-retirement code only in the guarded disposable Compose DB.
+        box_key = "historical-" + secrets.token_hex(24)
+        box_hash = hashlib.sha256(box_key.encode()).hexdigest()
+        box_id = sql(f"WITH historical AS (INSERT INTO v3_commerce.redemption_codes(code_hash,name,credits,redeem_type,blind_box_quantity) VALUES(decode('{box_hash}','hex'),'historical-{suffix}',0,'blind_box',3) RETURNING id) SELECT id FROM historical")
+        for path in ("/api/commerce/redemptions/redeem", "/api/user/topup"):
+            check("historical unclaimed box redemption retired at " + path, request(path, "POST", {"key": box_key}, token=token), 410)
+        assert sql(f"SELECT count(*) FROM v3_commerce.redemption_codes WHERE id={box_id} AND state='active' AND claimed_by IS NULL AND redeem_result IS NULL") == "1"
+        assert retired_box_finances() == box_finances_before, "retired code changed money or inventory"
+        check("historical box redemption remains revocable", request("/api/redemption/" + box_id, "DELETE", token=token, origin=args.url))
+        check("revoked historical box code cannot be claimed", request("/api/commerce/redemptions/redeem", "POST", {"key": box_key}, token=token), 409)
         check("invalid mixed redemption rejected", request("/api/redemption/", "POST", {"redeem_type": "subscription", "plan_id": plan["id"], "credits": 1}, token=token), 400)
-        check("disable standard fixture pool", request("/api/blind-box/admin/pools", "PUT", {**standard_pool, "enabled": False}, token=token, origin=args.url))
         report = check("root funding economics report", request("/api/billing/funding-economics?day=2026-09-30", token=token))["data"]
         assert report["date"] == "2026-09-30" and isinstance(report["sources"], list)
         check("funding report rejects malformed day", request("/api/billing/funding-economics?day=2026-02-30", token=token), 400)

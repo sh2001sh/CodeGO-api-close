@@ -10912,6 +10912,10 @@ export interface components {
             request_count: number | string | bigint;
             /** Format: double */
             success_rate: number;
+            /** Format: int64 */
+            probe_count?: number | string | bigint;
+            /** Format: double */
+            probe_success_rate?: number;
         };
         ChannelMarketAutoBuild: {
             enabled?: boolean;
@@ -11214,6 +11218,12 @@ export interface components {
             avg_tps?: number;
             disclosure?: components["schemas"]["ChannelMarketDisclosure"];
             failure_counts: components["schemas"]["ChannelMarketFailureCount"][];
+            /** Format: int64 */
+            probe_count?: number | string | bigint;
+            /** Format: int64 */
+            probe_success_count?: number | string | bigint;
+            /** Format: double */
+            probe_success_rate?: number;
         };
         PolicyAcceptanceInput: {
             /** @enum {string} */
@@ -13066,6 +13076,9 @@ export interface operations {
                 page?: number;
                 p?: number;
                 page_size?: number;
+                status?: string;
+                tag?: string;
+                provider?: string;
             };
             header?: never;
             path?: never;
@@ -14536,6 +14549,9 @@ export interface operations {
                 page?: number;
                 p?: number;
                 page_size?: number;
+                status?: string;
+                tag?: string;
+                provider?: string;
             };
             header?: never;
             path?: never;
@@ -14938,6 +14954,9 @@ export interface operations {
                 page?: number;
                 p?: number;
                 page_size?: number;
+                status?: string;
+                tag?: string;
+                provider?: string;
             };
             header?: never;
             path?: never;

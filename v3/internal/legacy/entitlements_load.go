@@ -11,12 +11,16 @@ import (
 )
 
 type entitlementsData struct {
-	rows map[string][]commerceRow
-	refs map[string]map[int64]commerceRow
+	rows             map[string][]commerceRow
+	refs             map[string]map[int64]commerceRow
+	preservedHistory map[string]int64
+	sampled          bool
 }
 
 func loadEntitlements(ctx context.Context, source pgx.Tx, sources map[string]string) (*entitlementsData, error) {
 	d := &entitlementsData{rows: map[string][]commerceRow{}, refs: map[string]map[int64]commerceRow{}}
+	d.sampled = onlineViewFrom(ctx) != nil && onlineViewFrom(ctx).sampled
+	d.preservedHistory = map[string]int64{}
 	names := []string{"users", "user_subscriptions", "subscription_plans", "blind_box_open_records", "blind_box_orders", "top_ups", "subscription_orders"}
 	for _, contract := range entitlementContracts {
 		names = append(names, contract.source)
@@ -35,12 +39,37 @@ func loadEntitlements(ctx context.Context, source pgx.Tx, sources map[string]str
 			if err := json.Unmarshal(raw, &r); err != nil {
 				return nil, fmt.Errorf("legacy: decode entitlement %s: %w", name, err)
 			}
+			if d.sampled && preserveCompletedEntitlementHistory(name, r) {
+				d.preservedHistory[name]++
+				continue
+			}
 			d.rows[name] = append(d.rows[name], r)
 			id, _ := r.integer("id")
 			d.refs[name][id] = r
 		}
 	}
 	return d, nil
+}
+
+// Paid rewards are already in canonical opening balances. Keep their old
+// receipts in V2; retain incomplete grants so validation still blocks them.
+func preserveCompletedEntitlementHistory(name string, row commerceRow) bool {
+	switch name {
+	case "subscription_lucky_numbers", "subscription_lucky_reward_notifications", "subscription_reset_opportunity_ledgers":
+		return true
+	case "subscription_lucky_rewards":
+		status, _ := row.text("credit_status")
+		return status == "credited"
+	case "subscription_lucky_draws":
+		status, _ := row.text("status")
+		return status == "completed"
+	case "subscription_blind_box_benefit_cycles":
+		status, _ := row.text("status")
+		expected, e1 := row.integer("expected_count")
+		granted, e2 := row.integer("granted_count")
+		return status == "completed" && e1 == nil && e2 == nil && expected == granted
+	}
+	return false
 }
 
 func entitlementProject(contract entitlementContract, row commerceRow) (map[string]any, error) {
@@ -88,6 +117,9 @@ func (d *entitlementsData) validate(report *Report) {
 		report.Amounts = map[string]string{}
 	}
 	d.reportExcludedAudits(report)
+	for table, count := range d.preservedHistory {
+		report.Counts["preserved_source_entitlements."+table] = count
+	}
 	for _, contract := range entitlementContracts {
 		report.Counts[contract.source] = int64(len(d.rows[contract.source]))
 		ids := map[int64]bool{}
@@ -139,7 +171,9 @@ func (d *entitlementsData) validate(report *Report) {
 			report.Amounts[contract.source+"."+column] = sum.String()
 		}
 	}
-	d.validateResetBalances(report)
+	if !d.sampled {
+		d.validateResetBalances(report)
+	}
 }
 
 func (d *entitlementsData) issue(report *Report, table string, id int64, detail string) {

@@ -12,7 +12,6 @@ for (const [path, heading] of [
   ['/wallet', '钱包'],
   ['/usage-logs', '使用日志'],
   ['/orders', '订单'],
-  ['/blind-box', '盲盒'],
   ['/channels', '渠道'],
   ['/users', '用户'],
   ['/settings', '系统设置'],
@@ -72,7 +71,7 @@ test('login errors remain visible and allow another attempt', async ({ page }) =
     route.fulfill({ status: 401, json: { success: false, message: '身份验证失败' } }),
   )
   await page.goto('/sign-in')
-  await page.getByLabel('用户名', { exact: true }).fill('operator')
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill('operator')
   await page.getByLabel('密码', { exact: true }).fill('incorrect-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveText('身份验证失败')
@@ -115,39 +114,6 @@ test('balance adjustment uses exact signed amounts and stable operation identifi
   expect(body.amount_micro).toBe(-1000001)
   expect(body.operation_id).toMatch(/^[a-f0-9-]{36}$/)
   await expect(page.getByRole('status')).toHaveText('已入账')
-})
-
-test('blind-box retry reuses the operation identifier after a server failure', async ({ page }) => {
-  const identifiers: string[] = []
-  await page.route('**/api/blind-box/inventory/purchase', async (route) => {
-    identifiers.push(route.request().postDataJSON().request_id)
-    await route.fulfill(
-      identifiers.length === 1
-        ? { status: 503, json: { success: false, message: '账本服务暂时不可用' } }
-        : {
-            json: {
-              success: true,
-              data: { id: 1, quantity: 1, unit_price_micro: 1000000, total_micro: 1000000 },
-            },
-          },
-    )
-  })
-  const confirm = () =>
-    page.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click()
-  await page.goto('/blind-box')
-  await page.getByRole('button', { name: '购买一个', exact: true }).click()
-  await confirm()
-  await expect(page.getByRole('alert')).toHaveText('账本服务暂时不可用')
-  await page.getByRole('button', { name: '购买一个', exact: true }).click()
-  const retried = page.waitForRequest('**/api/blind-box/inventory/purchase')
-  await confirm()
-  await retried
-  await expect(
-    page.getByRole('status').filter({ hasText: '购买成功，已加入未开启库存' }),
-  ).toBeVisible()
-  await expect(page.getByRole('alert')).toHaveCount(0)
-  expect(identifiers).toHaveLength(2)
-  expect(identifiers[0]).toBe(identifiers[1])
 })
 
 test('ordinary users cannot open administrator pages', async ({ page }) => {

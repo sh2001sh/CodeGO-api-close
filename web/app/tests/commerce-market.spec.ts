@@ -37,7 +37,7 @@ test('redemption failure permits a corrected code', async ({ page }) => {
         : { json: { success: true, data: { redeem_type: 'credits', credits: 1234567 } } },
     ),
   )
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=redemption')
   await page.getByLabel('兑换码', { exact: true }).fill('invalid-code')
   await page.getByRole('button', { name: '兑换', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveText('兑换码不存在')
@@ -145,55 +145,6 @@ test('editing a plan preserves zero credits fields and exact group rewards', asy
   })
 })
 
-test('discount props convert on confirmation and cannot be manually activated', async ({
-  page,
-}) => {
-  await page.route('**/api/blind-box/self', (route) =>
-    route.fulfill({
-      json: {
-        success: true,
-        data: {
-          available_count: 0,
-          pools: [],
-          props: [
-            {
-              id: '9223372036854775807',
-              kind: 'subscription_discount',
-              title: '订阅优惠卡',
-              status: 'available',
-              multiplier_ppm: 1000000,
-              remaining_seconds: 0,
-              prop_type: 'subscription_discount_50',
-              discount_rate_ppm: 500000,
-              max_discount_micro: 0,
-              used_discount_micro: 0,
-            },
-            {
-              id: 2,
-              kind: 'subscription',
-              title: '已使用月卡',
-              status: 'used',
-              multiplier_ppm: 1000000,
-              remaining_seconds: 0,
-              prop_type: '',
-              discount_rate_ppm: 0,
-              max_discount_micro: 0,
-              used_discount_micro: 0,
-            },
-          ],
-        },
-      },
-    }),
-  )
-  await page.goto('/blind-box')
-  await expect(page.getByText('购买套餐时自动使用', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: '使用', exact: true })).toBeDisabled()
-  const sent = page.waitForRequest('**/api/blind-box/props/9223372036854775807/convert')
-  await page.getByRole('button', { name: '转换为九折充值卡', exact: true }).click()
-  await page.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click()
-  expect((await sent).postDataJSON()).toEqual({ target_type: 'topup_discount_90' })
-})
-
 test('subscription renewal retries one request and shows the server order amount', async ({
   page,
 }) => {
@@ -217,7 +168,7 @@ test('subscription renewal retries one request and shows the server order amount
           },
     )
   })
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=plans')
   await page.getByRole('combobox', { name: '需要续期或升级的订阅', exact: true }).selectOption('1')
   await page.getByRole('button', { name: '续期', exact: true }).click()
   await page.getByRole('button', { name: '创建订单', exact: true }).click()
@@ -237,7 +188,7 @@ test('owned subscriptions retain server quote and conversion controls after thei
   await page.route('**/api/subscription/fuel/quote', (route) =>
     route.fulfill({ status: 400, json: { success: false, message: '该月卡不支持燃料' } }),
   )
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await expect(page.getByRole('combobox', { name: '需要转换的月卡', exact: true })).toBeVisible()
   await page.getByLabel('购买燃料 credits', { exact: true }).fill('10')
   const sent = page.waitForRequest('**/api/subscription/fuel/quote')
@@ -283,7 +234,7 @@ test('refund processing can synchronize to its completed result', async ({ page 
       },
     }),
   )
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=refunds')
   await page.getByRole('button', { name: '申请退款', exact: true }).click()
   const sent = page.waitForRequest('**/api/wallet/refunds')
   await page.getByRole('button', { name: '确认申请退款', exact: true }).click()
@@ -351,7 +302,7 @@ test('fuel uses a server quote and rejects an amount outside the configured step
       },
     }),
   )
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await page.getByLabel('购买燃料 credits', { exact: true }).fill('1.5')
   await page.getByRole('button', { name: '获取燃料报价', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('步长')
@@ -381,7 +332,7 @@ test('monthly conversion retries the same operation and reports distinct credite
         : { json: { success: true, data: { source_credits: 1000000, target_credits: 100000 } } },
     )
   })
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await page.getByLabel('转换比例 %', { exact: true }).fill('1')
   await page.getByRole('button', { name: '核对额度转换', exact: true }).click()
   await page.getByRole('button', { name: '确认转换额度', exact: true }).click()

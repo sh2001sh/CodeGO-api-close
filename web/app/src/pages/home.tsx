@@ -32,12 +32,19 @@ export default function HomePage() {
   const groups = useQuery(publicGroupsOptions(search))
   const rows = useMemo(() => (groups.data ? boardRows(groups.data) : undefined), [groups.data])
   const models = useMemo(() => modelsFromGroups(groups.data ?? []), [groups.data])
-  // Show one real model per provider, rather than invented popularity rankings.
-  const discovered = models
-    .filter((model, index) => models.findIndex((entry) => entry.vendor === model.vendor) === index)
-    .slice(0, 6)
+  const discovered = useMemo(() => {
+    const vendors = new Set<string>()
+    const entries: typeof models = []
+    for (const model of models) {
+      if (vendors.has(model.vendor)) continue
+      vendors.add(model.vendor)
+      entries.push(model)
+      if (entries.length === 6) break
+    }
+    return entries
+  }, [models])
   const summary = rows ? boardSummary(rows) : undefined
-  const sampleModel = rows?.flatMap((row) => row.models)[0] ?? 'YOUR_MODEL_ID'
+  const sampleModel = rows?.find((row) => row.models.length > 0)?.models[0] ?? 'YOUR_MODEL_ID'
   const signedIn = Boolean(session.data)
   const showMatches = (event: FormEvent) => {
     event.preventDefault()
@@ -51,11 +58,7 @@ export default function HomePage() {
     <div className="home">
       <section className="home-intro site-container" aria-labelledby="home-title">
         <div className="home-intro-copy">
-          <p className="home-eyebrow">
-            <span dir="ltr">CodeGo AI</span> / {t('模型与 API')}
-          </p>
-          <h1 id="home-title">{t('选择模型，开始构建。')}</h1>
-          <p className="home-intro-description">{t('浏览模型，比较分组，用熟悉的 SDK 接入。')}</p>
+          <h1 id="home-title">{t('模型与 API')}</h1>
           <form className="home-search" onSubmit={showMatches} role="search">
             <label className="home-search-field">
               <Search size={20} aria-hidden />
@@ -64,7 +67,7 @@ export default function HomePage() {
                 type="search"
                 maxLength={200}
                 value={query}
-                placeholder={t('搜索分组或模型，如 claude、gpt-4o…')}
+                placeholder={t('搜索分组或模型')}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
@@ -102,7 +105,6 @@ export default function HomePage() {
           <div className="home-section-heading">
             <div>
               <h2 id="home-discovery-title">{t('探索模型')}</h2>
-              <p>{t('按厂商浏览当前公开模型，完整定价见模型页。')}</p>
             </div>
             <Link to="/models" className="home-text-link">
               {t('查看全部')} <ArrowRight size={16} aria-hidden />
@@ -135,15 +137,11 @@ export default function HomePage() {
         <div className="home-section-heading">
           <div>
             <h2>{t('比较分组')}</h2>
-            <p>{t('同一模型可由不同分组提供。展开查看模型、验证与最近探测。')}</p>
           </div>
           <Link to="/channel-market" className="home-text-link">
             {t('渠道市场')} <ArrowRight size={16} aria-hidden />
           </Link>
         </div>
-        <p className="muted">
-          {t('首页最多展示 24 个匹配分组，统计仅覆盖当前展示结果；完整筛选与比较请进入渠道市场。')}
-        </p>
         <dl className="home-counts" aria-live="polite">
           <Count value={summary?.models} unit="个模型" />
           <Count value={summary?.vendors} unit="家厂商" />
@@ -171,7 +169,6 @@ export default function HomePage() {
           <div className="home-section-heading">
             <div>
               <h2 id="home-connect-title">{t('接入与使用')}</h2>
-              <p>{t('账号、额度、密钥，准备好就可以发送请求。')}</p>
             </div>
             <Link to="/docs" className="home-text-link">
               {t('接入文档')} <ArrowRight size={16} aria-hidden />
@@ -180,21 +177,18 @@ export default function HomePage() {
           <ol className="home-steps">
             <li>
               <h3>{t('创建账号')}</h3>
-              <p>{t('创建账号，登录控制台。')}</p>
               <Link to={signedIn ? '/dashboard' : '/sign-up'} className="home-text-link">
                 {t(signedIn ? '进入控制台' : '注册账号')} <ArrowRight size={15} aria-hidden />
               </Link>
             </li>
             <li>
               <h3>{t('准备额度与密钥')}</h3>
-              <p>{t('充值或选购套餐，创建对应分组的密钥。')}</p>
               <Link to="/wallet" className="home-text-link">
                 {t('前往钱包')} <ArrowRight size={15} aria-hidden />
               </Link>
             </li>
             <li>
               <h3>{t('发送第一条请求')}</h3>
-              <p>{t('复制接口地址，在 SDK 或对话页试用。')}</p>
               <Link to="/playground" className="home-text-link">
                 {t('开始对话')} <ArrowRight size={15} aria-hidden />
               </Link>
@@ -207,7 +201,6 @@ export default function HomePage() {
       <section className="site-container home-reference" aria-label={t('模型、分组与账单')}>
         <div>
           <h2>{t('模型、分组与账单')}</h2>
-          <p>{t('模型定价与分组倍率共同决定费用。调用后在使用日志核对用量与账单。')}</p>
           <div className="resource-actions">
             <Link to="/models">{t('模型与价格')}</Link>
             <Link to="/docs" hash="billing">
@@ -219,8 +212,7 @@ export default function HomePage() {
           </div>
         </div>
         <div>
-          <h2>{t('提供 API 服务？')}</h2>
-          <p>{t('在渠道工作台管理渠道、验证与供给。')}</p>
+          <h2>{t('渠道工作台')}</h2>
           <Link to="/my-channels" className="home-text-link">
             {t('进入渠道工作台')} <ArrowRight size={16} aria-hidden />
           </Link>

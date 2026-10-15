@@ -30,6 +30,9 @@ func (s *UserRefunds) Eligible(ctx context.Context, uid int64) ([]RefundableOrde
 		return nil, err
 	}
 	result := make([]RefundableOrder, 0, len(orders))
+	var walletLots map[string]credits.Micro
+	var walletErr error
+	walletLoaded := false
 	for _, o := range orders {
 		var status string
 		err = s.pool.QueryRow(ctx, `SELECT status FROM v3_commerce.user_refunds WHERE order_id=$1 ORDER BY created_at DESC LIMIT 1`, o.ID).Scan(&status)
@@ -45,7 +48,18 @@ func (s *UserRefunds) Eligible(ctx context.Context, uid int64) ([]RefundableOrde
 			result = append(result, item)
 			continue
 		}
-		remaining, _, err := s.refundableBalance(ctx, s.pool, o, account)
+		var remaining credits.Micro
+		if o.Kind == "topup" {
+			// All top-ups belong to this user's one wallet. Replay its audited
+			// funding history once per response instead of once per order.
+			if !walletLoaded {
+				walletLots, walletErr = walletRefundLots(ctx, s.pool, account)
+				walletLoaded = true
+			}
+			remaining, err = min(walletLots[o.TradeNo], o.Credits), walletErr
+		} else {
+			remaining, _, err = s.refundableBalance(ctx, s.pool, o, account)
+		}
 		if err != nil && !errors.Is(err, ErrRefundUnavailable) && !errors.Is(err, ErrFundingPending) {
 			return nil, err
 		}
@@ -97,10 +111,10 @@ func (s *UserRefunds) refundableBalance(ctx context.Context, q refundQuerier, o 
 		remaining := min(lots[o.TradeNo], o.Credits)
 		return remaining, remaining, nil
 	}
-	var used, current, balance credits.Micro
+	var used, current, balance, total credits.Micro
 	var origin *credits.Micro
 	var imported bool
-	err := q.QueryRow(ctx, `SELECT s.used_credits,COALESCE(u.spent,0),a.balance,f.used_credits,
+	err := q.QueryRow(ctx, `SELECT s.used_credits,COALESCE(u.spent,0),a.balance,f.used_credits,s.total_credits,
 	 NOT EXISTS(SELECT 1 FROM v3_commerce.subscription_buckets b JOIN v3_billing.ledger_entries e ON e.account_id=b.account_id
 	 WHERE b.subscription_id=s.id AND e.kind='subscription_grant' AND
 	 (e.operation_id='subscription:grant:'||$3 OR e.operation_id='subscription:cycle:grant:'||s.id::text||':package:'||$3))
@@ -108,20 +122,16 @@ func (s *UserRefunds) refundableBalance(ctx context.Context, q refundQuerier, o 
 	 JOIN v3_billing.accounts a ON a.id=s.account_id
 	 LEFT JOIN v3_commerce.user_refund_subscription_origins f ON f.subscription_id=s.id AND f.order_id=s.order_id
 	 LEFT JOIN LATERAL(SELECT GREATEST(-SUM(amount),0)::bigint spent FROM v3_billing.ledger_entries WHERE account_id=s.account_id AND kind IN ('usage','refund')) u ON true
-	 WHERE s.order_id=$1 AND s.account_id=$2 AND s.state IN ('active','expired')`, o.ID, account, o.TradeNo).Scan(&used, &current, &balance, &origin, &imported)
+	 WHERE s.order_id=$1 AND s.account_id=$2 AND s.state IN ('active','expired')`, o.ID, account, o.TradeNo).Scan(&used, &current, &balance, &origin, &total, &imported)
 	if err != nil {
 		return 0, 0, err
 	}
 	if imported && origin == nil {
 		return 0, 0, ErrRefundUnavailable
 	}
-	if origin != nil {
-		used = max(used, *origin)
-	}
-	used, err = used.Add(current)
+	remaining, err := subscriptionRefundRemaining(o.Credits, total, used, current, origin)
 	if err != nil {
-		return 0, 0, ErrRefundUnavailable
+		return 0, 0, err
 	}
-	remaining := max(o.Credits-used, 0)
 	return remaining, max(balance, 0), nil
 }

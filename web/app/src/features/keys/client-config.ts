@@ -1,29 +1,22 @@
-// Generates env/config snippets for common client tools, using the current
-// origin and a key prefix placeholder (the real secret is never embedded here
-// unless the caller explicitly passes it in after a reveal).
-export interface ClientConfigSnippet {
-  id: string
-  label: string
-  code: string
-}
+export const clientTools = [
+  { value: 'codex', label: 'Codex' },
+  { value: 'claude', label: 'Claude Code' },
+  { value: 'gemini', label: 'Gemini CLI' },
+  { value: 'opencode', label: 'OpenCode' },
+  { value: 'openclaw', label: 'OpenClaw' },
+  { value: 'hermes', label: 'Hermes' },
+] as const
 
-export function clientConfigSnippets(origin: string, apiKey: string): ClientConfigSnippet[] {
-  const baseURL = `${origin}/v1`
-  return [
-    {
-      id: 'openai-env',
-      label: 'OpenAI SDK (env)',
-      code: `export OPENAI_BASE_URL="${baseURL}"\nexport OPENAI_API_KEY="${apiKey}"`,
-    },
-    {
-      id: 'claude-code-env',
-      label: 'Claude Code (env)',
-      code: `export ANTHROPIC_BASE_URL="${origin}"\nexport ANTHROPIC_API_KEY="${apiKey}"`,
-    },
-    {
-      id: 'curl',
-      label: 'curl',
-      code: `curl ${baseURL}/chat/completions \\\n  -H "Authorization: Bearer ${apiKey}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Hello"}]}'`,
-    },
-  ]
+export function ccSwitchImportURL(value: string): string {
+  const link = new URL(value)
+  if (
+    link.protocol !== 'ccswitch:' ||
+    link.hostname !== 'v1' ||
+    link.pathname !== '/import' ||
+    link.searchParams.get('resource') !== 'provider' ||
+    !clientTools.some((tool) => tool.value === link.searchParams.get('app'))
+  ) {
+    throw new Error('导入链接无效')
+  }
+  return link.href
 }

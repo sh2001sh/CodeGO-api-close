@@ -10,7 +10,7 @@ export default function AuditPage() {
   const isAdmin = user.role === 'admin' || user.role === 'root'
   return (
     <>
-      <PageHeader title="请求审计" description="追踪请求、事件与用量的历史记录" />
+      <PageHeader title="请求审计" />
       <Tabs
         items={[
           { value: 'requests', label: '请求', content: <AuditRequestsTab isAdmin={isAdmin} /> },

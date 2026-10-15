@@ -11,7 +11,6 @@ import { CatalogConfiguration } from '../components/catalog-configuration'
 import {
   ChannelFilterBar,
   emptyChannelFilters,
-  matchesChannelFilters,
   type ChannelFilterState,
 } from '../features/catalog/channel-filters'
 import { ChannelBatchBar } from '../features/catalog/channel-batch'
@@ -39,13 +38,23 @@ export default function ChannelsPage() {
         api
           .GET('/api/catalog/channels', {
             signal,
-            params: { query: { page, page_size: 30, keyword } },
+            params: {
+              query: {
+                page,
+                page_size: 30,
+                keyword,
+                group: filters.group,
+                status: filters.status,
+                tag: filters.tag,
+                provider: filters.provider,
+              },
+            },
           })
           .then((result) => unwrap(result)),
-      [page, keyword],
+      [page, keyword, filters.group, filters.status, filters.tag, filters.provider],
     ),
   )
-  const rows = (data.items ?? []).filter((row) => matchesChannelFilters(row, filters))
+  const rows = data.items ?? []
   const save = useMutation({
     mutationFn: (channel: Channel) =>
       channel.id
@@ -126,7 +135,11 @@ export default function ChannelsPage() {
           setKeyword(value)
           setPage(1)
         }}
-        onFiltersChange={setFilters}
+        onFiltersChange={(next) => {
+          setFilters(next)
+          setSelected([])
+          setPage(1)
+        }}
       />
       <ChannelBatchBar selected={selected} onClear={() => setSelected([])} />
       <DataTable

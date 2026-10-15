@@ -37,7 +37,7 @@ export default function RedemptionsPage() {
   const [issued, setIssued] = useState<Schema['RedemptionCode'] | null>(null)
   const [revoking, setRevoking] = useState<Schema['RedemptionCode'] | null>(null)
   const [copied, setCopied] = useState(false)
-  const [redeemType, setRedeemType] = useState<'credits' | 'subscription' | 'blind_box'>('credits')
+  const [redeemType, setRedeemType] = useState<'credits' | 'subscription'>('credits')
   const queryClient = useQueryClient()
   const list = useQuery(redemptionsOptions(before))
   const plans = useQuery({
@@ -102,24 +102,13 @@ export default function RedemptionsPage() {
                   redeem_type: 'credits',
                   credits: BigInt(toMicroCredits(String(form.get('redemption-credits') ?? ''))),
                 }
-              else if (redeemType === 'subscription')
+              else
                 body = {
                   ...base,
                   redeem_type: 'subscription',
                   credits: 0,
                   plan_id: BigInt(positiveID(String(form.get('redemption-plan') ?? ''))),
                 }
-              else {
-                const quantity = String(form.get('redemption-boxes') ?? '')
-                if (!/^\d+$/.test(quantity) || Number(quantity) < 1 || Number(quantity) > 100)
-                  throw new Error('盲盒数量须为 1 至 100 的整数')
-                body = {
-                  ...base,
-                  redeem_type: 'blind_box',
-                  credits: 0,
-                  blind_box_quantity: Number(quantity),
-                }
-              }
               issue.mutate(body)
             } catch (cause) {
               setError(errorFrom(cause))
@@ -134,7 +123,7 @@ export default function RedemptionsPage() {
               value={redeemType}
               onChange={(event) => {
                 const value = event.target.value
-                if (value === 'credits' || value === 'subscription' || value === 'blind_box') {
+                if (value === 'credits' || value === 'subscription') {
                   setRedeemType(value)
                   setError(null)
                 }
@@ -142,7 +131,6 @@ export default function RedemptionsPage() {
             >
               <option value="credits">{t('钱包额度')}</option>
               <option value="subscription">{t('订阅套餐')}</option>
-              <option value="blind_box">{t('盲盒')}</option>
             </select>
           </label>
           {redeemType === 'credits' && (
@@ -165,9 +153,6 @@ export default function RedemptionsPage() {
                 ))}
               </select>
             </label>
-          )}
-          {redeemType === 'blind_box' && (
-            <Field name="redemption-boxes" label="盲盒数量" required placeholder="1 至 100" />
           )}
           <Field name="redemption-expiry" label="到期时间（可选）" type="datetime-local" />
           <Button
@@ -232,7 +217,7 @@ export default function RedemptionsPage() {
       <DataTable
         rows={list.data ?? []}
         rowKey={(row) => row.id}
-        empty="暂无兑换码。填写上方表单发行第一张。"
+        empty="暂无兑换码"
         columns={[
           { label: '名称', render: (row) => row.name },
           { label: '兑换权益', render: (row) => redemptionBenefit(row, t) },

@@ -1,9 +1,5 @@
 import { useTranslation } from '../../lib/i18n'
-// Filter bar for the channels page. `GET /api/catalog/channels` only accepts
-// `keyword` server-side today (see v3/internal/catalogcontrol/channels.go
-// listChannels) even though the openapi schema also declares `group` and
-// `model` query parameters that the handler never reads. Status, group, tag
-// and provider are therefore filtered client-side against the fetched page.
+// Filters are applied on the server before pagination.
 import { useState } from 'react'
 import { Button, Field, SelectField } from '../../components/ui'
 import type { Channel } from './types'
@@ -42,6 +38,7 @@ export function ChannelFilterBar(props: {
   const [local, setLocal] = useState(props.filters)
   return (
     <form
+      key={JSON.stringify(local)}
       className="filters"
       onSubmit={(event) => {
         event.preventDefault()
@@ -59,7 +56,13 @@ export function ChannelFilterBar(props: {
         props.onSearch(keyword)
       }}
     >
-      <Field name="keyword" label="关键字" defaultValue={props.initialKeyword} placeholder="名称" />
+      <Field
+        key={`keyword-${props.initialKeyword}`}
+        name="keyword"
+        label="关键字"
+        defaultValue={props.initialKeyword}
+        placeholder="名称 / ID / 标签"
+      />
       <Field name="group" label="分组" defaultValue={local.group} />
       <Field name="tag" label="标签" defaultValue={local.tag} />
       <Field name="provider" label="Provider" defaultValue={local.provider} />

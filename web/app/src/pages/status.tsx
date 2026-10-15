@@ -52,7 +52,6 @@ export default function StatusPage() {
     <div className="site-container site-page status-page">
       <PageHeader
         title="服务状态"
-        description="展示各分组最近的连通性探测；探测延迟不代表真实请求的首字延迟。"
         action={
           <Button
             variant="secondary"
@@ -84,7 +83,7 @@ export default function StatusPage() {
             {updatedAt ? String(t('最近更新')) + ' ' + String(date(updatedAt)) : t('暂无采样数据')}
           </p>
           {data.length === 0 ? (
-            <EmptyState title="暂无公开分组" description="当前没有可展示状态的分组。" />
+            <EmptyState title="暂无公开分组" />
           ) : (
             <div className="status-group-list">
               {data.map((group) => (

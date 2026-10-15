@@ -54,7 +54,7 @@ export function ChannelDisclosure(props: {
     <section className="market-disclosure" aria-label={t('来源与数据声明')}>
       <h4>{t('来源与数据声明')}</h4>
       {!disclosure ? (
-        <p className="subtle">{t('渠道主尚未披露来源、数据处理与模型能力。')}</p>
+        <p>{t('未披露')}</p>
       ) : (
         <>
           <dl className="market-disclosure-facts">
@@ -133,11 +133,6 @@ export function ChannelDisclosure(props: {
           </p>
         </>
       )}
-      <p className="subtle">
-        {t(
-          '以上为渠道主自行声明；连通验证仅说明请求可达，来源授权、模型真实性与数据策略未经平台独立核验。',
-        )}
-      </p>
     </section>
   )
 }
@@ -201,13 +196,15 @@ export function ModelInsights(props: { group: string; model: string }) {
               <dt>{t('性能样本')}</dt>
               <dd>{String(insight.performance_samples)}</dd>
             </div>
+            <div>
+              <dt>{t('探针')}</dt>
+              <dd>{String(insight.probe_count ?? 0)}</dd>
+            </div>
+            <div>
+              <dt>{t('探针成功率')}</dt>
+              <dd>{ratio(insight.probe_success_rate)}</dd>
+            </div>
           </dl>
-          {BigInt(insight.request_count) === 0n && (
-            <p className="subtle">{t('所选模型暂无有效调用样本，无法判断实际服务质量。')}</p>
-          )}
-          <p className="subtle">
-            {t('指标来自所选模型的真实调用；首字时间仅统计有计时数据的流式请求，探测延迟不参与。')}
-          </p>
           {insight.failure_counts.length > 0 && (
             <details className="market-insight-failures">
               <summary>{t('失败类型')}</summary>

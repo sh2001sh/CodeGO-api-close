@@ -79,6 +79,63 @@ test('row test shows latency on success', async ({ page }) => {
   await expect(page.getByText('234ms')).toBeVisible()
 })
 
+test('failed row and mixed batch tests keep results visible', async ({ page }) => {
+  await page.route('**/api/catalog/channels*', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: { items: [channel, { ...channel, id: 2, name: '备用渠道' }], total: 2 },
+      },
+    }),
+  )
+  await page.route('**/api/channel/test/1', (route) =>
+    route.fulfill({
+      json: { success: false, id: 1, time: 0.5, message: 'fixture upstream failed' },
+    }),
+  )
+  await page.route('**/api/channel/test', (route) =>
+    route.fulfill({
+      json: {
+        success: false,
+        tested: 2,
+        failed: 1,
+        data: [
+          { success: false, id: 1, time: 0.5, message: 'fixture upstream failed' },
+          { success: true, id: 2, time: 0.12, message: '' },
+        ],
+      },
+    }),
+  )
+  await page.goto('/channels')
+  await page.getByRole('button', { name: '测速', exact: true }).first().click()
+  await expect(page.getByText('失败', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '测试全部', exact: true }).click()
+  await expect(page.getByText('120ms')).toBeVisible()
+  await expect(page.getByText('失败', { exact: true })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+test('channel filters reach the server before pagination and reset cleanly', async ({ page }) => {
+  await page.route('**/api/catalog/channels*', (route) =>
+    route.fulfill({ json: { success: true, data: { items: [], total: 0 } } }),
+  )
+  await page.goto('/channels')
+  await page.getByLabel('分组', { exact: true }).fill('rare')
+  await page.getByLabel('标签', { exact: true }).fill('special')
+  await page.getByLabel('Provider', { exact: true }).fill('claude')
+  const sent = page.waitForRequest(
+    (request) => new URL(request.url()).searchParams.get('group') === 'rare',
+  )
+  await page.getByRole('button', { name: '搜索', exact: true }).click()
+  const query = new URL((await sent).url()).searchParams
+  expect(query.get('tag')).toBe('special')
+  expect(query.get('provider')).toBe('claude')
+  expect(query.get('page')).toBe('1')
+  await page.getByRole('button', { name: '重置', exact: true }).click()
+  await expect(page.getByLabel('分组', { exact: true })).toHaveValue('')
+  await expect(page.getByLabel('标签', { exact: true })).toHaveValue('')
+})
+
 test('fetch models into the channel form lets the admin pick upstream models', async ({ page }) => {
   await page.route('**/api/catalog/channels', (route) =>
     route.fulfill({ json: { success: true, data: { items: [], total: 0 } } }),

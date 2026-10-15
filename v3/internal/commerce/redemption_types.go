@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/sh2001sh/new-api/v3/internal/marketplace"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
 )
 
@@ -54,9 +55,7 @@ func (s *Service) validateRedemptionInput(ctx context.Context, in *IssueRedempti
 		}
 		return err
 	case "blind_box":
-		if in.BlindBoxQuantity < 1 || in.BlindBoxQuantity > 100 || in.Credits != 0 || in.PlanID != 0 {
-			return ErrInvalid
-		}
+		return marketplace.ErrBlindBoxesDisabled
 	default:
 		return ErrInvalid
 	}

@@ -3,6 +3,7 @@ package catalogcontrol
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -66,6 +67,13 @@ func (s *Server) loadProbeTarget(ctx context.Context, id int64) (Channel, gatewa
 func (s *Server) testStoredChannel(ctx context.Context, id int64, model, endpoint string, stream bool) probeResult {
 	result := probeResult{ID: id}
 	start := time.Now()
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	defer func() {
+		// Admin tests use the same retained probe history as market checks.
+		// They do not create a user charge or masquerade as real traffic.
+		s.recordMarketProbe(ctx, id, model, start, result)
+	}()
 	c, target, err := s.loadProbeTarget(ctx, id)
 	if err == nil {
 		if model == "" && len(c.Models) > 0 {
@@ -86,6 +94,28 @@ func (s *Server) testStoredChannel(ctx context.Context, id int64, model, endpoin
 	}
 	result.Success = true
 	return result
+}
+
+func (s *Server) recordMarketProbe(parent context.Context, channel int64, model string, started time.Time, result probeResult) {
+	if model == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 2*time.Second)
+	defer cancel()
+	status := "failed"
+	if result.Success {
+		status = "passed"
+	}
+	completed := time.Now()
+	results, err := json.Marshal([]map[string]any{{"model": model, "status": status, "latency_ms": int64(result.Time * 1000), "tested_at": completed}})
+	if err == nil {
+		_, err = s.pool.Exec(ctx, `INSERT INTO v3_channelmarket.verification_runs(id,channel_id,trigger,status,stage,results,created_at,started_at,completed_at,summary)
+		SELECT $1,$2,'admin_probe',$3,'completed',$4,$5,$5,$6,'Administrator connectivity test'
+		WHERE EXISTS(SELECT 1 FROM v3_channelmarket.groups WHERE channel_id=$2 AND deleted_at IS NULL)`, rand.Text(), channel, status, results, started, completed)
+	}
+	if err != nil {
+		s.log.Error("record market channel probe failed", "channel_id", channel, "error", err)
+	}
 }
 
 func (s *Server) legacyTestChannel(w http.ResponseWriter, r *http.Request) {

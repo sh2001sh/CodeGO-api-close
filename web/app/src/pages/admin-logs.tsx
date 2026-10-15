@@ -92,9 +92,10 @@ export default function AdminLogsPage() {
         </StatGrid>
       )}
       {BigInt(stat.data?.prompt_tokens_unknown_requests ?? 0) > 0 && (
-        <p className="subtle">
-          {t('输入 token 汇总不含历史统计异常的请求；扣费合计包含全部请求。')}
-        </p>
+        <Stat
+          label="输入 token 异常请求"
+          value={displayInt(stat.data?.prompt_tokens_unknown_requests)}
+        />
       )}
       <UsageFilterBar
         filters={filters}

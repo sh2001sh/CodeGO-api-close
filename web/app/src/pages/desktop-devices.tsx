@@ -6,6 +6,7 @@ import type { Schema } from '../lib/types'
 import { date } from '../lib/format'
 import { DataTable } from '../components/data-table'
 import { Button, ErrorMessage, Field, Loading, PageHeader, Status } from '../components/ui'
+import { ccSwitchImportURL } from '../features/keys/client-config'
 
 export default function DesktopDevicesPage() {
   const client = useQueryClient()
@@ -25,6 +26,7 @@ export default function DesktopDevicesPage() {
     },
   })
   const createImport = useMutation({
+    gcTime: 0,
     mutationFn: (body: Schema['DesktopImportInput']) =>
       api
         .POST('/api/desktop/import/deeplink', {
@@ -42,7 +44,7 @@ export default function DesktopDevicesPage() {
       {devices.isPending && <Loading />}
       {revokeID && (
         <div className="form-panel">
-          <p>确认撤销此设备？该设备将不能继续使用当前授权。</p>
+          <h2>撤销设备</h2>
           <Button variant="danger" disabled={revoke.isPending} onClick={() => revoke.mutate()}>
             确认撤销设备
           </Button>
@@ -77,27 +79,27 @@ export default function DesktopDevicesPage() {
               ),
             },
           ]}
-          empty="暂无已授权设备。请从桌面客户端发起授权。"
+          empty="暂无已授权设备"
         />
       )}
       <section className="section">
-        <h2>一键导入工具配置</h2>
-        <p>为当前账号的 API Key 生成短期导入链接，打开桌面客户端后确认应用配置。</p>
+        <h2>CC Switch</h2>
         <form
           className="form-panel"
+          onChange={() => createImport.reset()}
           onSubmit={(event) => {
             event.preventDefault()
             setLinkError(null)
             const form = new FormData(event.currentTarget)
             createImport.mutate({
-              target: form.get('target') === 'ccswitch' ? 'ccswitch' : 'codego',
+              target: 'ccswitch',
               tool: String(form.get('tool')),
               token_id: String(form.get('token_id')),
               name: String(form.get('name')),
               model: String(form.get('model')),
-              haiku_model: String(form.get('haiku-model')),
-              sonnet_model: String(form.get('sonnet-model')),
-              opus_model: String(form.get('opus-model')),
+              haiku_model: String(form.get('haiku-model') ?? ''),
+              sonnet_model: String(form.get('sonnet-model') ?? ''),
+              opus_model: String(form.get('opus-model') ?? ''),
               enabled: true,
             })
           }}
@@ -126,15 +128,8 @@ export default function DesktopDevicesPage() {
               <option value="hermes">Hermes</option>
             </select>
           </label>
-          <label className="field" htmlFor="import-target">
-            <span>导入客户端</span>
-            <select id="import-target" name="target">
-              <option value="codego">CodeGo</option>
-              <option value="ccswitch">CC Switch</option>
-            </select>
-          </label>
-          <Field name="name" label="配置名称" required defaultValue="CodeGo" maxLength={128} />
-          <Field name="model" label="模型" maxLength={256} />
+          <Field name="name" label="配置名称" required defaultValue="CodeGo" maxLength={100} />
+          <Field name="model" label="模型" required maxLength={256} />
           <Field name="haiku-model" label="Claude Haiku 模型（可选）" maxLength={256} />
           <Field name="sonnet-model" label="Claude Sonnet 模型（可选）" maxLength={256} />
           <Field name="opus-model" label="Claude Opus 模型（可选）" maxLength={256} />
@@ -144,23 +139,17 @@ export default function DesktopDevicesPage() {
         </form>
         {createImport.data && (
           <div className="form-stack">
-            <p role="status">
-              {createImport.data.token_name} 的导入链接已生成，有效期{' '}
-              {createImport.data.expires_in_seconds} 秒。
-            </p>
+            <strong role="status">{createImport.data.token_name}</strong>
             <Button
               onClick={() => {
                 try {
-                  const link = new URL(createImport.data.deep_link)
-                  if (!['codego:', 'ccswitch:'].includes(link.protocol))
-                    throw new Error('服务器返回了无效导入链接')
-                  window.location.assign(link.href)
+                  window.location.assign(ccSwitchImportURL(createImport.data.deep_link))
                 } catch (cause) {
                   setLinkError(cause instanceof Error ? cause : new Error('导入链接无效'))
                 }
               }}
             >
-              打开客户端并导入
+              导入 CC Switch
             </Button>
             <Button variant="quiet" onClick={() => createImport.reset()}>
               隐藏导入链接

@@ -85,7 +85,13 @@ func (s *Store) loadVersion(ctx context.Context, version int64) error {
 // flushed or restarted), it compiles from PostgreSQL instead so a gateway can
 // always start; the result is labeled with the version it was asked for.
 func (s *Store) fetch(ctx context.Context, version int64) (*Snapshot, error) {
-	blob, err := s.redis.Get(ctx, snapshotKey(version)).Bytes()
+	options := *s.redis.Options()
+	options.ReadTimeout = 90 * time.Second
+	options.WriteTimeout = 90 * time.Second
+	options.PoolSize = 1
+	transfer := redis.NewClient(&options)
+	defer transfer.Close()
+	blob, err := transfer.Get(ctx, snapshotKey(version)).Bytes()
 	if errors.Is(err, redis.Nil) {
 		s.log.Warn("catalog: snapshot blob missing in redis; compiling from postgres", "version", version)
 		snap, err := Compile(ctx, s.pool, s.dec)

@@ -1,3 +1,0 @@
-[FATAL] 2026/06/03 - 20:57:33 | [failed to initialize database: disk I/O error (2570)] 
-exit status 1
-go: unlinkat E:\sh\Coding\cpa_bussiness\new-api\.tmp\go\tmp\go-build887974034\b001\embedcfg: Access is denied.

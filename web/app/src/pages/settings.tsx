@@ -31,7 +31,7 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="系统设置" description="按分区管理站点配置；搜索可跨分区查找设置项。" />
+      <PageHeader title="系统设置" />
       <label className="field settings-search" htmlFor="settings-search">
         <span>{t('搜索')}</span>
         <input

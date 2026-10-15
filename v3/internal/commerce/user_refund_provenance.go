@@ -13,7 +13,7 @@ import (
 func nativeRefundLots(ctx context.Context, q refundQuerier, account int64, out map[string]credits.Micro) error {
 	rows, err := q.Query(ctx, `SELECT e.operation_id,coalesce(sum(l.remaining_amount),0)::bigint
 	 FROM v3_billing.ledger_entries e LEFT JOIN v3_billing.funding_lots l
-	 ON l.account_id=e.account_id AND l.source='topup' AND l.reference_type='topup' AND l.reference_id=e.operation_id
+	 ON l.account_id=e.account_id AND l.remaining_amount>0 AND l.source='topup' AND l.reference_type='topup' AND l.reference_id=e.operation_id
 	 WHERE e.account_id=$1 AND e.kind='topup' AND e.amount>0 AND e.operation_id LIKE 'order:paid:%'
 	 GROUP BY e.id,e.operation_id ORDER BY e.id`, account)
 	if err != nil {

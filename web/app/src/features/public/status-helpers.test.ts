@@ -61,6 +61,46 @@ function group(overrides: Partial<Group> = {}): Group {
 }
 
 describe('public connectivity observations', () => {
+  it('uses recent actual traffic for health while preserving separate probe evidence', () => {
+    const now = Date.now()
+    const current = Math.floor(now / 3_600_000) * 3600
+    const failedProbe = group({
+      model_verification_results: [result('gpt-test', 'failed')],
+      recent_request_series: [
+        { ts: current, request_count: 5, success_rate: 100, probe_count: 3, probe_success_rate: 0 },
+      ],
+    })
+    expect(groupTone(failedProbe, now)).toBe('healthy')
+    expect(groupProbe(failedProbe, now).tone).toBe('degraded')
+    expect(boardRows([failedProbe])[0].health).toBe('up')
+    expect(
+      groupTone(
+        {
+          ...failedProbe,
+          recent_request_series: [{ ts: current, request_count: 2, success_rate: 50 }],
+        },
+        now,
+      ),
+    ).toBe('degraded')
+    expect(
+      groupTone(
+        {
+          ...failedProbe,
+          recent_request_series: [
+            {
+              ts: current,
+              request_count: 0,
+              success_rate: 100,
+              probe_count: 50,
+              probe_success_rate: 100,
+            },
+          ],
+        },
+        now,
+      ),
+    ).toBe('degraded')
+    expect(groupTone(failedProbe, now + 3 * 3_600_000)).toBe('degraded')
+  })
   it('recognizes the backend passed verification enum', () => {
     expect(boardRows([group()])[0].verified).toBe(true)
     expect(boardRows([group()])[0]).toMatchObject({ id: 'channel-1', groupId: 'stable-group-1' })

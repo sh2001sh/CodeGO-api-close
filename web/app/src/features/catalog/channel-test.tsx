@@ -8,7 +8,7 @@ import { useMutation } from '@tanstack/react-query'
 import { APIError, api } from '../../lib/api'
 import { useTranslation } from '../../lib/i18n'
 import { Button, Badge } from '../../components/ui'
-import type { Channel, ProbeBatch, ProbeResult } from './types'
+import type { Channel, ProbeResult } from './types'
 
 export function useChannelTest() {
   return useMutation({
@@ -17,7 +17,7 @@ export function useChannelTest() {
         params: { path: { id: String(id) } },
       })
       if (!result.data) throw new APIError('服务器返回了无效响应', result.response.status)
-      return result.data as unknown as ProbeResult
+      return result.data
     },
   })
 }
@@ -27,7 +27,7 @@ export function useChannelTestAll() {
     mutationFn: async () => {
       const result = await api.GET('/api/channel/test')
       if (!result.data) throw new APIError('服务器返回了无效响应', result.response.status)
-      return result.data as unknown as ProbeBatch
+      return result.data
     },
   })
 }
@@ -47,7 +47,9 @@ export function ChannelTestCell(props: {
         (props.result.success ? (
           <Badge tone="success">{Math.round(props.result.time * 1000)}ms</Badge>
         ) : (
-          <Badge tone="danger">{t(props.result.message)}</Badge>
+          <span title={props.result.message}>
+            <Badge tone="danger">{t('失败')}</Badge>
+          </span>
         ))}
     </div>
   )

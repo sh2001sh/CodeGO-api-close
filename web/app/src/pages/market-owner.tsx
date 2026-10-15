@@ -108,7 +108,6 @@ export default function MarketOwnerPage() {
     <div className="channel-workspace">
       <PageHeader
         title="渠道工作台"
-        description="查看服务情况、收入构成与逐笔结算，管理你的供给。"
         action={
           <>
             <Link to="/channel-market" className="button button-secondary">
@@ -201,7 +200,7 @@ export default function MarketOwnerPage() {
                 <DataTable
                   rows={visibleChannels}
                   rowKey={(row) => row.id}
-                  empty="暂无渠道。提交你的上游服务，验证并审核通过后即可供用户使用。"
+                  empty="暂无渠道"
                   columns={[
                     {
                       label: '渠道',
@@ -362,7 +361,7 @@ export default function MarketOwnerPage() {
                     </MarketForm>
                     {inviteToken && (
                       <div className="notice" role="status">
-                        <p>{t('邀请令牌，仅分享给需要授权的用户：')}</p>
+                        <p>{t('邀请令牌')}</p>
                         <code>{inviteToken}</code>
                       </div>
                     )}

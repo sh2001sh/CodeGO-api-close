@@ -3,8 +3,7 @@
 
 export type SettingType = 'boolean' | 'string' | 'secret' | 'number' | 'json' | 'select'
 
-export type SettingGroupId =
-  'site' | 'auth' | 'payment' | 'billing' | 'model' | 'blindbox' | 'mail' | 'other'
+export type SettingGroupId = 'site' | 'auth' | 'payment' | 'billing' | 'model' | 'mail' | 'other'
 
 export interface SettingFieldDef {
   key: string

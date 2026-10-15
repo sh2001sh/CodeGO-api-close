@@ -213,14 +213,16 @@ func (d *marketplaceData) reward(r marketplaceSourceRow) (map[string]any, error)
 		base["kind"] = "credits"
 	case "subscription":
 		base["kind"] = "subscription"
-		plan := int64(0)
 		subID := d.integer(r, "user_subscription_id")
-		for _, sub := range d.source["user_subscriptions"] {
-			if sub.id() == subID {
-				plan = d.integer(sub, "plan_id")
-				break
+		if d.rewardPlansBySubscription == nil {
+			d.rewardPlansBySubscription = make(map[int64]int64)
+			for _, sub := range d.source["user_subscriptions"] {
+				if _, exists := d.rewardPlansBySubscription[sub.id()]; !exists {
+					d.rewardPlansBySubscription[sub.id()] = d.integer(sub, "plan_id")
+				}
 			}
 		}
+		plan := d.rewardPlansBySubscription[subID]
 		if plan <= 0 {
 			return base, fmt.Errorf("subscription reward has no source subscription plan")
 		}
@@ -234,14 +236,21 @@ func (d *marketplaceData) reward(r marketplaceSourceRow) (map[string]any, error)
 		if _, item := r["purchase_id"]; item {
 			openID = d.integer(r, "open_record_id")
 		}
-		for _, prop := range d.source["blind_box_props"] {
-			if openID > 0 && d.integer(prop, "open_record_id") == openID {
-				reward, err := d.propReward(prop)
-				for _, key := range []string{"legacy_reward_type", "reward_tier", "wallet_type"} {
-					reward[key] = base[key]
+		if d.rewardPropsByOpen == nil {
+			d.rewardPropsByOpen = make(map[int64]marketplaceSourceRow)
+			for _, prop := range d.source["blind_box_props"] {
+				id := d.integer(prop, "open_record_id")
+				if id > 0 && d.rewardPropsByOpen[id] == nil {
+					d.rewardPropsByOpen[id] = prop
 				}
-				return reward, err
 			}
+		}
+		if prop := d.rewardPropsByOpen[openID]; openID > 0 && prop != nil {
+			reward, err := d.propReward(prop)
+			for _, key := range []string{"legacy_reward_type", "reward_tier", "wallet_type"} {
+				reward[key] = base[key]
+			}
+			return reward, err
 		}
 		if named, ok := marketplaceNamedProp(title); ok {
 			for _, key := range []string{"legacy_reward_type", "reward_tier", "wallet_type"} {
@@ -258,22 +267,20 @@ func (d *marketplaceData) reward(r marketplaceSourceRow) (map[string]any, error)
 
 func (d *marketplaceData) normalizePity() {
 	opened := make(map[int64]int64)
+	standardOpened := make(map[int64]int64)
 	for _, r := range d.source["blind_box_open_records"] {
 		if p := r.text("pool_type"); p == "unified" || p == "balance_15" {
 			opened[d.integer(r, "user_id")]++
+		} else if p == "standard" {
+			standardOpened[d.integer(r, "user_id")]++
 		}
 	}
 	for _, r := range d.source["blind_box_pity_states"] {
-		var count int64
 		user := d.integer(r, "user_id")
+		count := standardOpened[user]
 		low := d.integer(r, "consecutive_low_rewards")
 		if user <= 0 || low < 0 {
 			d.problem("blind_box_pity", r.id(), "invalid_blind_box_pity", "pity requires a positive user and nonnegative counter")
-		}
-		for _, o := range d.source["blind_box_open_records"] {
-			if d.integer(o, "user_id") == user && o.text("pool_type") == "standard" {
-				count++
-			}
 		}
 		d.records = append(d.records, marketplaceRecord{"blind_box_pity", user, map[string]any{"user_id": user, "pool_id": int64(2), "legacy_id": r.id(), "opened": count, "small_progress": low, "big_progress": int64(0), "updated_at": d.instant(r, "updated_at", true)}})
 	}

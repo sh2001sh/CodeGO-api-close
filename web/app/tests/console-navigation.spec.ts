@@ -9,7 +9,7 @@ test('console brand returns to the public home on every viewport', async ({ page
   await expect(brand).toHaveAttribute('href', '/')
   await brand.click()
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByRole('heading', { name: '选择模型，开始构建。', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '模型与 API', level: 1 })).toBeVisible()
 })
 
 test('mobile console drawer brand returns home and retired links stay absent', async ({ page }) => {

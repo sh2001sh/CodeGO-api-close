@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/sh2001sh/new-api/v3/internal/marketplace"
 )
 
 func currencyNumber(amount int64, currency string) json.Number {
@@ -12,8 +14,11 @@ func currencyNumber(amount int64, currency string) json.Number {
 }
 
 func (h *handler) registerCashBoxes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/blind-box/amount", h.authorized(false, h.cashBoxAmount))
-	mux.HandleFunc("POST /api/blind-box/pay", h.authorized(false, h.cashBoxPay))
+	disabled := h.authorized(false, func(w http.ResponseWriter, _ *http.Request, _ Actor) {
+		respond(w, nil, marketplace.ErrBlindBoxesDisabled)
+	})
+	mux.HandleFunc("POST /api/blind-box/amount", disabled)
+	mux.HandleFunc("POST /api/blind-box/pay", disabled)
 	mux.HandleFunc("GET /api/blind-box/orders/{trade_no}", h.authorized(false, func(w http.ResponseWriter, r *http.Request, a Actor) {
 		o, err := h.s.CashBoxOrder(r.Context(), a.UserID, r.PathValue("trade_no"))
 		respond(w, o, err)

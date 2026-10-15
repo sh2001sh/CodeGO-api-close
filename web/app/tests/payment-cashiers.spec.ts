@@ -66,6 +66,7 @@ test('package checkout retains the cashier and only offers configured choices', 
   await page.goto('/wallet')
   await expect(page.locator('#wallet-payment-type option')).toHaveCount(1)
   await expect(page.locator('#wallet-payment-type')).toHaveValue('wxpay')
+  await page.getByRole('tab', { name: '购买套餐', exact: true }).click()
   await expect(page.locator('#subscription-payment-type option')).toHaveCount(1)
   await page.getByRole('button', { name: '购买', exact: true }).click()
   const sent = page.waitForRequest('**/api/packages/purchase')
@@ -122,7 +123,7 @@ test('fuel quote and purchase keep the selected cashier in the frozen request', 
   await page.route('**/api/subscription/fuel/purchase', (route) =>
     route.fulfill({ json: { success: true, data: { payment_url: '/orders' } } }),
   )
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await page.locator('#fuel-payment-type').selectOption('wxpay')
   await page.getByLabel('购买燃料 credits', { exact: true }).fill('2')
   await page.getByRole('button', { name: '获取燃料报价', exact: true }).click()

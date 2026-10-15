@@ -42,6 +42,9 @@ func inspectSource(ctx context.Context, tx pgx.Tx, sources map[string]string) (*
 	reportRetiredUserPoints(users, &r)
 	userIDs, usernames := map[int64]bool{}, map[string]bool{}
 	for _, u := range users {
+		if u.EmailPreservedInSource {
+			r.Counts["preserved_source_identity.ambiguous_recovery_emails"]++
+		}
 		if userIDs[u.ID] || usernames[u.Username] {
 			r.Issues = append(r.Issues, Issue{"user", u.ID, "duplicate_user", "source ID or username is duplicated"})
 		}

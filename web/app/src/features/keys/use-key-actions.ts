@@ -4,6 +4,7 @@ import { api, unwrap } from '../../lib/api'
 import { confirmAction } from '../../components/ui'
 import { useTranslation } from '../../lib/i18n'
 import type { APIKey, Schema } from '../../lib/types'
+import { keyStatusInput } from './key-policy'
 
 function useKeyFilters(keys: APIKey[]) {
   const [search, setSearch] = useState('')
@@ -65,7 +66,8 @@ export function useKeyActions(keys: APIKey[]) {
   const update = useMutation({
     mutationFn: (key: APIKey) =>
       api.PUT('/api/token/', {
-        body: { ...key, status: key.status === 'active' ? 'disabled' : 'active' },
+        params: { query: { status_only: 'true' } },
+        body: keyStatusInput(key, key.status === 'active' ? 'disabled' : 'active'),
       }),
     onSuccess: refresh,
   })
@@ -110,7 +112,12 @@ export function useKeyActions(keys: APIKey[]) {
   }
 
   const batchSetStatus = (status: 'active' | 'disabled') =>
-    runBatch((key) => api.PUT('/api/token/', { body: { ...key, status } }))
+    runBatch((key) =>
+      api.PUT('/api/token/', {
+        params: { query: { status_only: 'true' } },
+        body: keyStatusInput(key, status),
+      }),
+    )
 
   const batchDelete = async () => {
     const ok = await confirmAction({

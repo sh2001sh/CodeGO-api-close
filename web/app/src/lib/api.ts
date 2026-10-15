@@ -94,7 +94,14 @@ async function transport(request: Request): Promise<Response> {
   }
   if (!payload || typeof payload !== 'object' || !('success' in payload))
     throw new APIError('服务器返回了无效响应', response.status)
-  if (!response.ok || payload.success !== true) {
+  // Connectivity outcomes use success as the test result, not the HTTP
+  // envelope. Preserve failed samples and mixed batches for these exact GETs.
+  const probeResult =
+    request.method === 'GET' &&
+    /^\/api\/channel\/test(?:\/\d+)?$/.test(url.pathname) &&
+    typeof payload.success === 'boolean' &&
+    ('time' in payload || ('tested' in payload && 'failed' in payload && 'data' in payload))
+  if (!response.ok || (payload.success !== true && !probeResult)) {
     const message =
       'message' in payload && typeof payload.message === 'string'
         ? payload.message

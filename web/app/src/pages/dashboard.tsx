@@ -121,7 +121,6 @@ export default function DashboardPage() {
     <div className="overview-page">
       <PageHeader
         title="仪表板"
-        description={`${t('欢迎回来')}，${user.display_name || user.username}`}
         action={
           <>
             <a href="#api-integration" className="button button-ghost">
@@ -141,7 +140,7 @@ export default function DashboardPage() {
 
       {!subscriptions.isPending && !subscriptions.error && !hasFunding && (
         <Callout tone="warning" title={t('可用额度不足')}>
-          {t('钱包与有效套餐的剩余额度均低于 1 credit。')} <Link to="/wallet">{t('前往钱包')}</Link>
+          <Link to="/wallet">{t('前往钱包')}</Link>
         </Callout>
       )}
 
@@ -229,9 +228,12 @@ export default function DashboardPage() {
             </dl>
           )}
           {BigInt(stat.data?.prompt_tokens_unknown_requests ?? 0) > 0 && (
-            <p className="subtle">
-              {t('输入 token 汇总不含历史统计异常的请求；扣费合计包含全部请求。')}
-            </p>
+            <dl className="overview-usage-metrics">
+              <div>
+                <dt>{t('输入 token 异常请求')}</dt>
+                <dd>{displayInt(stat.data?.prompt_tokens_unknown_requests)}</dd>
+              </div>
+            </dl>
           )}
           {stat.error && (
             <Button variant="quiet" onClick={() => void stat.refetch()}>
@@ -249,7 +251,6 @@ export default function DashboardPage() {
         <div className="overview-primary">
           <Panel
             title="最近调用"
-            description="所选时段内最近的 5 条调用，可打开查看详情。"
             action={
               <Link to="/usage-logs" className="button button-ghost" data-size="sm">
                 {t('查看全部')}
@@ -286,18 +287,14 @@ export default function DashboardPage() {
               />
             )}
           </Panel>
-          <Panel
-            title="模型调用分布"
-            description="仅根据所选时段最新 50 条调用统计，不代表全量用量。"
-          >
+          <Panel title="模型调用分布（最近 50 条）">
             {recent.isPending ? (
               <Loading rows={2} />
             ) : recent.error ? (
-              <p className="muted">{t('调用记录加载失败，重试后即可查看分布。')}</p>
+              <p role="status">{t('调用记录加载失败')}</p>
             ) : models.length === 0 ? (
               <EmptyState
                 title="还没有调用记录"
-                description="选择分组和模型，开始你的第一次对话。"
                 action={
                   <Link to="/playground" className="button button-secondary">
                     {t('开始对话')}
@@ -425,11 +422,6 @@ export default function DashboardPage() {
                       {t('重试')}
                     </Button>
                   )}
-                  {!exampleSecret && (
-                    <p className="muted">
-                      {t('选择 API Key 并加载可用模型后，示例会使用你的当前权限。')}
-                    </p>
-                  )}
                   {exampleSecret &&
                     !availableModels.isPending &&
                     !availableModels.error &&
@@ -438,7 +430,6 @@ export default function DashboardPage() {
                         {t('该 Key 在所选分组暂无可用模型')}
                       </p>
                     )}
-                  <p className="muted">{t('这里只提供可复制示例，不会发送付费请求。')}</p>
                 </>
               )}
               <div className="code-block">

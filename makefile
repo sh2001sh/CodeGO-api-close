@@ -1,58 +1,27 @@
-FRONTEND_DIR = ./web/default
-BACKEND_DIR = .
-DEV_COMPOSE_FILE = docker-compose.dev.yml
-DEV_POSTGRES_SERVICE = postgres
-DEV_BACKEND_SERVICE = new-api
-DEV_POSTGRES_DB = new-api
-DEV_POSTGRES_USER = root
-DEV_SQLITE_PATH ?= one-api.db
+COMPOSE_PROJECT ?= codego-v3-dev
+ENV_FILE ?= .env
+DEV_WEB_UPSTREAM ?= http://127.0.0.1:18083
+DEV_COMPOSE = docker compose --env-file "$(ENV_FILE)" -f v3/deploy/compose.test.yaml -p "$(COMPOSE_PROJECT)"
 
-.PHONY: all build-frontend start-backend dev dev-api dev-api-rebuild dev-web reset-setup
+.PHONY: dev dev-web stop logs build verify verify-web
 
-all: build-frontend start-backend
-
-build-frontend:
-	@echo "Building default frontend..."
-	@cd $(FRONTEND_DIR) && bun install && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat ../../VERSION) bun run build
-
-start-backend:
-	@echo "Starting backend dev server..."
-	@cd $(BACKEND_DIR) && go run main.go &
-
-dev-api:
-	@echo "Starting backend services (docker)..."
-	@docker compose -f $(DEV_COMPOSE_FILE) up -d
-
-dev-api-rebuild:
-	@echo "Rebuilding and starting backend service (docker)..."
-	@docker compose -f $(DEV_COMPOSE_FILE) up -d --build $(DEV_BACKEND_SERVICE)
+dev:
+	$(DEV_COMPOSE) up --build -d
 
 dev-web:
-	@echo "Starting frontend dev server..."
-	@cd $(FRONTEND_DIR) && bun install && bun run dev
+	cd web/app && bun install --frozen-lockfile && V3_CONTROL_URL="$(DEV_WEB_UPSTREAM)" V3_GATEWAY_URL="$(DEV_WEB_UPSTREAM)" bun run dev
 
-dev: dev-api dev-web
+stop:
+	$(DEV_COMPOSE) down
 
-reset-setup:
-	@echo "Resetting local setup wizard state..."
-	@if docker compose -f $(DEV_COMPOSE_FILE) ps --services --status running | grep -qx "$(DEV_POSTGRES_SERVICE)"; then \
-		echo "Detected running docker dev PostgreSQL. Removing setup record and root users..."; \
-		docker compose -f $(DEV_COMPOSE_FILE) exec -T $(DEV_POSTGRES_SERVICE) \
-			psql -U $(DEV_POSTGRES_USER) -d $(DEV_POSTGRES_DB) \
-			-c 'DELETE FROM setups;' \
-			-c 'DELETE FROM users WHERE role = 100;' \
-			-c "DELETE FROM options WHERE key IN ('SelfUseModeEnabled', 'DemoSiteEnabled');"; \
-		echo "Restarting docker dev backend so setup status is recalculated..."; \
-		docker compose -f $(DEV_COMPOSE_FILE) restart $(DEV_BACKEND_SERVICE); \
-	elif db_path="$${SQLITE_PATH:-$(DEV_SQLITE_PATH)}"; db_path="$${db_path%%\?*}"; [ -f "$$db_path" ]; then \
-		db_path="$${SQLITE_PATH:-$(DEV_SQLITE_PATH)}"; \
-		db_path="$${db_path%%\?*}"; \
-		echo "Detected local SQLite database: $$db_path"; \
-		sqlite3 "$$db_path" \
-			"DELETE FROM setups; DELETE FROM users WHERE role = 100; DELETE FROM options WHERE key IN ('SelfUseModeEnabled', 'DemoSiteEnabled');"; \
-		echo "SQLite setup state reset. Restart the local backend process before testing the setup wizard."; \
-	else \
-		echo "No running docker dev PostgreSQL or local SQLite database found."; \
-		echo "Start the dev stack with 'make dev-api', or set SQLITE_PATH/DEV_SQLITE_PATH to your local SQLite database."; \
-		exit 1; \
-	fi
+logs:
+	$(DEV_COMPOSE) logs --tail=100 -f
+
+build:
+	cd v3 && go build ./cmd/gateway ./cmd/control ./cmd/worker ./cmd/migrate
+
+verify:
+	bash v3/scripts/verify.sh boundaries test lint race integration pgtest atlas
+
+verify-web:
+	cd web/app && bun install --frozen-lockfile && bun run typecheck && bun run check:api && bun run test && bun run build

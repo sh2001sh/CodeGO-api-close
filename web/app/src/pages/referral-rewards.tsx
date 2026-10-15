@@ -25,11 +25,6 @@ export default function ReferralRewardsPage() {
   return (
     <>
       <PageHeader title="邀请奖励" />
-      <p className="muted">
-        {t(
-          '邀请奖励以订单确认的条款为准。新活动以实际付费消费奖励替代刷新，已有次数和原订单承诺保留。',
-        )}
-      </p>
       <ErrorMessage error={copyError ?? overview.error} />
       {overview.isPending && <Loading />}
       {overview.data && (

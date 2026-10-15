@@ -31,6 +31,9 @@ type ChannelMarketInsights struct {
 	PerformanceSamples   int64                    `json:"performance_samples"`
 	Disclosure           *ChannelMarketDisclosure `json:"disclosure,omitempty"`
 	FailureCounts        []ModelFailureCount      `json:"failure_counts"`
+	ProbeCount           int64                    `json:"probe_count"`
+	ProbeSuccessCount    int64                    `json:"probe_success_count"`
+	ProbeSuccessRate     *float64                 `json:"probe_success_rate,omitempty"`
 }
 
 const modelObservationsSQL = `WITH observations AS (
@@ -84,6 +87,17 @@ func (s *Service) ModelInsights(ctx context.Context, a Actor, identity, model st
 		if result.RequestCount > 0 {
 			rate, bound := float64(result.SuccessCount)/float64(result.RequestCount), wilson(result.SuccessCount, result.RequestCount)
 			result.SuccessRate, result.WilsonSuccessRate = &rate, &bound
+		}
+		err = tx.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE r->>'status'='passed')
+ FROM v3_channelmarket.verification_runs v CROSS JOIN LATERAL jsonb_array_elements(v.results) r
+ WHERE v.channel_id=$1 AND r->>'model'=$2 AND v.completed_at>=$3 AND v.completed_at<=$4
+ AND v.status IN ('passed','failed') AND r->>'status' IN ('passed','failed')`, args[:4]...).Scan(&result.ProbeCount, &result.ProbeSuccessCount)
+		if err != nil {
+			return err
+		}
+		if result.ProbeCount > 0 {
+			rate := float64(result.ProbeSuccessCount) / float64(result.ProbeCount)
+			result.ProbeSuccessRate = &rate
 		}
 		// Expose stable categories, never raw upstream errors or user/request IDs.
 		rows, err := tx.Query(ctx, modelObservationsSQL+`SELECT CASE

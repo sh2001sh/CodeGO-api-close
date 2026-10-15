@@ -65,6 +65,18 @@ func (d *channelMarketData) inspectStreamed(ctx context.Context) error {
 				continue
 			}
 			count, exists := view.marketCounts[table]
+			if !exists && view.sampled {
+				// Empty optional sources have no row-total entry in sampled receipts.
+				// Observe actual emptiness; never fabricate a populated count.
+				var populated bool
+				if err := d.source.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM "+d.streamTables[table]+")").Scan(&populated); err != nil {
+					return err
+				}
+				if !populated {
+					count, exists = 0, true
+					view.marketCounts[table] = 0
+				}
+			}
 			if !exists || count < 0 {
 				return fmt.Errorf("legacy: missing or invalid verified marketplace count %s", table)
 			}

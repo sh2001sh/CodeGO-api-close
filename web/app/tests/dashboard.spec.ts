@@ -43,7 +43,9 @@ test('overview keeps exact aggregate amounts and switches the complete statistic
   await expect(usage.getByText('9,007,199,254,741,000', { exact: true })).toBeVisible()
   await expect(usage.getByText('12.345678 credits', { exact: true })).toBeVisible()
   await expect(page.getByText('9,007,199,256.740995 credits', { exact: true })).toBeVisible()
-  await expect(page.getByText('仅根据所选时段最新 50 条调用统计，不代表全量用量。')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: '模型调用分布（最近 50 条）', exact: true }),
+  ).toBeVisible()
   const request = page.waitForRequest(
     (item) => item.url().includes('/api/log/self/stat') && item.url() !== ranges[0].href,
   )

@@ -63,7 +63,13 @@ func (d *marketplaceData) normalizeGroups() {
 			d.problem("group_buy_member", id, "invalid_group_order", "order does not belong to member")
 		}
 		if subID > 0 && (subs[subID] == nil || d.integer(subs[subID], "user_id") != user) {
-			d.problem("group_buy_member", id, "invalid_group_subscription", "subscription does not belong to member")
+			if subs[subID] == nil && groupIndex[gid].text("status") == "completed" && r.flag("bonus_granted") {
+				// A settled historical member must not point at another live account
+				// after its original subscription was deleted in V2.
+				subID = 0
+			} else {
+				d.problem("group_buy_member", id, "invalid_group_subscription", "subscription does not belong to member")
+			}
 		}
 		bonus := d.money(r, "bonus_amount_usd", 1000000)
 		var targetOrder any = int64(0)
@@ -74,7 +80,9 @@ func (d *marketplaceData) normalizeGroups() {
 			} else {
 				targetOrder = orderID*2 + 1
 			}
-			targetSub = subID
+			if subID > 0 {
+				targetSub = subID
+			}
 		}
 		d.add("group_buy_members", id, map[string]any{"group_buy_id": gid, "user_id": user, "order_id": targetOrder, "subscription_id": targetSub, "bonus_granted": r.flag("bonus_granted"), "bonus_amount_micro": bonus, "created_at": d.instant(r, "created_at", true)})
 	}

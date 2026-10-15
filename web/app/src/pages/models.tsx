@@ -1,11 +1,107 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { Search } from 'lucide-react'
 import { useTranslation } from '../lib/i18n'
-import { publicModelsOptions, vendorOf } from '../lib/public-catalog'
+import { publicModelsOptions, vendorOf, type PublicCatalogModel } from '../lib/public-catalog'
 import { ModelGroupPrice } from '../features/public/model-group-price'
-import { Badge, CopyButton, EmptyState, ErrorMessage, Loading, Button } from '../components/ui'
+import {
+  Badge,
+  CopyButton,
+  EmptyState,
+  ErrorMessage,
+  Loading,
+  Button,
+  Pagination,
+} from '../components/ui'
+
+const pageSize = 24
+
+function ModelRow({ model }: { model: PublicCatalogModel }) {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <li className="model-row">
+      <div className="model-row-main">
+        <div className="model-row-title">
+          <code className="mono">{model.name}</code>
+          <CopyButton value={model.name} label="复制模型名" />
+        </div>
+        <div className="model-row-meta">
+          <Badge>{t(model.vendor || vendorOf(model.name))}</Badge>
+          <span>
+            {model.groups.length} {t('个分组')}
+          </span>
+        </div>
+      </div>
+      <div className="model-row-price">
+        <span className="subtle">{t('定价')}</span>
+        {model.groups.length === 1 ? (
+          <ModelGroupPrice group={model.groups[0]} />
+        ) : (
+          <span>{t('分组与定价')}</span>
+        )}
+      </div>
+      <details
+        className="model-row-groups"
+        onToggle={(event) => setExpanded(event.currentTarget.open)}
+      >
+        <summary>{t('提供分组')}</summary>
+        {expanded && (
+          <ul>
+            {model.groups.map((group) => (
+              <li key={group.slug}>
+                <span>{group.name}</span>
+                {group.verified && <Badge tone="success">{t('已验证')}</Badge>}
+                <span className="tabular">×{group.multiplier}</span>
+                <ModelGroupPrice group={group} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
+    </li>
+  )
+}
+
+function ModelResults({
+  models,
+  emptyCatalog,
+}: {
+  models: PublicCatalogModel[]
+  emptyCatalog: boolean
+}) {
+  const { t } = useTranslation()
+  const [page, setPage] = useState(1)
+  const activePage = Math.min(page, Math.max(1, Math.ceil(models.length / pageSize)))
+  const visible = models.slice((activePage - 1) * pageSize, activePage * pageSize)
+  return (
+    <>
+      <p className="subtle" style={{ marginBlock: 12 }} aria-live="polite">
+        {t('共')} {models.length} {t('个模型')}
+      </p>
+      {models.length === 0 ? (
+        <EmptyState title={emptyCatalog ? '暂无公开模型' : '没有匹配的模型'} />
+      ) : (
+        <>
+          <ul className="model-list">
+            {visible.map((model) => (
+              <ModelRow key={model.name} model={model} />
+            ))}
+          </ul>
+          {models.length > pageSize && (
+            <Pagination
+              page={activePage}
+              pageSize={pageSize}
+              total={models.length}
+              onChange={setPage}
+            />
+          )}
+        </>
+      )}
+    </>
+  )
+}
 
 export default function ModelsPage() {
   const { t } = useTranslation()
@@ -26,10 +122,14 @@ export default function ModelsPage() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1])
   }, [models])
   const query = (search.q ?? '').trim().toLowerCase()
-  const filtered = models.filter(
-    (model) =>
-      (!search.vendor || model.vendor === search.vendor) &&
-      (!query || model.name.toLowerCase().includes(query)),
+  const filtered = useMemo(
+    () =>
+      models.filter(
+        (model) =>
+          (!search.vendor || model.vendor === search.vendor) &&
+          (!query || model.name.toLowerCase().includes(query)),
+      ),
+    [models, search.vendor, query],
   )
   const setSearch = (next: { q?: string; vendor?: string }) =>
     void navigate({ search: (prev) => ({ ...prev, ...next }), replace: true })
@@ -39,7 +139,6 @@ export default function ModelsPage() {
       <header className="page-header">
         <div className="page-header-text">
           <h1>{t('模型')}</h1>
-          <p>{t('价格已包含分组倍率，以 credits 展示。个别优惠和实际用量会影响最终结算。')}</p>
         </div>
       </header>
       <div className="models-layout">
@@ -71,8 +170,8 @@ export default function ModelsPage() {
             <span className="sr-only">{t('搜索模型')}</span>
             <input
               type="search"
-              placeholder={t('搜索模型名称，如 gpt-4o、claude…')}
-              defaultValue={search.q ?? ''}
+              placeholder={t('搜索模型')}
+              value={search.q ?? ''}
               onChange={(event) => setSearch({ q: event.target.value || undefined })}
             />
           </label>
@@ -84,64 +183,17 @@ export default function ModelsPage() {
           )}
           {catalog.isPending && <Loading rows={6} />}
           {catalog.data && (
-            <>
-              <p className="subtle" style={{ marginBlock: 12 }}>
-                {t('共')} {filtered.length} {t('个模型')}
-              </p>
-              {filtered.length === 0 ? (
-                <EmptyState
-                  title={models.length === 0 ? '暂无公开模型' : '没有匹配的模型'}
-                  description={models.length === 0 ? undefined : '换个关键词或清除厂商筛选。'}
-                />
-              ) : (
-                <ul className="model-list">
-                  {filtered.map((model) => (
-                    <li key={model.name} className="model-row">
-                      <div className="model-row-main">
-                        <div className="model-row-title">
-                          <code className="mono">{model.name}</code>
-                          <CopyButton value={model.name} label="复制模型名" />
-                        </div>
-                        <div className="model-row-meta">
-                          <Badge>{t(model.vendor)}</Badge>
-                          <span>
-                            {model.groups.length} {t('个分组')}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="model-row-price">
-                        <span className="subtle">{t('定价')}</span>
-                        {model.groups.length === 1 ? (
-                          <ModelGroupPrice group={model.groups[0]} />
-                        ) : (
-                          <span>{t('分组与定价')}</span>
-                        )}
-                      </div>
-                      <details className="model-row-groups" open={model.groups.length > 1}>
-                        <summary>{t('提供分组')}</summary>
-                        <ul>
-                          {model.groups.map((group) => (
-                            <li key={group.slug}>
-                              <span>{group.name}</span>
-                              {group.verified && <Badge tone="success">{t('已验证')}</Badge>}
-                              <span className="tabular">×{group.multiplier}</span>
-                              <ModelGroupPrice group={group} />
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
+            <ModelResults
+              key={`${search.vendor ?? ''}\0${query}`}
+              models={filtered}
+              emptyCatalog={models.length === 0}
+            />
           )}
-          <p className="subtle" style={{ marginTop: 24 }}>
-            {t('需要按分组比较延迟和成功率？')}{' '}
-            <Link to="/channel-market" style={{ color: 'var(--accent)' }}>
+          <div style={{ marginTop: 24 }}>
+            <Link to="/channel-market" className="button button-quiet">
               {t('前往渠道市场')}
             </Link>
-          </p>
+          </div>
         </section>
       </div>
     </div>

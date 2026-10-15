@@ -25,7 +25,7 @@ function FieldShell(props: FieldBase & { children: ReactNode }) {
       </label>
       {props.children}
       {props.hint && !props.error && (
-        <span className="field-hint" id={`${props.name}-hint`}>
+        <span className="sr-only" id={`${props.name}-hint`}>
           {t(props.hint)}
         </span>
       )}

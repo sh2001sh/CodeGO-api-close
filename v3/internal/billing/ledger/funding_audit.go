@@ -161,7 +161,13 @@ func allocateFundingModeTx(ctx context.Context, tx pgx.Tx, account int64, reques
 	if exists {
 		return fmt.Errorf("%w: historical funding allocation %s", billing.ErrPostConflict, request)
 	}
-	lots, known, err := lockFundingLotsTx(ctx, tx, account, topupTrade)
+	var lots []fundingLot
+	var known credits.Micro
+	if mode == fundingOwnerSpend && topupTrade == "" {
+		lots, known, err = lockOwnerFundingPrefixTx(ctx, tx, account, amount)
+	} else {
+		lots, known, err = lockFundingLotsTx(ctx, tx, account, topupTrade)
+	}
 	if err != nil {
 		return err
 	}

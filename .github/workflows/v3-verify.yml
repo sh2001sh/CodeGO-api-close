@@ -7,12 +7,28 @@ on:
       - 'web/app/**'
       - '.github/workflows/v3-verify.yml'
       - '.dockerignore'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.env.example'
+      - 'makefile'
+      - 'README.md'
+      - 'CLAUDE.md'
+      - '.github/scripts/**'
+      - '.github/workflows/deploy-production.yml'
   push:
     paths:
       - 'v3/**'
       - 'web/app/**'
       - '.github/workflows/v3-verify.yml'
       - '.dockerignore'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.env.example'
+      - 'makefile'
+      - 'README.md'
+      - 'CLAUDE.md'
+      - '.github/scripts/**'
+      - '.github/workflows/deploy-production.yml'
   workflow_dispatch:
 
 permissions:
@@ -28,6 +44,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Verify V3 repository layout and deployment safety
+        run: |
+          python3 .github/scripts/verify-v3-layout.py
+          python3 .github/scripts/test-deploy-v3-existing.py
       - uses: actions/setup-go@v5
         with:
           go-version-file: v3/go.mod

@@ -141,7 +141,7 @@ func RefundableBalanceTx(ctx context.Context, tx pgx.Tx, account int64) (credits
 	if err := tx.QueryRow(ctx, `SELECT balance FROM v3_billing.accounts WHERE id=$1 AND kind='wallet' FOR UPDATE`, account).Scan(&balance); err != nil {
 		return 0, err
 	}
-	err := tx.QueryRow(ctx, `SELECT coalesce(sum(remaining_amount),0)::bigint FROM v3_billing.funding_lots WHERE account_id=$1 AND non_refundable`, account).Scan(&locked)
+	err := tx.QueryRow(ctx, `SELECT coalesce(sum(remaining_amount),0)::bigint FROM v3_billing.funding_lots WHERE account_id=$1 AND non_refundable AND remaining_amount>0`, account).Scan(&locked)
 	if err != nil || balance <= locked {
 		return 0, err
 	}

@@ -31,7 +31,7 @@ test('real restored TOTP backup replay, retained desktop API revoke and reward p
   const username = `restore_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
   const password = `Test-${crypto.randomUUID()}`
   await page.goto('/sign-up')
-  await page.getByLabel('用户名', { exact: true }).fill(username)
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill(username)
   await page.getByLabel('邮箱', { exact: true }).fill(`${username}@example.test`)
   await page.getByLabel('密码', { exact: true }).fill(password)
   await page.getByRole('checkbox', { name: /我已阅读并同意/ }).check()
@@ -48,7 +48,7 @@ test('real restored TOTP backup replay, retained desktop API revoke and reward p
   await expect(page.getByRole('heading', { name: '登录', exact: true })).toBeVisible()
 
   const login = async (backup: string) => {
-    await page.getByLabel('用户名', { exact: true }).fill(username)
+    await page.getByLabel(/^用户名(?:或邮箱)?$/).fill(username)
     await page.getByLabel('密码', { exact: true }).fill(password)
     await page.getByRole('button', { name: '登录', exact: true }).click()
     await page.getByLabel('两步验证码或备用码', { exact: true }).fill(backup)
@@ -103,4 +103,30 @@ test('real restored TOTP backup replay, retained desktop API revoke and reward p
         /\/sign-up\?ref=[A-Za-z0-9_-]+$/,
       )
   }
+
+  const before = await page.request.get('/api/billing/balance')
+  expect(before.ok()).toBe(true)
+  const balanceBefore = (await before.json()).data.balance_micro
+  const inventoryBefore = await page.request.get('/api/blind-box/self')
+  expect(inventoryBefore.ok()).toBe(true)
+  const historicalInventory = (await inventoryBefore.json()).data
+  for (const path of [
+    '/blind-box/inventory/purchase',
+    '/blind-box/inventory/open',
+    '/blind-box/inventory/gift',
+    '/blind-box/pay',
+  ]) {
+    const retired = await page.request.post(`/api${path}`, { data: { count: 1 } })
+    expect(retired.status()).toBe(410)
+  }
+  const after = await page.request.get('/api/billing/balance')
+  expect(after.ok()).toBe(true)
+  expect((await after.json()).data.balance_micro).toBe(balanceBefore)
+  const inventoryAfter = await page.request.get('/api/blind-box/self')
+  expect(inventoryAfter.ok()).toBe(true)
+  expect((await inventoryAfter.json()).data).toEqual(historicalInventory)
+  await page.goto('/blind-box')
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await expect(page.getByRole('heading', { name: '仪表板', exact: true })).toBeVisible()
+  await expect(page.locator('a[href="/blind-box"], a[href="/admin/blind-box"]')).toHaveCount(0)
 })

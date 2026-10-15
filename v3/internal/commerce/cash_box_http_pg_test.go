@@ -119,33 +119,38 @@ func cashBoxSign(values url.Values) string {
 }
 
 func TestCashBoxLegacyHTTPVerifiesNotifyAndBrowserReturnCannotGrant(t *testing.T) {
-	s, _, pool, _ := cashBoxFixture(t)
+	s, _, pool, p := cashBoxFixture(t)
 	mux := http.NewServeMux()
 	s.Register(mux, func(*http.Request) (commerce.Actor, error) { return commerce.Actor{UserID: 1, Role: "user"}, nil })
 	quote := httptest.NewRecorder()
 	mux.ServeHTTP(quote, httptest.NewRequest("POST", "/api/blind-box/amount", strings.NewReader(`{"quantity":2}`)))
-	if quote.Code != 200 || !strings.Contains(quote.Body.String(), `"data":"5.00"`) {
-		t.Fatalf("legacy amount quote: %d %s", quote.Code, quote.Body.String())
+	if quote.Code != http.StatusGone {
+		t.Fatalf("retired amount quote: %d %s", quote.Code, quote.Body.String())
 	}
 	checkout := httptest.NewRecorder()
 	mux.ServeHTTP(checkout, httptest.NewRequest("POST", "/api/blind-box/pay", strings.NewReader(`{"quantity":2,"payment_method":"wxpay"}`)))
-	var body struct {
-		Message string
-		URL     string
-		Data    struct {
-			OrderID string            `json:"order_id"`
-			Form    map[string]string `json:"form"`
-		}
+	if checkout.Code != http.StatusGone {
+		t.Fatalf("retired checkout: %d %s", checkout.Code, checkout.Body.String())
 	}
-	if err := json.Unmarshal(checkout.Body.Bytes(), &body); err != nil || checkout.Code != 200 || body.Message != "success" || body.URL != "https://cashier.test/submit.php" || body.Data.Form["type"] != "wxpay" || body.Data.Form["money"] != "5.00" {
-		t.Fatalf("legacy checkout contract: %d %s err=%v", checkout.Code, checkout.Body.String(), err)
+	if n := cashBoxCount(t, pool, `SELECT count(*) FROM v3_commerce.orders`); n != 0 {
+		t.Fatalf("retired checkout created orders=%d", n)
+	}
+	// Construct a pre-retirement order through the existing fixture service;
+	// callbacks must still settle genuine historical payments after suspension.
+	o := cashBoxCreate(t, s, p.ID, 2)
+	cashier, err := url.Parse(o.PaymentURL)
+	if err != nil || cashier.Scheme != "https" || cashier.Host != "cashier.test" || cashier.Path != "/submit.php" || cashier.Query().Get("type") != "wxpay" || cashier.Query().Get("money") != "5.00" || cashier.Query().Get("sign") != cashBoxSign(cashier.Query()) {
+		t.Fatalf("historical Epay checkout contract lost: err=%v", err)
 	}
 	back := httptest.NewRecorder()
-	mux.ServeHTTP(back, httptest.NewRequest("GET", "/api/blind-box/epay/return?trade_no="+body.Data.OrderID, nil))
+	mux.ServeHTTP(back, httptest.NewRequest("GET", "/api/blind-box/epay/return?trade_no="+o.TradeNo, nil))
 	if back.Code != http.StatusSeeOther || back.Header().Get("Location") != "https://site.test/blind-box?pay=pending" {
 		t.Fatalf("browser return: %d %s", back.Code, back.Header().Get("Location"))
 	}
-	values := url.Values{"pid": {"merchant"}, "out_trade_no": {body.Data.OrderID}, "trade_no": {"external-event"},
+	if n := cashBoxCount(t, pool, `SELECT count(*) FROM v3_marketplace.blind_box_items`); n != 0 {
+		t.Fatalf("browser return granted inventory=%d", n)
+	}
+	values := url.Values{"pid": {"merchant"}, "out_trade_no": {o.TradeNo}, "trade_no": {"external-event"},
 		"trade_status": {"TRADE_SUCCESS"}, "money": {"5.00"}, "type": {"wxpay"}, "sign_type": {"MD5"}}
 	values.Set("sign", "tampered")
 	bad := httptest.NewRecorder()
@@ -167,7 +172,7 @@ func TestCashBoxLegacyHTTPVerifiesNotifyAndBrowserReturnCannotGrant(t *testing.T
 }
 
 func TestCashBoxXunhuPreservesSignedCashierAndQRCodeAndVerifiedInventory(t *testing.T) {
-	_, m, pool, _ := cashBoxFixture(t)
+	_, m, pool, p := cashBoxFixture(t)
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			t.Error(err)
@@ -194,17 +199,22 @@ func TestCashBoxXunhuPreservesSignedCashierAndQRCodeAndVerifiedInventory(t *test
 	s.Register(mux, func(*http.Request) (commerce.Actor, error) { return commerce.Actor{UserID: 1, Role: "user"}, nil })
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/blind-box/pay", strings.NewReader(`{"quantity":2,"payment_method":"xunhu"}`)))
-	var reply struct {
-		Data struct {
-			OrderID string `json:"order_id"`
-			PayURL  string `json:"pay_url"`
-			QRURL   string `json:"qrcode_url"`
-		}
+	if w.Code != http.StatusGone {
+		t.Fatalf("retired Xunhu checkout: %d %s", w.Code, w.Body.String())
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &reply); err != nil || w.Code != 200 || reply.Data.PayURL != "https://cashier.test/xunhu" || reply.Data.QRURL != "https://cashier.test/qr.png" {
-		t.Fatalf("real signed Xunhu cashier/QR lost: %d %s err=%v", w.Code, w.Body.String(), err)
+	if n := cashBoxCount(t, pool, `SELECT count(*) FROM v3_commerce.orders`); n != 0 {
+		t.Fatalf("retired Xunhu checkout created orders=%d", n)
 	}
-	v := url.Values{"appid": {"merchant"}, "trade_order_id": {reply.Data.OrderID}, "total_fee": {"5.00"}, "status": {"OD"}}
+	o, err := s.CreateCashBox(context.Background(), commerce.CreateCashBox{UserID: 1, PoolID: p.ID, Quantity: 2,
+		Provider: "xunhu", PaymentMethod: "xunhu", SuccessURL: "https://site.test/blind-box?pay=pending", CancelURL: "https://site.test/blind-box?pay=fail"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var qr string
+	if err := pool.QueryRow(context.Background(), `SELECT checkout_qrcode_url FROM v3_commerce.orders WHERE id=$1`, o.ID).Scan(&qr); err != nil || o.PaymentURL != "https://cashier.test/xunhu" || qr != "https://cashier.test/qr.png" {
+		t.Fatalf("historical signed Xunhu cashier/QR lost: err=%v", err)
+	}
+	v := url.Values{"appid": {"merchant"}, "trade_order_id": {o.TradeNo}, "total_fee": {"5.00"}, "status": {"OD"}}
 	v.Set("hash", cashBoxSign(v))
 	for range 2 {
 		w = httptest.NewRecorder()

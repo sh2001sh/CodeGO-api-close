@@ -199,9 +199,11 @@ func (s *Service) ReleaseIncome(ctx context.Context, limit int) (IncomeResult, e
 }
 
 // loadReleasableSettlementsTx locks up to limit pending settlements whose
-// hold period has elapsed.
+// hold period has elapsed. Read in the existing release index's order, so a
+// bounded batch does not scan and sort the owner's entire settlement history.
+// Accounts for the whole batch are separately locked in ascending ID order.
 func loadReleasableSettlementsTx(ctx context.Context, tx pgx.Tx, now time.Time, limit int) ([]releasableSettlement, error) {
-	rows, err := tx.Query(ctx, `SELECT id,owner_user_id,net_micro-reclaimed_micro FROM v3_channelmarket.settlements WHERE status='pending' AND available_at<=$1 ORDER BY owner_user_id,id LIMIT $2 FOR UPDATE SKIP LOCKED`, now, limit)
+	rows, err := tx.Query(ctx, `SELECT id,owner_user_id,net_micro-reclaimed_micro FROM v3_channelmarket.settlements WHERE status='pending' AND available_at<=$1 ORDER BY available_at,id LIMIT $2 FOR UPDATE SKIP LOCKED`, now, limit)
 	if err != nil {
 		return nil, err
 	}

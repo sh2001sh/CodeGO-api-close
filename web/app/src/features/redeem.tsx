@@ -1,6 +1,5 @@
 import { useTranslation } from '../lib/i18n'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
 import { api, unwrap } from '../lib/api'
 import { credits } from '../lib/format'
 import { Button, ErrorMessage, Field } from '../components/ui'
@@ -15,7 +14,6 @@ export function RedeemCredits() {
       Promise.all([
         client.invalidateQueries({ queryKey: ['wallet'] }),
         client.invalidateQueries({ queryKey: ['subscriptions'] }),
-        client.invalidateQueries({ queryKey: ['boxes'] }),
         client.invalidateQueries({ queryKey: ['orders'] }),
       ]),
   })
@@ -47,8 +45,7 @@ export function RedeemCredits() {
             </>
           ) : redeem.data.redeem_type === 'blind_box' ? (
             <>
-              {t('已兑换')} {redeem.data.blind_box_quantity} {t('个盲盒。')}{' '}
-              <Link to="/blind-box">{t('查看盲盒')}</Link>
+              {t('已兑换')} {redeem.data.blind_box_quantity} {t('个盲盒。')}
             </>
           ) : (
             <>

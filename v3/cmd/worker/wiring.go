@@ -39,6 +39,9 @@ type services struct {
 }
 
 func (s *services) close() {
+	if s == nil {
+		return
+	}
 	if s.native != nil {
 		s.native.close()
 	}

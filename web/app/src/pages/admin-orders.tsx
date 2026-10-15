@@ -10,7 +10,6 @@ import { DataTable } from '../components/data-table'
 import { Button, Drawer, PageHeader, Status, Tabs } from '../components/ui'
 import { OrderDetail } from '../features/commerce-admin/order-detail'
 import { PackagePaymentReviews } from '../features/commerce-admin/package-payment-reviews'
-import { useNotificationTranslation } from '../features/notifications/messages'
 
 type Order = Schema['Order']
 
@@ -94,10 +93,9 @@ function OrderList() {
 }
 
 export default function AdminOrdersPage() {
-  const { nt } = useNotificationTranslation()
   return (
     <>
-      <PageHeader title="订单审核" description={nt('paymentReviewQueueDescription')} />
+      <PageHeader title="订单审核" />
       <Tabs
         label="订单审核"
         items={[

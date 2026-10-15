@@ -3879,6 +3879,27 @@
             "schema": {
               "type": "integer"
             }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "x-required-role": "admin"
@@ -7127,6 +7148,27 @@
             "schema": {
               "type": "integer"
             }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "x-required-role": "admin"
@@ -8005,6 +8047,27 @@
             "required": false,
             "schema": {
               "type": "integer"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -58196,6 +58259,17 @@
             "format": "double",
             "minimum": 0,
             "maximum": 100
+          },
+          "probe_count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "probe_success_rate": {
+            "type": "number",
+            "format": "double",
+            "minimum": 0,
+            "maximum": 100
           }
         },
         "required": [
@@ -59267,6 +59341,22 @@
             "items": {
               "$ref": "#/components/schemas/ChannelMarketFailureCount"
             }
+          },
+          "probe_count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "probe_success_count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "probe_success_rate": {
+            "type": "number",
+            "format": "double",
+            "minimum": 0,
+            "maximum": 1
           }
         },
         "required": [

@@ -1,5 +1,5 @@
 import { Boxes, FileCode, Settings2 } from 'lucide-react'
-import { date } from '../../lib/format'
+import { credits, date } from '../../lib/format'
 import { useTranslation } from '../../lib/i18n'
 import { DataTable } from '../../components/data-table'
 import { Button, Status, confirmAction } from '../../components/ui'
@@ -20,7 +20,7 @@ export function KeyTable(props: {
     <DataTable
       rows={props.rows}
       rowKey={(row) => row.id}
-      empty="暂无 API Key，创建后即可调用模型"
+      empty="暂无 API Key"
       columns={[
         {
           label: '',
@@ -36,6 +36,14 @@ export function KeyTable(props: {
         { label: '名称', render: (row) => row.name },
         { label: '密钥', render: (row) => <code>{row.key_prefix}…</code> },
         { label: '状态', render: (row) => <Status value={row.status} /> },
+        { label: '分组 / 路由池', render: (row) => row.group ?? t('跟随账户分组') },
+        { label: '已用额度', numeric: true, render: (row) => credits(row.spent_micro_credits) },
+        {
+          label: '剩余额度',
+          numeric: true,
+          render: (row) =>
+            row.budget_limited ? credits(row.budget_micro_credits ?? 0) : t('不限'),
+        },
         { label: '创建时间', render: (row) => date(row.created_at) },
         { label: '到期时间', render: (row) => date(row.expires_at) },
         {

@@ -12,6 +12,8 @@ import resources from './en-resources'
 import home from './en-home'
 import legacyUI from './en-legacy-ui'
 import marketConfidence from './en-market-confidence'
+import keys from './en-keys'
+import interfaceUpdate from './en-interface-update'
 const optimizationMessages: Record<string, string> = {
   '此列表包含启用和停用的奖池。编辑会保留完整奖励与保底规则，停用的奖池可重新启用。':
     'This list includes enabled and disabled reward pools. Editing preserves complete reward and guarantee rules. Disabled pools can be enabled again.',
@@ -391,6 +393,8 @@ const messages: Record<string, string> = {
   root: 'Owner',
 }
 export default {
+  ...interfaceUpdate,
+  ...keys,
   ...shell,
   ...areaSettings,
   ...areaAnalytics,

@@ -1,6 +1,6 @@
 import { useTranslation } from '../../lib/i18n'
 import type { Schema } from '../../lib/types'
-import { groupProbe, toneLabel } from '../public/status-helpers'
+import { groupProbe, groupTone, toneLabel } from '../public/status-helpers'
 import { Status } from '../../components/ui'
 
 export function currentQuality(group: Schema['ChannelMarketChannelView'], now = Date.now()) {
@@ -26,6 +26,12 @@ export function MarketQuality(props: {
   return (
     <>
       <dl className="market-service-facts">
+        <div>
+          <dt>{t('服务状态')}</dt>
+          <dd>
+            <Status value={toneLabel[groupTone(group)]} />
+          </dd>
+        </div>
         <div>
           <dt>{t('最近探测状态')}</dt>
           <dd>
@@ -69,39 +75,28 @@ export function MarketQuality(props: {
           </>
         )}
       </dl>
-      {quality ? (
-        props.expanded && (
-          <div className="market-quality-snapshot">
-            <dl className="market-service-facts">
-              <div>
-                <dt>{t('缓存命中率')}</dt>
-                <dd>{ratio(quality.cache_hit_rate)}</dd>
-              </div>
-              <div>
-                <dt>{t('平均实扣 credits')}</dt>
-                <dd>
-                  <bdi dir="ltr">{quality.average_charge_credits ?? t('暂无数据')}</bdi>
-                </dd>
-              </div>
-              <div>
-                <dt>{t('综合评分')}</dt>
-                <dd>{quality.observing ? t('样本不足') : quality.score.toFixed(2)}</dd>
-              </div>
-            </dl>
-            <p className="subtle">
-              {t('调用统计更新于')} {new Date(quality.calculated_at).toLocaleString(locale)} ·{' '}
-              {t('探测延迟不等同于实际调用首字时间。')}
-            </p>
-          </div>
-        )
-      ) : (
-        <p className="subtle market-quality-empty">
-          {t(
-            group.quality
-              ? '调用统计已过期，等待更新。'
-              : '暂无调用统计；探测结果仅反映最近一次连接检查。',
-          )}
-        </p>
+      {quality && props.expanded && (
+        <div className="market-quality-snapshot">
+          <dl className="market-service-facts">
+            <div>
+              <dt>{t('缓存命中率')}</dt>
+              <dd>{ratio(quality.cache_hit_rate)}</dd>
+            </div>
+            <div>
+              <dt>{t('平均实扣 credits')}</dt>
+              <dd>
+                <bdi dir="ltr">{quality.average_charge_credits ?? t('暂无数据')}</bdi>
+              </dd>
+            </div>
+            <div>
+              <dt>{t('综合评分')}</dt>
+              <dd>{quality.observing ? t('样本不足') : quality.score.toFixed(2)}</dd>
+            </div>
+          </dl>
+          <p className="subtle">
+            {t('调用统计更新于')} {new Date(quality.calculated_at).toLocaleString(locale)}
+          </p>
+        </div>
       )}
     </>
   )

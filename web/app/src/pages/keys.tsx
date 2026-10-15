@@ -49,7 +49,6 @@ export default function KeysPage() {
       />
       {requested.group && (
         <p className="notice">
-          {t('创建 Key 后返回所选分组完成绑定。')}{' '}
           <Link to="/channel-market" search={{ group: requested.group }}>
             {t('返回所选分组')}
           </Link>
@@ -95,6 +94,8 @@ export default function KeysPage() {
         <Drawer open onOpenChange={(open) => !open && setCreating(false)} title="创建 API Key">
           <KeyForm
             pending={create.isPending}
+            error={create.error}
+            initialGroup={requested.group}
             onSave={(body) => create.mutate(body, { onSuccess: () => setCreating(false) })}
             onCancel={() => setCreating(false)}
           />
@@ -106,6 +107,7 @@ export default function KeysPage() {
             key={editing.id}
             apiKey={editing}
             pending={edit.isPending}
+            error={edit.error}
             onSave={(body) => edit.mutate(body, { onSuccess: () => setEditing(null) })}
             onCancel={() => setEditing(null)}
           />

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/sh2001sh/new-api/v3/internal/marketplace"
 	"github.com/sh2001sh/new-api/v3/pkg/credits"
 )
 
@@ -211,6 +212,8 @@ func respond(w http.ResponseWriter, value any, err error) {
 	}
 	code, message := http.StatusInternalServerError, "commerce operation failed"
 	switch {
+	case errors.Is(err, marketplace.ErrBlindBoxesDisabled):
+		code, message = http.StatusGone, err.Error()
 	case errors.Is(err, ErrNotFound):
 		code, message = http.StatusNotFound, "not found"
 	case errors.Is(err, ErrInvalid), errors.Is(err, ErrPaymentMismatch):

@@ -66,11 +66,7 @@ export default function DeploymentsPage() {
         }
       />
       {settings.isPending && <Loading />}
-      {settings.data && !enabled && (
-        <p className="notice">
-          {t('外部部署服务尚未启用或未配置凭据。超级管理员可在系统设置中配置 io.net 服务。')}
-        </p>
-      )}
+      {settings.data && !enabled && <p className="notice">{t('外部部署服务未启用或缺少凭据')}</p>}
       {connect.isSuccess && <p role="status">{t('连接测试已完成。')}</p>}
       {enabled && (
         <>

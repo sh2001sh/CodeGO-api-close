@@ -1,0 +1,60 @@
+.analytics-chart-labelled .analytics-chart-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.analytics-chart-reading {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-chart-scroll {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: var(--border) transparent;
+}
+
+.analytics-chart-labelled .analytics-chart-svg {
+  overflow: visible;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-chart-axis,
+.analytics-chart-value {
+  fill: var(--text);
+  font-size: 12px;
+}
+
+.analytics-chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.analytics-chart-hit {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 2;
+}
+
+.analytics-chart-point {
+  outline: none;
+  cursor: crosshair;
+}
+
+.analytics-chart-point:hover .analytics-chart-bar,
+.analytics-chart-point:focus-visible .analytics-chart-bar {
+  opacity: 1;
+}
+
+.analytics-chart-point:focus-visible .analytics-chart-hit {
+  stroke: var(--text);
+}

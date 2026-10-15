@@ -12,20 +12,25 @@ func marketplaceCashRequest(trade string) string {
 	return fmt.Sprintf("cash:%x", digest[:24])
 }
 func (d *marketplaceData) externalOrderForPurchase(request string) int64 {
-	for _, r := range d.source["blind_box_orders"] {
-		if marketplaceCashRequest(r.text("trade_no")) == request {
-			return r.id()
+	if d.externalOrdersByRequest == nil {
+		d.externalOrdersByRequest = make(map[string]int64)
+		for _, r := range d.source["blind_box_orders"] {
+			key := marketplaceCashRequest(r.text("trade_no"))
+			if _, exists := d.externalOrdersByRequest[key]; !exists {
+				d.externalOrdersByRequest[key] = r.id()
+			}
 		}
 	}
-	return 0
+	return d.externalOrdersByRequest[request]
 }
 func (d *marketplaceData) hasOrderInventory(order marketplaceSourceRow) bool {
-	for _, r := range d.source["balance_blind_box_purchases"] {
-		if r.text("request_id") == marketplaceCashRequest(order.text("trade_no")) {
-			return true
+	if d.inventoryPurchaseRequests == nil {
+		d.inventoryPurchaseRequests = make(map[string]bool)
+		for _, r := range d.source["balance_blind_box_purchases"] {
+			d.inventoryPurchaseRequests[r.text("request_id")] = true
 		}
 	}
-	return false
+	return d.inventoryPurchaseRequests[marketplaceCashRequest(order.text("trade_no"))]
 }
 
 // External orders that already issued cash:<trade hash> balance inventory must

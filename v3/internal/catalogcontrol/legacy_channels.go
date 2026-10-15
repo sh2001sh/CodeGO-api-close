@@ -84,7 +84,7 @@ func (s *Server) legacyGetChannel(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	c, err := scanChannel(s.pool.QueryRow(r.Context(), channelSelect+` WHERE c.id=$1`, id))
+	c, err := scanChannel(s.pool.QueryRow(r.Context(), channelSelect+` WHERE c.id=$1 AND `+visibleCatalogChannel, id))
 	if err != nil {
 		s.dbError(w, err)
 		return
@@ -99,16 +99,13 @@ func (s *Server) legacyListChannels(w http.ResponseWriter, r *http.Request) {
 			p = old
 		}
 	}
-	keyword := r.URL.Query().Get("keyword")
-	group := r.URL.Query().Get("group")
-	model := r.URL.Query().Get("model")
-	where := ` WHERE ($1='' OR c.name ILIKE '%'||$1||'%') AND ($2='' OR EXISTS(SELECT 1 FROM v3_catalog.channel_groups cg WHERE cg.channel_id=c.id AND cg.group_name=$2)) AND ($3='' OR EXISTS(SELECT 1 FROM v3_catalog.channel_models cm WHERE cm.channel_id=c.id AND cm.model=$3))`
+	where, args := channelFilters(r)
 	var total int64
-	if err := s.pool.QueryRow(r.Context(), `SELECT count(*) FROM v3_catalog.channels c`+where, keyword, group, model).Scan(&total); err != nil {
+	if err := s.pool.QueryRow(r.Context(), `SELECT count(*) FROM v3_catalog.channels c`+where, args...).Scan(&total); err != nil {
 		s.dbError(w, err)
 		return
 	}
-	rows, err := s.pool.Query(r.Context(), channelSelect+where+` ORDER BY c.id DESC LIMIT $4 OFFSET $5`, keyword, group, model, n, (p-1)*n)
+	rows, err := s.pool.Query(r.Context(), channelSelect+where+` ORDER BY c.id DESC LIMIT $7 OFFSET $8`, append(args, n, (p-1)*n)...)
 	if err != nil {
 		s.dbError(w, err)
 		return

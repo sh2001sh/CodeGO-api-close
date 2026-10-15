@@ -39,7 +39,7 @@ for (const [locale, messages] of Object.entries({ en, 'zh-HK': hk, ar })) {
         },
       }),
     )
-    await page.goto('/wallet')
+    await page.goto('/wallet?section=conversion')
     await page
       .getByRole('combobox', { name: t('需要转余额的老套餐'), exact: true })
       .selectOption('1')
@@ -210,10 +210,22 @@ test('reviewed quote shows future promises before requiring user consent', async
       },
     }),
   )
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await page.getByRole('combobox', { name: '需要转余额的老套餐', exact: true }).selectOption('17')
   await page.getByRole('button', { name: '预览整份转余额', exact: true }).click()
-  await expect(page.getByText('未来周期承诺已计入本次到账，转换后不会再次自动发放。')).toBeVisible()
-  await expect(page.getByText(/本次比例：1,000 credits 老额度 → 100 credits/)).toBeVisible()
+  const quoteMetrics = page.locator('dl.metrics')
+  await expect(
+    quoteMetrics
+      .locator('div')
+      .filter({ has: page.locator('dt', { hasText: '未发放的周期承诺' }) })
+      .locator('dd'),
+  ).toHaveText('400 credits')
+  await expect(
+    quoteMetrics
+      .locator('div')
+      .filter({ has: page.locator('dt', { hasText: '钱包到账' }) })
+      .locator('dd'),
+  ).toHaveText('100 credits')
+  await expect(page.getByRole('checkbox', { name: /我确认将整份剩余权益/ })).not.toBeChecked()
   await expect(page.getByRole('button', { name: '确认整份转余额', exact: true })).toBeDisabled()
 })

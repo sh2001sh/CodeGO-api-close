@@ -37,7 +37,7 @@ describe('public model evidence', () => {
         element(ModelInsights, { group: 'group-7', model: 'model-a' }),
       ),
     )
-    expect(html).toContain('所选模型暂无有效调用样本')
+    expect(html).toContain('<dt>24 小时请求</dt><dd>0</dd>')
     expect(html).toContain('暂无数据')
     expect(html).not.toContain('100%')
     expect(html).not.toContain('0 ms')

@@ -60,7 +60,7 @@ test('reauthenticating as another account starts a fresh dashboard without previ
     history.pushState(null, '', '/sign-in')
     window.dispatchEvent(new PopStateEvent('popstate'))
   })
-  await page.getByLabel('用户名', { exact: true }).fill('account-B')
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill('account-B')
   await page.getByLabel('密码', { exact: true }).fill('account-B-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.locator('.overview-wallet-value')).toHaveText('222 credits')
@@ -206,7 +206,9 @@ async function removalFixture(page: Page) {
       automaticPresenceSimulation: true,
     },
   })
-  await page.goto('http://localhost:3100/profile')
+  const profileURL = new URL('/profile', test.info().project.use.baseURL)
+  profileURL.hostname = 'localhost'
+  await page.goto(profileURL.href)
   await expect(page.getByRole('button', { name: '移除通行密钥', exact: true })).toBeVisible()
   const privateKey = await page.evaluate(async () => {
     const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [

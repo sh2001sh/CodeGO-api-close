@@ -1,9 +1,0 @@
-[     378ms] [INFO] [rsbuild] WebSocket connecting... @ http://127.0.0.1:3202/static/js/vendors-node_modules_pnpm_lobehub_icons_4_12_0__lobe_7d7dfdb512fee72763016feb3a663a5b_node_mo-c415d6.js:264088
-[     395ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3202/static/js/lib-react.js:28005
-[     415ms] [INFO] 🌐 i18next is made possible by our own product, Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙 @ http://127.0.0.1:3202/static/js/vendors-node_modules_pnpm_lobehub_icons_4_12_0__lobe_7d7dfdb512fee72763016feb3a663a5b_node_mo-c415d6.js:306239
-[     417ms] [LOG] i18next: languageChanged zh-CN @ http://127.0.0.1:3202/static/js/vendors-node_modules_pnpm_lobehub_icons_4_12_0__lobe_7d7dfdb512fee72763016feb3a663a5b_node_mo-c415d6.js:304652
-[     417ms] [LOG] i18next: initialized {debug: true, initAsync: true, ns: Array(1), defaultNS: Array(1), fallbackLng: Array(1)} @ http://127.0.0.1:3202/static/js/vendors-node_modules_pnpm_lobehub_icons_4_12_0__lobe_7d7dfdb512fee72763016feb3a663a5b_node_mo-c415d6.js:304652
-[     694ms] [INFO] [rsbuild] WebSocket connected. @ http://127.0.0.1:3202/static/js/vendors-node_modules_pnpm_lobehub_icons_4_12_0__lobe_7d7dfdb512fee72763016feb3a663a5b_node_mo-c415d6.js:264088
-[     844ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:3202/sign-in?redirect=%2Fdashboard%2Foverview:0
-[  926432ms] [LOG] [HMR] Reload all CSS @ http://127.0.0.1:3202/static/js/vendors-node_modules_pnpm_lobehub_icons_4_12_0__lobe_7d7dfdb512fee72763016feb3a663a5b_node_mo-c415d6.js:269847
-[  926474ms] [LOG] [HMR] Reload all CSS @ http://127.0.0.1:3202/static/js/vendors-node_modules_pnpm_lobehub_icons_4_12_0__lobe_7d7dfdb512fee72763016feb3a663a5b_node_mo-c415d6.js:269847

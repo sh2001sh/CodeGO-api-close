@@ -17,14 +17,15 @@ import (
 )
 
 var (
-	ErrInvalidInput = errors.New("marketplace: invalid input")
-	ErrConflict     = errors.New("marketplace: request or state conflict")
-	ErrNotFound     = errors.New("marketplace: not found")
-	ErrUnavailable  = errors.New("marketplace: feature unavailable")
-	ErrInventory    = errors.New("marketplace: insufficient inventory")
-	ErrDailyLimit   = errors.New("marketplace: daily purchase limit exceeded")
-	ErrMonthlyLimit = errors.New("marketplace: monthly purchase limit exceeded")
-	ErrOpenLimit    = errors.New("marketplace: daily open limit exceeded")
+	ErrInvalidInput       = errors.New("marketplace: invalid input")
+	ErrConflict           = errors.New("marketplace: request or state conflict")
+	ErrNotFound           = errors.New("marketplace: not found")
+	ErrUnavailable        = errors.New("marketplace: feature unavailable")
+	ErrBlindBoxesDisabled = errors.New("blind boxes are disabled")
+	ErrInventory          = errors.New("marketplace: insufficient inventory")
+	ErrDailyLimit         = errors.New("marketplace: daily purchase limit exceeded")
+	ErrMonthlyLimit       = errors.New("marketplace: monthly purchase limit exceeded")
+	ErrOpenLimit          = errors.New("marketplace: daily open limit exceeded")
 )
 
 type Poster interface {

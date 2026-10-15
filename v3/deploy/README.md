@@ -118,7 +118,7 @@ migrate ledger-check
 
 ## 正式全量切换
 
-`.github/workflows/v3-verify.yml` 先完成后端、前端和真实隔离整栈验收，再构建 `gateway/control/worker/migrate/web` 五类镜像。`main`、`v3-rebuild` 或标签的 `push` 发布到 `ghcr.io/sh2001sh/codego-api:sha-<7位提交>-<服务>-amd64`，PR、其他分支和手动验证不推送。镜像包含完整提交 OCI 标签，CI 摘要记录每类 digest；正式切换固定同一提交并核对 digest，不使用 `latest`。旧 v2 Docker、二进制和生产部署工作流只保留明确的 legacy 手动入口，提交或打标签不会触发旧生产自动部署。该配置不自动迁移生产或执行切换。
+`.github/workflows/v3-verify.yml` 先完成后端、前端和真实隔离整栈验收，再构建 `gateway/control/worker/migrate/web` 五类镜像。`main`、`v3-rebuild` 或标签的 `push` 发布到 `ghcr.io/sh2001sh/codego-api:sha-<7位提交>-<服务>-amd64`，PR、其他分支和手动验证不推送。镜像包含完整提交 OCI 标签，CI 摘要记录每类 digest；正式切换固定同一提交并核对 digest，不使用 `latest`。根目录旧版服务、前端及发布工作流已移除。生产发布使用 `.github/workflows/deploy-production.yml`，指定通过完整 V3 验证的 40 位提交号，只更新既有 JSON Compose 的镜像引用，保留环境、端口、网络、卷和资源预算；不会把根目录的新部署模板覆盖到现有生产环境，也不自动执行数据库迁移。已知启动修复程序挂载及入口会在正式镜像替换时一并移除，未知入口覆盖会拒绝发布。SSH 主机公钥通过 `PRODUCTION_DEPLOY_KNOWN_HOSTS` 固定。
 
 1. 记录生产镜像、Nginx上游、数据库/文件备份及Redis持久化状态。
 2. 停止v2控制面的资金写入及网关新请求，等待在途请求、预扣和异步结算排空。

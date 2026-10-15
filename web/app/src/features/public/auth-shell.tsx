@@ -1,20 +1,14 @@
 import type { ReactNode } from 'react'
-import { Moon, ShieldCheck, Sun, Timer, Waypoints } from 'lucide-react'
+import { Moon, Sun } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { useTheme } from '../../lib/preferences'
 import { IconButton } from '../../components/ui'
 import { Brand, CompanyIdentity } from '../../components/app/global-topbar'
 import { LanguageMenu } from '../../components/app/language-menu'
 
-const bullets = [
-  { icon: Waypoints, label: '一个接口，接入所有主流模型' },
-  { icon: Timer, label: '实时路由' },
-  { icon: ShieldCheck, label: '可验证的渠道市场' },
-] as const
-
 /**
  * Split layout shared by sign-in, sign-up, password recovery and the OAuth
- * callback page. Left side carries the value proposition; right side holds
+ * callback page. Left side carries the brand artwork; right side holds
  * the theme/language toggles above the actual form panel.
  */
 export function AuthShell(props: { children: ReactNode }) {
@@ -25,17 +19,14 @@ export function AuthShell(props: { children: ReactNode }) {
     <main className="auth-layout">
       <aside className="auth-aside">
         <Brand />
-        <div>
-          <h2>{t('选择模型，管理调用。')}</h2>
-          <ul>
-            {bullets.map((bullet) => (
-              <li key={bullet.label}>
-                <bullet.icon size={18} aria-hidden />
-                <span>{t(bullet.label)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <img
+          src="/brand/codego-routing-small.webp"
+          alt=""
+          width={768}
+          height={512}
+          decoding="async"
+          style={{ width: '100%', height: 'auto' }}
+        />
         <CompanyIdentity />
       </aside>
       <div className="auth-main">

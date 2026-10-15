@@ -5,42 +5,44 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
 
 type sourceUser struct {
-	ID             int64   `json:"id"`
-	ExternalID     string  `json:"external_id"`
-	Username       string  `json:"username"`
-	DisplayName    string  `json:"display_name"`
-	Email          string  `json:"email"`
-	Password       string  `json:"password"`
-	Role           int     `json:"role"`
-	Status         int     `json:"status"`
-	Group          string  `json:"group"`
-	GPTUnits       int64   `json:"quota"`
-	WalletUnits    int64   `json:"claude_quota"`
-	Setting        string  `json:"setting"`
-	Remark         string  `json:"remark"`
-	CreatedAt      int64   `json:"created_at"`
-	LastLoginAt    int64   `json:"last_login_at"`
-	DeletedAt      *string `json:"deleted_at"`
-	GitHubID       string  `json:"github_id"`
-	DiscordID      string  `json:"discord_id"`
-	OIDCID         string  `json:"oidc_id"`
-	WeChatID       string  `json:"wechat_id"`
-	TelegramID     string  `json:"telegram_id"`
-	LinuxDOID      string  `json:"linux_do_id"`
-	InviterID      int64   `json:"inviter_id"`
-	AffCode        string  `json:"aff_code"`
-	AffCount       int64   `json:"aff_count"`
-	AffUnits       int64   `json:"aff_quota"`
-	AffHistory     int64   `json:"aff_history"`
-	UsedUnits      int64   `json:"used_quota"`
-	RequestCount   int64   `json:"request_count"`
-	StripeCustomer string  `json:"stripe_customer"`
-	wallet         Wallet
+	ID                     int64   `json:"id"`
+	ExternalID             string  `json:"external_id"`
+	Username               string  `json:"username"`
+	DisplayName            string  `json:"display_name"`
+	Email                  string  `json:"email"`
+	Password               string  `json:"password"`
+	Role                   int     `json:"role"`
+	Status                 int     `json:"status"`
+	Group                  string  `json:"group"`
+	GPTUnits               int64   `json:"quota"`
+	WalletUnits            int64   `json:"claude_quota"`
+	Setting                string  `json:"setting"`
+	Remark                 string  `json:"remark"`
+	CreatedAt              int64   `json:"created_at"`
+	LastLoginAt            int64   `json:"last_login_at"`
+	DeletedAt              *string `json:"deleted_at"`
+	GitHubID               string  `json:"github_id"`
+	DiscordID              string  `json:"discord_id"`
+	OIDCID                 string  `json:"oidc_id"`
+	WeChatID               string  `json:"wechat_id"`
+	TelegramID             string  `json:"telegram_id"`
+	LinuxDOID              string  `json:"linux_do_id"`
+	InviterID              int64   `json:"inviter_id"`
+	AffCode                string  `json:"aff_code"`
+	AffCount               int64   `json:"aff_count"`
+	AffUnits               int64   `json:"aff_quota"`
+	AffHistory             int64   `json:"aff_history"`
+	UsedUnits              int64   `json:"used_quota"`
+	RequestCount           int64   `json:"request_count"`
+	StripeCustomer         string  `json:"stripe_customer"`
+	wallet                 Wallet
+	EmailPreservedInSource bool `json:"-"`
 }
 
 func loadUsers(ctx context.Context, tx pgx.Tx, sources map[string]string) ([]sourceUser, error) {
@@ -55,6 +57,9 @@ func loadUsers(ctx context.Context, tx pgx.Tx, sources map[string]string) ([]sou
 		}
 		u := &users[i]
 		u.wallet = Wallet{UserID: u.ID, GPTUnits: u.GPTUnits, ProjectionUnits: u.WalletUnits}
+	}
+	if view := onlineViewFrom(ctx); view != nil && view.sampled {
+		preserveAmbiguousEmails(users)
 	}
 	if sources["accounts"] == "" {
 		return users, nil
@@ -85,6 +90,28 @@ func loadUsers(ctx context.Context, tx pgx.Tx, sources map[string]string) ([]sou
 		}
 	}
 	return users, rows.Err()
+}
+
+// V2 allowed shared mailboxes. V3 recovery must identify exactly one account;
+// preserve ambiguous addresses in the original source rather than selecting
+// an arbitrary account as their owner. Username/password/API keys are intact.
+func preserveAmbiguousEmails(users []sourceUser) {
+	counts := map[string]int{}
+	for _, u := range users {
+		if u.DeletedAt == nil {
+			key := strings.ToLower(strings.Trim(u.Email, " "))
+			if key != "" {
+				counts[key]++
+			}
+		}
+	}
+	for i := range users {
+		u := &users[i]
+		if u.DeletedAt == nil && counts[strings.ToLower(strings.Trim(u.Email, " "))] > 1 {
+			u.EmailPreservedInSource = true
+			u.Email = ""
+		}
+	}
 }
 
 func (m *Importer) importUsers(ctx context.Context, tx pgx.Tx, users []sourceUser) error {

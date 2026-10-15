@@ -1,4 +1,26 @@
 /* ---------- Button ---------- */
+.lucide {
+  stroke-width: 1.75;
+}
+.data-table {
+  min-inline-size: 0;
+}
+.data-table > .table-scroll {
+  max-block-size: min(70dvh, 720px);
+  scrollbar-gutter: stable;
+}
+.data-table > .table-scroll thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+.data-table td {
+  min-inline-size: 128px;
+}
+.data-table .pagination {
+  flex-wrap: wrap;
+}
 .button {
   position: relative;
   display: inline-flex;

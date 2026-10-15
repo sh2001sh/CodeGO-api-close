@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -13,7 +14,7 @@ import (
 	"github.com/sh2001sh/new-api/v3/internal/identity"
 )
 
-// Exercise the actual control callbacks and session boundary for all three benefits.
+// Exercise monetary/subscription redemption and the retired blind-box boundary.
 func verifyTypedRedemptionAssembly(t *testing.T, pool *pgxpool.Pool, call apiCall, admin string) {
 	t.Helper()
 	ctx := context.Background()
@@ -31,10 +32,12 @@ func verifyTypedRedemptionAssembly(t *testing.T, pool *pgxpool.Pool, call apiCal
 	for _, body := range []string{
 		`{"name":"mixed","credits":1,"redeem_type":"subscription","plan_id":1}`,
 		`{"name":"missing plan","credits":0,"redeem_type":"subscription"}`,
-		`{"name":"too many","credits":0,"redeem_type":"blind_box","blind_box_quantity":101}`,
 		`{"name":"obsolete","credits":1,"redeem_type":"quota"}`,
 	} {
 		call("POST", "/api/redemption/", admin, body, 400)
+	}
+	for _, quantity := range []int{1, 101} {
+		call("POST", "/api/redemption/", admin, fmt.Sprintf(`{"name":"retired","redeem_type":"blind_box","blind_box_quantity":%d}`, quantity), 410)
 	}
 	issue := func(body string) commerce.RedemptionCode {
 		t.Helper()
@@ -102,23 +105,40 @@ func verifyTypedRedemptionAssembly(t *testing.T, pool *pgxpool.Pool, call apiCal
 	checkUnclaimed(capped)
 	call("DELETE", fmt.Sprintf("/api/redemption/%d", capped.ID), admin, "", 200)
 	call("POST", "/api/commerce/redemptions/redeem", user, string(body), 409)
-	boxes := issue(`{"name":"sealed boxes","credits":0,"redeem_type":"blind_box","blind_box_quantity":3}`)
+	// Seed pre-retirement records directly; the HTTP surface cannot issue new boxes.
+	boxes := commerce.RedemptionCode{Key: fmt.Sprintf("historical-boxes-%d", session.Data.User.ID), RedeemType: "blind_box", BlindBoxQuantity: 3}
+	digest := sha256.Sum256([]byte(boxes.Key))
+	if err := pool.QueryRow(ctx, `INSERT INTO v3_commerce.redemption_codes(code_hash,name,credits,redeem_type,blind_box_quantity) VALUES($1,'historical sealed boxes',0,'blind_box',3) RETURNING id`, digest[:]).Scan(&boxes.ID); err != nil {
+		t.Fatal(err)
+	}
 	body, _ = json.Marshal(map[string]string{"key": boxes.Key})
-	call("POST", "/api/commerce/redemptions/redeem", user, string(body), 503)
+	call("POST", "/api/commerce/redemptions/redeem", user, string(body), 410)
+	call("POST", "/api/user/topup", user, string(body), 410)
 	checkUnclaimed(boxes)
-	call("PUT", "/api/blind-box/admin/pools", admin, `{"name":"Redemption standard pool","scope":"standard","enabled":true,"price_micro":2500000,"daily_limit":100,"rewards":[{"kind":"credits","title":"reward","weight":1,"amount_micro":1000}]}`, 200)
-	result = redeem("/api/commerce/redemptions/redeem", boxes)
-	if result.RedeemType != "blind_box" || result.BlindBoxQuantity != 3 || result.BlindBoxOrderID <= 0 || result.Credits != 0 {
-		t.Fatalf("blind box result=%+v", result)
+	call("PUT", "/api/blind-box/admin/pools", admin, `{"name":"Redemption standard pool","scope":"standard","enabled":true,"price_micro":2500000,"daily_limit":100,"rewards":[{"kind":"credits","title":"reward","weight":1,"amount_micro":1000}]}`, 410)
+	call("DELETE", fmt.Sprintf("/api/redemption/%d", boxes.ID), admin, "", 200)
+	call("POST", "/api/commerce/redemptions/redeem", user, string(body), 409)
+	used := commerce.RedemptionCode{Key: fmt.Sprintf("historical-used-boxes-%d", session.Data.User.ID)}
+	digest = sha256.Sum256([]byte(used.Key))
+	result = commerce.RedemptionResult{RedeemType: "blind_box", BlindBoxQuantity: 3, BlindBoxOrderID: 17}
+	saved, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if replay := redeem("/api/user/topup", boxes); replay != result {
-		t.Fatalf("blind box replay changed result=%+v", replay)
+	if err := pool.QueryRow(ctx, `INSERT INTO v3_commerce.redemption_codes(code_hash,name,credits,redeem_type,blind_box_quantity,state,claimed_by,claimed_at,redeem_result) VALUES($1,'historical consumed boxes',0,'blind_box',3,'used',$2,now(),$3) RETURNING id`, digest[:], session.Data.User.ID, saved).Scan(&used.ID); err != nil {
+		t.Fatal(err)
 	}
+	for _, path := range []string{"/api/commerce/redemptions/redeem", "/api/user/topup"} {
+		if replay := redeem(path, used); replay != result {
+			t.Fatalf("historical blind box replay changed result=%+v", replay)
+		}
+	}
+	body, _ = json.Marshal(map[string]string{"key": used.Key})
 	call("POST", "/api/commerce/redemptions/redeem", admin, string(body), 409)
 	var items, packages int
 	var balance int64
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM v3_marketplace.blind_box_items WHERE owner_user_id=$1 AND status='available'`, session.Data.User.ID).Scan(&items); err != nil || items != 3 {
-		t.Fatalf("sealed redemption inventory=%d err=%v", items, err)
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM v3_marketplace.blind_box_items WHERE owner_user_id=$1`, session.Data.User.ID).Scan(&items); err != nil || items != 0 {
+		t.Fatalf("retired redemption created inventory=%d err=%v", items, err)
 	}
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM v3_commerce.subscriptions WHERE user_id=$1 AND source='redemption'`, session.Data.User.ID).Scan(&packages); err != nil || packages != 1 {
 		t.Fatalf("redemption packages=%d err=%v", packages, err)
@@ -130,7 +150,7 @@ func verifyTypedRedemptionAssembly(t *testing.T, pool *pgxpool.Pool, call apiCal
 		Data []commerce.RedemptionCode `json:"data"`
 	}
 	w = call("GET", "/api/redemption/", admin, "", 200)
-	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil || len(listed.Data) != 4 {
+	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil || len(listed.Data) != 5 {
 		t.Fatalf("redemption admin list count=%d err=%v", len(listed.Data), err)
 	}
 	for _, code := range listed.Data {

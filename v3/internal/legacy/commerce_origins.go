@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -44,6 +45,31 @@ func (d *commerceData) loadRefundOrigins(ctx context.Context, source pgx.Tx, sou
 	if err != nil {
 		return err
 	}
+	if view := onlineViewFrom(ctx); view != nil && view.sampled && sources["balance_snapshots"] != "" {
+		d.walletCanonical = map[int64]int64{}
+		rows, err := source.Query(ctx, "SELECT a.owner_id,s.available_balance FROM "+sources["accounts"]+" a JOIN "+sources["balance_snapshots"]+" s ON s.account_id=a.account_id WHERE a.owner_type='user' AND a.account_type='claude_wallet' AND a.quota_unit='quota'")
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var uid, units int64
+			if err = rows.Scan(&uid, &units); err != nil {
+				rows.Close()
+				return err
+			}
+			amount, convertErr := OpeningBalance(units)
+			if convertErr != nil {
+				rows.Close()
+				return convertErr
+			}
+			d.walletCanonical[uid] = max(int64(amount), 0)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+	}
 	orders := map[string]commerceRow{}
 	for _, row := range d.rows["top_ups"] {
 		trade, _ := row.text("trade_no")
@@ -72,10 +98,26 @@ func (d *commerceData) loadRefundOrigins(ctx context.Context, source pgx.Tx, sou
 		if err = json.Unmarshal(raw, &row); err != nil {
 			return err
 		}
-		if !strings.HasPrefix(row.Key, "topup:") || !strings.HasSuffix(row.Key, ":unified") {
+		view := onlineViewFrom(ctx)
+		if view != nil && view.sampled && accounts[row.Account] == 0 {
+			// Retired wallets are preserved in V2 and never open spendable V3 funds.
+			d.refundOriginsWaived++
+			continue
+		}
+		suffix := ":unified"
+		if strings.HasSuffix(row.Key, ":claude") {
+			suffix = ":claude"
+		}
+		if !strings.HasPrefix(row.Key, "topup:") || !strings.HasSuffix(row.Key, suffix) {
+			if view != nil && view.sampled {
+				// Preserve its wallet and funding lot, but never invent a refundable
+				// payment origin for a historical manual adjustment.
+				d.refundOriginsWaived++
+				continue
+			}
 			return fmt.Errorf("legacy: paid funding lot has unsupported topup attribution")
 		}
-		trade := strings.TrimSuffix(strings.TrimPrefix(row.Key, "topup:"), ":unified")
+		trade := strings.TrimSuffix(strings.TrimPrefix(row.Key, "topup:"), suffix)
 		order := orders[trade]
 		if order == nil {
 			return fmt.Errorf("legacy: paid funding lot references missing topup order")
@@ -101,7 +143,51 @@ func (d *commerceData) loadRefundOrigins(ctx context.Context, source pgx.Tx, sou
 		}
 		d.refundOrigins = append(d.refundOrigins, commerceRefundOrigin{projection.values["id"].(int64), uid, int64(original), int64(remaining)})
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if d.walletCanonical != nil {
+		d.capRefundOriginsToCanonical()
+	}
+	return nil
+}
+
+// Retain proven paid origins, consuming their oldest remainder first when V2
+// lot projections exceed the frozen wallet. This matches refund FIFO without
+// changing the wallet or inventing money/attribution for anonymous funds.
+func (d *commerceData) capRefundOriginsToCanonical() {
+	sums := map[int64]*big.Int{}
+	for _, origin := range d.refundOrigins {
+		if sums[origin.UserID] == nil {
+			sums[origin.UserID] = new(big.Int)
+		}
+		sums[origin.UserID].Add(sums[origin.UserID], big.NewInt(origin.Remaining))
+	}
+	excess := map[int64]*big.Int{}
+	for uid, sum := range sums {
+		available, exists := d.walletCanonical[uid]
+		if exists && sum.Cmp(big.NewInt(available)) > 0 {
+			excess[uid] = new(big.Int).Sub(sum, big.NewInt(available))
+		}
+	}
+	sort.SliceStable(d.refundOrigins, func(i, j int) bool { return d.refundOrigins[i].OrderID < d.refundOrigins[j].OrderID })
+	for i := range d.refundOrigins {
+		origin := &d.refundOrigins[i]
+		extra := excess[origin.UserID]
+		if extra == nil || extra.Sign() == 0 {
+			continue
+		}
+		removed := origin.Remaining
+		if extra.IsInt64() {
+			removed = min(removed, extra.Int64())
+		}
+		origin.Remaining -= removed
+		extra.Sub(extra, big.NewInt(removed))
+	}
+	if d.preservedSourceCounts == nil {
+		d.preservedSourceCounts = map[string]int64{}
+	}
+	d.preservedSourceCounts["refund_origin_canonical_fifo_caps"] = int64(len(excess))
 }
 
 func (d *commerceData) validateRefundOrigins(report *Report) {
@@ -123,11 +209,15 @@ func (d *commerceData) validateRefundOrigins(report *Report) {
 			continue
 		}
 		wallet, err := commerceUnits(row, "claude_quota")
+		if canonical, exists := d.walletCanonical[uid]; exists {
+			wallet = canonical
+		}
 		if err != nil || sums[uid].Cmp(big.NewInt(wallet)) > 0 {
 			report.Issues = append(report.Issues, Issue{"user", uid, "refund_origin_exceeds_wallet", "verifiable paid-origin remainder exceeds imported wallet balance"})
 		}
 	}
 	report.Counts["topup_refund_origins"] = int64(len(d.refundOrigins))
+	report.Counts["historical_refund_origins_unverified"] = d.refundOriginsWaived
 }
 
 func (m *Importer) importRefundOrigins(ctx context.Context, tx pgx.Tx, d *commerceData) error {

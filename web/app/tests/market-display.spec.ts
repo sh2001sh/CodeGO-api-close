@@ -156,7 +156,6 @@ test('expired usage snapshots never present a historical success rate as current
   ])
   await page.goto('/channel-market?group=stale')
   const row = page.locator('.market-listing')
-  await expect(row.getByText('调用统计已过期，等待更新。', { exact: true })).toBeVisible()
   await expect(row.locator('dl div').filter({ hasText: '调用成功率' }).locator('dd')).toHaveText(
     '暂无数据',
   )

@@ -1,5 +1,5 @@
 import { vendorOf, type PublicGroup } from '../../lib/public-catalog'
-import { groupProbe } from '../public/status-helpers'
+import { groupProbe, groupTone } from '../public/status-helpers'
 
 export type BoardHealth = 'up' | 'down' | 'idle'
 export type BoardSort = 'multiplier' | 'latency' | 'models'
@@ -42,7 +42,7 @@ export function boardRows(groups: readonly PublicGroup[]): BoardRow[] {
       models,
       vendors: [...new Set(models.map(vendorOf))],
       verified: group.verification_status === 'passed',
-      health: boardHealth[probe.tone],
+      health: boardHealth[groupTone(group)],
       latencyMs: probe.latencyMs,
       probedAt: probe.testedAt ?? null,
     }

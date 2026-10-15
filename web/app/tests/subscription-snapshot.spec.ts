@@ -67,7 +67,7 @@ test('old fuel rights and original amount step survive changes to the live plan'
       },
     }),
   )
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await expect(page.getByRole('combobox', { name: '月卡订阅', exact: true })).toContainText(
     '购买时的燃料月卡',
   )
@@ -105,7 +105,7 @@ test('a later live-plan fuel option does not grant rights absent from the frozen
       },
     }),
   )
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await expect(page.getByText('暂无支持购买燃料的有效月卡。', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '获取燃料报价', exact: true })).toHaveCount(0)
 })

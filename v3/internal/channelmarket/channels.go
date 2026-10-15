@@ -228,6 +228,11 @@ func (s *Service) Transition(ctx context.Context, a Actor, channel int64, action
 		if err != nil {
 			return err
 		}
+		if action == "delete" || action == "pause" {
+			if _, err = tx.Exec(ctx, `UPDATE v3_channelmarket.verification_runs SET status='paused',completed_at=$2,summary='Channel paused or deleted' WHERE channel_id=$1 AND status IN ('queued','running') AND ($3 OR trigger='auto_probe')`, channel, s.cfg.Now(), action == "delete"); err != nil {
+				return err
+			}
+		}
 		if action == "approve" || action == "reject" {
 			labelStatus := "rejected"
 			if action == "approve" {

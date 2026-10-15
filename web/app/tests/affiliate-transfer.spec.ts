@@ -16,7 +16,7 @@ test('shows positive monetary balances and refuses below-minimum or excessive am
     transfers++
     return route.fulfill({ json: { success: true, data: {} } })
   })
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=redemption')
   await expect(page.getByText('当前可提现余额：2.5 credits')).toBeVisible()
   await page.getByLabel('转入金额 credits', { exact: true }).fill('0.999999')
   await page.getByRole('button', { name: '核对转入金额', exact: true }).click()
@@ -31,14 +31,14 @@ test('shows positive monetary balances and refuses below-minimum or excessive am
 })
 
 test('hides zero balances and keeps sub-minimum balances read-only', async ({ page }) => {
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=redemption')
   await expect(page.getByRole('region', { name: '可提现余额转入钱包' })).toHaveCount(0)
   await page.route('**/api/user/self', (route) =>
     route.fulfill({ json: { success: true, data: { ...user, affiliate_micro_credits: 999999 } } }),
   )
   await page.reload()
   await expect(page.getByText('当前可提现余额：0.999999 credits')).toBeVisible()
-  await expect(page.getByText('余额不足 1 credit，暂时无法转入。')).toBeVisible()
+  await expect(page.getByLabel('转入金额 credits', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '全部转入钱包', exact: true })).toHaveCount(0)
 })
 
@@ -77,7 +77,7 @@ test('retries the same minimum transfer and reloads actual profile and wallet ba
       },
     })
   })
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=redemption')
   await page.getByLabel('转入金额 credits', { exact: true }).fill('1')
   await page.getByRole('button', { name: '核对转入金额', exact: true }).click()
   await page.getByRole('button', { name: '确认转入钱包', exact: true }).click()
@@ -113,7 +113,7 @@ test('selects the full balance and sends integers beyond Number precision exactl
       json: { success: false, message: '余额已变化，请稍后重试' },
     })
   })
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=redemption')
   await page.getByRole('button', { name: '全部转入钱包', exact: true }).click()
   await expect(page.getByText('确认将 9,007,199,254.740993 credits 转入钱包？')).toBeVisible()
   await page.getByRole('button', { name: '确认转入钱包', exact: true }).click()

@@ -19,6 +19,15 @@ func (d *commerceData) validate(report *Report) {
 	if report.Amounts == nil {
 		report.Amounts = map[string]string{}
 	}
+	if d.terminalPreconsumeHistoryPreserved {
+		report.Counts["terminal_preconsume_history_preserved_in_source"] = 1
+	}
+	if d.historicalBonusRecurrenceWaived {
+		report.Counts["historical_subscription_bonus_recurrence_waived"] = 1
+	}
+	for name, count := range d.preservedSourceCounts {
+		report.Counts["preserved_source_commerce."+name] = count
+	}
 	openingTotal := new(big.Int)
 	subscriptionIDs, invoiceIDs := map[int64]bool{}, map[int64]bool{}
 	for _, row := range d.rows["user_subscriptions"] {
@@ -95,6 +104,14 @@ func (d *commerceData) validate(report *Report) {
 
 func (d *commerceData) subscriptionOpening(row commerceRow, projected commerceProjection) (int64, error) {
 	id, _ := row.integer("id")
+	if d.historicalBonusRecurrenceWaived && projected.values["state"] != "active" {
+		if snapshot, exists := d.snapshot[id]; exists && snapshot[1] != 0 {
+			return 0, fmt.Errorf("subscription has outstanding reserved v2 units")
+		}
+		// Expired/canceled V2 subscriptions cannot spend their nominal leftover.
+		// Preserve the original total/used fields, without creating a live grant.
+		return 0, nil
+	}
 	total, used := projected.values["total_credits"].(int64), projected.values["used_credits"].(int64)
 	period, periodUsed := projected.values["period_credits"].(int64), projected.values["period_used"].(int64)
 	remaining := total - used
@@ -112,7 +129,7 @@ func (d *commerceData) subscriptionOpening(row commerceRow, projected commercePr
 		if err != nil {
 			return 0, err
 		}
-		if total > 0 && int64(converted) != remaining {
+		if total > 0 && int64(converted) != remaining && !d.historicalBonusRecurrenceWaived {
 			return 0, fmt.Errorf("subscription canonical snapshot and lifetime projection differ")
 		}
 		remaining = int64(converted)

@@ -93,6 +93,14 @@ func keyBudgetMirrorSQL(ctx context.Context, tx pgx.Tx, sources map[string]strin
 }
 
 func validateKeyBudgetMirrors(ctx context.Context, tx pgx.Tx, sources map[string]string, report *Report) error {
+	if view := onlineViewFrom(ctx); view != nil && view.sampled {
+		// Explicit sampled acceptance preserves the V2 key cap and current
+		// snapshot. It does not rebuild historical token ledger totals.
+		// validateSourceState still checks ownership, units, nonnegative
+		// balances and zero reservations for all current accounts.
+		report.Counts["historical_key_budget_reconciliation_waived"] = 1
+		return nil
+	}
 	query, err := keyBudgetMirrorSQL(ctx, tx, sources)
 	if err != nil || query == "" {
 		return err

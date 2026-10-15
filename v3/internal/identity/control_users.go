@@ -72,7 +72,15 @@ func (c *Control) User(ctx context.Context, id int64) (User, error) {
 func (c *Control) Login(ctx context.Context, username, password string) (User, error) {
 	var u User
 	var hash string
-	err := c.pool.QueryRow(ctx, `SELECT `+userColumns+`,coalesce(password_hash,'') FROM v3_identity.users WHERE username=$1 AND deleted_at IS NULL`, username).
+	username = strings.TrimSpace(username)
+	// Usernames cannot contain @. Match email addresses with the same
+	// normalization as mailbox binding and recovery, including imported users.
+	predicate := "username=$1"
+	if strings.Contains(username, "@") {
+		username = strings.ToLower(username)
+		predicate = "lower(btrim(email))=$1"
+	}
+	err := c.pool.QueryRow(ctx, `SELECT `+userColumns+`,coalesce(password_hash,'') FROM v3_identity.users WHERE `+predicate+` AND deleted_at IS NULL`, username).
 		Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role, &u.Status, &u.Group, &u.AffiliateMicroCredits, &hash)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return User{}, err

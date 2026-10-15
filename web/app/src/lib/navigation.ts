@@ -5,7 +5,6 @@ import {
   Boxes,
   Cable,
   FileText,
-  Gift,
   KeyRound,
   LayoutDashboard,
   ListOrdered,
@@ -28,7 +27,6 @@ import {
   ArrowLeftRight,
   ScrollText,
   SearchCheck,
-  Package,
   ClipboardCheck,
   Database,
   HeartPulse,
@@ -120,12 +118,6 @@ export const consoleNav: readonly NavGroup[] = [
         keywords: 'billing ledger entries history invoice 账单 流水 明细 对账 发票',
       },
       {
-        to: '/packages',
-        label: '套餐包',
-        icon: Package,
-        keywords: 'packages 套餐包 购买 续费 升级',
-      },
-      {
         to: '/transfers',
         label: '钱包转账',
         icon: ArrowLeftRight,
@@ -155,7 +147,6 @@ export const consoleNav: readonly NavGroup[] = [
         icon: Star,
         keywords: 'groups favorites bookmarks 分组 收藏 渠道',
       },
-      { to: '/blind-box', label: '盲盒', icon: Gift, keywords: 'blind box 盲盒 抽卡' },
     ],
   },
   {
@@ -217,12 +208,6 @@ export const consoleNav: readonly NavGroup[] = [
         label: '兑换码管理',
         icon: Ticket,
         keywords: 'redemption codes 兑换码 卡密',
-      },
-      {
-        to: '/admin/blind-box',
-        label: '盲盒管理',
-        icon: Gift,
-        keywords: 'blind box admin pools 盲盒 奖池 发放 撤销',
       },
       { to: '/deployments', label: '模型部署', icon: Rocket, keywords: 'deployment 部署 模型' },
       {

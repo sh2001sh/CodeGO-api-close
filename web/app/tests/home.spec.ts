@@ -67,13 +67,13 @@ test('brand and model discovery remain usable with reduced motion and English', 
 }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1, name: '选择模型，开始构建。' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: '模型与 API' })).toBeVisible()
   await expect(page.locator('.home-intro-art img')).toHaveCSS('animation-name', 'none')
   await expect(page.getByText(/new-api|QuantumNous/)).toHaveCount(0)
   await selectLanguage(page, 'English')
-  await expect(
-    page.getByRole('heading', { level: 1, name: 'Choose a model. Start building.' }),
-  ).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Models & API' })).toBeVisible()
+  if (process.env.CAPTURE_UI === '1')
+    await page.screenshot({ path: test.info().outputPath('home.png'), fullPage: true })
   await page.getByRole('link', { name: 'Models & pricing', exact: true }).first().click()
   await expect(page).toHaveURL(/\/models$/)
   await expect(page.getByRole('heading', { name: 'Model', exact: true })).toBeVisible()

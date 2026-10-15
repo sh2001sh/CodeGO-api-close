@@ -121,7 +121,8 @@ const keyColumns = `k.id,k.name,k.status,k.group_name,k.allowed_models,k.allowed
  CASE WHEN k.budget_limited THEN coalesce(b.balance,0) ELSE NULL END,k.cross_group_retry,(k.max_marketplace_multiplier*1000000)::bigint,coalesce(b.id,0),k.user_id,
  (coalesce((SELECT sum(l.amount) FROM v3_billing.usage_logs l WHERE l.key_id=k.id AND l.user_id=k.user_id),0)
  +coalesce((SELECT t.amount FROM v3_billing.retired_usage_totals t WHERE t.key_id=k.id AND t.user_id=k.user_id),0))::bigint`
-const keyFrom = `v3_identity.api_keys k LEFT JOIN v3_billing.accounts b ON b.owner_type='api_key' AND b.owner_id=k.id AND b.kind='key_budget'`
+const keyBudgetJoin = ` LEFT JOIN v3_billing.accounts b ON b.owner_type='api_key' AND b.owner_id=k.id AND b.kind='key_budget'`
+const keyFrom = `v3_identity.api_keys k` + keyBudgetJoin
 
 func scanKey(row pgx.Row) (KeyRecord, error) {
 	var k KeyRecord

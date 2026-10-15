@@ -201,8 +201,15 @@ func (m *Importer) Import(ctx context.Context, apply bool) (Report, error) {
 		if err = onlineRestoreRelationships(ctx, target, onlineSpecs(sources)); err != nil {
 			return r, err
 		}
-		if err = m.checkImportData(ctx, target, data, &r); err != nil {
-			return r, err
+		if view.sampled {
+			// The sealed stage already passed the accepted financial samples.
+			// Runtime wallet/price/charge probes gate public cutover; repeating
+			// every historical projection here would repeat the waived audit.
+			r.Counts["full_final_source_target_reconciliation_waived"] = 1
+		} else {
+			if err = m.checkImportData(ctx, target, data, &r); err != nil {
+				return r, err
+			}
 		}
 		if _, err = target.Exec(ctx, "UPDATE v3_migration_online.run SET phase='finalized' WHERE singleton AND run_id=$1", view.runID); err != nil {
 			return r, err

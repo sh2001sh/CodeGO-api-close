@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/sh2001sh/new-api/v3/internal/commerce"
+	"github.com/sh2001sh/new-api/v3/internal/marketplace"
 )
 
 func TestTypedRedemptionImportedSubscriptionCreatesOneFreshPackageAndStableReceipt(t *testing.T) {
@@ -127,10 +128,17 @@ func TestTypedRedemptionRejectsInconsistentBenefits(t *testing.T) {
 	s, _, _ := newService(t)
 	for _, in := range []commerce.IssueRedemptionInput{
 		{RedeemType: "credits"}, {RedeemType: "credits", Credits: 10, PlanID: 1}, {RedeemType: "subscription", PlanID: 1, Credits: 1},
-		{RedeemType: "blind_box", BlindBoxQuantity: 101}, {RedeemType: "blind_box", BlindBoxQuantity: 1, Credits: 1}, {RedeemType: "old_points", Credits: 100},
+		{RedeemType: "old_points", Credits: 100},
 	} {
 		if _, err := s.IssueTypedRedemption(context.Background(), in); !errors.Is(err, commerce.ErrInvalid) {
 			t.Fatalf("input=%+v err=%v", in, err)
+		}
+	}
+	for _, in := range []commerce.IssueRedemptionInput{
+		{RedeemType: "blind_box", BlindBoxQuantity: 101}, {RedeemType: "blind_box", BlindBoxQuantity: 1, Credits: 1},
+	} {
+		if _, err := s.IssueTypedRedemption(context.Background(), in); !errors.Is(err, marketplace.ErrBlindBoxesDisabled) {
+			t.Fatalf("retired input=%+v err=%v", in, err)
 		}
 	}
 }

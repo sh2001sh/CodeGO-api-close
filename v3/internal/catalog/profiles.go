@@ -80,7 +80,19 @@ func (p AccountProfile) SubscriptionAccounts(now time.Time) []int64 {
 // loadBaseAccountProfiles loads the per-user base profile fields (wallet
 // account, multiplier, cards, groups, funding preference).
 func loadBaseAccountProfiles(ctx context.Context, tx pgx.Tx) (map[int64]AccountProfile, error) {
-	rows, err := tx.Query(ctx, `SELECT u.id,coalesce(a.id,0),coalesce(p.multiplier_ppm,1000000),p.expires_at,coalesce(p.cards,'[]'::jsonb),ARRAY(SELECT v3_identity.allowed_groups(u.id)),ARRAY(SELECT v3_identity.auto_groups(u.id)),u.settings
+	// auto_groups is the intersection of allowed_groups and one global setting.
+	// Read that setting once, so compiling every user does not repeat the full
+	// authorization query (including the market access checks) a second time.
+	var configuredAutoGroups []string
+	if err := tx.QueryRow(ctx, `SELECT ARRAY(SELECT jsonb_array_elements_text(coalesce(
+	 (SELECT value FROM v3_platform.settings WHERE key='AutoGroups' AND NOT sensitive),'["default"]'::jsonb)))`).Scan(&configuredAutoGroups); err != nil {
+		return nil, fmt.Errorf("catalog: automatic groups: %w", err)
+	}
+	autoGroups := make(map[string]struct{}, len(configuredAutoGroups))
+	for _, group := range configuredAutoGroups {
+		autoGroups[group] = struct{}{}
+	}
+	rows, err := tx.Query(ctx, `SELECT u.id,coalesce(a.id,0),coalesce(p.multiplier_ppm,1000000),p.expires_at,coalesce(p.cards,'[]'::jsonb),ARRAY(SELECT v3_identity.allowed_groups(u.id)),u.settings
 	 FROM v3_identity.users u
 	 LEFT JOIN v3_billing.accounts a ON a.owner_type='user' AND a.owner_id=u.id AND a.kind='wallet'
 	 LEFT JOIN v3_marketplace.account_profiles p ON p.user_id=u.id
@@ -93,10 +105,11 @@ func loadBaseAccountProfiles(ctx context.Context, tx pgx.Tx) (map[int64]AccountP
 		var p AccountProfile
 		var expiry *time.Time
 		var settings []byte
-		if err = rows.Scan(&p.UserID, &p.WalletAccountID, &p.MultiplierPPM, &expiry, &p.Cards, &p.AllowedGroups, &p.AutoGroups, &settings); err != nil {
+		if err = rows.Scan(&p.UserID, &p.WalletAccountID, &p.MultiplierPPM, &expiry, &p.Cards, &p.AllowedGroups, &settings); err != nil {
 			rows.Close()
 			return nil, err
 		}
+		p.AutoGroups = allowedAutoGroups(p.AllowedGroups, autoGroups)
 		if err = readProfilePreference(&p, settings); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("catalog: user %d funding preference: %w", p.UserID, err)
@@ -108,6 +121,16 @@ func loadBaseAccountProfiles(ctx context.Context, tx pgx.Tx) (map[int64]AccountP
 	}
 	rows.Close()
 	return profiles, rows.Err()
+}
+
+func allowedAutoGroups(allowed []string, configured map[string]struct{}) []string {
+	groups := make([]string, 0)
+	for _, group := range allowed {
+		if _, ok := configured[group]; ok {
+			groups = append(groups, group)
+		}
+	}
+	return groups
 }
 
 // applyKeyBudgetAccounts attaches per-API-key budget accounts onto the

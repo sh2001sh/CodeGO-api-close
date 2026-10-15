@@ -19,7 +19,7 @@ test('password login resumes OIDC through browser navigation with its original q
     'href',
     `/sign-up?returnTo=${encodeURIComponent(oidcReturn)}`,
   )
-  await page.getByLabel('用户名', { exact: true }).fill('operator')
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill('operator')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   const continued = page.waitForRequest(
     (request) => new URL(request.url()).pathname === '/api/oidc/authorize',
@@ -38,7 +38,7 @@ for (const target of ['//evil.test', '/%2f/evil.test', '/%5cevil.test', 'https:/
       'href',
       '/api/oauth/github',
     )
-    await page.getByLabel('用户名', { exact: true }).fill('operator')
+    await page.getByLabel(/^用户名(?:或邮箱)?$/).fill('operator')
     await page.getByLabel('密码', { exact: true }).fill('test-password')
     await page.getByRole('button', { name: '登录', exact: true }).click()
     await expect(page.getByRole('heading', { name: '仪表板', exact: true })).toBeVisible()
@@ -50,7 +50,7 @@ test('dashboard login survives a slow wallet request while the shell mounts', as
     await route.fallback()
   })
   await page.goto('/sign-in?returnTo=%2F%252f%2Fevil.test')
-  await page.getByLabel('用户名', { exact: true }).fill('operator')
+  await page.getByLabel(/^用户名(?:或邮箱)?$/).fill('operator')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.getByRole('heading', { name: '仪表板', exact: true })).toBeVisible()

@@ -31,9 +31,13 @@ type marketplaceRecord struct {
 	Fields map[string]any
 }
 type marketplaceData struct {
-	source  map[string][]marketplaceSourceRow
-	records []marketplaceRecord
-	issues  []Issue
+	source                    map[string][]marketplaceSourceRow
+	records                   []marketplaceRecord
+	issues                    []Issue
+	externalOrdersByRequest   map[string]int64
+	inventoryPurchaseRequests map[string]bool
+	rewardPlansBySubscription map[int64]int64
+	rewardPropsByOpen         map[int64]marketplaceSourceRow
 }
 
 func loadMarketplace(ctx context.Context, source pgx.Tx, sources map[string]string) (*marketplaceData, error) {

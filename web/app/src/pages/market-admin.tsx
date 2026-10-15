@@ -205,7 +205,6 @@ export default function MarketAdminPage() {
           <h2>
             {t('审核 ·')} {selected.system_display_name}
           </h2>
-          <p className="muted">{t('验证通过后可批准发布；未通过时填写原因。')}</p>
           {selected.name_status === 'pending' && (
             <dl>
               <dt>{t('当前公开名称')}</dt>
@@ -218,10 +217,6 @@ export default function MarketAdminPage() {
               <dd>{selected.submitted_remark ?? selected.remark ?? t('无')}</dd>
             </dl>
           )}
-          {selected.name_status === 'pending' &&
-            ['active', 'paused'].includes(selected.lifecycle_status) && (
-              <p className="muted">{t('仅审核本次名称与备注修改，拒绝后保留原内容与服务状态。')}</p>
-            )}
           <MarketForm
             pending={review.isPending}
             submit="提交审核"

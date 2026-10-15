@@ -54,7 +54,7 @@ export default function TransfersPage() {
         <DataTable
           rows={history.data?.history.items ?? []}
           rowKey={(row) => row.id}
-          empty="暂无转账记录。完成一笔转账后会显示在这里。"
+          empty="暂无转账记录"
           columns={[
             {
               label: '方向',

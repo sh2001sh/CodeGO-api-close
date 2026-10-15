@@ -8,6 +8,49 @@ const response = (data: string, status = 200) =>
 const baseUrl = 'http://localhost'
 
 describe('control API transport', () => {
+  it('keeps failed connectivity samples and mixed batches as test results', async () => {
+    const failed = { success: false, id: 1, time: 1.2, message: 'upstream failure' }
+    const batch = {
+      success: false,
+      tested: 2,
+      failed: 1,
+      data: [failed, { ...failed, id: 2, success: true }],
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(response(JSON.stringify(failed)))
+        .mockResolvedValueOnce(response(JSON.stringify(batch))),
+    )
+    vi.resetModules()
+    const { api } = await import('./api')
+    expect(
+      (await api.GET('/api/channel/test/{id}', { baseUrl, params: { path: { id: '1' } } })).data,
+    ).toEqual(failed)
+    expect((await api.GET('/api/channel/test', { baseUrl })).data).toEqual(batch)
+  })
+  it('still rejects HTTP failures, invalid probe envelopes, and ordinary business failures', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(response('{"success":false,"time":0,"message":"forbidden"}', 403))
+        .mockResolvedValueOnce(response('{"success":false,"message":"database error"}'))
+        .mockResolvedValueOnce(response('{"success":false,"time":1,"message":"payment failed"}')),
+    )
+    vi.resetModules()
+    const { api, APIError } = await import('./api')
+    await expect(
+      api.GET('/api/channel/test/{id}', { baseUrl, params: { path: { id: '1' } } }),
+    ).rejects.toEqual(new APIError('forbidden', 403))
+    await expect(api.GET('/api/channel/test', { baseUrl })).rejects.toEqual(
+      new APIError('database error', 200),
+    )
+    await expect(api.GET('/api/wallet', { baseUrl })).rejects.toEqual(
+      new APIError('payment failed', 200),
+    )
+  })
   it('serializes int64 adjustments as exact JSON integers', async () => {
     const mock = vi.fn((_request: Request) =>
       Promise.resolve(response('{"success":true,"data":{}}')),

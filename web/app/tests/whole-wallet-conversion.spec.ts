@@ -72,7 +72,7 @@ test('whole conversion requires explicit consent, uses reviewed amounts and requ
           },
     )
   })
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await page.getByRole('combobox', { name: '需要转余额的老套餐', exact: true }).selectOption('1')
   await page.getByRole('button', { name: '预览整份转余额', exact: true }).click()
   const consent = page.getByRole('checkbox', { name: /我确认将整份剩余权益转入本人余额/ })
@@ -106,7 +106,7 @@ test('expired old subscription cannot request a conversion quote', async ({ page
     quotes++
     return route.fulfill({ json: { success: true, data: quote } })
   })
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await expect(
     page
       .getByRole('combobox', { name: '需要转余额的老套餐', exact: true })
@@ -148,7 +148,7 @@ test('network retry keeps one request and accepted pending result polls until co
       },
     })
   })
-  await page.goto('/wallet')
+  await page.goto('/wallet?section=conversion')
   await page.getByRole('combobox', { name: '需要转余额的老套餐', exact: true }).selectOption('1')
   await page.getByRole('button', { name: '预览整份转余额', exact: true }).click()
   await page.getByRole('checkbox', { name: /我确认将整份剩余权益转入本人余额/ }).check()

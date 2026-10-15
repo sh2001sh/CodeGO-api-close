@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/sh2001sh/new-api/v3/internal/billing"
 	"github.com/sh2001sh/new-api/v3/internal/gateway"
@@ -34,6 +35,10 @@ func (s *Service) Handler(auth Authenticate) http.Handler {
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
+			if disabledBlindBoxMutation(r) {
+				reply(w, nil, ErrBlindBoxesDisabled)
+				return
+			}
 			fn(w, r, id)
 		})
 	}
@@ -42,6 +47,21 @@ func (s *Service) Handler(auth Authenticate) http.Handler {
 	s.registerBlindBoxCompat(register)
 	s.registerBatchRoutes(register)
 	return mux
+}
+
+// Historical reads and administrative revocation remain available while the
+// product is suspended. Every route that creates or consumes a box is closed.
+func disabledBlindBoxMutation(r *http.Request) bool {
+	if !strings.HasPrefix(r.URL.Path, "/api/blind-box/") || r.Method == http.MethodGet || r.Method == http.MethodHead {
+		return false
+	}
+	if r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/pause") || strings.HasSuffix(r.URL.Path, "/revoke")) {
+		return false
+	}
+	if r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/admin/users/") && strings.HasSuffix(r.URL.Path, "/grants") {
+		return false
+	}
+	return true
 }
 
 func (s *Service) registerGroupBuyRoutes(register registerFunc) {
@@ -167,6 +187,8 @@ func reply(w http.ResponseWriter, data any, err error) {
 	if err != nil {
 		message = err.Error()
 		switch {
+		case errors.Is(err, ErrBlindBoxesDisabled):
+			status = http.StatusGone
 		case errors.Is(err, ErrInvalidInput):
 			status = http.StatusBadRequest
 		case errors.Is(err, ErrNotFound):

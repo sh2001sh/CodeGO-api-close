@@ -109,7 +109,7 @@ func TestHTTPAuthenticationAndBodyBoundary(t *testing.T) {
 		t.Fatalf("admin=%d", w.Code)
 	}
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/blind-box/inventory/open", strings.NewReader(`{"count":1} {"count":2}`)))
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/group-buy/create", strings.NewReader(`{"order_id":1} {"order_id":2}`)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("extra JSON=%d", w.Code)
 	}

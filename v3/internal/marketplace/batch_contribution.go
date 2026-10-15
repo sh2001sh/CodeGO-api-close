@@ -2,7 +2,6 @@ package marketplace
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -74,45 +73,10 @@ func contributionFacts(ctx context.Context, tx pgx.Tx, b Batch, cutoff time.Time
 	return facts, rows.Err()
 }
 
-// AccrueBatchEntitlements runs in low-frequency worker maintenance, not on the
-// gateway's high-frequency settlement path. A seven-day maturation window and
-// the pre-funded reserve absorb later reversals without revoking issued boxes.
+// AccrueBatchEntitlements is retained for persisted jobs from older releases.
+// Blind-box promotion issuance is suspended; historical entitlements stay put.
 func (s *Service) AccrueBatchEntitlements(ctx context.Context, limit int) (int, error) {
-	if limit < 1 || limit > 1000 {
-		limit = 100
-	}
-	batches, err := s.ListBatches(ctx, true)
-	if err != nil {
-		return 0, err
-	}
-	awarded := 0
-	for _, batch := range batches {
-		if batch.State != "published" || batch.Purpose != "consumption" || batch.EntitledCount >= batch.RemainingCount {
-			continue
-		}
-		var facts []contributionFact
-		err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-			var e error
-			facts, e = contributionFacts(ctx, tx, batch, s.cfg.Now().Add(-7*24*time.Hour), 0, limit)
-			return e
-		})
-		if err != nil {
-			return awarded, err
-		}
-		seen := map[int64]bool{}
-		for _, f := range facts {
-			if seen[f.user] {
-				continue
-			}
-			seen[f.user] = true
-			n, e := s.accrueUserBatch(ctx, batch.ID, f.user, limit)
-			if e != nil {
-				return awarded, fmt.Errorf("batch %d contribution: %w", batch.ID, e)
-			}
-			awarded += n
-		}
-	}
-	return awarded, nil
+	return 0, nil
 }
 
 func (s *Service) accrueUserBatch(ctx context.Context, batch, user int64, limit int) (int, error) {

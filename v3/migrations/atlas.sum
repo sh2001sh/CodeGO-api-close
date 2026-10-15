@@ -1,4 +1,4 @@
-h1:t+syaMkLme4YnwI9A4GkkOCQffooNBNA837ak6CQG7I=
+h1:9JJ/xNw+paSr5+g6SpOKQn9nezPxDSl2tuBmBEsmsDk=
 20260930193000_workflow.sql h1:B6ydcTeFjdBrB/TEsbAbYBQbuSwtj6S7QgLm1c2DSgU=
 20261001000001_platform.sql h1:mGuj9NKaRMKYYu2in4anJFqn/eud8jtDaR41a1D5Dz8=
 20261001000002_identity.sql h1:pzNUPn6jGgoT9Xgw4KCk2SZeDNR4sHjxW+pZ4pgRQuE=
@@ -75,3 +75,5 @@ h1:t+syaMkLme4YnwI9A4GkkOCQffooNBNA837ak6CQG7I=
 20261010000108_channelmarket_exact_prices.sql h1:mYqyTx18IfU3kctzBkEp5tvUmy3SmYrPPIFUcmfJ3sE=
 20261010000109_history_retention.sql h1:GY9IrtaBIHXcnZglq4Xj5GAvmcAeqcKD2D7kPJ2XP6I=
 20261010000110_legacy_prompt_anomaly.sql h1:YSyqX70ip8A3dHEu4qM5MiaSauoyFsmu1pUnzJWlBuQ=
+20261015000111_active_funding_restrictions.sql h1:6ZBtkRh9AIOepueJqdtII4w70tpXhX4HyejZuaoVLvA=
+20261015000112_channel_probe_history_indexes.sql h1:oU92bn4j74yhWQesIt+exkdUQIyoW7Hoc5e0dF+XQBM=

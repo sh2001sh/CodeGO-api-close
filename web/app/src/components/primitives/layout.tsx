@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../lib/i18n'
 
-/** Page title row. `description` explains the page purpose in one sentence. */
+/** Compact page identity; actions and live data carry the page context. */
 export function PageHeader(props: {
   title: string
   description?: ReactNode
@@ -12,11 +12,7 @@ export function PageHeader(props: {
   return (
     <header className="page-header">
       <div className="page-header-text">
-        {props.eyebrow && <div className="breadcrumbs">{props.eyebrow}</div>}
         <h1>{t(props.title)}</h1>
-        {props.description && (
-          <p>{typeof props.description === 'string' ? t(props.description) : props.description}</p>
-        )}
       </div>
       <div className="page-header-actions">{props.action}</div>
     </header>
@@ -29,7 +25,6 @@ export function SectionHeader(props: { title: string; description?: string; acti
     <div className="section-header">
       <div>
         <h2>{t(props.title)}</h2>
-        {props.description && <p>{t(props.description)}</p>}
       </div>
       {props.action}
     </div>
@@ -51,10 +46,7 @@ export function Panel(props: {
     <Tag className={`panel ${props.className ?? ''}`.trim()}>
       {(props.title || props.action) && (
         <div className="panel-header">
-          <div>
-            {props.title && <h2>{t(props.title)}</h2>}
-            {props.description && <p>{t(props.description)}</p>}
-          </div>
+          <div>{props.title && <h2>{t(props.title)}</h2>}</div>
           {props.action}
         </div>
       )}

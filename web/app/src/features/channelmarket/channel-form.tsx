@@ -209,7 +209,7 @@ export function MarketChannelForm(props: {
               checked={updateService}
               onChange={(event) => setUpdateService(event.target.checked)}
             />{' '}
-            {t('更新并发与服务策略（重新填写）')}
+            {t('服务设置')}
           </label>
         )}
         {updateService && (
@@ -219,33 +219,63 @@ export function MarketChannelForm(props: {
               label="渠道并发（0 不限）"
               type="number"
               min={0}
-              defaultValue={0}
+              defaultValue={channel?.max_concurrency ?? 0}
             />
             <Field
               name="user_max_concurrency"
               label="用户并发（0 不限）"
               type="number"
               min={0}
-              defaultValue={0}
+              defaultValue={channel?.user_max_concurrency ?? 0}
             />
-            <Field name="qps" label="每秒请求数（0 不限）" type="number" min={0} defaultValue={0} />
-            <Field name="maintenance_window" label="维护时间" placeholder="02:00-03:00" />
+            <Field
+              name="qps"
+              label="每秒请求数（0 不限）"
+              type="number"
+              min={0}
+              defaultValue={channel?.qps ?? 0}
+            />
+            <Field
+              name="maintenance_window"
+              label="维护时间"
+              defaultValue={channel?.maintenance_window ?? ''}
+            />
             <Field
               name="probe_interval"
               label="自动探测间隔（分钟）"
               type="number"
               min={1}
-              defaultValue={30}
+              max={1440}
+              defaultValue={channel?.auto_probe_interval_minutes || 30}
             />
-            <Field name="probe_model" label="自动探测模型" />
+            <Field
+              name="probe_model"
+              label="自动探测模型"
+              defaultValue={channel?.auto_probe_model ?? ''}
+            />
             <label>
-              <input type="checkbox" name="auto_probe" /> {t('自动探测')}
+              <input
+                type="checkbox"
+                name="auto_probe"
+                defaultChecked={channel?.auto_probe_enabled ?? false}
+              />{' '}
+              {t('自动探测')}
             </label>
             <label>
-              <input type="checkbox" name="interception" defaultChecked /> {t('敏感词拦截')}
+              <input
+                type="checkbox"
+                name="interception"
+                defaultChecked={channel?.sensitive_word_interception_enabled ?? true}
+              />{' '}
+              {t('敏感词拦截')}
             </label>
             <label>
-              <input type="checkbox" name="cards" /> {t('支持倍率卡')}
+              <input
+                type="checkbox"
+                name="cards"
+                defaultChecked={channel?.multiplier_card_supported ?? false}
+              />{' '}
+              {t('支持倍率卡')}
             </label>
           </>
         )}
@@ -253,15 +283,7 @@ export function MarketChannelForm(props: {
           {t('取消')}
         </Button>
       </MarketForm>
-      <p className="muted">
-        {t('已发布分组的名称与备注修改需审核，通过前继续显示原内容。厂商标签修改立即生效。')}
-      </p>
-      <p className="muted">{t('连接和模型修改后需要重新验证与审核。')}</p>
-      {channel ? (
-        <DisclosureEditor id={channel.id} models={channel.declared_models ?? []} />
-      ) : (
-        <p className="muted">{t('渠道创建后，可在编辑页单独补充来源、数据政策与模型能力声明。')}</p>
-      )}
+      {channel && <DisclosureEditor id={channel.id} models={channel.declared_models ?? []} />}
     </section>
   )
 }

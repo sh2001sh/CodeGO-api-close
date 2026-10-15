@@ -194,12 +194,20 @@ hr {
   font-size: var(--text-sm);
 }
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  html {
     scroll-behavior: auto !important;
+  }
+  .loading > span,
+  .button[data-loading]::after,
+  .toast {
+    animation: none;
+  }
+  .drawer-popup,
+  .dialog-popup,
+  details > summary::after {
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+  .button:active:not(:disabled) {
+    transform: none;
   }
 }

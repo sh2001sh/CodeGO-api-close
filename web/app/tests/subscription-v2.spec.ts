@@ -32,14 +32,36 @@ test('fixed package compares against actual provider credits and has no legacy r
       },
     }),
   )
-  await page.goto('/wallet')
-  await expect(page.getByText(/同金额充值可得 100 credits/)).toContainText(
-    '多得 3 credits（3.00%）',
-  )
+  await page.goto('/wallet?section=plans')
+  const product = page.getByRole('article').filter({ hasText: plan.name })
+  await expect(
+    product
+      .locator('dl > div')
+      .filter({ has: page.locator('dt', { hasText: '套餐额度' }) })
+      .locator('dd'),
+  ).toHaveText('103 credits')
+  await expect(
+    product
+      .locator('dl > div')
+      .filter({ has: page.locator('dt', { hasText: '同金额钱包额度' }) })
+      .locator('dd'),
+  ).toHaveText('100 credits')
+  await expect(
+    product
+      .locator('dl > div')
+      .filter({ has: page.locator('dt', { hasText: '额外额度' }) })
+      .locator('dd'),
+  ).toHaveText('+3 credits · 3.00%')
   await page.getByRole('combobox', { name: '需要续期或升级的订阅', exact: true }).selectOption('1')
   await expect(page.getByRole('button', { name: '续期', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '升级到此套餐', exact: true })).toHaveCount(0)
-  await expect(page.getByText(/额度一次到账，不支持刷新/)).toBeVisible()
+  await expect(product.getByRole('button', { name: '购买', exact: true })).toBeEnabled()
+  await expect(
+    product
+      .locator('dl > div')
+      .filter({ has: page.locator('dt', { hasText: '额度重置' }) })
+      .locator('dd'),
+  ).toHaveText('不重置')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   )

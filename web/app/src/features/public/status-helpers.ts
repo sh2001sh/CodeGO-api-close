@@ -1,6 +1,4 @@
-// Status derivation from the public group-status snapshot. The v3 API only
-// exposes the latest verification run per group (no time-bucketed history),
-// so "status" here means "result of the most recent connectivity probe".
+// Connectivity measurements and real traffic retain their own timestamps.
 import type { Schema } from '../../lib/types'
 
 export type GroupStatusTone = 'healthy' | 'degraded' | 'unknown'
@@ -143,8 +141,18 @@ export function groupProbe(
   return observation(tone, manualAt, latencyMs)
 }
 
-export function groupTone(group: Schema['ChannelMarketChannelView']): GroupStatusTone {
-  return groupProbe(group).tone
+export function groupTone(
+  group: Schema['ChannelMarketChannelView'],
+  now = Date.now(),
+): GroupStatusTone {
+  const recent = [...(group.recent_request_series ?? [])]
+    .filter((item) => {
+      const at = Number(item.ts) * 1000
+      return BigInt(item.request_count) > 0n && at <= now && now - at < 2 * 60 * 60_000
+    })
+    .sort((a, b) => Number(b.ts) - Number(a.ts))[0]
+  if (recent) return recent.success_rate >= 90 ? 'healthy' : 'degraded'
+  return groupProbe(group, now).tone
 }
 
 export function overallTone(

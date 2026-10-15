@@ -99,9 +99,7 @@ for (const width of [375, 390]) {
     try {
       await page.reload()
       await page.evaluate(() => document.fonts.ready)
-      await expect(
-        page.getByRole('heading', { level: 1, name: 'Choose a model. Start building.' }),
-      ).toBeVisible()
+      await expect(page.getByRole('heading', { level: 1, name: 'Models & API' })).toBeVisible()
       await expect(page.locator('.account-placeholder')).toBeVisible()
       await expect(page.locator('.account-placeholder')).toHaveAttribute('aria-busy', 'true')
       expect(

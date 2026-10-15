@@ -10,7 +10,6 @@ import {
   frozenSubscriptionPlan,
   packageComparison,
   subscriptionPolicy,
-  subscriptionPolicyLabel,
 } from '../../lib/subscription-policy'
 import { Button, ErrorMessage, Field, Loading, Status } from '../../components/ui'
 import { errorFrom, positiveID } from './amounts'
@@ -86,7 +85,7 @@ export function SubscriptionActions(props: {
       (subscriptionPolicy(plan) === 'standard_v2' ||
         (current && subscriptionPolicy(current) !== subscriptionPolicy(plan)))
     ) {
-      setError(new Error('新版套餐独立购买，不能与原规则套餐合并续期或升级'))
+      setError(new Error('此套餐仅支持独立购买'))
       return
     }
     buy.reset()
@@ -150,39 +149,41 @@ export function SubscriptionActions(props: {
           </select>
         </label>
       </div>
-      <p className="muted">
-        {t('续期及升级价格由服务器按已使用额度核算；提交后会生成订单，确认订单金额后再前往支付。')}
-      </p>
       <div className="catalog-grid">
         {props.plans
           .filter((plan) => plan.enabled && !plan.internal_only)
           .map((plan) => (
             <article className="product" key={String(plan.id)}>
               <h3>{plan.name}</h3>
-              <p className="muted">{t(subscriptionPolicyLabel(plan))}</p>
-              <p>
-                {credits(plan.credits)} · {paymentAmount(plan.price_minor, plan.currency)}
-              </p>
-              {subscriptionPolicy(plan) === 'standard_v2' && (
-                <p>
-                  {t('与余额同口径扣费，不额外乘十倍；额度一次到账，不支持刷新。')}
-                  {(() => {
-                    const comparison = packageComparison(plan, method)
-                    return comparison ? (
-                      <>
-                        {t('按当前支付方式兑换率，同金额充值可得')} {credits(comparison.wallet)}
-                        {t('，此套餐')}
-                        {comparison.extra >= 0n ? t('多得') : t('少得')}{' '}
-                        {credits(comparison.extra >= 0n ? comparison.extra : -comparison.extra)}（
-                        {comparison.percent}）。
-                      </>
-                    ) : (
-                      t('选择同币种支付方式后可比较实际充值额度。')
-                    )
-                  })()}
-                </p>
-              )}
               <dl>
+                <div>
+                  <dt>{t('套餐额度')}</dt>
+                  <dd>{credits(plan.credits)}</dd>
+                </div>
+                <div>
+                  <dt>{t('价格')}</dt>
+                  <dd>{paymentAmount(plan.price_minor, plan.currency)}</dd>
+                </div>
+                {(() => {
+                  const comparison = packageComparison(plan, method)
+                  return comparison ? (
+                    <>
+                      <div>
+                        <dt>{t('同金额钱包额度')}</dt>
+                        <dd>{credits(comparison.wallet)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t(comparison.extra >= 0n ? '额外额度' : '额度差额')}</dt>
+                        <dd>
+                          {comparison.extra < 0n ? '−' : '+'}
+                          {credits(comparison.extra >= 0n ? comparison.extra : -comparison.extra)}
+                          {' · '}
+                          {comparison.percent}
+                        </dd>
+                      </div>
+                    </>
+                  ) : null
+                })()}
                 <div>
                   <dt>{t('有效期')}</dt>
                   <dd>
@@ -287,10 +288,25 @@ export function SubscriptionActions(props: {
                 : t('购买')}
             “{props.plans.find((plan) => String(plan.id) === String(purchase.body.plan_id))?.name}
             ”？
-            {subscriptionPolicy(
-              props.plans.find((plan) => String(plan.id) === String(purchase.body.plan_id)) ?? {},
-            ) === 'standard_v2' && t('这是一份独立的固定额度套餐，不支持刷新，也不延长其它套餐。')}
           </p>
+          {subscriptionPolicy(
+            props.plans.find((plan) => String(plan.id) === String(purchase.body.plan_id)) ?? {},
+          ) === 'standard_v2' && (
+            <dl className="full-width">
+              <div>
+                <dt>{t('购买方式')}</dt>
+                <dd>{t('独立购买')}</dd>
+              </div>
+              <div>
+                <dt>{t('额度刷新')}</dt>
+                <dd>{t('不支持')}</dd>
+              </div>
+              <div>
+                <dt>{t('其他套餐有效期')}</dt>
+                <dd>{t('保持不变')}</dd>
+              </div>
+            </dl>
+          )}
           <Button disabled={buy.isPending} onClick={() => buy.mutate(purchase)}>
             {buy.isPending ? t('创建订单中…') : buy.isError ? t('重试同一笔订单') : t('创建订单')}
           </Button>
@@ -321,7 +337,6 @@ export function SubscriptionActions(props: {
           >
             {t('前往支付')}
           </Button>
-          <p className="muted">{t('订单可在订单页继续支付或取消。')}</p>
           <Button
             variant="quiet"
             onClick={() => {

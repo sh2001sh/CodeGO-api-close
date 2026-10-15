@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -56,6 +57,13 @@ func decodeChannel(row json.RawMessage) (sourceChannel, string, error) {
 	var c sourceChannel
 	if err := json.Unmarshal(row, &c); err != nil {
 		return c, "", err
+	}
+	for _, value := range []*string{&c.BaseURL, &c.Key} {
+		plain, err := cmSecret(*value, os.Getenv("V3_MIGRATION_SOURCE_CRYPTO_SECRET"))
+		if err != nil {
+			return c, "", fmt.Errorf("legacy: channel %d encrypted routing value cannot be restored", c.ID)
+		}
+		*value = plain
 	}
 	provider, err := providerID(c.Type)
 	if err != nil {

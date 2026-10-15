@@ -64,17 +64,12 @@ export function Refunds() {
           {t('刷新')}
         </Button>
       </div>
-      <p className="muted">
-        {t(
-          '目前支持人民币易支付订单，按未使用额度计算退款并扣除 2% 手续费。显示金额为扣除手续费后的预计到账金额，实际结果以支付平台确认为准。',
-        )}
-      </p>
       <ErrorMessage error={list.error ?? create.error ?? sync.error} />
       {list.isPending && <Loading />}
       <DataTable
         rows={list.data?.items ?? []}
         rowKey={(row) => row.trade_no}
-        empty="暂无支持退款的订单。已支付的易支付订单会显示在这里。"
+        empty="暂无支持退款的订单"
         columns={[
           { label: '订单号', render: (row) => row.trade_no },
           {
@@ -82,6 +77,7 @@ export function Refunds() {
             render: (row) => (row.order_type === 'subscription' ? t('订阅') : t('充值')),
           },
           { label: '未使用额度', render: (row) => credits(row.remaining_quota), numeric: true },
+          { label: '手续费（2%）', render: (row) => `CNY ${row.fee_amount}`, numeric: true },
           {
             label: '预计到账',
             render: (row) =>
@@ -114,11 +110,12 @@ export function Refunds() {
       />
       {selected && (
         <div className="form-panel">
-          <p className="full-width">
-            {t('确认退回订单')} {selected.trade_no} {t('的未使用额度？预计到账')}{' '}
-            {paymentAmount(selected.refund_amount_minor, 'cny')}
-            {t('。处理中会暂扣相关额度。')}
-          </p>
+          <dl className="full-width">
+            <dt>{t('订单号')}</dt>
+            <dd>{selected.trade_no}</dd>
+            <dt>{t('预计到账')}</dt>
+            <dd>{paymentAmount(selected.refund_amount_minor, 'cny')}</dd>
+          </dl>
           <Button
             variant="danger"
             disabled={create.isPending}

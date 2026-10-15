@@ -46,7 +46,11 @@ func (c *Control) keyPage(ctx context.Context, uid int64, page, limit int) (cont
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM v3_identity.api_keys WHERE user_id=$1 AND deleted_at IS NULL`, uid).Scan(&out.Total); err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT `+keyColumns+` FROM `+keyFrom+` WHERE k.user_id=$1 AND k.deleted_at IS NULL ORDER BY k.id DESC LIMIT $2 OFFSET $3`, uid, limit, (page-1)*limit)
+		// Apply the page boundary before lifetime usage aggregates. Otherwise
+		// PostgreSQL can compute each aggregate for every skipped OFFSET row.
+		rows, err := tx.Query(ctx, `SELECT `+keyColumns+` FROM (
+		 SELECT * FROM v3_identity.api_keys WHERE user_id=$1 AND deleted_at IS NULL
+		 ORDER BY id DESC LIMIT $2 OFFSET $3) k`+keyBudgetJoin+` ORDER BY k.id DESC`, uid, limit, (page-1)*limit)
 		if err != nil {
 			return err
 		}

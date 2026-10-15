@@ -18,6 +18,8 @@ import (
 // Compile+publish, so a burst of catalog writes produces one new version.
 const coalesceWindow = 200 * time.Millisecond
 
+const publishRetryDelay = time.Second
+
 // snapshotTTL is how long a superseded snapshot blob stays in Redis, so a
 // gateway that saw the old announcement late can still load it.
 const snapshotTTL = time.Hour
@@ -63,9 +65,11 @@ type Publisher struct {
 	enc   Encrypter
 	log   *slog.Logger
 
-	mu      sync.Mutex
-	pending bool
-	timer   *time.Timer
+	mu          sync.Mutex
+	pending     bool
+	dirty       bool
+	timer       *time.Timer
+	publishGate chan struct{}
 }
 
 // NewPublisher builds a Publisher. enc re-encrypts credential secrets before
@@ -77,28 +81,51 @@ func NewPublisher(pool *pgxpool.Pool, redis *redisx.Client, dec Decrypter, enc E
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Publisher{pool: pool, redis: redis, dec: dec, enc: enc, log: log}
+	return &Publisher{pool: pool, redis: redis, dec: dec, enc: enc, log: log, publishGate: make(chan struct{}, 1)}
 }
 
 // Publish schedules a compile+publish, coalescing with any already pending
 // within coalesceWindow. It never blocks on the compile itself.
 func (p *Publisher) Publish(ctx context.Context) {
 	p.mu.Lock()
+	p.dirty = true
 	if p.pending {
 		p.mu.Unlock()
 		return
 	}
 	p.pending = true
 	p.timer = time.AfterFunc(coalesceWindow, func() {
-		p.mu.Lock()
-		p.pending = false
-		p.mu.Unlock()
-		if err := p.PublishNow(context.Background()); err != nil {
-			p.log.Error("catalog: publish failed", "err", err)
-		}
+		p.publishPending(func() error { return p.PublishNow(context.Background()) })
 	})
 	p.mu.Unlock()
 	_ = ctx
+}
+
+// Keep one runner alive through the entire publication. Changes received
+// while it compiles require one more pass, since its read transaction may
+// predate them. A failed pass must also retry: the outbox already committed.
+func (p *Publisher) publishPending(publish func() error) {
+	for {
+		p.mu.Lock()
+		p.dirty = false
+		p.mu.Unlock()
+		err := publish()
+		if err != nil {
+			p.log.Error("catalog: publish failed; retrying", "err", err)
+		}
+		p.mu.Lock()
+		if err == nil && !p.dirty {
+			p.pending = false
+			p.mu.Unlock()
+			return
+		}
+		p.mu.Unlock()
+		delay := coalesceWindow
+		if err != nil {
+			delay = publishRetryDelay
+		}
+		time.Sleep(delay)
+	}
 }
 
 // publishLockKey is the pg_advisory_lock key that serializes publishers
@@ -111,14 +138,19 @@ const publishLockKey int64 = 0x7633_6361_7461 // "v3cata"
 // a dedicated connection. Without it, two publishers could compile in one
 // order and bump in the other, giving the stale snapshot the higher version.
 func (p *Publisher) PublishNow(ctx context.Context) error {
-	conn, err := p.pool.Acquire(ctx)
+	// Wait before acquiring a pooled connection. Heavy snapshots can take
+	// minutes; waiting publishers must leave connections available to billing.
+	select {
+	case p.publishGate <- struct{}{}:
+		defer func() { <-p.publishGate }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	conn, err := p.acquirePublishLock(ctx)
 	if err != nil {
-		return fmt.Errorf("catalog: acquire connection: %w", err)
+		return err
 	}
 	defer conn.Release()
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", publishLockKey); err != nil {
-		return fmt.Errorf("catalog: publish lock: %w", err)
-	}
 	defer func() {
 		// Unlock on a fresh context so a canceled ctx cannot leak the lock.
 		if _, err := conn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", publishLockKey); err != nil {
@@ -127,6 +159,38 @@ func (p *Publisher) PublishNow(ctx context.Context) error {
 		}
 	}()
 	return p.publishLocked(ctx, conn)
+}
+
+// Another process may be publishing. Never hold a pool connection while
+// waiting for it: control and worker share their pool with ordinary work.
+func (p *Publisher) acquirePublishLock(ctx context.Context) (*pgxpool.Conn, error) {
+	for {
+		conn, err := p.pool.Acquire(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("catalog: acquire connection: %w", err)
+		}
+		var locked bool
+		err = conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", publishLockKey).Scan(&locked)
+		if err == nil && locked {
+			return conn, nil
+		}
+		if err != nil {
+			// A canceled/lost reply may hide a successfully acquired session
+			// lock. Discard the connection instead of returning that lock to
+			// the pool, where a later publisher could acquire it recursively.
+			_ = conn.Conn().Close(context.Background())
+			conn.Release()
+			return nil, fmt.Errorf("catalog: publish lock: %w", err)
+		}
+		conn.Release()
+		timer := time.NewTimer(coalesceWindow)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func (p *Publisher) publishLocked(ctx context.Context, conn *pgxpool.Conn) error {
@@ -153,7 +217,17 @@ func (p *Publisher) publishLocked(ctx context.Context, conn *pgxpool.Conn) error
 	// quiet period can still load it. Older versions age out.
 	// Publication and retention are atomic. UNLINK releases retired blobs
 	// off the Redis command thread; pre-upgrade snapshots still age out by TTL.
-	if err := publishSnapshot.Run(ctx, p.redis.Client,
+	// Catalog blobs are much larger than billing commands, especially at the
+	// first publication after import. Keep the billing connection's short
+	// timeouts and give this transfer its own bounded connection.
+	options := *p.redis.Options()
+	options.ReadTimeout = 90 * time.Second
+	options.WriteTimeout = 90 * time.Second
+	options.PoolSize = 1
+	transfer := redis.NewClient(&options)
+	defer transfer.Close()
+	p.log.Info("catalog: snapshot encoded", "version", version, "bytes", len(blob))
+	if err := publishSnapshot.Run(ctx, transfer,
 		[]string{snapshotKey(version), snapshotVersionsKey, snapshotKey(version - 1)},
 		blob, version, int64(snapshotTTL/time.Second), retainedSnapshots, redisx.ChannelSnapshot).Err(); err != nil {
 		return fmt.Errorf("catalog: publish snapshot to redis: %w", err)

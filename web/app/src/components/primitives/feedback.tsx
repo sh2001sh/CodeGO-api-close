@@ -61,7 +61,6 @@ export function EmptyState(props: {
         {props.icon ?? <Inbox size={20} />}
       </div>
       <div className="empty-state-title">{t(props.title)}</div>
-      {props.description && <p>{t(props.description)}</p>}
       {props.action}
     </div>
   )

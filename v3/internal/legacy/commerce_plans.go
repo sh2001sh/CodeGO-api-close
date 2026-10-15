@@ -50,6 +50,15 @@ func (d *commerceData) projectPlan(r commerceRow) (commerceProjection, error) {
 	if err = commercePlanRuntime(values); err != nil {
 		return commerceProjection{}, err
 	}
+	if d.historicalBonusRecurrenceWaived {
+		values["group_buy_enabled"], values["lucky_draw_enabled"] = false, false
+		values["blind_box_benefit_count"] = int64(0)
+		for _, key := range []string{"group_buy_bonus2", "group_buy_bonus3", "group_buy_bonus5"} {
+			values[key] = "0"
+			values[key+"_micro"] = int64(0)
+		}
+		values["group_buy_bonus"] = int64(0)
+	}
 	switch values["reset_period"] {
 	case "never", "daily", "weekly", "monthly":
 	case "custom":

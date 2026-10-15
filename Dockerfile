@@ -1,48 +1,23 @@
-FROM oven/bun:1@sha256:0733e50325078969732ebe3b15ce4c4be5082f18c4ac1a0f0ca4839c2e4e42a7 AS builder
-
-WORKDIR /build
-ARG FRONTEND_REVISION=unknown
-COPY web/default/package.json .
-COPY web/default/bun.lock .
-RUN bun install
-COPY ./web/default .
-COPY ./VERSION .
-RUN test -n "$FRONTEND_REVISION" \
-    && printf '%s' "$FRONTEND_REVISION" > /tmp/frontend-revision \
-    && grep -q '成员调整尚未保存' src/features/dawn/market/pool-workbench.tsx \
-    && rm -rf dist \
-    && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat VERSION) bun run build \
-    && test -s dist/index.html
-
-FROM golang:1.26.1-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039 AS builder2
-ENV GO111MODULE=on CGO_ENABLED=0
-
-ARG TARGETOS
-ARG TARGETARCH
-ARG APP_PATH=./cmd/control-api
-ENV GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64}
-ENV GOEXPERIMENT=greenteagc
-
-WORKDIR /build
-
-ADD go.mod go.sum ./
+FROM mirror.gcr.io/library/golang:1.26-alpine AS build
+RUN apk add --no-cache ca-certificates git
+WORKDIR /src
+COPY v3/go.mod v3/go.sum ./
 RUN go mod download
+COPY v3/ ./
+ARG SERVICE=gateway
+ENV GOMAXPROCS=2
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    case "$SERVICE" in gateway|control|worker|migrate) ;; *) exit 2 ;; esac && \
+    CGO_ENABLED=0 go build -p 1 -trimpath -ldflags='-s -w' -o /out/server "./cmd/$SERVICE"
 
-COPY . .
-# Copy the freshly built frontend after the source tree so the embedded UI
-# cannot be shadowed by a stale or ignored web/default/dist directory.
-COPY --from=builder /build/dist ./web/default/dist
-RUN go build -ldflags "-s -w -X 'github.com/sh2001sh/new-api/internal/platform/config.Version=$(cat VERSION)'" -o app ${APP_PATH}
-
-FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tzdata libasan8 wget \
-    && rm -rf /var/lib/apt/lists/* \
-    && update-ca-certificates
-
-COPY --from=builder2 /build/app /app
+FROM mirror.gcr.io/library/alpine:3.22
+RUN apk add --no-cache ca-certificates tzdata && \
+    addgroup -S codego && adduser -S -G codego codego && \
+    mkdir -p /data/wal /data/files /data/logs && chown -R codego:codego /data && chmod 700 /data/logs
+COPY --from=build /out/server /app/server
 COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md /licenses/
-EXPOSE 3000
+COPY v3/licenses/ /licenses/v3/
+COPY v3/internal/commerce/invoicefonts/OFL.txt /licenses/invoice-fonts-OFL.txt
+USER codego
 WORKDIR /data
-ENTRYPOINT ["/app"]
+ENTRYPOINT ["/app/server"]

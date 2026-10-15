@@ -290,12 +290,66 @@ test('batch actions enable, disable and report partial failure', async ({ page }
   await expect(page.getByText('1 / 2 项操作失败，请检查后重试')).toBeVisible()
 })
 
-test('客户端配置 dialog reveals the secret and renders copyable snippets', async ({ page }) => {
-  await mockKeySecret(page, 'sk-config-secret')
+test('CC Switch configuration imports through the authenticated API without revealing a key on open', async ({
+  page,
+}) => {
+  let revealed = 0
+  await page.route('**/api/token/*/key', (route) => {
+    revealed += 1
+    return route.fulfill({ json: { success: true, data: { key: 'sk-config-secret' } } })
+  })
+  await page.route('**/api/desktop/import/deeplink', (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      target: 'ccswitch',
+      tool: 'claude',
+      token_id: 1,
+      model: 'claude-sonnet-test',
+      sonnet_model: 'claude-sonnet-test',
+    })
+    return route.fulfill({
+      json: {
+        success: true,
+        data: {
+          deep_link: 'ccswitch://v1/import?resource=provider&app=claude&name=CodeGo&apiKey=test',
+          token_name: '工作密钥',
+          expires_in_seconds: 0,
+        },
+      },
+    })
+  })
   await page.goto('/keys')
   await page.getByRole('button', { name: '客户端配置', exact: true }).first().click()
-  await expect(page.getByText('sk-config-secret', { exact: false }).first()).toBeVisible()
-  await expect(page.getByText('OPENAI_API_KEY', { exact: false }).first()).toBeVisible()
+  const dialog = page.getByRole('dialog', { name: 'CC Switch', exact: true })
+  await expect(dialog).toBeVisible()
+  expect(revealed).toBe(0)
+  await dialog.getByLabel('工具', { exact: true }).selectOption('claude')
+  await dialog.getByLabel('模型', { exact: true }).fill('claude-sonnet-test')
+  await dialog.getByLabel('Sonnet', { exact: true }).fill('claude-sonnet-test')
+  await page.screenshot({
+    path: test.info().outputPath('cc-switch.png'),
+    fullPage: true,
+    animations: 'disabled',
+  })
+  await dialog.getByRole('button', { name: '生成配置', exact: true }).click()
+  await expect(dialog.getByRole('button', { name: '导入 CC Switch', exact: true })).toBeVisible()
+  await expect(dialog.getByText('sk-config-secret', { exact: false })).toHaveCount(0)
+  await dialog.getByLabel('模型', { exact: true }).fill('updated-model')
+  await expect(dialog.getByRole('button', { name: '导入 CC Switch', exact: true })).toHaveCount(0)
+  expect(revealed).toBe(0)
+})
+
+test('CC Switch import failure keeps the model draft and supports a retry', async ({ page }) => {
+  await page.route('**/api/desktop/import/deeplink', (route) =>
+    route.fulfill({ status: 503, json: { success: false, message: '配置生成失败' } }),
+  )
+  await page.goto('/keys')
+  await page.getByRole('button', { name: '客户端配置', exact: true }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'CC Switch', exact: true })
+  await dialog.getByLabel('模型', { exact: true }).fill('gpt-test')
+  await dialog.getByRole('button', { name: '生成配置', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toHaveText('配置生成失败')
+  await expect(dialog.getByLabel('模型', { exact: true })).toHaveValue('gpt-test')
+  await expect(dialog.getByRole('button', { name: '生成配置', exact: true })).toBeEnabled()
 })
 
 test('invalid output settings keep the draft and do not send or create a response', async ({

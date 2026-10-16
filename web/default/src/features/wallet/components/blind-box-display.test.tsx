@@ -8,6 +8,7 @@ import {
   BalanceBoxPanelView,
   type BalanceBoxPanelViewProps,
 } from './balance-blind-box-view'
+import { canQuoteBlindBoxAmount } from './blind-box-dialog-data'
 import { BlindBoxSidebar } from './blind-box-sidebar'
 
 await i18n.changeLanguage('en')
@@ -121,6 +122,57 @@ test('cash payment requires an enabled activity and an available quote', () => {
     assert.equal(buttons.length, 2)
     assert.equal(!buttons[1].includes('disabled=""'), state.enabled)
   }
+})
+
+test('cash quotes wait for enabled configuration, a real channel and valid daily quantity', () => {
+  const method = { type: 'alipay', name: 'Alipay' }
+  const data = { enabled: true, inventory: balance, pay_methods: [method] }
+  assert.equal(canQuoteBlindBoxAmount(data, 1, method, true), true)
+  assert.equal(canQuoteBlindBoxAmount(null, 1, method, true), false)
+  assert.equal(canQuoteBlindBoxAmount(data, 1, method, false), false)
+  assert.equal(
+    canQuoteBlindBoxAmount({ ...data, enabled: false }, 1, method, true),
+    false
+  )
+  assert.equal(
+    canQuoteBlindBoxAmount(
+      { ...data, inventory: { ...balance, enabled: false } },
+      1,
+      method,
+      true
+    ),
+    false
+  )
+  assert.equal(canQuoteBlindBoxAmount(data, 1, null, true), false)
+  assert.equal(
+    canQuoteBlindBoxAmount({ ...data, pay_methods: [] }, 1, method, true),
+    false
+  )
+  assert.equal(
+    canQuoteBlindBoxAmount(data, 1, { type: 'removed', name: 'Removed' }, true),
+    false
+  )
+  for (const quantity of [0, -1, 1.5, NaN, Infinity, 97]) {
+    assert.equal(canQuoteBlindBoxAmount(data, quantity, method, true), false)
+  }
+  assert.equal(canQuoteBlindBoxAmount(data, 96, method, true), true)
+  assert.equal(
+    canQuoteBlindBoxAmount(
+      { ...data, inventory: { ...balance, remaining_purchase_limit: 0 } },
+      1,
+      method,
+      true
+    ),
+    false
+  )
+})
+
+test('an unavailable cash quote renders a placeholder instead of a payment value', () => {
+  const html = renderToStaticMarkup(
+    <BalanceBoxPurchaseWorkspace {...base} cashAmountDue={null} />
+  )
+  assert.doesNotMatch(html, /¥|NaN|undefined/)
+  assert.match(html, /class="tabular-nums">—<\/span>/)
 })
 
 test('purchase amounts keep credit and cash units distinct', () => {

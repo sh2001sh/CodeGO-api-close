@@ -20,6 +20,7 @@ import type {
 } from '../types'
 import { BlindBoxContent } from './blind-box-content'
 import {
+  canQuoteBlindBoxAmount,
   EMPTY_PAYMENT_STATE,
   EMPTY_PRIZE_STATE,
   type PrizeDialogState,
@@ -49,9 +50,15 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
   const [selectedQuantity, setSelectedQuantity] = useState(1)
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<PaymentMethod | null>(null)
+  const cashQuoteEnabled = canQuoteBlindBoxAmount(
+    data,
+    selectedQuantity,
+    selectedPaymentMethod,
+    !loading && !loadError
+  )
   const amountQuote = useQuery({
     queryKey: ['blind-box', 'amount', selectedQuantity],
-    enabled: selectedQuantity > 0,
+    enabled: cashQuoteEnabled,
     retry: false,
     queryFn: async ({ signal }) => {
       const response = await calculateBlindBoxAmount(
@@ -66,7 +73,9 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
     },
   })
   const amountDue =
-    amountQuote.isSuccess && !amountQuote.isFetching ? amountQuote.data : null
+    cashQuoteEnabled && amountQuote.isSuccess && !amountQuote.isFetching
+      ? amountQuote.data
+      : null
   const [showHistory, setShowHistory] = useState(false)
   const [showProps, setShowProps] = useState(false)
   const [convertingPropId, setConvertingPropId] = useState<number | null>(null)
@@ -316,7 +325,7 @@ export function BlindBoxCard(props: BlindBoxCardProps) {
           </Button>
         </div>
       ) : null}
-      {amountQuote.isError ? (
+      {cashQuoteEnabled && amountQuote.isError ? (
         <div role='alert' className='commerce-error mb-6'>
           <span>
             {t('Payment amount')}: {amountQuote.error.message || t('加载失败')}

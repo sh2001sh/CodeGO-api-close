@@ -1,7 +1,25 @@
 import interfaceI18n from '@/i18n/config'
 import { getIntlLocale } from '@/i18n/format'
 import { formatQuota } from '@/lib/format'
-import type { BlindBoxRecord } from '../types'
+import type { BlindBoxRecord, BlindBoxSelfData, PaymentMethod } from '../types'
+
+export function canQuoteBlindBoxAmount(
+  data: Pick<BlindBoxSelfData, 'enabled' | 'inventory' | 'pay_methods'> | null,
+  quantity: number,
+  method: PaymentMethod | null,
+  ready: boolean
+): boolean {
+  return Boolean(
+    ready &&
+    data?.enabled &&
+    data.inventory?.enabled &&
+    method &&
+    data.pay_methods.some((available) => available.type === method.type) &&
+    Number.isInteger(quantity) &&
+    quantity > 0 &&
+    quantity <= data.inventory.remaining_purchase_limit
+  )
+}
 
 export type PaymentStage = 'idle' | 'pending' | 'success' | 'failed'
 

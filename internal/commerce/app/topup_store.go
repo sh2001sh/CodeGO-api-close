@@ -14,6 +14,7 @@ import (
 	"math"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strings"
 	"time"
 )
@@ -68,6 +69,15 @@ func CreatePendingTopUpOrderWithBlindBoxDiscount(topUp *commerceschema.TopUp) (f
 		discountedPaidQuota := decimal.NewFromInt(basePaidQuota).
 			Mul(decimal.NewFromFloat(topUp.Money)).Div(baseMoney)
 		topUp.PaidQuota = decimal.Min(discountedPaidQuota, decimal.NewFromInt(grantedQuota)).IntPart()
+		if topUp.PaymentProvider == commerceschema.PaymentProviderEpay {
+			propID := 0
+			if prop != nil {
+				propID = prop.Id
+			}
+			if err := snapshotEpayTopupCheckout(topUp, propID); err != nil {
+				return err
+			}
+		}
 		return tx.Create(topUp).Error
 	})
 	return appliedRate, err
@@ -94,7 +104,7 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &commerceschema.TopUp{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(topUpTradeNoColumn()+" = ?", tradeNo).First(topUp).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(topUpTradeNoColumn()+" = ?", tradeNo).First(topUp).Error; err != nil {
 			return commerceschema.ErrTopUpNotFound
 		}
 		if expectedPaymentProvider != "" && topUp.PaymentProvider != expectedPaymentProvider {
@@ -145,7 +155,7 @@ func ExpireDueTopUps(limit int) (int, error) {
 	for _, id := range ids {
 		err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 			topUp := &commerceschema.TopUp{}
-			if err := tx.Set("gorm:query_option", "FOR UPDATE").
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 				Where("id = ? AND status = ? AND create_time <= ?", id, constant.TopUpStatusPending, cutoff).
 				First(topUp).Error; err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {

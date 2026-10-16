@@ -1,8 +1,10 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Calcium-Ion/go-epay/epay"
 	"github.com/sh2001sh/new-api/constant"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
@@ -16,7 +18,175 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"math"
+	"strconv"
+	"strings"
 )
+
+type epayTopupCheckoutSnapshot struct {
+	Version int `json:"version"`
+	PropID  int `json:"prop_id"`
+}
+
+// Keep the original card identity even after expiry releases its reservation.
+// This is local checkout evidence, never evidence that a provider was paid.
+func snapshotEpayTopupCheckout(topUp *commerceschema.TopUp, propID int) error {
+	payload := map[string]any{}
+	if topUp.ProviderPayload != "" {
+		if err := json.Unmarshal([]byte(topUp.ProviderPayload), &payload); err != nil {
+			return err
+		}
+		if payload == nil {
+			return errors.New("invalid epay checkout payload")
+		}
+	}
+	payload["epay_checkout"] = epayTopupCheckoutSnapshot{Version: 1, PropID: propID}
+	data, err := json.Marshal(payload)
+	if err == nil {
+		topUp.ProviderPayload = string(data)
+	}
+	return err
+}
+
+// Only HandleEpayWebhook calls this after SDK signature and merchant validation.
+// Other providers and administrator completion retain their pending-only rule.
+func completeVerifiedEpayTopUp(verified *epay.VerifyRes, params map[string]string) (*commerceschema.TopUp, int, error) {
+	if verified == nil || !verified.VerifyStatus || verified.TradeStatus != epay.StatusTradeSuccess ||
+		strings.TrimSpace(verified.ServiceTradeNo) == "" || strings.TrimSpace(verified.TradeNo) == "" {
+		return nil, 0, errors.New("invalid verified epay payment")
+	}
+	// Epay checkout uses the CNY submit.php protocol and sends no currency field.
+	// An explicit conflicting currency cannot change that original denomination.
+	if currency := params["currency"]; currency != "" && currency != "CNY" {
+		return nil, 0, errors.New("epay currency mismatch")
+	}
+	paidMoney, err := decimal.NewFromString(verified.Money)
+	if err != nil || !paidMoney.IsPositive() || !paidMoney.Equal(paidMoney.Round(2)) {
+		return nil, 0, errors.New("invalid epay payment amount")
+	}
+	var completed *commerceschema.TopUp
+	creditedQuota := 0
+	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var order commerceschema.TopUp
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("trade_no = ?", verified.ServiceTradeNo).First(&order).Error; err != nil {
+			return err
+		}
+		if order.PaymentProvider != commerceschema.PaymentProviderEpay || order.PaymentMethod == "" || order.PaymentMethod != verified.Type {
+			return commerceschema.ErrPaymentMethodMismatch
+		}
+		if math.IsNaN(order.Money) || math.IsInf(order.Money, 0) || order.Money <= 0 {
+			return errors.New("invalid epay order amount")
+		}
+		expectedMoney, err := decimal.NewFromString(strconv.FormatFloat(order.Money, 'f', 2, 64))
+		if err != nil || !paidMoney.Equal(expectedMoney) {
+			return errors.New("epay payment amount mismatch")
+		}
+		if order.ExternalPaymentID != "" && order.ExternalPaymentID != verified.TradeNo {
+			return errors.New("epay provider order mismatch")
+		}
+		if order.Status == constant.TopUpStatusSuccess {
+			if order.ExternalPaymentID == "" {
+				var previous map[string]string
+				if json.Unmarshal([]byte(order.ProviderPayload), &previous) != nil || previous["trade_no"] != verified.TradeNo {
+					return errors.New("epay original provider order evidence missing or conflicting")
+				}
+			}
+			// A replay acknowledges the original payment without touching a refund,
+			// its funding lots, or the immutable payment evidence.
+			completed = &order
+			return nil
+		}
+		if (order.Status != constant.TopUpStatusPending && order.Status != constant.TopUpStatusExpired) ||
+			order.RefundStatus != "" || order.RefundNo != "" || order.RefundProviderID != "" || order.RefundAmount != 0 || order.RefundQuota != 0 {
+			return commerceschema.ErrTopUpStatusInvalid
+		}
+		quota := calculateTopUpQuotaToAdd(&order)
+		if quota <= 0 {
+			return errors.New("invalid topup quota")
+		}
+		if err := consumeEpayTopupOriginalPropTx(tx, &order); err != nil {
+			return err
+		}
+		payload, err := json.Marshal(params)
+		if err != nil {
+			return err
+		}
+		previousStatus := order.Status
+		order.Status = constant.TopUpStatusSuccess
+		order.CompleteTime = platformruntime.GetTimestamp()
+		order.ExternalPaymentID = verified.TradeNo
+		order.ProviderPayload = string(payload)
+		result := tx.Model(&commerceschema.TopUp{}).Where("id = ? AND status = ?", order.Id, previousStatus).
+			Updates(map[string]any{"status": order.Status, "complete_time": order.CompleteTime, "external_payment_id": order.ExternalPaymentID, "provider_payload": order.ProviderPayload})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return commerceschema.ErrTopUpStatusInvalid
+		}
+		if err := creditTopUpQuotaTx(tx, &order, quota, "", ""); err != nil {
+			return err
+		}
+		completed, creditedQuota = &order, quota
+		return nil
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	if creditedQuota > 0 {
+		invalidateTopUpUserCache(completed.UserId)
+	}
+	return completed, creditedQuota, nil
+}
+
+func consumeEpayTopupOriginalPropTx(tx *gorm.DB, order *commerceschema.TopUp) error {
+	var envelope struct {
+		Checkout *epayTopupCheckoutSnapshot `json:"epay_checkout"`
+	}
+	if order.ProviderPayload != "" {
+		if err := json.Unmarshal([]byte(order.ProviderPayload), &envelope); err != nil {
+			return errors.New("invalid epay checkout evidence")
+		}
+	}
+	var props []commerceschema.BlindBoxProp
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("reserved_order_trade_no = ? AND reserved_order_type = ? AND status = ?", order.TradeNo, commerceschema.BlindBoxPropOrderTypeTopup, commerceschema.BlindBoxPropStatusReserved).Limit(2).Find(&props).Error; err != nil {
+		return err
+	}
+	if len(props) > 1 {
+		return errors.New("epay discount reservation conflict")
+	}
+	if envelope.Checkout != nil {
+		if envelope.Checkout.Version != 1 || envelope.Checkout.PropID < 0 ||
+			(envelope.Checkout.PropID == 0 && len(props) != 0) ||
+			(envelope.Checkout.PropID > 0 && (len(props) != 1 || props[0].Id != envelope.Checkout.PropID)) {
+			return errors.New("epay original discount prop released or conflicting; manual review required")
+		}
+	} else if len(props) == 0 {
+		// Legacy expiry or a conflicting reservation can erase the original
+		// card identity even while an order is pending. PaidQuota alone cannot
+		// prove no card was used. Never reconstruct it from mutable settings.
+		return errors.New("epay original discount evidence missing; manual review required")
+	}
+	if len(props) == 0 {
+		return nil
+	}
+	prop := props[0]
+	if prop.UserId != order.UserId || prop.PropType != commerceschema.BlindBoxPropTypeTopupDiscount90 {
+		return errors.New("epay original discount prop ownership mismatch")
+	}
+	now := platformruntime.GetTimestamp()
+	result := tx.Model(&commerceschema.BlindBoxProp{}).
+		Where("id = ? AND user_id = ? AND status = ? AND reserved_order_trade_no = ? AND reserved_order_type = ?", prop.Id, order.UserId, commerceschema.BlindBoxPropStatusReserved, order.TradeNo, commerceschema.BlindBoxPropOrderTypeTopup).
+		Updates(map[string]any{"status": commerceschema.BlindBoxPropStatusUsed, "used_at": now, "reserved_order_type": "", "reserved_order_trade_no": "", "updated_at": now})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return errors.New("epay original discount prop changed")
+	}
+	return nil
+}
 
 func calculateTopUpQuotaToAdd(topUp *commerceschema.TopUp) int {
 	if topUp == nil {
@@ -89,7 +259,7 @@ func CompleteTopUpByTradeNo(tradeNo string, expectedPaymentProvider string, actu
 	var quotaToAdd int
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &commerceschema.TopUp{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(topUpTradeNoColumn()+" = ?", tradeNo).First(topUp).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(topUpTradeNoColumn()+" = ?", tradeNo).First(topUp).Error; err != nil {
 			return commerceschema.ErrTopUpNotFound
 		}
 		if expectedPaymentProvider != "" && topUp.PaymentProvider != expectedPaymentProvider {
@@ -143,7 +313,7 @@ func ManualCompleteTopUp(tradeNo string, callerIP string) error {
 	var paymentMethod string
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &commerceschema.TopUp{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(topUpTradeNoColumn()+" = ?", tradeNo).First(topUp).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(topUpTradeNoColumn()+" = ?", tradeNo).First(topUp).Error; err != nil {
 			return errors.New("充值订单不存在")
 		}
 		if topUp.Status == constant.TopUpStatusSuccess {

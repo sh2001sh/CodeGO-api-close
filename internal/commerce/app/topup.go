@@ -10,7 +10,6 @@ import (
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
-	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
@@ -265,8 +264,11 @@ func HandleEpayWebhook(params map[string]string, clientIP string) (bool, error) 
 		return false, nil
 	}
 	verifyInfo, err := client.Verify(params)
-	if err != nil || !verifyInfo.VerifyStatus {
+	if err != nil || verifyInfo == nil || !verifyInfo.VerifyStatus {
 		return false, err
+	}
+	if params["pid"] != client.Config.PartnerID {
+		return false, errors.New("epay merchant mismatch")
 	}
 	if verifyInfo.TradeStatus != epay.StatusTradeSuccess {
 		return true, nil
@@ -275,28 +277,14 @@ func HandleEpayWebhook(params map[string]string, clientIP string) (bool, error) 
 	LockOrder(verifyInfo.ServiceTradeNo)
 	defer UnlockOrder(verifyInfo.ServiceTradeNo)
 
-	topUp := GetTopUpByTradeNo(verifyInfo.ServiceTradeNo)
-	if topUp == nil || topUp.PaymentProvider != commerceschema.PaymentProviderEpay {
-		return false, nil
-	}
-	if topUp.Status != constant.TopUpStatusPending {
-		return true, nil
-	}
-
-	completedTopUp, creditedQuota, completeErr := CompleteTopUpByTradeNo(
-		verifyInfo.ServiceTradeNo,
-		commerceschema.PaymentProviderEpay,
-		verifyInfo.Type,
-		"",
-		"",
-	)
+	completedTopUp, creditedQuota, completeErr := completeVerifiedEpayTopUp(verifyInfo, params)
 	if completeErr != nil {
-		logger.LogError(context.Background(), fmt.Sprintf("epay complete topup failed trade_no=%s user_id=%d client_ip=%s error=%q topup=%q", topUp.TradeNo, topUp.UserId, clientIP, completeErr.Error(), platformtext.GetJsonString(topUp)))
+		logger.LogError(context.Background(), fmt.Sprintf("epay complete topup failed trade_no=%s client_ip=%s error=%q", verifyInfo.ServiceTradeNo, clientIP, completeErr.Error()))
 		return false, completeErr
 	}
-	_ = platformdb.DB.Model(&commerceschema.TopUp{}).
-		Where("trade_no = ?", completedTopUp.TradeNo).
-		Update("provider_payload", platformtext.GetJsonString(params)).Error
+	if creditedQuota == 0 {
+		return true, nil
+	}
 
 	logger.LogInfo(context.Background(), fmt.Sprintf("epay topup success trade_no=%s user_id=%d wallet_type=%s client_ip=%s quota_to_add=%d money=%.2f", completedTopUp.TradeNo, completedTopUp.UserId, completedTopUp.WalletType, clientIP, creditedQuota, completedTopUp.Money))
 	auditapp.RecordTopupLog(completedTopUp.UserId, fmt.Sprintf("epay topup success, wallet: %s, quota: %v, paid: %.2f", completedTopUp.NormalizedWalletType(), logger.LogQuota(creditedQuota), completedTopUp.Money), clientIP, completedTopUp.PaymentMethod, "epay")

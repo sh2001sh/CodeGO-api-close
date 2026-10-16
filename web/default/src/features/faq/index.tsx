@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import { Link } from '@tanstack/react-router'
-import { ChevronRight, Code2, MessageSquareQuote, Search } from 'lucide-react'
-import { Trans, useTranslation } from 'react-i18next'
+import { ArrowUpRight, Plus } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 import { PublicLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
+import '@/features/docs/reading.css'
 
 const faqs = [
   {
@@ -36,6 +38,15 @@ const faqSeo = getPublicPageSeoEntry('/faq')
 
 export function FAQPage() {
   const { t } = useTranslation()
+  useEffect(() => {
+    const openLinkedAnswer = () => {
+      const answer = document.getElementById(window.location.hash.slice(1))
+      if (answer instanceof HTMLDetailsElement) answer.open = true
+    }
+    openLinkedAnswer()
+    window.addEventListener('hashchange', openLinkedAnswer)
+    return () => window.removeEventListener('hashchange', openLinkedAnswer)
+  }, [])
   return (
     <PublicLayout showMainContainer={false}>
       <SiteSeo
@@ -49,78 +60,42 @@ export function FAQPage() {
           mainEntity: faqs.map((item) => ({
             '@type': 'Question',
             name: t(item.q),
-            acceptedAnswer: {
-              '@type': 'Answer',
-              text: t(item.a),
-            },
+            acceptedAnswer: { '@type': 'Answer', text: t(item.a) },
           })),
         }}
       />
-      <main className='px-6 pt-28 pb-16 md:px-10 md:pt-32'>
-        <div className='mx-auto max-w-5xl'>
-          <div className='max-w-3xl space-y-4'>
-            <div className='border-border bg-muted text-muted-foreground inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold'>
-              <Search className='size-3.5' />
-              {t(faqSeo.eyebrow)}
-            </div>
-            <h1 className='text-foreground text-4xl font-semibold tracking-tight'>
-              {t(faqSeo.h1)}
-            </h1>
-            <p className='text-muted-foreground text-base leading-8'>
-              {t(faqSeo.intro)}
-            </p>
-          </div>
-
-          <div className='mt-10 grid gap-4'>
-            {faqs.map((item) => (
-              <section
+      <main
+        id='content'
+        tabIndex={-1}
+        className='market-reading px-5 pt-8 pb-24 sm:px-8 md:pt-16'
+      >
+        <div className='market-faq'>
+          <h1>{t(faqSeo.h1)}</h1>
+          <div className='market-faq-list'>
+            {faqs.map((item, index) => (
+              <details
+                id={`faq-${index + 1}`}
                 key={item.q}
-                className='border-border bg-card text-card-foreground rounded-xl border p-6'
+                className='market-faq-item'
               >
-                <div className='text-foreground text-lg font-semibold'>
+                <summary>
                   {t(item.q)}
-                </div>
-                <p className='text-muted-foreground mt-3 text-sm leading-7'>
-                  {t(item.a)}
-                </p>
-              </section>
+                  <Plus aria-hidden='true' />
+                </summary>
+                <p>{t(item.a)}</p>
+              </details>
             ))}
           </div>
-
-          <div className='mt-10 grid gap-4 md:grid-cols-2'>
-            <Link
-              to='/guide'
-              className='border-border bg-card hover:bg-muted/40 rounded-xl border p-6 transition-colors'
-            >
-              <div className='flex items-center gap-2 text-sm font-semibold'>
-                <Code2 className='text-muted-foreground size-4' />
-                <Trans i18nKey={'使用说明'} />
-              </div>
-              <p className='text-muted-foreground mt-3 text-sm leading-7'>
-                <Trans i18nKey={'看实际使用流程、脚本下载和平台入口。'} />
-              </p>
-              <div className='mt-4 inline-flex items-center gap-1 text-sm font-medium'>
-                <Trans i18nKey={'查看使用说明'} />
-                <ChevronRight className='size-4' />
-              </div>
+          <nav className='market-reading-links'>
+            <Link to='/guide'>
+              {t('使用说明')}
+              <ArrowUpRight size={20} aria-hidden='true' />
             </Link>
-            <Link
-              to='/about'
-              className='border-border bg-card hover:bg-muted/40 rounded-xl border p-6 transition-colors'
-            >
-              <div className='flex items-center gap-2 text-sm font-semibold'>
-                <MessageSquareQuote className='text-muted-foreground size-4' />
-                <Trans i18nKey={'关于 Code Go'} />
-              </div>
-              <p className='text-muted-foreground mt-3 text-sm leading-7'>
-                <Trans i18nKey={'看品牌概念、核心卖点和公开表达口径。'} />
-              </p>
-              <div className='mt-4 inline-flex items-center gap-1 text-sm font-medium'>
-                <Trans i18nKey={'了解 Code Go'} />
-                <ChevronRight className='size-4' />
-              </div>
+            <Link to='/about'>
+              {t('关于 Code Go')}
+              <ArrowUpRight size={20} aria-hidden='true' />
             </Link>
-          </div>
+          </nav>
         </div>
       </main>
     </PublicLayout>

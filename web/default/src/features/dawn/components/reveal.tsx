@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com.
 */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { getIntlLocale } from '@/i18n/format'
 
 /** 是否偏好减少动效（SSR 安全）。 */
 function prefersReducedMotion(): boolean {
@@ -51,7 +52,10 @@ export function Reveal(props: { children: ReactNode; className?: string }) {
   }, [])
 
   return (
-    <div ref={ref} className={`reveal${shown ? ' in' : ''}${props.className ? ` ${props.className}` : ''}`}>
+    <div
+      ref={ref}
+      className={`reveal${shown ? 'in' : ''}${props.className ? ` ${props.className}` : ''}`}
+    >
       {props.children}
     </div>
   )
@@ -106,7 +110,7 @@ export function CountUp(props: {
   const text =
     div > 1
       ? (value / div).toFixed(digits)
-      : Math.round(value).toLocaleString()
+      : Math.round(value).toLocaleString(getIntlLocale())
 
   return <span ref={ref}>{text}</span>
 }

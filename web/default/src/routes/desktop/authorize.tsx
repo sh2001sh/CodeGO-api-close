@@ -32,14 +32,15 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { getSelf } from '@/lib/api'
 import { formatTimestampToDate } from '@/lib/format'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PublicLayout } from '@/components/layout'
 import {
   approveDesktopAuthSession,
   getDesktopAuthSession,
   rejectDesktopAuthSession,
 } from '@/features/profile/api'
+import '@/features/setup/setup.css'
 import { getDesktopAuthorizationStatus } from './-authorize-state'
 import {
   buildDesktopAuthorizeViewModel,
@@ -137,170 +138,168 @@ function DesktopAuthorizeRoute() {
   const status = getDesktopAuthorizationStatus(session?.status)
 
   return (
-    <div className='bg-background min-h-screen px-4 py-10 sm:px-6'>
-      <div className='mx-auto flex w-full max-w-2xl flex-col gap-6'>
-        <div className='space-y-3'>
-          <Badge className='w-fit gap-2 rounded-full bg-orange-500/10 px-3 py-1 text-orange-700 hover:bg-orange-500/10'>
-            <Monitor className='h-3.5 w-3.5' />
-            Code Go Desktop
-          </Badge>
-          <div className='space-y-2'>
+    <PublicLayout showMainContainer={false}>
+      <main id='content' tabIndex={-1} className='market-desktop px-5 sm:px-8'>
+        <div className='mx-auto flex w-full max-w-2xl flex-col gap-6'>
+          <header className='market-desktop-heading'>
             <h1 className='text-3xl font-semibold tracking-tight'>
               {t('Approve desktop access')}
             </h1>
-            <p className='text-muted-foreground max-w-xl text-sm leading-6'>
-              {t(
-                'Review this desktop request before allowing it to access your Code Go account.'
-              )}
-            </p>
-          </div>
+            <span className='market-desktop-product'>
+              <Monitor className='size-4' aria-hidden='true' />
+              Code Go Desktop
+            </span>
+          </header>
+
+          <Card className='market-desktop-card'>
+            <CardHeader className='space-y-2'>
+              <CardTitle className='text-base'>
+                {t(viewModel.titleKey)}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              {sessionQuery.isLoading ? (
+                <div
+                  role='status'
+                  className='market-desktop-notice market-desktop-loading'
+                >
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                  {t('Loading desktop session...')}
+                </div>
+              ) : sessionQuery.isError ? (
+                <div
+                  role='alert'
+                  className='market-desktop-notice market-desktop-danger'
+                >
+                  <ShieldAlert className='mt-0.5 h-4 w-4 shrink-0' />
+                  <span>
+                    {viewModel.errorMessage ||
+                      t('Desktop authorization session not found')}
+                  </span>
+                </div>
+              ) : session ? (
+                <>
+                  <dl className='market-desktop-identity'>
+                    <div>
+                      <dt>{t('Device')}</dt>
+                      <dd>{session.device_name}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('Code')}</dt>
+                      <dd className='market-desktop-code'>
+                        {session.user_code}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t('Platform')}</dt>
+                      <dd>{t(viewModel.platformLabel)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('Status')}</dt>
+                      <dd>
+                        <span
+                          className='market-desktop-status'
+                          data-state={status}
+                        >
+                          {session.status}
+                        </span>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t('Requested at')}</dt>
+                      <dd>{formatTimestampToDate(session.created_at)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('Expires at')}</dt>
+                      <dd>{formatTimestampToDate(session.expires_at)}</dd>
+                    </div>
+                  </dl>
+
+                  <section className='market-desktop-permissions'>
+                    <div className='text-sm font-medium'>
+                      {t('This desktop will be allowed to')}
+                    </div>
+                    <ul className='text-muted-foreground mt-3 space-y-2 text-sm'>
+                      {(session.permissions || []).map((permission) => (
+                        <li key={permission} className='flex items-start gap-2'>
+                          <CheckCircle2
+                            className='market-desktop-permission-icon mt-0.5 h-4 w-4 shrink-0'
+                            aria-hidden='true'
+                          />
+                          <span>{t(permission)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+
+                  {viewModel.noticeKey && viewModel.noticeTone === 'success' ? (
+                    <div
+                      role='status'
+                      className='market-desktop-notice market-desktop-success'
+                    >
+                      <CheckCircle2 className='mt-0.5 h-4 w-4 shrink-0' />
+                      <span>{t(viewModel.noticeKey)}</span>
+                    </div>
+                  ) : viewModel.noticeKey &&
+                    viewModel.noticeTone === 'danger' ? (
+                    <div
+                      role='status'
+                      className='market-desktop-notice market-desktop-danger'
+                    >
+                      {status === 'rejected' ? (
+                        <ShieldX className='mt-0.5 h-4 w-4 shrink-0' />
+                      ) : (
+                        <ShieldAlert className='mt-0.5 h-4 w-4 shrink-0' />
+                      )}
+                      <span>{t(viewModel.noticeKey)}</span>
+                    </div>
+                  ) : viewModel.canReview ? (
+                    <div className='market-desktop-actions'>
+                      <Button
+                        onClick={() => approveMutation.mutate()}
+                        disabled={
+                          approveMutation.isPending || rejectMutation.isPending
+                        }
+                        className='gap-2'
+                      >
+                        {approveMutation.isPending ? (
+                          <Loader2 className='h-4 w-4 animate-spin' />
+                        ) : (
+                          <CheckCircle2 className='h-4 w-4' />
+                        )}
+                        {t(viewModel.primaryActionKey || 'Approve desktop')}
+                      </Button>
+                      <Button
+                        variant='outline'
+                        onClick={() => rejectMutation.mutate()}
+                        disabled={
+                          approveMutation.isPending || rejectMutation.isPending
+                        }
+                        className='gap-2'
+                      >
+                        {rejectMutation.isPending ? (
+                          <Loader2 className='h-4 w-4 animate-spin' />
+                        ) : (
+                          <ShieldX className='h-4 w-4' />
+                        )}
+                        {t(viewModel.secondaryActionKey || 'Reject desktop')}
+                      </Button>
+                      <Button
+                        variant='outline'
+                        onClick={() => navigate({ to: '/profile' })}
+                        className='gap-2'
+                      >
+                        <ExternalLink className='h-4 w-4' />
+                        {t('Open profile')}
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </CardContent>
+          </Card>
         </div>
-
-        <Card className='border-border/70 bg-card/95 shadow-sm'>
-          <CardHeader className='space-y-2'>
-            <CardTitle className='text-base'>{t(viewModel.titleKey)}</CardTitle>
-          </CardHeader>
-          <CardContent className='space-y-4'>
-            {sessionQuery.isLoading ? (
-              <div className='text-muted-foreground flex items-center gap-3 rounded-lg border px-4 py-4 text-sm'>
-                <Loader2 className='h-4 w-4 animate-spin' />
-                {t('Loading desktop session...')}
-              </div>
-            ) : sessionQuery.isError ? (
-              <div className='border-destructive/20 bg-destructive/5 text-destructive flex items-start gap-3 rounded-lg border px-4 py-4 text-sm'>
-                <ShieldAlert className='mt-0.5 h-4 w-4 shrink-0' />
-                <span>
-                  {viewModel.errorMessage ||
-                    t('Desktop authorization session not found')}
-                </span>
-              </div>
-            ) : session ? (
-              <>
-                <div className='bg-muted/20 grid gap-3 rounded-lg border p-4 sm:grid-cols-2'>
-                  <div>
-                    <div className='text-muted-foreground text-xs'>
-                      {t('Device')}
-                    </div>
-                    <div className='mt-1 text-sm font-medium'>
-                      {session.device_name}
-                    </div>
-                  </div>
-                  <div>
-                    <div className='text-muted-foreground text-xs'>
-                      {t('Code')}
-                    </div>
-                    <div className='mt-1 font-mono text-sm font-medium tracking-[0.18em]'>
-                      {session.user_code}
-                    </div>
-                  </div>
-                  <div>
-                    <div className='text-muted-foreground text-xs'>
-                      {t('Platform')}
-                    </div>
-                    <div className='mt-1 text-sm font-medium'>
-                      {t(viewModel.platformLabel)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className='text-muted-foreground text-xs'>
-                      {t('Status')}
-                    </div>
-                    <div className='mt-1 text-sm font-medium'>
-                      {session.status}
-                    </div>
-                  </div>
-                  <div>
-                    <div className='text-muted-foreground text-xs'>
-                      {t('Requested at')}
-                    </div>
-                    <div className='mt-1 text-sm font-medium'>
-                      {formatTimestampToDate(session.created_at)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className='text-muted-foreground text-xs'>
-                      {t('Expires at')}
-                    </div>
-                    <div className='mt-1 text-sm font-medium'>
-                      {formatTimestampToDate(session.expires_at)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className='bg-muted/20 rounded-lg border p-4'>
-                  <div className='text-sm font-medium'>
-                    {t('This desktop will be allowed to')}
-                  </div>
-                  <ul className='text-muted-foreground mt-3 space-y-2 text-sm'>
-                    {(session.permissions || []).map((permission) => (
-                      <li key={permission} className='flex items-start gap-2'>
-                        <CheckCircle2 className='mt-0.5 h-4 w-4 shrink-0 text-emerald-600' />
-                        <span>{t(permission)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {viewModel.noticeKey && viewModel.noticeTone === 'success' ? (
-                  <div className='flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-4 text-sm text-emerald-700 dark:text-emerald-300'>
-                    <CheckCircle2 className='mt-0.5 h-4 w-4 shrink-0' />
-                    <span>{t(viewModel.noticeKey)}</span>
-                  </div>
-                ) : viewModel.noticeKey && viewModel.noticeTone === 'danger' ? (
-                  <div className='border-destructive/20 bg-destructive/5 text-destructive flex items-start gap-3 rounded-lg border px-4 py-4 text-sm'>
-                    {status === 'rejected' ? (
-                      <ShieldX className='mt-0.5 h-4 w-4 shrink-0' />
-                    ) : (
-                      <ShieldAlert className='mt-0.5 h-4 w-4 shrink-0' />
-                    )}
-                    <span>{t(viewModel.noticeKey)}</span>
-                  </div>
-                ) : viewModel.canReview ? (
-                  <div className='flex flex-wrap gap-3'>
-                    <Button
-                      onClick={() => approveMutation.mutate()}
-                      disabled={
-                        approveMutation.isPending || rejectMutation.isPending
-                      }
-                      className='gap-2'
-                    >
-                      {approveMutation.isPending ? (
-                        <Loader2 className='h-4 w-4 animate-spin' />
-                      ) : (
-                        <CheckCircle2 className='h-4 w-4' />
-                      )}
-                      {t(viewModel.primaryActionKey || 'Approve desktop')}
-                    </Button>
-                    <Button
-                      variant='outline'
-                      onClick={() => rejectMutation.mutate()}
-                      disabled={
-                        approveMutation.isPending || rejectMutation.isPending
-                      }
-                      className='gap-2'
-                    >
-                      {rejectMutation.isPending ? (
-                        <Loader2 className='h-4 w-4 animate-spin' />
-                      ) : (
-                        <ShieldX className='h-4 w-4' />
-                      )}
-                      {t(viewModel.secondaryActionKey || 'Reject desktop')}
-                    </Button>
-                    <Button
-                      variant='outline'
-                      onClick={() => navigate({ to: '/profile' })}
-                      className='gap-2'
-                    >
-                      <ExternalLink className='h-4 w-4' />
-                      {t('Open profile')}
-                    </Button>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+      </main>
+    </PublicLayout>
   )
 }

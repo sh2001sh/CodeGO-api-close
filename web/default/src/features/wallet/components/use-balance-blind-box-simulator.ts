@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import interfaceI18n from '@/i18n/config'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { calculateAccountYieldRate } from '@/lib/blind-box-economics'
 import { parseQuotaFromDollars } from '@/lib/format'
@@ -22,6 +24,8 @@ interface SimulationSession {
 }
 
 export function useBalanceBlindBoxSimulator(priceUSD: number) {
+  useTranslation()
+
   const [initialAmount, setInitialAmount] = useState('100')
   const [count, setCount] = useState(1)
   const [busy, setBusy] = useState(false)
@@ -50,7 +54,11 @@ export function useBalanceBlindBoxSimulator(priceUSD: number) {
 
   const start = () => {
     if (!canStart) {
-      toast.error(`模拟初始额度需在 ${priceUSD.toFixed(2)} 至 1,000,000 之间`)
+      toast.error(
+        interfaceI18n.t('模拟初始额度需在 {{param0}} 至 1,000,000 之间', {
+          param0: priceUSD.toFixed(2),
+        })
+      )
       return
     }
     setCount(1)
@@ -81,7 +89,7 @@ export function useBalanceBlindBoxSimulator(priceUSD: number) {
         }
       )
       if (!isApiSuccess(response) || !response.data) {
-        throw new Error(response.message || '模拟抽盒失败')
+        throw new Error(response.message || interfaceI18n.t('模拟抽盒失败'))
       }
       const baseID = session.drawCount
       setSession({
@@ -102,7 +110,11 @@ export function useBalanceBlindBoxSimulator(priceUSD: number) {
         ].slice(0, 40),
       })
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : '模拟抽盒失败')
+      toast.error(
+        reason instanceof Error
+          ? reason.message
+          : interfaceI18n.t('模拟抽盒失败')
+      )
     } finally {
       setBusy(false)
     }

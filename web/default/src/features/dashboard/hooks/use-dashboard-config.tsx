@@ -1,3 +1,4 @@
+import interfaceI18n from '@/i18n/config'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -89,30 +90,36 @@ export function useSummaryCardsConfig(totals: {
   currencyLabel: string
   currencyEnabled: boolean
 }) {
+  useTranslation()
+
   return [
     {
       key: 'todayUsage',
-      title: '近 24 小时消耗',
+      title: interfaceI18n.t('近 24 小时消耗'),
       value: totals.todayUsageDisplay,
       description: totals.currencyEnabled
-        ? `最近 24 小时累计消耗（${totals.currencyLabel}）`
-        : '最近 24 小时累计消耗',
+        ? interfaceI18n.t('最近 24 小时累计消耗（{{param0}}）', {
+            param0: totals.currencyLabel,
+          })
+        : interfaceI18n.t('最近 24 小时累计消耗'),
       icon: Flame,
     },
     {
       key: 'usage',
-      title: '账本累计消耗',
+      title: interfaceI18n.t('账本累计消耗'),
       value: totals.usedDisplay,
       description: totals.currencyEnabled
-        ? `账本累计已结算用量（${totals.currencyLabel}）`
-        : '账本累计已结算用量',
+        ? interfaceI18n.t('账本累计已结算用量（{{param0}}）', {
+            param0: totals.currencyLabel,
+          })
+        : interfaceI18n.t('账本累计已结算用量'),
       icon: TrendingUp,
     },
     {
       key: 'requests',
-      title: '请求次数',
+      title: interfaceI18n.t('请求次数'),
       value: totals.requestCountDisplay,
-      description: '账号累计发起的请求数',
+      description: interfaceI18n.t('账号累计发起的请求数'),
       icon: Activity,
     },
   ]

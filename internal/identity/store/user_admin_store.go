@@ -87,7 +87,38 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*identi
 		}
 	}
 
-	if err := query.Count(&total).Error; err != nil {
+	// A narrow window query evaluates substring filters once. Fetching the page
+	// separately keeps large identity records out of PostgreSQL's window buffer.
+	if platformdb.UsingPostgreSQL && keyword != "" {
+		var matches []struct {
+			ID    int
+			Total int64
+		}
+		if err := query.Session(&gorm.Session{}).Select("id, COUNT(*) OVER() AS total").Order("id desc").Limit(num).Offset(startIdx).Scan(&matches).Error; err != nil {
+			tx.Rollback()
+			return nil, 0, err
+		}
+		if len(matches) > 0 {
+			total = matches[0].Total
+			ids := make([]int, len(matches))
+			for i, match := range matches {
+				ids[i] = match.ID
+			}
+			query = tx.Unscoped().Model(&identityschema.User{}).Where("id IN ?", ids)
+			startIdx = 0
+		} else {
+			if startIdx > 0 || num == 0 {
+				if err := query.Count(&total).Error; err != nil {
+					tx.Rollback()
+					return nil, 0, err
+				}
+			}
+			if err := tx.Commit().Error; err != nil {
+				return nil, 0, err
+			}
+			return []*identityschema.User{}, total, nil
+		}
+	} else if err := query.Count(&total).Error; err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}

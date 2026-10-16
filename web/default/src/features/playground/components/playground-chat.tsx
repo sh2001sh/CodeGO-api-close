@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react'
+import interfaceI18n from '@/i18n/config'
+import { MessageSquare, ArrowUpRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -102,29 +104,21 @@ export function PlaygroundChat({
     [editText, originalText]
   )
   return (
-    <Conversation>
+    <Conversation
+      className='pg-conversation'
+      initial='instant'
+      resize='instant'
+    >
       {/* Remove outer padding; apply padding to inner centered container to align with input */}
       <ConversationContent className='p-0'>
-        <div className='mx-auto w-full max-w-4xl px-4 py-4'>
+        <div className='pg-message-list'>
           {messages.length === 0 && (
-            <div className='playground-empty-state flex min-h-[min(52vh,34rem)] flex-col items-center justify-center px-4 py-10 text-center'>
-              <div className='playground-empty-mark border-primary/20 bg-primary/8 text-primary mb-6 flex size-16 items-center justify-center rounded-2xl border'>
-                <span
-                  className='size-5 rounded-full border-2 border-current'
-                  aria-hidden='true'
-                />
+            <div className='pg-empty-state'>
+              <div className='pg-empty-symbol' aria-hidden='true'>
+                <MessageSquare strokeWidth={1} />
+                <ArrowUpRight strokeWidth={1} />
               </div>
-              <p className='text-primary/80 mb-2 text-xs font-semibold tracking-[0.18em] uppercase'>
-                Code Go · AI coding gateway
-              </p>
-              <h1 className='text-foreground max-w-xl text-3xl font-semibold tracking-[-0.03em] text-balance sm:text-4xl'>
-                {t('A clear path from question to working code')}
-              </h1>
-              <p className='text-muted-foreground mt-4 max-w-lg text-sm leading-6 sm:text-base'>
-                {t(
-                  'Choose a model, describe what you are building, and keep the whole exchange in one calm workspace.'
-                )}
-              </p>
+              <h2>{t('新建会话')}</h2>
             </div>
           )}
           {messages.map((message, messageIndex) => {
@@ -137,17 +131,33 @@ export function PlaygroundChat({
                 <BranchMessages>
                   {versions.map((version, versionIndex) => (
                     <Message
-                      className='group flex-row-reverse'
+                      className='pg-message group flex-row-reverse'
+                      data-role={message.from}
                       from={message.from}
                       key={`${message.key}-${version.id}-${versionIndex}`}
                     >
                       <div className='w-full min-w-0 flex-1 basis-full py-1'>
+                        <div className='pg-message-heading'>
+                          <span>
+                            {message.from === 'user'
+                              ? t('You')
+                              : message.model || t('Assistant')}
+                          </span>
+                          {message.group && (
+                            <span className='pg-message-group'>
+                              {message.group}
+                            </span>
+                          )}
+                          {message.status === 'cancelled' && (
+                            <span className='pg-cancelled'>{t('已取消')}</span>
+                          )}
+                        </div>
                         {isEditing(message.key) ? (
                           <div className='space-y-2'>
                             <Textarea
                               value={editText}
                               onChange={(e) => setEditText(e.target.value)}
-                              className='font-mono text-sm'
+                              className='pg-message-edit text-base'
                               rows={8}
                             />
                             <div className='flex gap-2'>
@@ -160,7 +170,7 @@ export function PlaygroundChat({
                                   }
                                   disabled={isEmpty || !isChanged}
                                 >
-                                  Save & Submit
+                                  {interfaceI18n.t('Save & Submit')}
                                 </Button>
                               )}
                               <Button
@@ -168,14 +178,14 @@ export function PlaygroundChat({
                                 onClick={() => onSaveEdit?.(editText)}
                                 disabled={isEmpty || !isChanged}
                               >
-                                Save
+                                {interfaceI18n.t('Save')}
                               </Button>
                               <Button
                                 size='sm'
                                 variant='outline'
                                 onClick={() => onCancelEdit?.(false)}
                               >
-                                Cancel
+                                {interfaceI18n.t('Cancel')}
                               </Button>
                             </div>
                           </div>
@@ -255,15 +265,50 @@ export function PlaygroundChat({
                                   {showLoader && (
                                     <div className='flex items-center gap-2 py-2'>
                                       <Loader />
-                                      <Shimmer className='text-sm' duration={1}>
-                                        Responding...
+                                      <Shimmer
+                                        className='text-base'
+                                        duration={1}
+                                      >
+                                        {interfaceI18n.t('Responding...')}
                                       </Shimmer>
                                     </div>
+                                  )}
+
+                                  {!!message.toolCalls?.length && (
+                                    <details className='pg-tool-calls'>
+                                      <summary>
+                                        {t('工具调用')} ·{' '}
+                                        {message.toolCalls.length}
+                                      </summary>
+                                      {message.toolCalls.map((call, index) => (
+                                        <div key={call.id || index}>
+                                          <strong>
+                                            {call.function?.name ||
+                                              call.id ||
+                                              t('工具调用')}
+                                          </strong>
+                                          <pre>
+                                            {call.function?.arguments || ''}
+                                          </pre>
+                                        </div>
+                                      ))}
+                                    </details>
                                   )}
 
                                   {/* Error or Content */}
                                   {message.status === 'error' ? (
                                     <>
+                                      {showMessageContent && (
+                                        <MessageContent
+                                          variant='flat'
+                                          data-slot='message-content'
+                                          className={cn(
+                                            getMessageContentStyles()
+                                          )}
+                                        >
+                                          <Response>{displayContent}</Response>
+                                        </MessageContent>
+                                      )}
                                       <MessageError
                                         message={message}
                                         className='mb-2'
@@ -275,6 +320,7 @@ export function PlaygroundChat({
                                       <>
                                         <MessageContent
                                           variant='flat'
+                                          data-slot='message-content'
                                           className={cn(
                                             getMessageContentStyles()
                                           )}
@@ -285,6 +331,65 @@ export function PlaygroundChat({
                                       </>
                                     )
                                   )}
+                                  {!!message.attempts?.length && (
+                                    <details className='pg-attempt-history'>
+                                      <summary>
+                                        {t('历史尝试')} ·{' '}
+                                        {message.attempts.length}
+                                      </summary>
+                                      <pre>
+                                        {JSON.stringify(
+                                          message.attempts,
+                                          null,
+                                          2
+                                        )}
+                                      </pre>
+                                    </details>
+                                  )}
+                                  {isAssistant &&
+                                    !showLoader &&
+                                    (message.usage || message.requestId) && (
+                                      <div className='pg-request-metadata'>
+                                        {message.usage && (
+                                          <dl>
+                                            <div>
+                                              <dt>{t('输入')}</dt>
+                                              <dd>
+                                                {message.usage.prompt_tokens}{' '}
+                                                tokens
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>{t('输出')}</dt>
+                                              <dd>
+                                                {
+                                                  message.usage
+                                                    .completion_tokens
+                                                }{' '}
+                                                tokens
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>{t('总计')}</dt>
+                                              <dd>
+                                                {message.usage.total_tokens}{' '}
+                                                tokens
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>{t('费用')}</dt>
+                                              <dd>{t('待核验')}</dd>
+                                            </div>
+                                          </dl>
+                                        )}
+                                        {message.requestId && (
+                                          <details>
+                                            <summary>Request ID</summary>
+                                            <code>{message.requestId}</code>
+                                          </details>
+                                        )}
+                                      </div>
+                                    )}
                                 </>
                               )
                             })()}

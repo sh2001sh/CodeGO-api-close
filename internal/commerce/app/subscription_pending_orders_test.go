@@ -26,6 +26,7 @@ func TestExpireDueSubscriptionOrdersReleasesDiscountReservation(t *testing.T) {
 		UserId: user.Id, PlanId: 1, Money: 10, TradeNo: "stale-subscription-order",
 		Status: constant.TopUpStatusPending, CreateTime: time.Now().Add(-4 * time.Minute).Unix(),
 	}
+	require.NoError(t, db.FirstOrCreate(&commerceschema.SubscriptionPlan{Id: order.PlanId, Title: "Legacy checkout", DurationUnit: "month", DurationValue: 1}).Error)
 	_, err := CreatePendingSubscriptionOrderWithDiscounts(&order, order.Money)
 	require.NoError(t, err)
 

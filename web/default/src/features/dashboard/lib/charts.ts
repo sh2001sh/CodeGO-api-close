@@ -1,3 +1,4 @@
+import { getIntlLocale } from '@/i18n/format'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -79,16 +80,18 @@ function getVChartDefaultColors(domainLength: number, themeKey?: string) {
 
 function renderQuotaCompat(rawQuota: number, digits = 4): string {
   const { config, meta } = getCurrencyDisplay()
-  if (meta.kind === 'tokens') return rawQuota.toLocaleString()
+  if (meta.kind === 'tokens') return rawQuota.toLocaleString(getIntlLocale())
   const usd = rawQuota / config.quotaPerUnit
   const rate = 'exchangeRate' in meta ? meta.exchangeRate : 1
-  const symbol = 'symbol' in meta ? meta.symbol : '$'
+  const credits = meta.kind === 'currency' && meta.currencyCode === 'USD'
+  const symbol = credits ? '' : 'symbol' in meta ? meta.symbol : ''
+  const suffix = credits ? ' credits' : ''
   const value = usd * rate
   const fixed = value.toFixed(digits)
   if (parseFloat(fixed) === 0 && rawQuota > 0 && value > 0) {
-    return symbol + Math.pow(10, -digits).toFixed(digits)
+    return symbol + Math.pow(10, -digits).toFixed(digits) + suffix
   }
-  return symbol + fixed
+  return symbol + fixed + suffix
 }
 
 /**
@@ -105,7 +108,9 @@ export function processChartData(
   const otherLabel = tt('Other')
 
   const formatInt = (value: number) =>
-    Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
+    Intl.NumberFormat(getIntlLocale(), { maximumFractionDigits: 0 }).format(
+      value
+    )
   const formatQuotaValue = (value: number) => renderQuotaCompat(value, 4)
   const formatQuotaTotal = (value: number) => renderQuotaCompat(value, 2)
 
@@ -195,6 +200,7 @@ export function processChartData(
       },
       spec_line: {
         type: 'bar',
+        barMaxWidth: 12,
         data: [{ id: 'barData', values: [] }],
         xField: 'Time',
         yField: 'Usage',
@@ -225,6 +231,7 @@ export function processChartData(
       },
       spec_rank_bar: {
         type: 'bar',
+        barMaxWidth: 12,
         data: [{ id: 'rankData', values: [] }],
         xField: 'Model',
         yField: 'Count',
@@ -521,6 +528,7 @@ export function processChartData(
     },
     spec_line: {
       type: 'bar',
+      barMaxWidth: 12,
       data: [{ id: 'barData', values: lineValues }],
       xField: 'Time',
       yField: 'Usage',
@@ -529,6 +537,7 @@ export function processChartData(
       legends: { visible: true, selectMode: 'single' },
       color: modelColor,
       bar: {
+        style: { cornerRadius: [4, 4, 0, 0] },
         state: {
           hover: { stroke: '#000', lineWidth: 1 },
         },
@@ -685,6 +694,7 @@ export function processChartData(
     },
     spec_rank_bar: {
       type: 'bar',
+      barMaxWidth: 12,
       data: [{ id: 'rankData', values: rankValues }],
       xField: 'Model',
       yField: 'Count',
@@ -696,6 +706,7 @@ export function processChartData(
         text: tt('Call Count Ranking'),
       },
       bar: {
+        style: { cornerRadius: [4, 4, 0, 0] },
         state: {
           hover: { stroke: '#000', lineWidth: 1 },
         },
@@ -756,6 +767,7 @@ export function processUserChartData(
   const emptyResult: ProcessedUserChartData = {
     spec_user_rank: {
       type: 'bar',
+      barMaxWidth: 12,
       data: [{ id: 'userRankData', values: [] }],
       xField: 'rawQuota',
       yField: 'User',
@@ -855,6 +867,7 @@ export function processUserChartData(
   return {
     spec_user_rank: {
       type: 'bar',
+      barMaxWidth: 12,
       data: [{ id: 'userRankData', values: rankValues }],
       xField: 'rawQuota',
       yField: 'User',
@@ -867,6 +880,7 @@ export function processUserChartData(
       },
       legends: { visible: false },
       bar: {
+        style: { cornerRadius: [4, 4, 0, 0] },
         state: { hover: { stroke: '#000', lineWidth: 1 } },
       },
       label: {

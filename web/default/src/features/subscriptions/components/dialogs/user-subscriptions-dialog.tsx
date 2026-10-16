@@ -20,7 +20,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Plus, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -55,6 +54,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { StatusBadge } from '@/components/status-badge'
 import {
   createUserSubscription,
@@ -90,7 +90,7 @@ function getCurrencySymbol(currency?: string) {
   const normalized = (currency || '').toUpperCase()
   if (normalized === 'CNY') return 'RMB '
   if (normalized === 'EUR') return 'EUR '
-  return '$'
+  return 'credits '
 }
 
 interface Props {
@@ -151,8 +151,9 @@ export function UserSubscriptionsDialog(props: Props) {
     type: 'invalidate' | 'delete' | 'reset'
     subId: number
   } | null>(null)
-  const [editingSub, setEditingSub] =
-    useState<UserSubscriptionRecord['subscription'] | null>(null)
+  const [editingSub, setEditingSub] = useState<
+    UserSubscriptionRecord['subscription'] | null
+  >(null)
   const [editValues, setEditValues] = useState({
     start_time: '',
     end_time: '',
@@ -289,7 +290,9 @@ export function UserSubscriptionsDialog(props: Props) {
         status: editValues.status,
         amount_total: parseSubscriptionQuotaUSDToUnits(editValues.amount_total),
         amount_used: parseSubscriptionQuotaUSDToUnits(editValues.amount_used),
-        period_amount: parseSubscriptionQuotaUSDToUnits(editValues.period_amount),
+        period_amount: parseSubscriptionQuotaUSDToUnits(
+          editValues.period_amount
+        ),
         period_used: parseSubscriptionQuotaUSDToUnits(editValues.period_used),
         model_limits: editValues.model_limits || '',
       })
@@ -307,7 +310,7 @@ export function UserSubscriptionsDialog(props: Props) {
   return (
     <>
       <Sheet open={props.open} onOpenChange={props.onOpenChange}>
-        <SheetContent className='overflow-y-auto sm:max-w-2xl'>
+        <SheetContent className='commerce-dialog overflow-y-auto sm:max-w-2xl'>
           <SheetHeader>
             <SheetTitle>{t('User Subscription Management')}</SheetTitle>
             <SheetDescription>
@@ -405,7 +408,8 @@ export function UserSubscriptionsDialog(props: Props) {
                           <TableCell>
                             <div>
                               <div className='font-medium'>
-                                {planTitleMap.get(sub.plan_id) || `#${sub.plan_id}`}
+                                {planTitleMap.get(sub.plan_id) ||
+                                  `#${sub.plan_id}`}
                               </div>
                               <div className='text-muted-foreground text-xs'>
                                 {t('Source')}: {sub.source || '-'}
@@ -413,7 +417,11 @@ export function UserSubscriptionsDialog(props: Props) {
                             </div>
                           </TableCell>
                           <TableCell>
-                          <SubscriptionStatusBadge sub={sub} t={t} now={now} />
+                            <SubscriptionStatusBadge
+                              sub={sub}
+                              t={t}
+                              now={now}
+                            />
                           </TableCell>
                           <TableCell>
                             <div className='text-xs'>
@@ -421,7 +429,11 @@ export function UserSubscriptionsDialog(props: Props) {
                                 {t('Start')}: {formatTimestamp(sub.start_time)}
                               </div>
                               <div>
-                                {t('End')}: {formatTimestamp(sub.end_time)}
+                                {t('End')}:{' '}
+                                {Number(sub.credit_pack_granted_quota || 0) >
+                                  0 && sub.end_time === 0
+                                  ? t('长期有效')
+                                  : formatTimestamp(sub.end_time)}
                               </div>
                               <div>
                                 {t('Next reset')}:{' '}
@@ -518,7 +530,7 @@ export function UserSubscriptionsDialog(props: Props) {
               ? t('Confirm invalidate')
               : confirmAction.type === 'reset'
                 ? t('Confirm quota reset')
-              : t('Confirm delete')
+                : t('Confirm delete')
           }
           desc={
             confirmAction.type === 'invalidate'
@@ -529,9 +541,9 @@ export function UserSubscriptionsDialog(props: Props) {
                 ? t(
                     'This will clear the used quota, period used quota, and per-model usage for this subscription, then move the reset cycle forward. Continue?'
                   )
-              : t(
-                  'Deleting will permanently remove this subscription record (including benefit details). Continue?'
-                )
+                : t(
+                    'Deleting will permanently remove this subscription record (including benefit details). Continue?'
+                  )
           }
           handleConfirm={handleConfirmAction}
           destructive={confirmAction.type === 'delete'}
@@ -542,7 +554,7 @@ export function UserSubscriptionsDialog(props: Props) {
         open={!!editingSub}
         onOpenChange={(open) => !open && setEditingSub(null)}
       >
-        <DialogContent className='sm:max-w-xl'>
+        <DialogContent className='commerce-dialog sm:max-w-xl'>
           <DialogHeader>
             <DialogTitle>{t('Edit Subscription')}</DialogTitle>
           </DialogHeader>
@@ -603,7 +615,7 @@ export function UserSubscriptionsDialog(props: Props) {
             </div>
             <div className='space-y-2'>
               <label className='text-sm font-medium'>
-                {t('Total Quota')} (USD)
+                {t('Total Quota')} (credits)
               </label>
               <Input
                 type='number'
@@ -618,7 +630,7 @@ export function UserSubscriptionsDialog(props: Props) {
             </div>
             <div className='space-y-2'>
               <label className='text-sm font-medium'>
-                {t('Used Quota')} (USD)
+                {t('Used Quota')} (credits)
               </label>
               <Input
                 type='number'
@@ -633,7 +645,7 @@ export function UserSubscriptionsDialog(props: Props) {
             </div>
             <div className='space-y-2'>
               <label className='text-sm font-medium'>
-                {t('Period Quota')} (USD)
+                {t('Period Quota')} (credits)
               </label>
               <Input
                 type='number'
@@ -648,7 +660,7 @@ export function UserSubscriptionsDialog(props: Props) {
             </div>
             <div className='space-y-2'>
               <label className='text-sm font-medium'>
-                {t('Period Used')} (USD)
+                {t('Period Used')} (credits)
               </label>
               <Input
                 type='number'

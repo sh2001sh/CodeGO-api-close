@@ -1,3 +1,5 @@
+import interfaceI18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import { formatQuota } from '@/lib/format'
 import type { BlindBoxRecord } from '../types'
 
@@ -51,7 +53,7 @@ export const EMPTY_PRIZE_STATE: PrizeDialogState = {
 /** Format a blind-box event timestamp for the current locale. */
 export function formatBlindBoxTimestamp(timestamp?: number) {
   if (!timestamp) return '--'
-  return new Date(timestamp * 1000).toLocaleString()
+  return new Date(timestamp * 1000).toLocaleString(getIntlLocale())
 }
 
 /** Resolve the payment method name shown in blind-box purchase flows. */
@@ -61,9 +63,9 @@ export function getBlindBoxMethodLabel(
     name?: string
   } | null
 ) {
-  if (!method) return '未选择'
-  if (method.type === 'xunhu') return '微信支付（XunhuPay）'
-  return method.name || method.type || '在线支付'
+  if (!method) return interfaceI18n.t('未选择')
+  if (method.type === 'xunhu') return interfaceI18n.t('微信支付（XunhuPay）')
+  return method.name || method.type || interfaceI18n.t('在线支付')
 }
 
 /** Summarize all rewards returned by one blind-box opening. */
@@ -83,14 +85,22 @@ export function summarizeOpenResult(records: BlindBoxRecord[]) {
   )
 
   const parts: string[] = []
-  if (subscriptionHits > 0) parts.push(`${subscriptionHits} 个套餐`)
+  if (subscriptionHits > 0)
+    parts.push(
+      interfaceI18n.t('{{param0}} 个套餐', { param0: subscriptionHits })
+    )
   if (creditRecords.length > 0) {
-    parts.push(`${formatQuota(creditTotal)} 通用额度`)
+    parts.push(
+      interfaceI18n.t('{{param0}} 通用额度', {
+        param0: formatQuota(creditTotal),
+      })
+    )
   }
-  if (propHits > 0) parts.push(`${propHits} 个道具`)
+  if (propHits > 0)
+    parts.push(interfaceI18n.t('{{param0}} 个道具', { param0: propHits }))
   return parts.length > 0
-    ? `获得 ${parts.join('、')}`
-    : `获得 ${records.length} 项奖励`
+    ? interfaceI18n.t('获得 {{param0}}', { param0: parts.join('、') })
+    : interfaceI18n.t('获得 {{param0}} 项奖励', { param0: records.length })
 }
 
 /** Resolve the visual tone for a blind-box reward. */

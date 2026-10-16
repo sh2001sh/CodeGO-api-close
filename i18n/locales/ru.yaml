@@ -1,0 +1,234 @@
+common.invalid_params: Неверные параметры
+common.database_error: Ошибка базы данных, обратитесь к администратору.
+common.retry_later: Пожалуйста, повторите попытку позже
+common.generate_failed: Генерация не удалась
+common.not_found: Не найден
+common.unauthorized: Несанкционированный
+common.forbidden: Запрещено
+common.invalid_id: Неверный идентификатор
+common.id_empty: ID пуст!
+common.feature_disabled: Эта функция не включена
+common.operation_success: Операция прошла успешно
+common.operation_failed: Операция не удалась
+common.update_success: Обновление успешно выполнено
+common.update_failed: Обновление не удалось
+common.create_success: Создание успешно
+common.create_failed: Не удалось создать
+common.delete_success: Удаление успешно
+common.delete_failed: Удаление не удалось
+common.already_exists: Уже существует
+common.name_cannot_be_empty: Имя не может быть пустым
+common.batch_too_many: Слишком много элементов в пакетном запросе, максимум {{.Max}}.
+auth.not_logged_in: Неавторизованный, не авторизован и доступ token не предоставлен.
+auth.access_token_invalid: Несанкционированный, недействительный доступ token
+auth.user_info_invalid: Несанкционированная, недействительная информация пользователя
+auth.user_id_not_provided: Несанкционировано, заголовок New-Api-User не указан.
+auth.user_id_format_error: Несанкционированная ошибка формата заголовка New-Api-User
+auth.user_id_mismatch: Несанкционированный, новый-Api-пользователь не соответствует вошедшему в систему пользователю
+auth.user_banned: Пользователь заблокирован
+auth.insufficient_privilege: Неавторизованный, недостаточные привилегии
+token.name_too_long: Имя Token слишком длинное.
+token.quota_negative: Значение квоты не может быть отрицательным.
+token.quota_exceed_max: Значение квоты превышает допустимый диапазон, максимум — {{.Max}}.
+token.generate_failed: Не удалось создать token.
+token.get_info_failed: Не удалось получить информацию token. Повторите попытку позже.
+token.expired_cannot_enable: Срок действия Token истек, и его невозможно активировать. Пожалуйста, измените срок
+  действия или установите его так, чтобы он никогда не истекал.
+token.exhausted_cannot_enable: Квота Token исчерпана и не может быть включена. Пожалуйста, измените оставшуюся квоту
+  или установите ее на неограниченную.
+token.invalid: Неверный token
+token.not_provided: Token не предусмотрено
+token.expired: Срок действия этого token истек.
+token.exhausted: Квота token исчерпана TokenStatusExhausted[sk-{{.Prefix}}***{{.Suffix}}]
+token.status_unavailable: Этот статус token недоступен.
+token.db_error: Неверный token, ошибка запроса к базе данных, обратитесь к администратору.
+redemption.name_length: Длина имени кода активации должна быть в диапазоне от 1 до 20.
+redemption.count_positive: Число кодов активации должно быть больше 0.
+redemption.count_max: Одновременно можно создать максимум 100 кодов погашения.
+redemption.create_failed: Не удалось создать код активации. Повторите попытку позже.
+redemption.invalid: Неверный код активации
+redemption.used: Этот код активации был использован
+redemption.expired: Срок действия этого кода активации истек
+redemption.busy: Система занята, повторите попытку позже
+redemption.failed: Не удалось активировать. Повторите попытку позже.
+redemption.not_provided: Код активации не предоставлен.
+redemption.expire_time_invalid: Срок действия не может быть раньше текущего времени.
+user.password_login_disabled: Вход по паролю отключен администратором
+user.register_disabled: Регистрация нового пользователя отключена администратором
+user.password_register_disabled: Регистрация пароля отключена администратором, используйте стороннюю проверку аккаунта.
+user.username_or_password_empty: Имя пользователя или пароль пусты
+user.username_or_password_error: Имя пользователя или пароль неверны, или пользователь забанен.
+user.email_or_password_empty: Электронная почта или пароль пусты!
+user.exists: Имя пользователя уже существует или было удалено
+user.not_exists: Пользователь не существует
+user.disabled: Этот пользователь отключен
+user.session_save_failed: Не удалось сохранить сеанс. Повторите попытку.
+user.require_2fa: Пожалуйста, введите код двухфакторной аутентификации
+user.email_verification_required: Проверка электронной почты включена, введите адрес электронной почты и код подтверждения.
+user.verification_code_error: Код подтверждения неверен или срок его действия истек.
+user.input_invalid: Неверный ввод {{.Error}}
+user.no_permission_same_level: Нет разрешения на доступ к пользователям того же или более высокого уровня.
+user.no_permission_higher_level: Нет разрешения на обновление пользователей того же или более высокого уровня разрешений.
+user.cannot_create_higher_level: Невозможно создавать пользователей с уровнем разрешений, равным или выше вашего.
+user.cannot_delete_root_user: Не могу удалить учетную запись суперадминистратора
+user.cannot_disable_root_user: Невозможно отключить пользователя суперадминистратора
+user.cannot_demote_root_user: Невозможно понизить статус суперадминистратора
+user.already_admin: Этот пользователь уже является администратором
+user.already_common: Этот пользователь уже является обычным пользователем
+user.admin_cannot_promote: Обычные администраторы не могут повышать других пользователей до администраторов.
+user.original_password_error: Исходный пароль неверен
+user.invite_quota_insufficient: Квота приглашений недостаточна!
+user.transfer_quota_minimum: Минимальная квота на передачу — {{.Min}}!
+user.transfer_success: Перенос успешен
+user.transfer_failed: Передача не удалась {{.Error}}
+user.topup_processing: Пополнение обрабатывается. Повторите попытку позже.
+user.register_failed: Не удалось зарегистрировать пользователя или не удалось получить идентификатор пользователя.
+user.default_token_failed: Не удалось создать token по умолчанию.
+user.aff_code_empty: Партнерский код пуст!
+user.email_empty: Электронная почта пуста!
+user.github_id_empty: Идентификатор GitHub пуст!
+user.discord_id_empty: Discord ID пуст!
+user.oidc_id_empty: Идентификатор OIDC пуст!
+user.wechat_id_empty: WeChat ID пуст!
+user.telegram_id_empty: Идентификатор Telegram пуст!
+user.telegram_not_bound: Этот аккаунт Telegram не привязан
+user.linux_do_id_empty: Идентификатор DO Linux пуст!
+user.quota_change_zero: Сумма изменения квоты не может быть нулевой.
+quota.negative: Квота не может быть отрицательной!
+quota.exceed_max: Значение квоты превышает допустимый диапазон
+quota.insufficient: Недостаточная квота
+quota.warning_invalid: Неверный тип предупреждения
+quota.threshold_gt_zero: Порог предупреждения должен быть больше 0.
+subscription.not_enabled: План подписки не включен
+subscription.title_empty: Название плана подписки не может быть пустым.
+subscription.price_negative: Цена не может быть отрицательной.
+subscription.price_max: Цена не может превышать 9999.
+subscription.purchase_limit_negative: Лимит покупок не может быть отрицательным.
+subscription.quota_negative: Общая квота не может быть отрицательной.
+subscription.group_not_exists: Группа обновления не существует
+subscription.reset_cycle_gt_zero: Пользовательский цикл сброса должен быть больше 0 секунд.
+subscription.purchase_max: Лимит покупок для этого плана достигнут.
+subscription.invalid_id: Неверный идентификатор подписки
+subscription.invalid_user_id: Неверный идентификатор пользователя
+payment.not_configured: Платежная информация не настроена администратором
+payment.method_not_exists: Способ оплаты не существует
+payment.callback_error: Ошибка конфигурации URL обратного вызова
+payment.create_failed: Не удалось создать заказ
+payment.start_failed: Не удалось начать платеж
+payment.amount_too_low: Сумма плана слишком мала
+payment.stripe_not_configured: Stripe не настроен или ключ недействителен.
+payment.webhook_not_configured: Вебхук не настроен
+payment.price_id_not_configured: StripePriceId не настроен для этого плана.
+payment.creem_not_configured: CreemProductId не настроен для этого плана.
+payment.compliance_required: Функции оплаты, погашения, подписки и вознаграждения за приглашения отключены. Администратор
+  должен подтвердить условия соответствия, прежде чем включать их.
+topup.not_provided: Номер платежного поручения не указан
+topup.order_not_exists: Заказа на пополнение не существует
+topup.order_status: Ошибка статуса заказа на пополнение
+topup.failed: Не удалось пополнить счет. Повторите попытку позже.
+topup.invalid_quota: Неверная квота пополнения
+channel.not_exists: Канал не существует
+channel.id_format_error: Ошибка формата идентификатора канала
+channel.no_available_key: Нет доступных ключей каналов
+channel.get_list_failed: Не удалось получить список каналов. Повторите попытку позже.
+channel.get_tags_failed: Не удалось получить теги. Повторите попытку позже.
+channel.get_key_failed: Не удалось получить ключ канала.
+channel.get_ollama_failed: Не удалось получить модели Олламы.
+channel.query_failed: Не удалось запросить канал
+channel.no_valid_upstream: Нет действующего восходящего канала
+channel.upstream_saturated: Текущая восходящая нагрузка группы насыщена. Повторите попытку позже.
+channel.get_available_failed: Не удалось получить доступные каналы для модели {{.Model}} в группе {{.Group}}.
+model.name_empty: Название модели не может быть пустым.
+model.name_exists: Название модели уже существует
+model.id_missing: Идентификатор модели отсутствует
+model.get_list_failed: Не удалось получить список моделей. Повторите попытку позже.
+model.get_failed: Не удалось получить вышестоящие модели.
+model.reset_success: Сброс соотношения модели выполнен успешно
+vendor.name_empty: Имя поставщика не может быть пустым.
+vendor.name_exists: Название поставщика уже существует
+vendor.id_missing: Идентификатор поставщика отсутствует
+group.name_type_empty: Имя и тип группы не могут быть пустыми.
+group.name_exists: Название группы уже существует
+group.id_missing: Идентификатор группы отсутствует
+checkin.disabled: Функция регистрации не включена
+checkin.already_today: Уже зарегистрировался сегодня
+checkin.failed: Регистрация не удалась, повторите попытку позже.
+checkin.quota_failed: 'Регистрация не удалась: ошибка обновления квоты'
+passkey.create_failed: Невозможно создать учетные данные Passkey
+passkey.login_abnormal: Статус входа в систему с паролем ненормальный
+passkey.update_failed: Обновление учетных данных пароля не выполнено.
+passkey.invalid_user_id: Неверный идентификатор пользователя
+passkey.verify_failed: Не удалось проверить пароль. Повторите попытку или свяжитесь с администратором.
+twofa.not_enabled: Пользователь не включил 2FA
+twofa.user_id_empty: Идентификатор пользователя не может быть пустым.
+twofa.already_exists: У пользователя уже настроена 2FA.
+twofa.record_id_empty: Идентификатор записи 2FA не может быть пустым.
+twofa.code_invalid: Код подтверждения или резервный код неверен.
+rate_limit.reached: 'Вы достигли лимита запросов: максимальное количество запросов {{.Max}} за {{.Minutes}} минут.'
+rate_limit.total_reached: 'Вы достигли общего лимита запросов: максимальное количество запросов {{.Max}} за {{.Minutes}}
+  минут, включая неудачные попытки.'
+setting.invalid_type: Неверный тип предупреждения
+setting.webhook_empty: URL-адрес вебхука не может быть пустым.
+setting.webhook_invalid: Неверный URL вебхука
+setting.email_invalid: Неверный адрес электронной почты
+setting.bark_url_empty: URL-адрес для push-уведомлений Bark не может быть пустым.
+setting.bark_url_invalid: Неверный URL-адрес для отправки Bark
+setting.gotify_url_empty: URL-адрес сервера Gotify не может быть пустым.
+setting.gotify_token_empty: Gotify token не может быть пустым.
+setting.gotify_url_invalid: Неверный URL-адрес сервера Gotify
+setting.url_must_http: URL-адрес должен начинаться с http:// или https://.
+setting.saved: Настройки обновлены
+deployment.not_enabled: Развертывание модели io.net не включено или отсутствует ключ API.
+deployment.id_required: Требуется идентификатор развертывания.
+deployment.container_id_required: Требуется идентификатор контейнера.
+deployment.name_empty: Имя развертывания не может быть пустым.
+deployment.name_taken: Имя развертывания недоступно. Выберите другое имя.
+deployment.hardware_id_required: Требуется параметр hardware_id
+deployment.hardware_invalid_id: Неверный параметр hardware_id
+deployment.api_key_required: требуется API_key
+deployment.invalid_payload: Неверная полезная нагрузка запроса
+deployment.not_found: Детали контейнера не найдены
+performance.disk_cache_cleared: Кэш неактивного диска очищен.
+performance.stats_reset: Статистика сброшена
+performance.gc_executed: GC выполнен
+ability.db_corrupted: Согласованность базы данных нарушена
+ability.repair_running: Задача восстановления уже запущена. Повторите попытку позже.
+oauth.invalid_code: Неверный код авторизации
+oauth.get_user_error: Не удалось получить информацию о пользователе.
+oauth.account_used: Эта учетная запись привязана к другому пользователю
+oauth.unknown_provider: Неизвестный поставщик OAuth
+oauth.state_invalid: Параметр состояния пуст или не соответствует
+oauth.not_enabled: '{{.Provider}} вход и регистрация не разрешены администратором'
+oauth.user_deleted: Пользователь удален
+oauth.user_banned: Пользователь заблокирован
+oauth.bind_success: Привязка прошла успешно
+oauth.already_bound: Эта учетная запись {{.Provider}} уже привязана.
+oauth.connect_failed: Невозможно подключиться к серверу {{.Provider}}. Повторите попытку позже.
+oauth.token_failed: Не удалось получить token от {{.Provider}}, проверьте настройки.
+oauth.user_info_empty: '{{.Provider}} вернул пустую информацию о пользователе, проверьте настройки.'
+oauth.trust_level_low: Уровень доверия Linux DO не соответствует минимуму, требуемому администратором
+redeem.failed: Не удалось активировать. Повторите попытку позже.
+user.create_default_token_error: Не удалось создать token по умолчанию.
+common.uuid_duplicate: Пожалуйста, повторите попытку, система сгенерировала дубликат UUID!
+common.invalid_input: Неверный ввод
+distributor.invalid_request: 'Неверный запрос: {{.Error}}.'
+distributor.invalid_channel_id: Неверный идентификатор канала
+distributor.channel_disabled: Этот канал отключен
+distributor.affinity_channel_disabled: Канал, выбранный по привязке каналов, отключен, а повторная попытка остановлена
+  правилом. Пожалуйста, свяжитесь с администратором
+distributor.token_no_model_access: У этого token нет доступа ни к одной модели.
+distributor.token_model_forbidden: Этот token не имеет доступа к модели {{.Model}}.
+distributor.model_name_required: Название модели не указано, название модели не может быть пустым.
+distributor.invalid_playground_request: 'Неверный запрос игровой площадки: {{.Error}}.'
+distributor.group_access_denied: Нет разрешения на доступ к этой группе
+distributor.get_channel_failed: 'Не удалось получить доступный канал для модели {{.Model}} в группе {{.Group}} (дистрибьютор):
+  {{.Error}}.'
+distributor.no_available_channel: Нет доступного канала для модели {{.Model}} в группе {{.Group}} (дистрибьютор)
+distributor.invalid_request_parse_model: Неверный запрос, невозможно проанализировать модель
+custom_oauth.not_found: Пользовательский поставщик OAuth не найден
+custom_oauth.slug_empty: Слаг не может быть пустым
+custom_oauth.slug_exists: Слизняк уже существует
+custom_oauth.name_empty: Имя провайдера не может быть пустым.
+custom_oauth.has_bindings: Невозможно удалить поставщика с существующими привязками пользователей.
+custom_oauth.binding_not_found: Привязка OAuth не найдена
+custom_oauth.provider_id_field_invalid: Не удалось извлечь идентификатор пользователя из ответа поставщика.

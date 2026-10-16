@@ -13,6 +13,46 @@ import (
 	"time"
 )
 
+func TestSubscriptionPurchaseRenewalUpgradeWithoutLuckyNumberTables(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := &identityschema.User{Id: 9931, Username: "legacy-benefit-user", Status: constant.UserStatusEnabled}
+	plan := &commerceschema.SubscriptionPlan{
+		Id: 9932, Title: "Lite monthly", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		DurationUnit: commerceschema.SubscriptionDurationMonth, DurationValue: 1, PriceAmount: 49,
+		TotalAmount: quotaUnitsFromUSD(300), MembershipTier: commerceschema.SubscriptionMembershipTierLite,
+		LuckyDrawEnabled: true, BlindBoxBenefitCount: 1,
+	}
+	higher := &commerceschema.SubscriptionPlan{
+		Id: 9933, Title: "Standard monthly", PlanType: commerceschema.SubscriptionPlanTypeMonthly,
+		DurationUnit: commerceschema.SubscriptionDurationMonth, DurationValue: 1, PriceAmount: 89,
+		TotalAmount: quotaUnitsFromUSD(620), MembershipTier: commerceschema.SubscriptionMembershipTierStandard,
+		LuckyDrawEnabled: true, BlindBoxBenefitCount: 2,
+	}
+	require.NoError(t, db.Create(user).Error)
+	require.NoError(t, db.Create(plan).Error)
+	require.NoError(t, db.Create(higher).Error)
+	subscription, preview, err := ApplySubscriptionPurchaseTx(db, user.Id, plan, "order")
+	require.NoError(t, err)
+	require.NotNil(t, subscription)
+	require.Equal(t, commerceschema.SubscriptionPurchaseActionSubscribe, preview.Action)
+	require.NoError(t, db.Model(subscription).Update("amount_used", plan.TotalAmount/2).Error)
+	_, preview, err = ApplySubscriptionPurchaseTx(db, user.Id, plan, "order")
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.SubscriptionPurchaseActionRenew, preview.Action)
+	_, preview, err = ApplySubscriptionPurchaseTx(db, user.Id, higher, "order")
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.SubscriptionPurchaseActionUpgrade, preview.Action)
+	subscriptions, err := GetAllActiveUserSubscriptions(user.Id)
+	require.NoError(t, err)
+	require.NotEmpty(t, subscriptions)
+	require.False(t, db.Migrator().HasTable(&commerceschema.SubscriptionLuckyNumber{}))
+	require.False(t, db.Migrator().HasTable(&commerceschema.SubscriptionLuckyDraw{}))
+	require.False(t, db.Migrator().HasTable(&commerceschema.SubscriptionBlindBoxBenefitCycle{}))
+	var benefitOrders int64
+	require.NoError(t, db.Model(&commerceschema.BlindBoxOrder{}).Where("source = ?", commerceschema.BlindBoxOrderSourceSubscriptionBenefit).Count(&benefitOrders).Error)
+	require.Zero(t, benefitOrders)
+}
+
 func TestResolveSubscriptionPurchasePreview_UpgradeUsesFullTargetPrice(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 

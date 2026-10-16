@@ -9,11 +9,12 @@ import (
 )
 
 const (
-	SubscriptionDurationYear   = "year"
-	SubscriptionDurationMonth  = "month"
-	SubscriptionDurationDay    = "day"
-	SubscriptionDurationHour   = "hour"
-	SubscriptionDurationCustom = "custom"
+	SubscriptionDurationPermanent = "permanent"
+	SubscriptionDurationYear      = "year"
+	SubscriptionDurationMonth     = "month"
+	SubscriptionDurationDay       = "day"
+	SubscriptionDurationHour      = "hour"
+	SubscriptionDurationCustom    = "custom"
 )
 
 const (
@@ -51,10 +52,11 @@ const (
 )
 
 const (
-	SubscriptionPlanTypeMonthly = "monthly"
-	SubscriptionPlanTypeWeekly  = "weekly"
-	SubscriptionPlanTypeDaily   = "daily"
-	SubscriptionPlanTypeStarter = "starter"
+	SubscriptionPlanTypeMonthly    = "monthly"
+	SubscriptionPlanTypeCreditPack = "credit_pack"
+	SubscriptionPlanTypeWeekly     = "weekly"
+	SubscriptionPlanTypeDaily      = "daily"
+	SubscriptionPlanTypeStarter    = "starter"
 )
 
 // SubscriptionPlan is a purchasable subscription product.
@@ -143,6 +145,8 @@ func inferSubscriptionPlanType(plan *SubscriptionPlan) string {
 
 func normalizeSubscriptionPlanType(planType string) string {
 	switch strings.TrimSpace(strings.ToLower(planType)) {
+	case SubscriptionPlanTypeCreditPack:
+		return SubscriptionPlanTypeCreditPack
 	case SubscriptionPlanTypeStarter:
 		return SubscriptionPlanTypeStarter
 	case SubscriptionPlanTypeWeekly:
@@ -167,16 +171,19 @@ type SubscriptionOrder struct {
 	FirstPurchaseDiscountStartAt    int64   `json:"first_purchase_discount_start_at" gorm:"type:bigint;not null;default:0"`
 	FirstPurchaseDiscountEndAt      int64   `json:"first_purchase_discount_end_at" gorm:"type:bigint;not null;default:0"`
 
-	TradeNo              string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	PaymentMethod        string  `json:"payment_method" gorm:"type:varchar(50)"`
-	PaymentProvider      string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
-	PurchaseType         string  `json:"purchase_type" gorm:"type:varchar(32);default:'normal';index"`
-	GroupBuyId           int64   `json:"group_buy_id" gorm:"type:bigint;default:0;index"`
-	TargetSubscriptionId int     `json:"target_subscription_id" gorm:"type:int;default:0;index"`
-	FuelQuota            int64   `json:"fuel_quota" gorm:"type:bigint;default:0"`
-	FuelUnitPrice        float64 `json:"fuel_unit_price" gorm:"type:decimal(10,4);default:0"`
-	FuelExpiresAt        int64   `json:"fuel_expires_at" gorm:"type:bigint;default:0"`
-	Status               string  `json:"status"`
+	TradeNo                   string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	PaymentMethod             string  `json:"payment_method" gorm:"type:varchar(50)"`
+	PaymentProvider           string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
+	PurchaseType              string  `json:"purchase_type" gorm:"type:varchar(32);default:'normal';index"`
+	GroupBuyId                int64   `json:"group_buy_id" gorm:"type:bigint;default:0;index"`
+	TargetSubscriptionId      int     `json:"target_subscription_id" gorm:"type:int;default:0;index"`
+	FuelQuota                 int64   `json:"fuel_quota" gorm:"type:bigint;default:0"`
+	CreditPackQuota           int64   `json:"credit_pack_quota" gorm:"type:bigint;not null;default:0"`
+	CreditPackPaidQuota       int64   `json:"credit_pack_paid_quota" gorm:"type:bigint;not null;default:0"`
+	CreditPackChannelShareBPS int64   `json:"credit_pack_channel_share_bps" gorm:"type:bigint;not null;default:0"`
+	FuelUnitPrice             float64 `json:"fuel_unit_price" gorm:"type:decimal(10,4);default:0"`
+	FuelExpiresAt             int64   `json:"fuel_expires_at" gorm:"type:bigint;default:0"`
+	Status                    string  `json:"status"`
 	// FulfillmentStatus separates provider payment confirmation from benefits delivery.
 	// Existing historical rows default to completed so migrations cannot re-grant benefits.
 	FulfillmentStatus string  `json:"fulfillment_status" gorm:"type:varchar(32);default:'completed';index"`
@@ -198,6 +205,11 @@ type UserSubscription struct {
 	UserId int `json:"user_id" gorm:"index;index:idx_user_sub_active,priority:1"`
 	PlanId int `json:"plan_id" gorm:"index"`
 
+	// Immutable purchase snapshots identify the new one-times-price funding source.
+	CreditPackGrantedQuota    int64 `json:"credit_pack_granted_quota" gorm:"type:bigint;not null;default:0"`
+	CreditPackPaidQuota       int64 `json:"credit_pack_paid_quota" gorm:"type:bigint;not null;default:0"`
+	CreditPackChannelShareBPS int64 `json:"credit_pack_channel_share_bps" gorm:"type:bigint;not null;default:0"`
+
 	AmountTotal  int64  `json:"amount_total" gorm:"type:bigint;not null;default:0"`
 	AmountUsed   int64  `json:"amount_used" gorm:"type:bigint;not null;default:0"`
 	PeriodAmount int64  `json:"period_amount" gorm:"type:bigint;not null;default:0"`
@@ -217,7 +229,6 @@ type UserSubscription struct {
 	LuckyBenefitCycle string `json:"lucky_benefit_cycle" gorm:"type:varchar(128);default:''"`
 
 	ConversionPreview *SubscriptionClaudeConversionPreview `json:"conversion_preview,omitempty" gorm:"-"`
-	LuckyNumber       *SubscriptionLuckyNumber             `json:"lucky_number,omitempty" gorm:"-"`
 	MembershipTier    string                               `json:"membership_tier,omitempty" gorm:"type:varchar(16);default:'none';index"`
 	CreatedAt         int64                                `json:"created_at" gorm:"bigint"`
 	UpdatedAt         int64                                `json:"updated_at" gorm:"bigint"`

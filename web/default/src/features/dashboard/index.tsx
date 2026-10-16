@@ -20,13 +20,14 @@ import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
-import { DawnOverviewDashboard } from '@/features/dashboard/components/overview/dawn-overview-dashboard'
 import { ROLE } from '@/lib/roles'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import { FadeIn } from '@/components/page-transition'
 import { SiteSeo } from '@/components/seo'
+import { DawnOverviewDashboard } from '@/features/dashboard/components/overview/dawn-overview-dashboard'
+import './analytics.css'
 import { ModelCacheAnalysis } from './components/models/model-cache-analysis'
 import { ModelOperationsOverview } from './components/models/model-operations-overview'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
@@ -127,10 +128,7 @@ function PerformanceOverviewFallback() {
   )
 }
 
-const SECTION_META: Record<
-  DashboardSectionId,
-  { titleKey: string }
-> = {
+const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   overview: {
     titleKey: 'Overview',
   },
@@ -226,7 +224,7 @@ export function Dashboard() {
       {activeSection === 'overview' ? (
         <DawnOverviewDashboard />
       ) : (
-        <SectionPageLayout>
+        <SectionPageLayout kicker=''>
           <SiteSeo
             title={t(meta.titleKey)}
             description={t(meta.titleKey)}
@@ -235,10 +233,18 @@ export function Dashboard() {
           />
           <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
           <SectionPageLayout.Content>
-            <div className='space-y-3 sm:space-y-4'>
+            <div className='console-analytics space-y-6 sm:space-y-8'>
+              {activeSection === 'users' && !isAdmin && (
+                <div role='alert' className='border-y py-12 text-base'>
+                  {t('无权访问')}
+                </div>
+              )}
               <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
                 {showSectionTabs ? (
-                  <Tabs value={activeSection} onValueChange={handleSectionChange}>
+                  <Tabs
+                    value={activeSection}
+                    onValueChange={handleSectionChange}
+                  >
                     <TabsList className='h-auto max-w-full flex-wrap justify-start'>
                       {visibleSections.map((section) => (
                         <TabsTrigger key={section} value={section}>
@@ -276,7 +282,9 @@ export function Dashboard() {
                       <TabsTrigger value='overview'>
                         {t('Operations overview')}
                       </TabsTrigger>
-                      <TabsTrigger value='trend'>{t('Trend analysis')}</TabsTrigger>
+                      <TabsTrigger value='trend'>
+                        {t('Trend analysis')}
+                      </TabsTrigger>
                       <TabsTrigger value='cache'>{t('缓存分析')}</TabsTrigger>
                     </TabsList>
                   </Tabs>
@@ -311,7 +319,7 @@ export function Dashboard() {
                   )}
                 </>
               )}
-              {activeSection === 'users' && (
+              {activeSection === 'users' && isAdmin && (
                 <FadeIn>
                   <Suspense fallback={<ModelChartsFallback />}>
                     <LazyUserCharts />

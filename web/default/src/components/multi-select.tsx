@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import * as React from 'react'
+import interfaceI18n from '@/i18n/config'
 import { Command as CommandPrimitive } from 'cmdk'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -87,7 +88,7 @@ export function MultiSelect({
                 <Button
                   variant='ghost'
                   size='icon-sm'
-                  aria-label='Remove'
+                  aria-label={interfaceI18n.t('Remove')}
                   className='ml-1 size-auto p-0'
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {

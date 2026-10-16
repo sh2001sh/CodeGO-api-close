@@ -35,6 +35,11 @@ export interface GroupModelRequestStatus {
 }
 
 export interface MarketplaceGroup {
+  custom_name?: string
+  description?: string
+  tags?: string[]
+  shop_id?: number
+  shop_name?: string
   model_prices?: Record<string, ChannelModelPrice>
   id: string
   channel_id: string
@@ -55,6 +60,7 @@ export interface MarketplaceGroup {
   multiplier: number
   subscription_enabled: boolean
   subscription_multiplier: number
+  credit_pack_supported?: boolean
   multiplier_card_supported: boolean
   multiplier_card_user_enabled: boolean
   models: string[]
@@ -173,7 +179,34 @@ export interface MarketplaceGroupHighlights {
   fastest?: MarketplaceGroupHighlight | null
 }
 
+export interface OwnerChannelIndexItem {
+  id: string
+  system_display_name: string
+  custom_name?: string
+  submitted_source_label: string
+  search_text: string
+  multiplier: number
+  lifecycle_status: MarketplaceStatus
+  verification_status: string
+  connectivity_test_status: ConnectivityTestStatus
+  needs_attention: boolean
+  checking: boolean
+  total_income: number
+  deleted_at?: string | null
+}
+
+export type OwnerChannelOption = Pick<
+  MarketplaceChannel,
+  'id' | 'system_display_name' | 'submitted_source_label' | 'deleted_at'
+>
+
 export interface MarketplaceChannel {
+  credit_pack_supported?: boolean
+  custom_name?: string
+  description?: string
+  tags?: string[]
+  moderation_status?: string
+  moderation_reason?: string
   id: string
   owner_user_id: number
   owner_external_id: string
@@ -243,6 +276,8 @@ export interface MarketplaceChannelUserBlockList {
 }
 
 export interface AdminMarketplaceChannelFilters {
+  page?: number
+  pageSize?: number
   search?: string
   status?: string
   source?: string
@@ -296,6 +331,10 @@ export interface AdminOwnerIncomeReleaseResult {
 }
 
 export interface ChannelFormValues {
+  credit_pack_supported: boolean
+  custom_name?: string
+  description?: string
+  tags?: string[]
   provider_type: string
   source_label: string
   base_url: string
@@ -317,6 +356,10 @@ export interface ChannelFormValues {
 }
 
 export interface ChannelUpdateValues {
+  credit_pack_supported?: boolean
+  custom_name?: string
+  description?: string
+  tags?: string[]
   provider_type?: string
   source_label?: string
   declared_models?: string[]
@@ -348,6 +391,8 @@ export interface ChannelModelPrice {
 }
 
 export interface GroupFilters {
+  shop_id?: number
+  tag?: string
   separate_official?: boolean
   search: string
   model: string
@@ -361,7 +406,7 @@ export interface GroupFilters {
   window_hours: number
   page: number
   page_size: number
-  multiplier_card?: string
+  credit_pack?: '' | 'supported' | 'unsupported'
 }
 
 export interface TokenOption {
@@ -443,6 +488,7 @@ export interface MarketplaceOwnerUsageLogFilters {
 }
 
 export interface MarketplaceAutoRoutePoolItem {
+  credit_pack_supported?: boolean
   group_id: string
   source_type: 'official' | 'marketplace_user'
   public_slug: string
@@ -503,6 +549,7 @@ export interface MarketplaceRoutePool extends Omit<
 
 export interface MarketplaceRoutePoolAutoBuild {
   enabled: boolean
+  credit_pack_only: boolean
   schedule: 'interval' | 'daily'
   interval_minutes: number
   daily_time: string

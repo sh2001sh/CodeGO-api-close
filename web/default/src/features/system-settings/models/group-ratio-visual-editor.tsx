@@ -20,13 +20,7 @@ import { useState, useMemo, useEffect, useCallback, memo } from 'react'
 import { Pencil, Plus, Trash2, GripVertical, ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Collapsible,
@@ -36,7 +30,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -420,9 +413,6 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
       <Card className={sectionCardClassName}>
         <CardHeader className={sectionHeaderClassName}>
           <CardTitle>{t('Top-up group ratios')}</CardTitle>
-          <CardDescription>
-            {t('Multipliers for recharge pricing based on user groups.')}
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className='space-y-4'>
@@ -491,11 +481,6 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
       <Card className={sectionCardClassName}>
         <CardHeader className={sectionHeaderClassName}>
           <CardTitle>{t('Inter-group ratio overrides')}</CardTitle>
-          <CardDescription>
-            {t(
-              'Custom multipliers when specific user groups use specific token groups. Example: VIP users get 0.9x rate when using "edit_this" group tokens.'
-            )}
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className='space-y-4'>
@@ -613,11 +598,6 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
       <Card className={sectionCardClassName}>
         <CardHeader className={sectionHeaderClassName}>
           <CardTitle>{t('Auto assignment order')}</CardTitle>
-          <CardDescription>
-            {t(
-              'Priority order for automatic group assignment. New tokens rotate through this list.'
-            )}
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className='space-y-4'>
@@ -678,12 +658,9 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
 
       {/* Auto Group Dialog */}
       <Dialog open={autoGroupDialogOpen} onOpenChange={setAutoGroupDialogOpen}>
-        <DialogContent>
+        <DialogContent className='settings-dialog'>
           <DialogHeader>
             <DialogTitle>{t('Add auto group')}</DialogTitle>
-            <DialogDescription>
-              {t('Add a group identifier to the auto assignment list.')}
-            </DialogDescription>
           </DialogHeader>
           <div className='space-y-4 py-4'>
             <div className='space-y-2'>
@@ -709,12 +686,9 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
 
       {/* User Group Dialog */}
       <Dialog open={userGroupDialogOpen} onOpenChange={setUserGroupDialogOpen}>
-        <DialogContent>
+        <DialogContent className='settings-dialog'>
           <DialogHeader>
             <DialogTitle>{t('Add user group')}</DialogTitle>
-            <DialogDescription>
-              {t('Create a new user group to configure ratio overrides for.')}
-            </DialogDescription>
           </DialogHeader>
           <div className='space-y-4 py-4'>
             <div className='space-y-2'>
@@ -847,11 +821,6 @@ function GroupPricingTable({
         <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
           <div>
             <CardTitle>{t('Pricing groups')}</CardTitle>
-            <CardDescription>
-              {t(
-                'Edit billing ratios and user-selectable groups in one table.'
-              )}
-            </CardDescription>
           </div>
           <Button onClick={addRow} size='sm' className='sm:self-start'>
             <Plus className='mr-2 h-4 w-4' />
@@ -1017,16 +986,13 @@ function SimpleGroupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className='settings-dialog'>
         <DialogHeader>
           <DialogTitle>
             {editData
               ? t('Edit {{title}}', { title })
               : t('Add {{title}}', { title })}
           </DialogTitle>
-          <DialogDescription>
-            {t('Configure the ratio for this group.')}
-          </DialogDescription>
         </DialogHeader>
         <div className='space-y-4 py-4'>
           <div className='space-y-2'>
@@ -1108,21 +1074,11 @@ function GroupOverrideDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className='settings-dialog'>
         <DialogHeader>
           <DialogTitle>
             {editData ? t('Edit ratio override') : t('Add ratio override')}
           </DialogTitle>
-          <DialogDescription>
-            {userGroup
-              ? t(
-                  'Configure a custom ratio for "{{userGroup}}" users when using a specific token group.',
-                  { userGroup }
-                )
-              : t(
-                  'Configure a custom ratio for when users use a specific token group.'
-                )}
-          </DialogDescription>
         </DialogHeader>
         <div className='space-y-4 py-4'>
           <div className='space-y-2'>
@@ -1133,9 +1089,6 @@ function GroupOverrideDialog({
               placeholder={t('edit_this')}
               disabled={!!editData}
             />
-            <p className='text-muted-foreground text-xs'>
-              {t('The token group that will have a custom ratio')}
-            </p>
           </div>
           <div className='space-y-2'>
             <Label>{t('Ratio')}</Label>

@@ -52,6 +52,14 @@ func TestAutomaticChannelTestSkipsManuallyDisabledChannel(t *testing.T) {
 	}))
 }
 
+func TestMarketplaceChannelUsesOwnerControlledProbes(t *testing.T) {
+	channel := &gatewayschema.Channel{Status: constant.ChannelStatusEnabled, ChannelScope: gatewayschema.ChannelScopeExternal}
+	require.False(t, shouldRunChannelTest(channel, false))
+	require.True(t, shouldRunChannelTest(channel, true), "explicit administrator testing remains available")
+	channel.Status = constant.ChannelStatusManuallyDisabled
+	require.False(t, shouldRunChannelTest(channel, true))
+}
+
 func TestSettleTestQuotaUsesTieredBilling(t *testing.T) {
 	info := &relaycommon.RelayInfo{
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
@@ -107,4 +115,26 @@ func TestBuildTestLogOtherInjectsTieredInfo(t *testing.T) {
 	require.Equal(t, "tiered_expr", other["billing_mode"])
 	require.Equal(t, "base", other["matched_tier"])
 	require.NotEmpty(t, other["expr_b64"])
+}
+
+func TestPresentationPromptPreservesEndpointTokenRules(t *testing.T) {
+	for _, model := range []string{"gpt-5", "o3", "gemini-2.5-pro", "gpt-5-codex"} {
+		request := buildTestRequest(model, "", nil, false)
+		applyChannelTestPrompt(request, "Review data and return SAFE or AD")
+		switch req := request.(type) {
+		case *dto.GeneralOpenAIRequest:
+			require.Contains(t, req.Messages[0].Content, "SAFE")
+			if req.MaxCompletionTokens != nil {
+				require.Nil(t, req.MaxTokens, "max_tokens and max_completion_tokens must not coexist")
+				require.GreaterOrEqual(t, *req.MaxCompletionTokens, uint(1024))
+			} else {
+				require.GreaterOrEqual(t, *req.MaxTokens, uint(1024))
+			}
+		case *dto.OpenAIResponsesRequest:
+			require.Contains(t, string(req.Input), "SAFE")
+			require.Equal(t, uint(1024), *req.MaxOutputTokens)
+		default:
+			t.Fatalf("unexpected request type %T", request)
+		}
+	}
 }

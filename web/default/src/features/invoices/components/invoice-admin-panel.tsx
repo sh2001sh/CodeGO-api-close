@@ -18,17 +18,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import i18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import { FileCheck2, XCircle } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -66,7 +61,7 @@ const emptyDraft = (): AdminDraft => ({
 
 function formatTime(timestamp: number) {
   return timestamp
-    ? new Intl.DateTimeFormat('zh-CN', {
+    ? new Intl.DateTimeFormat(getIntlLocale(), {
         dateStyle: 'short',
         timeStyle: 'short',
       }).format(timestamp * 1000)
@@ -100,7 +95,11 @@ export function InvoiceAdminPanel() {
             }
       ),
     onSuccess: () => {
-      toast.success(draft.status === 'issued' ? '已登记开票信息' : '已驳回申请')
+      toast.success(
+        draft.status === 'issued'
+          ? i18n.t('已登记开票信息')
+          : i18n.t('已驳回申请')
+      )
       setSelected(null)
       void queryClient.invalidateQueries({
         queryKey: ['admin-invoice-requests'],
@@ -136,13 +135,6 @@ export function InvoiceAdminPanel() {
             <CardTitle>
               <Trans i18nKey={'发票审核'} />
             </CardTitle>
-            <CardDescription className='mt-1'>
-              <Trans
-                i18nKey={
-                  '仅管理员可查看抬头、税号和接收邮箱，并登记发票号码或驳回原因。'
-                }
-              />
-            </CardDescription>
           </div>
           <NativeSelect
             value={status}
@@ -262,7 +254,7 @@ export function InvoiceAdminPanel() {
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
       >
-        <DialogContent className='max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-lg'>
+        <DialogContent className='commerce-dialog max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle>
               <Trans i18nKey={'处理发票申请'} />

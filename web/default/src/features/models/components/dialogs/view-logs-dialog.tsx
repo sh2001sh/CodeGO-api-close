@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import interfaceI18n from '@/i18n/config'
 import { Download, Loader2, RefreshCcw, Terminal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -274,7 +275,7 @@ export function ViewLogsDialog({
                 <SelectGroup>
                   <SelectItem value='stdout'>stdout</SelectItem>
                   <SelectItem value='stderr'>stderr</SelectItem>
-                  <SelectItem value='all'>all</SelectItem>
+                  <SelectItem value='all'>{interfaceI18n.t('all')}</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>

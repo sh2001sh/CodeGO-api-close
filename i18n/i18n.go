@@ -20,6 +20,10 @@ const (
 	LangZhCN    = "zh-CN"
 	LangZhTW    = "zh-TW"
 	LangEn      = "en"
+	LangFr      = "fr"
+	LangRu      = "ru"
+	LangJa      = "ja"
+	LangVi      = "vi"
 	DefaultLang = LangEn // Fallback to English if language not supported
 )
 
@@ -41,9 +45,8 @@ func Init() error {
 		bundle.RegisterUnmarshalFunc("yaml", yaml.Unmarshal)
 
 		// Load embedded translation files
-		files := []string{"locales/zh-CN.yaml", "locales/zh-TW.yaml", "locales/en.yaml"}
-		for _, file := range files {
-			_, err := bundle.LoadMessageFileFS(localeFS, file)
+		for _, lang := range SupportedLanguages() {
+			_, err := bundle.LoadMessageFileFS(localeFS, "locales/"+lang+".yaml")
 			if err != nil {
 				initErr = err
 				return
@@ -51,9 +54,9 @@ func Init() error {
 		}
 
 		// Pre-create localizers for supported languages
-		localizers[LangZhCN] = i18n.NewLocalizer(bundle, LangZhCN)
-		localizers[LangZhTW] = i18n.NewLocalizer(bundle, LangZhTW)
-		localizers[LangEn] = i18n.NewLocalizer(bundle, LangEn)
+		for _, lang := range SupportedLanguages() {
+			localizers[lang] = i18n.NewLocalizer(bundle, lang)
+		}
 
 		httpapi.TranslateMessage = T
 	})
@@ -122,14 +125,16 @@ func SetUserLangLoader(loader func(userId int) string) {
 }
 
 // GetLangFromContext extracts the language setting from gin context
-// It checks multiple sources in priority order:
-// 1. User settings (ContextKeyUserSetting) - if already loaded (e.g., by TokenAuth)
-// 2. Lazy load user language from cache/DB using user ID
-// 3. Language set by middleware (ContextKeyLanguage) - from Accept-Language header
-// 4. Default language (English)
+// An explicit Accept-Language preference takes priority over the saved account
+// language, followed by middleware context and the default language.
 func GetLangFromContext(c *gin.Context) string {
 	if c == nil {
 		return DefaultLang
+	}
+	// An explicit request preference follows the language currently selected in
+	// the interface without writing that selection to the user's account.
+	if acceptLang := c.GetHeader("Accept-Language"); acceptLang != "" {
+		return ParseAcceptLanguage(acceptLang)
 	}
 
 	// 1. Try to get language from user settings (if already loaded by TokenAuth or other middleware)
@@ -165,14 +170,6 @@ func GetLangFromContext(c *gin.Context) string {
 		}
 	}
 
-	// 4. Try Accept-Language header directly (fallback if middleware didn't run)
-	if acceptLang := c.GetHeader("Accept-Language"); acceptLang != "" {
-		lang := ParseAcceptLanguage(acceptLang)
-		if IsSupported(lang) {
-			return lang
-		}
-	}
-
 	return DefaultLang
 }
 
@@ -199,7 +196,7 @@ func ParseAcceptLanguage(header string) string {
 
 // normalizeLang normalizes language code to supported format
 func normalizeLang(lang string) string {
-	lang = strings.ToLower(strings.TrimSpace(lang))
+	lang = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(lang), "_", "-"))
 
 	// Handle common variations
 	switch {
@@ -209,6 +206,14 @@ func normalizeLang(lang string) string {
 		return LangZhCN
 	case strings.HasPrefix(lang, "en"):
 		return LangEn
+	case strings.HasPrefix(lang, "fr"):
+		return LangFr
+	case strings.HasPrefix(lang, "ru"):
+		return LangRu
+	case strings.HasPrefix(lang, "ja"):
+		return LangJa
+	case strings.HasPrefix(lang, "vi"):
+		return LangVi
 	default:
 		return DefaultLang
 	}
@@ -216,7 +221,7 @@ func normalizeLang(lang string) string {
 
 // SupportedLanguages returns a list of supported language codes
 func SupportedLanguages() []string {
-	return []string{LangZhCN, LangZhTW, LangEn}
+	return []string{LangZhCN, LangZhTW, LangEn, LangFr, LangRu, LangJa, LangVi}
 }
 
 // IsSupported checks if a language code is supported

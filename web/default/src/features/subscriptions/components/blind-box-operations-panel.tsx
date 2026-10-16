@@ -14,13 +14,6 @@ export function BlindBoxOperationsPanel() {
               <Gift className='text-primary size-4' aria-hidden='true' />
               <Trans i18nKey={'统一盲盒运营'} />
             </div>
-            <p className='text-muted-foreground max-w-2xl text-sm leading-6'>
-              <Trans
-                i18nKey={
-                  '人民币与通用额度入口共用同一售价、每日限购、普通奖池和独立保底池。下方配置即为当前实际运行规则。'
-                }
-              />
-            </p>
           </div>
           <div className='flex flex-wrap gap-2'>
             <Button

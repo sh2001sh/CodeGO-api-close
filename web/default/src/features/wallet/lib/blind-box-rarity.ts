@@ -1,3 +1,4 @@
+import interfaceI18n from '@/i18n/config'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -21,9 +22,10 @@ import type { BlindBoxTier } from '../types'
 export type RewardRarity = 'legendary' | 'epic' | 'common'
 
 export const RARITY_RING: Record<RewardRarity, string> = {
-  legendary: 'border-primary/45 bg-primary/[0.07]',
-  epic: 'border-primary/25 bg-primary/[0.03]',
-  common: 'border-border/70 bg-background/72',
+  legendary:
+    'border-amber-500/35 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-transparent',
+  epic: 'border-indigo-500/25 bg-gradient-to-br from-indigo-500/8 via-purple-500/4 to-transparent',
+  common: 'border-border/70 bg-card/60',
 }
 
 export const RARITY_BADGE: Record<
@@ -32,11 +34,11 @@ export const RARITY_BADGE: Record<
 > = {
   legendary: {
     label: '稀有',
-    cls: 'border-primary/50 bg-primary text-primary-foreground',
+    cls: 'border-amber-500/30 bg-gradient-to-r from-amber-500/15 to-orange-500/15 text-amber-600 dark:text-amber-400 font-semibold rounded-md',
   },
   epic: {
     label: '精品',
-    cls: 'border-primary/40 bg-primary/10 text-primary',
+    cls: 'border-indigo-500/25 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold rounded-md',
   },
   common: null,
 }
@@ -69,10 +71,10 @@ export function formatTierAmount(tier: BlindBoxTier) {
 
   const amount =
     tier.min_usd === tier.max_usd
-      ? `$${tier.min_usd}`
-      : `$${tier.min_usd} - $${tier.max_usd}`
+      ? `${tier.min_usd} credits`
+      : `${tier.min_usd} - ${tier.max_usd} credits`
 
-  return `${amount} 通用额度`
+  return interfaceI18n.t('{{param0}} 通用额度', { param0: amount })
 }
 
 export function groupTiersByRewardType(tiers: BlindBoxTier[]) {

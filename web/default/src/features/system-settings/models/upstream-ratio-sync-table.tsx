@@ -209,9 +209,6 @@ export function UpstreamRatioSyncTable({
           <p className='text-muted-foreground text-sm'>
             {t('No upstream price differences found')}
           </p>
-          <p className='text-muted-foreground mt-1 text-xs'>
-            {t('Select sync channels to compare prices')}
-          </p>
         </div>
       </div>
     )

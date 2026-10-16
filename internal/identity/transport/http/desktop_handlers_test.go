@@ -154,6 +154,8 @@ func setupDesktopHTTPTestDB(t *testing.T) *gorm.DB {
 		&billingschema.BillingReservation{},
 		&billingschema.BillingSettlement{},
 		&billingschema.BillingOutboxEvent{},
+		&billingschema.ReferralRebateProgram{},
+		&billingschema.ReferralConsumptionRebate{},
 		&identitydomain.ImageWorkspaceItem{},
 		&identitydomain.Checkin{},
 		&commerceschema.SubscriptionResetOpportunityAccount{},
@@ -172,6 +174,9 @@ func setupDesktopHTTPTestDB(t *testing.T) *gorm.DB {
 		&identitydomain.DesktopTelemetryEvent{},
 	); err != nil {
 		t.Fatalf("failed to migrate desktop http tables: %v", err)
+	}
+	if err := db.Create(&billingschema.ReferralRebateProgram{ID: 1, RateBPS: 300, EffectiveAt: 1}).Error; err != nil {
+		t.Fatalf("failed to enable referral rebate program: %v", err)
 	}
 
 	t.Cleanup(func() {

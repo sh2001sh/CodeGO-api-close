@@ -109,10 +109,10 @@ export function BlindBoxPaymentDialog(props: {
   return (
     <Dialog open={props.state.open} onOpenChange={handleCloseAttempt}>
       <DialogContent
-        className='w-[calc(100vw-1rem)] max-w-xl overflow-hidden p-0'
+        className='commerce-dialog w-[calc(100vw-1rem)] max-w-xl overflow-hidden p-0'
         showCloseButton={true}
       >
-        <DialogHeader className='border-b px-5 py-4'>
+        <DialogHeader className='px-5 py-4'>
           <DialogTitle className='flex items-center gap-2 text-base'>
             <Gift className='size-5' />
             <Trans i18nKey={'支付确认'} />
@@ -128,23 +128,25 @@ export function BlindBoxPaymentDialog(props: {
           />
         ) : (
           <div className='space-y-4 px-5 py-5'>
-            <div className={cn('rounded-xl border p-4', statusConfig.tone)}>
+            <div className={cn('rounded-xl p-4', statusConfig.tone)}>
               <div className='flex items-start gap-3'>
                 <div className='border-border bg-card flex size-10 items-center justify-center rounded-full border'>
                   {statusConfig.icon}
                 </div>
                 <div className='min-w-0 flex-1'>
                   <div className='text-foreground text-sm font-semibold'>
-                    {statusConfig.title}
+                    {i18n.t(statusConfig.title)}
                   </div>
-                  <div className='text-muted-foreground mt-1 text-sm leading-6'>
-                    {isTimedOut
-                      ? i18n.t(
-                          '支付处理时间较长，你可以关闭对话框，结果会自动同步'
-                        )
-                      : props.state.message ||
-                        i18n.t('请使用下方二维码完成支付')}
-                  </div>
+                  {props.state.stage === 'failed' && props.state.message ? (
+                    <div className='text-destructive mt-1 text-sm leading-6'>
+                      {props.state.message}
+                    </div>
+                  ) : null}
+                  {isTimedOut ? (
+                    <div className='text-muted-foreground mt-1 text-sm'>
+                      {i18n.t('支付处理超时')}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

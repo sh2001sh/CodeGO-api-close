@@ -142,7 +142,7 @@ export function FirstPurchaseDiscountSection(props: {
     <SettingsSection
       title={t('First purchase campaign')}
       description={t(
-        'Offer a time-limited discount on each user’s first successful monthly plan purchase. Starter, daily, and weekly plans are excluded.'
+        'Configure the first plan purchase discount and activity window'
       )}
     >
       <Form {...form}>
@@ -168,10 +168,8 @@ export function FirstPurchaseDiscountSection(props: {
                         : t('Disabled')}
                   </Badge>
                 </div>
-                <p className='text-muted-foreground max-w-2xl text-sm'>
-                  {t(
-                    'Plan-purchase eligibility is reserved when an order is created and consumed only after a successful payment.'
-                  )}
+                <p className='text-muted-foreground max-w-2xl text-base'>
+                  {t('Order created: reserved · Payment successful: consumed')}
                 </p>
               </div>
             </div>
@@ -212,8 +210,8 @@ export function FirstPurchaseDiscountSection(props: {
                       }
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('For example, enter 8 for an 80% checkout price.')}
+                  <FormDescription className='settings-field-fact'>
+                    {t('8 = 80%')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -255,7 +253,7 @@ export function FirstPurchaseDiscountSection(props: {
             />
           </div>
 
-          <div className='flex items-center justify-between gap-4 border-t pt-4'>
+          <div className='settings-save-bar flex items-center justify-between gap-4 border-t pt-4'>
             <p className='text-muted-foreground flex items-center gap-2 text-xs'>
               <CalendarClock className='size-4' aria-hidden='true' />
               {t(

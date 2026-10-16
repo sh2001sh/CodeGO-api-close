@@ -14,15 +14,12 @@ import (
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 
-	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
-	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	"gorm.io/gorm"
 )
 
-const referralInviteeRegisterRewardPoints int64 = 2
 const registrationBlindBoxQuantity = 5
 
 func insertUserAndApplyRegistrationRewards(user *identityschema.User, inviterID int) error {
@@ -109,9 +106,6 @@ func applyReferralRegistrationRewards(inviterID int, inviteeID int) {
 	if err := incrementInviterAffCount(inviterID); err != nil {
 		platformobservability.SysLog(fmt.Sprintf("failed to increase inviter aff_count, inviter_id=%d invitee_id=%d err=%v", inviterID, inviteeID, err))
 	}
-	if err := awardReferralRegisterInviteePoints(inviterID, inviteeID); err != nil {
-		platformobservability.SysLog(fmt.Sprintf("failed to award referral register points, inviter_id=%d invitee_id=%d err=%v", inviterID, inviteeID, err))
-	}
 }
 
 func incrementInviterAffCount(inviterID int) error {
@@ -119,24 +113,4 @@ func incrementInviterAffCount(inviterID int) error {
 		Where("id = ?", inviterID).
 		Update("aff_count", gorm.Expr("aff_count + ?", 1)).
 		Error
-}
-
-func awardReferralRegisterInviteePoints(inviterID int, inviteeID int) error {
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if tx == nil || !tx.Migrator().HasTable(&billingschema.PointAccount{}) {
-			return nil
-		}
-		key := fmt.Sprintf("referral-register-invitee:%d:%d", inviterID, inviteeID)
-		_, _, err := billingapp.AddPointLedgerTx(
-			tx,
-			inviteeID,
-			billingschema.PointLedgerTypeEarn,
-			referralInviteeRegisterRewardPoints,
-			billingschema.PointSourceReferralRegister,
-			fmt.Sprintf("%d", inviterID),
-			key,
-			"受邀注册赠送积分",
-		)
-		return err
-	})
 }

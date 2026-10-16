@@ -10,12 +10,10 @@ import (
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 )
 
-func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segmentCount int) (map[string]*float64, map[string][]UserGroupStatusBucket, map[string]int64, float64, int64) {
-	rates := make(map[string]*float64)
+func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segmentCount int) (map[string][]UserGroupStatusBucket, float64, int64) {
 	seriesByModel := make(map[string][]UserGroupStatusBucket)
-	requestCounts := make(map[string]int64)
 	if len(groupNames) == 0 {
-		return rates, seriesByModel, requestCounts, 0, 60
+		return seriesByModel, 0, 60
 	}
 	if segmentCount <= 0 {
 		segmentCount = 20
@@ -32,68 +30,25 @@ func queryGroupModelRecentHealth(groupNames []string, sampleMinutes int, segment
 
 	sampleWindowHours := float64(windowSeconds) / 3600
 	now := time.Now().Unix()
-	windowStart, windowEnd, alignedSegments := buildAlignedStatusWindow(now, windowSeconds, requestedBucketSeconds)
+	windowStart, windowEnd, _ := buildAlignedStatusWindow(now, windowSeconds, requestedBucketSeconds)
 
-	actualBucketSeconds, _ := fillGroupModelPerfHealth(
-		rates,
-		seriesByModel,
-		requestCounts,
-		windowStart,
-		windowEnd,
-		requestedBucketSeconds,
-		alignedSegments,
-		groupNames,
-	)
-	return rates, seriesByModel, requestCounts, sampleWindowHours, actualBucketSeconds
-}
-
-func fillGroupModelPerfHealth(
-	rates map[string]*float64,
-	seriesByModel map[string][]UserGroupStatusBucket,
-	requestCounts map[string]int64,
-	windowStart int64,
-	windowEnd int64,
-	bucketSeconds int64,
-	segmentCount int,
-	groupNames []string,
-) (int64, bool) {
 	actualBucketSeconds := auditprojection.PerfMetricsBucketSeconds()
 	if actualBucketSeconds <= 0 {
-		actualBucketSeconds = bucketSeconds
+		actualBucketSeconds = requestedBucketSeconds
 	}
 	hours := int(math.Ceil(float64(windowEnd-windowStart) / 3600))
 	if hours <= 0 {
 		hours = 1
 	}
 
-	summaryRows, err := auditprojection.QuerySummaryByGroupModels(hours, groupNames)
-	if err != nil {
-		return actualBucketSeconds, false
-	}
+	// Status and request count come from the latest nonempty series bucket.
+	// The former additional 6-hour model aggregate was never used by the
+	// response, and duplicated a full aggregation for every status request.
 	seriesRows, err := auditprojection.QuerySeriesByGroupModels(hours, groupNames)
-	if err != nil && len(summaryRows) == 0 {
-		return actualBucketSeconds, false
+	if err == nil {
+		applyPerfSeriesRows(seriesByModel, seriesRows, windowStart, windowEnd, actualBucketSeconds)
 	}
-	if len(summaryRows) == 0 && len(seriesRows) == 0 {
-		return actualBucketSeconds, false
-	}
-
-	applyPerfSummaryRows(rates, requestCounts, summaryRows)
-
-	applyPerfSeriesRows(seriesByModel, seriesRows, windowStart, windowEnd, actualBucketSeconds)
-	return actualBucketSeconds, len(requestCounts) > 0 || len(seriesByModel) > 0
-}
-
-func applyPerfSummaryRows(rates map[string]*float64, requestCounts map[string]int64, rows []auditprojection.GroupModelSummary) {
-	for _, row := range rows {
-		if row.RequestCount <= 0 {
-			continue
-		}
-		key := row.Group + "::" + row.ModelName
-		requestCounts[key] += row.RequestCount
-		rate := row.SuccessRate
-		rates[key] = &rate
-	}
+	return seriesByModel, sampleWindowHours, actualBucketSeconds
 }
 
 func applyPerfSeriesRows(seriesByModel map[string][]UserGroupStatusBucket, rows []auditprojection.GroupModelSeries, windowStart, windowEnd, bucketSeconds int64) {

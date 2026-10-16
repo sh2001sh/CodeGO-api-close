@@ -212,6 +212,9 @@ func ListUserTopUps(userID int, keyword string, pageInfo *platformpagination.Pag
 	if err != nil {
 		return nil, err
 	}
+	if err := attachCreditPackTopupQuota(topups); err != nil {
+		return nil, err
+	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(topups)
 	return pageInfo, nil
@@ -229,6 +232,9 @@ func ListAllTopUps(keyword string, pageInfo *platformpagination.PageInfo) (*plat
 		topups, total, err = GetAllTopUps(pageInfo)
 	}
 	if err != nil {
+		return nil, err
+	}
+	if err := attachCreditPackTopupQuota(topups); err != nil {
 		return nil, err
 	}
 	pageInfo.SetTotal(int(total))

@@ -29,6 +29,7 @@ import {
   ChannelStrategySection,
 } from './channel-form-sections'
 import { ChannelModelsSection } from './channel-models-section'
+import { ChannelPresentationSection } from './channel-presentation-section'
 
 export function ChannelCreateForm(props: { onCreated: () => void }) {
   return <ChannelEditorForm onSaved={props.onCreated} />
@@ -147,6 +148,9 @@ export function ChannelEditorForm(props: {
         await update.mutateAsync({
           id: props.channel.id,
           values: {
+            custom_name: values.custom_name,
+            description: values.description,
+            tags: values.tags,
             provider_type: values.provider_type,
             source_label: values.source_label,
             declared_models: values.declared_models,
@@ -161,6 +165,7 @@ export function ChannelEditorForm(props: {
               values.sensitive_word_interception_enabled,
             multiplier_card_supported: values.multiplier_card_supported,
             multiplier_card_user_enabled: values.multiplier_card_user_enabled,
+            credit_pack_supported: values.credit_pack_supported,
             auto_probe_enabled: values.auto_probe_enabled,
             auto_probe_interval_minutes: values.auto_probe_interval_minutes,
             auto_probe_model: values.auto_probe_model,
@@ -197,6 +202,7 @@ export function ChannelEditorForm(props: {
   const pending = editing ? update.isPending : mutations.create.isPending
   return (
     <form onSubmit={submit}>
+      <ChannelPresentationSection form={form} channel={props.channel} />
       <ChannelConnectionSection form={form} editing={editing} />
       <ChannelModelsSection
         form={form}

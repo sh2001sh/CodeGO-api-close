@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { getIntlLocale } from '@/i18n/format'
 import { RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -26,11 +27,15 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import type { BlindBoxSelfData } from '@/features/wallet/types'
-import { getUserBlindBoxOverview, grantUserBlindBoxes, revokeUserBlindBoxes } from '../../api'
+import {
+  getUserBlindBoxOverview,
+  grantUserBlindBoxes,
+  revokeUserBlindBoxes,
+} from '../../api'
 
 function formatTime(timestamp?: number): string {
   if (!timestamp) return '-'
-  return new Date(timestamp * 1000).toLocaleString()
+  return new Date(timestamp * 1000).toLocaleString(getIntlLocale())
 }
 
 interface Props {
@@ -120,20 +125,33 @@ export function UserBlindBoxDialog(props: Props) {
   const handleRevoke = async () => {
     if (!props.user?.id) return
     const quantity = Number(revokeQuantity)
-    if (!Number.isInteger(quantity) || quantity < 1 || !revokeReason.trim()) return
+    if (!Number.isInteger(quantity) || quantity < 1 || !revokeReason.trim())
+      return
     setRevoking(true)
     try {
-      const response = await revokeUserBlindBoxes(props.user.id, { quantity, reason: revokeReason.trim() })
-      if (!response.success) { toast.error(response.message || t('Revoke blind boxes failed')); return }
+      const response = await revokeUserBlindBoxes(props.user.id, {
+        quantity,
+        reason: revokeReason.trim(),
+      })
+      if (!response.success) {
+        toast.error(response.message || t('Revoke blind boxes failed'))
+        return
+      }
       toast.success(t('Blind boxes revoked successfully'))
-      setRevokeQuantity('1'); setRevokeReason(''); setRevokeConfirmOpen(false)
+      setRevokeQuantity('1')
+      setRevokeReason('')
+      setRevokeConfirmOpen(false)
       await loadData()
-    } catch { toast.error(t('Revoke blind boxes failed')) } finally { setRevoking(false) }
+    } catch {
+      toast.error(t('Revoke blind boxes failed'))
+    } finally {
+      setRevoking(false)
+    }
   }
 
   return (
     <Sheet open={props.open} onOpenChange={props.onOpenChange}>
-      <SheetContent className='overflow-y-auto sm:max-w-3xl'>
+      <SheetContent className='solaris-admin-dialog overflow-y-auto sm:max-w-3xl'>
         <SheetHeader>
           <SheetTitle>{t('Blind Box Management')}</SheetTitle>
           <SheetDescription>
@@ -211,13 +229,44 @@ export function UserBlindBoxDialog(props: Props) {
             </Button>
           </div>
           <div className='border-destructive/30 rounded-lg border p-4'>
-            <div className='text-sm font-medium'>{t('Revoke available blind boxes')}</div>
-            <p className='text-muted-foreground mt-1 text-sm'>{t('Only unopened available boxes can be revoked. This action cannot be undone.')}</p>
-            <div className='mt-4 grid gap-4 sm:grid-cols-[140px_minmax(0,1fr)]'>
-              <div className='space-y-2'><Label htmlFor='blind-box-revoke-quantity'>{t('Quantity')}</Label><Input id='blind-box-revoke-quantity' type='number' min={1} value={revokeQuantity} onChange={(event) => setRevokeQuantity(event.target.value)} /></div>
-              <div className='space-y-2'><Label htmlFor='blind-box-revoke-reason'>{t('Reason')}</Label><Input id='blind-box-revoke-reason' value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} /></div>
+            <div className='text-sm font-medium'>
+              {t('Revoke available blind boxes')}
             </div>
-            <Button variant='destructive' className='mt-4' disabled={!revokeReason.trim() || Number(revokeQuantity) < 1} onClick={() => setRevokeConfirmOpen(true)}>{t('Revoke blind boxes')}</Button>
+            <p className='text-muted-foreground mt-1 text-sm'>
+              {t(
+                'Only unopened available boxes can be revoked. This action cannot be undone.'
+              )}
+            </p>
+            <div className='mt-4 grid gap-4 sm:grid-cols-[140px_minmax(0,1fr)]'>
+              <div className='space-y-2'>
+                <Label htmlFor='blind-box-revoke-quantity'>
+                  {t('Quantity')}
+                </Label>
+                <Input
+                  id='blind-box-revoke-quantity'
+                  type='number'
+                  min={1}
+                  value={revokeQuantity}
+                  onChange={(event) => setRevokeQuantity(event.target.value)}
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label htmlFor='blind-box-revoke-reason'>{t('Reason')}</Label>
+                <Input
+                  id='blind-box-revoke-reason'
+                  value={revokeReason}
+                  onChange={(event) => setRevokeReason(event.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              variant='destructive'
+              className='mt-4'
+              disabled={!revokeReason.trim() || Number(revokeQuantity) < 1}
+              onClick={() => setRevokeConfirmOpen(true)}
+            >
+              {t('Revoke blind boxes')}
+            </Button>
           </div>
 
           <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
@@ -391,9 +440,23 @@ export function UserBlindBoxDialog(props: Props) {
             </div>
           </div>
         </div>
-        <ConfirmDialog open={revokeConfirmOpen} onOpenChange={setRevokeConfirmOpen} title={t('Confirm blind box revocation')} desc={t('This will revoke {{count}} available blind boxes and cannot be undone.', { count: revokeQuantity })} handleConfirm={() => void handleRevoke()} confirmText={t('Revoke')} destructive isLoading={revoking} />
+        <ConfirmDialog
+          className='solaris-admin-dialog'
+          open={revokeConfirmOpen}
+          onOpenChange={setRevokeConfirmOpen}
+          title={t('Confirm blind box revocation')}
+          desc={t(
+            'This will revoke {{count}} available blind boxes and cannot be undone.',
+            { count: revokeQuantity }
+          )}
+          handleConfirm={() => void handleRevoke()}
+          confirmText={t('Revoke')}
+          destructive
+          isLoading={revoking}
+        />
       </SheetContent>
       <ConfirmDialog
+        className='solaris-admin-dialog'
         open={grantConfirmOpen}
         onOpenChange={setGrantConfirmOpen}
         title={t('Confirm blind box grant')}

@@ -6,8 +6,6 @@ it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 */
-import i18n from '@/i18n/config'
-import { motion, useReducedMotion, type Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BlindBoxSelfData, PaymentMethod } from '../types'
@@ -16,28 +14,12 @@ import { BlindBoxDisabledNotice } from './blind-box-notices'
 import { BlindBoxPoolShowcase } from './blind-box-pool-showcase'
 import { BlindBoxPropRules } from './blind-box-rules-panel'
 
-const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
-const STACK: Variants = {
-  initial: {},
-  animate: { transition: { staggerChildren: 0.06, delayChildren: 0.02 } },
-}
-const STACK_ITEM: Variants = {
-  initial: { opacity: 0, y: 10 },
-  animate: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.32, ease: EASE_OUT_QUINT },
-  },
-}
-const REDUCED_STACK: Variants = { initial: {}, animate: {} }
-const REDUCED_ITEM: Variants = { initial: {}, animate: {} }
-
 export interface BlindBoxContentProps {
   data: BlindBoxSelfData | null
   loading: boolean
   selectedQuantity: number
   selectedPaymentMethod: PaymentMethod | null
-  amountDue: number
+  amountDue: number | null
   paying: boolean
   onQuantityChange: (value: number) => void
   onPaymentMethodChange: (method: PaymentMethod) => void
@@ -47,70 +29,45 @@ export interface BlindBoxContentProps {
 }
 
 export function BlindBoxContent(props: BlindBoxContentProps) {
-  useTranslation()
-  const reduced = Boolean(useReducedMotion())
-
-  if (props.loading && !props.data) return <BlindBoxContentSkeleton />
+  const { t } = useTranslation()
+  if (props.loading && !props.data) {
+    return (
+      <div
+        className='blind-box-loading'
+        aria-busy='true'
+        aria-label={t('加载中')}
+      >
+        <Skeleton className='h-96 w-full rounded-2xl' />
+        <Skeleton className='h-64 w-full rounded-2xl' />
+      </div>
+    )
+  }
 
   return (
-    <motion.div
-      className='space-y-4'
-      variants={reduced ? REDUCED_STACK : STACK}
-      initial='initial'
-      animate='animate'
-    >
-      {props.data && !props.data.enabled ? (
-        <motion.div variants={reduced ? REDUCED_ITEM : STACK_ITEM}>
-          <BlindBoxDisabledNotice />
-        </motion.div>
-      ) : null}
-
-      <motion.div variants={reduced ? REDUCED_ITEM : STACK_ITEM}>
-        <BalanceBlindBoxPanel
-          data={props.data}
-          loading={props.loading}
-          onRefresh={props.onRefresh}
-          cashMethods={props.data?.pay_methods || []}
-          selectedCashMethod={props.selectedPaymentMethod}
-          cashAmountDue={props.amountDue}
-          cashPaying={props.paying}
-          onCashMethodChange={props.onPaymentMethodChange}
-          onCashQuantityChange={props.onQuantityChange}
-          onCashPurchase={props.onPay}
-          onOpenProps={props.onOpenProps}
-        />
-      </motion.div>
-
-      <motion.div variants={reduced ? REDUCED_ITEM : STACK_ITEM}>
+    <div className='blind-box-content'>
+      {props.data && !props.data.enabled ? <BlindBoxDisabledNotice /> : null}
+      <BalanceBlindBoxPanel
+        data={props.data}
+        loading={props.loading}
+        onRefresh={props.onRefresh}
+        cashMethods={props.data?.pay_methods || []}
+        selectedCashMethod={props.selectedPaymentMethod}
+        cashAmountDue={props.amountDue}
+        cashPaying={props.paying}
+        onCashMethodChange={props.onPaymentMethodChange}
+        onCashQuantityChange={props.onQuantityChange}
+        onCashPurchase={props.onPay}
+        onOpenProps={props.onOpenProps}
+      />
+      <div className='blind-box-rewards'>
         <BlindBoxPoolShowcase
           data={props.data}
           tiers={props.data?.inventory?.tiers || props.data?.tiers || []}
-          title={i18n.t('统一盲盒奖池')}
-          description=''
+          title={t('统一盲盒奖池')}
           hideSubscription
         />
-      </motion.div>
-
-      <motion.div variants={reduced ? REDUCED_ITEM : STACK_ITEM}>
         <BlindBoxPropRules />
-      </motion.div>
-    </motion.div>
-  )
-}
-
-function BlindBoxContentSkeleton() {
-  return (
-    <div className='space-y-4'>
-      <div className='app-page-shell space-y-5 p-6'>
-        <div className='flex flex-col items-center gap-4'>
-          <Skeleton className='size-32 rounded-xl' />
-          <Skeleton className='h-6 w-48' />
-          <Skeleton className='h-4 w-72 max-w-full' />
-        </div>
-        <Skeleton className='h-10 w-full' />
-        <Skeleton className='h-28 w-full rounded-lg' />
       </div>
-      <Skeleton className='h-64 w-full rounded-xl' />
     </div>
   )
 }

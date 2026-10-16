@@ -29,7 +29,8 @@ import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { DataTablePage } from '@/components/data-table'
-import { getModels, searchModels, getVendors } from '../api'
+import { AdminTableStatus } from '@/features/channels/components/admin-table-status'
+import { getModels, searchModels, getAllVendors } from '../api'
 import {
   DEFAULT_PAGE_SIZE,
   getModelStatusOptions,
@@ -92,7 +93,7 @@ export function ModelsTable() {
   // Fetch vendors for filter
   const { data: vendorsData } = useQuery({
     queryKey: vendorsQueryKeys.list(),
-    queryFn: () => getVendors({ page_size: 1000 }),
+    queryFn: () => getAllVendors(),
   })
 
   const vendors = useMemo(
@@ -119,7 +120,7 @@ export function ModelsTable() {
 
   // Fetch models data
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: modelsQueryKeys.list({
       keyword: globalFilter,
       vendor: activeVendorFilter,
@@ -220,41 +221,53 @@ export function ModelsTable() {
   ]
 
   return (
-    <DataTablePage
-      table={table}
-      columns={columns}
-      isLoading={isLoading}
-      isFetching={isFetching}
-      emptyTitle={t('No Models Found')}
-      emptyDescription={t(
-        'No models available. Create your first model to get started.'
-      )}
-      skeletonKeyPrefix='model-skeleton'
-      applyHeaderSize
-      toolbarProps={{
-        searchPlaceholder: t('Filter by model name...'),
-        filters: [
-          {
-            columnId: 'status',
-            title: t('Status'),
-            options: [...getModelStatusOptions(t)],
-            singleSelect: true,
-          },
-          {
-            columnId: 'vendor_id',
-            title: t('Vendor'),
-            options: vendorFilterOptions,
-            singleSelect: true,
-          },
-          {
-            columnId: 'sync_official',
-            title: t('Official Sync'),
-            options: [...getSyncStatusOptions(t)],
-            singleSelect: true,
-          },
-        ],
-      }}
-      bulkActions={<DataTableBulkActions table={table} />}
-    />
+    <>
+      <AdminTableStatus
+        title={t('Models')}
+        total={data?.data?.total}
+        selected={table.getSelectedRowModel().rows.length}
+        loading={isLoading}
+        fetching={isFetching}
+        failed={isError || data?.success === false}
+        onRetry={() => void refetch()}
+      />
+      <DataTablePage
+        className='admin-records'
+        tableClassName='rounded-lg'
+        tableHeaderClassName='sticky top-0 z-10'
+        table={table}
+        columns={columns}
+        isLoading={isLoading}
+        isFetching={isFetching}
+        emptyTitle={t('No Models Found')}
+        emptyDescription=''
+        skeletonKeyPrefix='model-skeleton'
+        applyHeaderSize
+        toolbarProps={{
+          searchPlaceholder: t('Filter by model name...'),
+          filters: [
+            {
+              columnId: 'status',
+              title: t('Status'),
+              options: [...getModelStatusOptions(t)],
+              singleSelect: true,
+            },
+            {
+              columnId: 'vendor_id',
+              title: t('Vendor'),
+              options: vendorFilterOptions,
+              singleSelect: true,
+            },
+            {
+              columnId: 'sync_official',
+              title: t('Official Sync'),
+              options: [...getSyncStatusOptions(t)],
+              singleSelect: true,
+            },
+          ],
+        }}
+        bulkActions={<DataTableBulkActions table={table} />}
+      />
+    </>
   )
 }

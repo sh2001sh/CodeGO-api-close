@@ -11,6 +11,7 @@ interface WalletResetOpportunityPanelProps {
   canUseResetOpportunity: boolean
   usingResetOpportunity: boolean
   onUseResetOpportunity: () => void
+  hideDetailsLink?: boolean
 }
 
 export function WalletResetOpportunityPanel(
@@ -32,12 +33,7 @@ export function WalletResetOpportunityPanel(
         <div>
           <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
             <Sparkles className='text-warning h-4 w-4' />
-            {t('Quota reset opportunity')}
-          </div>
-          <div className='text-muted-foreground mt-1 text-xs leading-5'>
-            {t(
-              'Earned when an invited new user purchases a monthly plan. Opportunities are saved and can be used once per calendar month.'
-            )}
+            {t('历史刷新权益')}
           </div>
         </div>
         <div className='border-border bg-background/80 text-foreground rounded-full border px-3 py-1 text-xs font-semibold'>
@@ -56,10 +52,7 @@ export function WalletResetOpportunityPanel(
           label={t('Total used')}
           value={`${props.resetOpportunity.used_total}`}
         />
-        <WalletStatItem
-          label={t('This month status')}
-          value={monthlyStatus}
-        />
+        <WalletStatItem label={t('This month status')} value={monthlyStatus} />
       </div>
 
       <div className='border-border/70 bg-background/72 text-muted-foreground mt-3 rounded-2xl border px-3 py-3 text-xs'>
@@ -69,24 +62,13 @@ export function WalletResetOpportunityPanel(
               props.currentSubscriptionTitle || t('No active subscription'),
           })}
         </div>
-        <div className='mt-1 leading-5'>
-          {t(
-            'Only clears used quota for the first active subscription in the billing order. It does not extend the expiry date or change subscription benefits.'
-          )}
-        </div>
         {props.resetOpportunity.used_this_month ? (
-          <div className='text-warning mt-2'>
-            {t('Already used this month. Try again next month.')}
-          </div>
+          <div className='text-warning mt-2'>{t('Used this month')}</div>
         ) : !hasCurrentSubscription ? (
-          <div className='text-warning mt-2'>
-            {t('Purchase and activate a plan to use a reset opportunity.')}
-          </div>
+          <div className='text-warning mt-2'>{t('暂无可刷新的旧套餐')}</div>
         ) : props.resetOpportunity.available_count <= 0 ? (
           <div className='text-warning mt-2'>
-            {t(
-              'No reset opportunities are available. Invite a new user to purchase a monthly plan to earn one.'
-            )}
+            {t('No opportunity available')}
           </div>
         ) : null}
       </div>
@@ -102,15 +84,17 @@ export function WalletResetOpportunityPanel(
           {props.usingResetOpportunity ? (
             <Loader2 className='mr-1 h-4 w-4 animate-spin' />
           ) : null}
-          {t('Reset current subscription quota')}
+          {t('刷新旧套餐额度')}
         </Button>
-        <Button
-          variant='outline'
-          className='flex-1'
-          render={<Link to='/invite-rewards' />}
-        >
-          {t('View reset details')}
-        </Button>
+        {!props.hideDetailsLink && (
+          <Button
+            variant='outline'
+            className='flex-1'
+            render={<Link to='/invite-rewards' />}
+          >
+            {t('View reset details')}
+          </Button>
+        )}
       </div>
     </div>
   )

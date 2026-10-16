@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import i18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import { ChevronDown, ChevronRight, ListPlus } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -56,6 +57,7 @@ export function GroupStatusSection(props: {
               : i18n.t('官方渠道')}{' '}
             · {group.models.length} <Trans i18nKey={'个模型'} />
           </p>
+          <code className='status-group-id'>{group.group_id}</code>
         </div>
         <div className='flex shrink-0 flex-wrap items-center gap-2 sm:gap-3'>
           {typeof group.request_count === 'number' &&
@@ -69,7 +71,7 @@ export function GroupStatusSection(props: {
                   <Trans i18nKey={'成功'} />{' '}
                   {Math.round(
                     (group.request_count * group.success_rate) / 100
-                  ).toLocaleString()}
+                  ).toLocaleString(getIntlLocale())}
                   {' · '}
                   <Trans i18nKey={'失败'} />{' '}
                   {Math.max(
@@ -78,7 +80,7 @@ export function GroupStatusSection(props: {
                       Math.round(
                         (group.request_count * group.success_rate) / 100
                       )
-                  ).toLocaleString()}
+                  ).toLocaleString(getIntlLocale())}
                 </div>
               </div>
             )}
@@ -99,7 +101,11 @@ export function GroupStatusSection(props: {
               props.inCurrentPool || props.joining || !props.group.group_id
             }
             onClick={props.onJoinCurrentPool}
-            title={props.poolName ? `当前路由池：${props.poolName}` : undefined}
+            title={
+              props.poolName
+                ? i18n.t('当前路由池：{{param0}}', { param0: props.poolName })
+                : undefined
+            }
           >
             <ListPlus className='size-3.5' />
             {props.inCurrentPool
@@ -123,12 +129,9 @@ export function GroupStatusSection(props: {
       </div>
 
       {props.expanded && (
-        <div
-          id={contentId}
-          className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
-        >
+        <div id={contentId} className='group-model-matrix'>
           {group.models.length === 0 ? (
-            <div className='codego-empty px-4 py-6'>NO MODELS</div>
+            <div className='codego-empty px-4 py-6'>{i18n.t('NO MODELS')}</div>
           ) : (
             group.models.map((model) => (
               <GroupStatusMonitorCard

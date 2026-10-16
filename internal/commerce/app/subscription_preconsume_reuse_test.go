@@ -105,7 +105,7 @@ func checkPreconsumeReuseHotPath(t *testing.T, db *gorm.DB, statements int) {
 func TestSubscriptionPreConsumeTransactionReusesLockedAccount(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	ensureSubscriptionPreConsumeRecordSchema(t)
-	checkPreconsumeReuseHotPath(t, db, 13) // SQLite reservation path is four statements longer than PostgreSQL.
+	checkPreconsumeReuseHotPath(t, db, 12) // SQLite reservation path is three statements longer than PostgreSQL.
 }
 
 func TestSubscriptionPreConsumeTransactionReusesLockedAccountPostgres(t *testing.T) {

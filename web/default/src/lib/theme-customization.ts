@@ -23,14 +23,14 @@ For commercial licensing, please contact support@quantumnous.com
  * provider without breaking React Fast Refresh boundaries.
  */
 
-// Brand-locked: the console ships a single CodeGo dawn-copper theme.
+// Brand-locked: public pages and the console share Solaris Optics.
 // The multi-preset switcher was removed; the shape is kept so the
 // customization provider and config drawer keep working unchanged.
 export const THEME_PRESETS = [
   {
     value: 'default',
     name: 'CodeGo',
-    swatches: ['#b8562e', '#e7e4e2'],
+    swatches: ['#ff5500', '#faf8f5'],
   },
 ] as const
 

@@ -2,6 +2,7 @@ package app
 
 import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
@@ -52,6 +53,10 @@ func deleteMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 		return tx.Delete(channel).Error
 	})
 	if err == nil {
+		marketplaceAutoProbeTasks.cancelChannel(channel.ID)
+		marketplaceVerificationTasks.cancelChannel(channel.ID)
+		gatewaystore.InitChannelCache()
+		gatewaystore.NotifyChannelCacheChanged()
 		invalidateAdminMarketplaceStatsCache()
 	}
 	return err

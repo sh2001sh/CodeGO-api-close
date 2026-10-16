@@ -45,6 +45,11 @@ func creditTopUpQuotaTx(tx *gorm.DB, topUp *commerceschema.TopUp, quotaToAdd int
 	if err := billingapp.CreditClaudeWalletQuotaTx(tx, topUp.UserId, quotaToAdd, fmt.Sprintf("topup:%s:unified", topUp.TradeNo), "topup_credit"); err != nil {
 		return err
 	}
+	if topUp.PaidQuota > 0 {
+		if err := billingapp.SnapshotTopupPaidQuotaTx(tx, topUp.TradeNo, topUp.PaidQuota); err != nil {
+			return err
+		}
+	}
 	if topUp.PaymentProvider == commerceschema.PaymentProviderStripe && customerID != "" {
 		updateFields["stripe_customer"] = customerID
 	}

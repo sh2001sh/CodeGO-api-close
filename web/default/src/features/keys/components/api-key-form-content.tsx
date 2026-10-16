@@ -24,7 +24,7 @@ export function ApiKeyFormContent(props: {
     <form
       id='api-key-form'
       onSubmit={props.form.handleSubmit(props.onSubmit, props.onInvalid)}
-      className='min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:space-y-4 sm:px-4 sm:py-4'
+      className='api-key-form min-h-0 flex-1 overflow-y-auto overscroll-contain'
     >
       <ApiKeyBasicSection
         form={props.form}

@@ -23,7 +23,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
-  EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
@@ -50,6 +49,7 @@ import {
   submitImageEdit,
   submitImageGeneration,
 } from './api'
+import './image-workspace.css'
 import type {
   GroupOption,
   ImageWorkspaceFormState,
@@ -116,9 +116,9 @@ function getStatusVariant(status: ImageWorkspaceItem['status']) {
 }
 
 function getStatusLabel(status: ImageWorkspaceItem['status']) {
-  if (status === 'ready') return '已完成'
-  if (status === 'expired') return '已过期'
-  return '生成失败'
+  if (status === 'ready') return i18n.t('已完成')
+  if (status === 'expired') return i18n.t('已过期')
+  return i18n.t('生成失败')
 }
 
 function dedupeItems(items: ImageWorkspaceItem[]) {
@@ -143,7 +143,7 @@ function InfoPill(props: { label: string; value: string }) {
 
 function ImageWorkspaceSkeleton() {
   return (
-    <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]'>
+    <div className='image-workspace-layout'>
       <Skeleton className='h-[46rem] rounded-xl' />
       <Skeleton className='h-[46rem] rounded-xl' />
     </div>
@@ -275,19 +275,19 @@ export function ImageWorkspace() {
 
   const handleSubmit = async () => {
     if (!form.model) {
-      toast.error('请先选择模型')
+      toast.error(i18n.t('请先选择模型'))
       return
     }
     if (!form.group) {
-      toast.error('请先选择分组')
+      toast.error(i18n.t('请先选择分组'))
       return
     }
     if (!form.prompt.trim()) {
-      toast.error('请先输入提示词')
+      toast.error(i18n.t('请先输入提示词'))
       return
     }
     if (form.mode === 'edit' && !selectedSource) {
-      toast.error('改图模式需要先选择一张来源图片')
+      toast.error(i18n.t('改图模式需要先选择一张来源图片'))
       return
     }
 
@@ -327,7 +327,9 @@ export function ImageWorkspace() {
         recentItemsQuery.refetch(),
       ])
       setGalleryTab('session')
-      toast.success(form.mode === 'generate' ? '图片生成完成' : '改图完成')
+      toast.success(
+        form.mode === 'generate' ? i18n.t('图片生成完成') : i18n.t('改图完成')
+      )
     } catch (error) {
       const err = error as {
         response?: { data?: { error?: { message?: string }; message?: string } }
@@ -337,7 +339,7 @@ export function ImageWorkspace() {
         err?.response?.data?.error?.message ||
         err?.response?.data?.message ||
         err?.message ||
-        '图片请求失败'
+        i18n.t('图片请求失败')
       toast.error(message)
     } finally {
       setIsSubmitting(false)
@@ -380,36 +382,54 @@ export function ImageWorkspace() {
 
   return (
     <>
-      <div className='codego-image-workspace min-h-full p-4 md:p-6'>
-        <div className='mx-auto max-w-[1580px] space-y-5'>
-          {form.group && !modelsQuery.isLoading && models.length === 0 && (
-            <Alert className='border-amber-500/40 bg-amber-500/5'>
-              <AlertCircle className='text-amber-600' />
+      <div className='market-image-workspace min-h-full'>
+        <div className='mx-auto max-w-[1440px] space-y-8'>
+          {form.group &&
+            !modelsQuery.isLoading &&
+            !modelsQuery.isError &&
+            models.length === 0 && (
+              <Alert className='border-amber-500/40 bg-amber-500/5'>
+                <AlertCircle className='text-amber-600' />
+                <AlertTitle>
+                  <Trans i18nKey={'当前分组没有可用的生图模型'} />
+                </AlertTitle>
+                <AlertDescription>
+                  {form.group === 'auto'
+                    ? i18n.t(
+                        '请检查后台 AutoGroups 是否包含生图模型所在分组、用户分组权限和模型计费配置。'
+                      )
+                    : i18n.t(
+                        '请检查该分组的渠道模型、用户权限和模型计费配置。'
+                      )}
+                </AlertDescription>
+              </Alert>
+            )}
+          {[groupsQuery, modelsQuery, sessionItemsQuery, recentItemsQuery].some(
+            (query) => query.isError
+          ) && (
+            <Alert variant='destructive'>
               <AlertTitle>
-                <Trans i18nKey={'当前分组没有可用的生图模型'} />
+                <Trans i18nKey={'加载失败'} />
               </AlertTitle>
-              <AlertDescription>
-                {form.group === 'auto'
-                  ? i18n.t(
-                      '请检查后台 AutoGroups 是否包含生图模型所在分组、用户分组权限和模型计费配置。'
-                    )
-                  : i18n.t('请检查该分组的渠道模型、用户权限和模型计费配置。')}
-              </AlertDescription>
+              <Button
+                variant='outline'
+                onClick={() => {
+                  if (groupsQuery.isError) void groupsQuery.refetch()
+                  if (modelsQuery.isError) void modelsQuery.refetch()
+                  if (sessionItemsQuery.isError)
+                    void sessionItemsQuery.refetch()
+                  if (recentItemsQuery.isError) void recentItemsQuery.refetch()
+                }}
+              >
+                <Trans i18nKey={'Retry'} />
+              </Button>
             </Alert>
           )}
-          <div className='flex flex-wrap items-center justify-between gap-3 px-1'>
+          <header className='image-workspace-heading'>
             <div>
-              <div className='text-muted-foreground text-xs font-medium tracking-[0.28em]'>
+              <h1>
                 <Trans i18nKey={'生图工作台'} />
-              </div>
-              <h1 className='text-foreground mt-2 text-2xl font-semibold tracking-tight'>
-                <Trans i18nKey={'生成、编辑和管理图片'} />
               </h1>
-              <p className='text-muted-foreground mt-1 text-sm'>
-                <Trans
-                  i18nKey={'选择模型与参数，输入中文提示词即可开始创作。'}
-                />
-              </p>
             </div>
             <div className='flex flex-wrap gap-2'>
               <Button variant='outline' onClick={handleNewSession}>
@@ -428,21 +448,14 @@ export function ImageWorkspace() {
                 <Trans i18nKey={'查看日志'} />
               </Button>
             </div>
-          </div>
+          </header>
 
-          <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]'>
-            <div className='border-border bg-card rounded-xl border p-5'>
-              <div className='text-foreground flex items-center gap-2 text-base font-semibold'>
+          <div className='image-workspace-layout'>
+            <section className='image-workspace-panel'>
+              <h2 className='image-workspace-section-title'>
                 <Sparkles className='size-4' />
                 <Trans i18nKey={'创作对话'} />
-              </div>
-              <div className='text-muted-foreground mt-1 text-sm'>
-                <Trans
-                  i18nKey={
-                    '用中文描述需求，系统会按你当前选择的模型、分组和参数发起生图。'
-                  }
-                />
-              </div>
+              </h2>
 
               <div className='mt-5 space-y-5'>
                 <Tabs
@@ -464,31 +477,22 @@ export function ImageWorkspace() {
                 </Tabs>
 
                 <div className='grid gap-2'>
-                  <Label>
+                  <Label htmlFor='image-workspace-prompt'>
                     <Trans i18nKey={'提示词'} />
                   </Label>
                   <Textarea
+                    id='image-workspace-prompt'
                     value={form.prompt}
                     onChange={(event) =>
                       updateForm('prompt', event.target.value)
                     }
-                    placeholder={i18n.t(
-                      '例如：生成一张电影感的雨夜街头场景，主角撑着透明雨伞站在霓虹灯下，镜头低角度，反光地面细节丰富，整体偏青橙色调。'
-                    )}
                     className='min-h-40 rounded-xl'
                   />
-                  <div className='text-muted-foreground text-xs leading-6'>
-                    <Trans
-                      i18nKey={
-                        '写得越具体，结果越稳定。建议写清主体、环境、风格、镜头、构图和想保留的关键细节。'
-                      }
-                    />
-                  </div>
                 </div>
 
                 <div className='grid gap-4 md:grid-cols-2'>
                   <div className='grid gap-2'>
-                    <Label>
+                    <Label htmlFor='image-workspace-model'>
                       <Trans i18nKey={'模型'} />
                     </Label>
                     <Select
@@ -501,7 +505,10 @@ export function ImageWorkspace() {
                         updateForm('model', value ?? '')
                       }
                     >
-                      <SelectTrigger className='w-full rounded-lg'>
+                      <SelectTrigger
+                        id='image-workspace-model'
+                        className='w-full rounded-lg'
+                      >
                         <SelectValue placeholder={i18n.t('选择模型')} />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
@@ -517,7 +524,7 @@ export function ImageWorkspace() {
                   </div>
 
                   <div className='grid gap-2'>
-                    <Label>
+                    <Label htmlFor='image-workspace-group'>
                       <Trans i18nKey={'分组'} />
                     </Label>
                     <Select
@@ -530,7 +537,10 @@ export function ImageWorkspace() {
                         updateForm('group', value ?? '')
                       }
                     >
-                      <SelectTrigger className='w-full rounded-lg'>
+                      <SelectTrigger
+                        id='image-workspace-group'
+                        className='w-full rounded-lg'
+                      >
                         <SelectValue placeholder={i18n.t('选择分组')} />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
@@ -559,7 +569,7 @@ export function ImageWorkspace() {
 
                 <div className='grid gap-4 md:grid-cols-3'>
                   <div className='grid gap-2'>
-                    <Label>
+                    <Label htmlFor='image-workspace-size'>
                       <Trans i18nKey={'尺寸'} />
                     </Label>
                     <Select
@@ -572,7 +582,10 @@ export function ImageWorkspace() {
                         updateForm('size', value ?? sizeOptions[0])
                       }
                     >
-                      <SelectTrigger className='w-full rounded-lg'>
+                      <SelectTrigger
+                        id='image-workspace-size'
+                        className='w-full rounded-lg'
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
@@ -588,24 +601,30 @@ export function ImageWorkspace() {
                   </div>
 
                   <div className='grid gap-2'>
-                    <Label>
+                    <Label htmlFor='image-workspace-quality'>
                       <Trans i18nKey={'清晰度'} />
                     </Label>
                     <Select
-                      items={QUALITY_OPTIONS}
+                      items={QUALITY_OPTIONS.map((item) => ({
+                        ...item,
+                        label: i18n.t(item.label),
+                      }))}
                       value={form.quality}
                       onValueChange={(value) =>
                         updateForm('quality', value ?? QUALITY_OPTIONS[0].value)
                       }
                     >
-                      <SelectTrigger className='w-full rounded-lg'>
+                      <SelectTrigger
+                        id='image-workspace-quality'
+                        className='w-full rounded-lg'
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
                         <SelectGroup>
                           {QUALITY_OPTIONS.map((item) => (
                             <SelectItem key={item.value} value={item.value}>
-                              {item.label}
+                              {i18n.t(item.label)}
                             </SelectItem>
                           ))}
                         </SelectGroup>
@@ -614,7 +633,7 @@ export function ImageWorkspace() {
                   </div>
 
                   <div className='grid gap-2'>
-                    <Label>
+                    <Label htmlFor='image-workspace-count'>
                       <Trans i18nKey={'生成张数'} />
                     </Label>
                     <Select
@@ -627,7 +646,10 @@ export function ImageWorkspace() {
                         updateForm('count', value ?? COUNT_OPTIONS[0])
                       }
                     >
-                      <SelectTrigger className='w-full rounded-2xl'>
+                      <SelectTrigger
+                        id='image-workspace-count'
+                        className='w-full rounded-2xl'
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
@@ -650,13 +672,6 @@ export function ImageWorkspace() {
                         <div className='text-foreground text-sm font-semibold'>
                           <Trans i18nKey={'来源图片'} />
                         </div>
-                        <div className='text-muted-foreground text-xs leading-6'>
-                          <Trans
-                            i18nKey={
-                              '先从历史图片中选一张作为改图基础，再输入你要继续调整的方向。'
-                            }
-                          />
-                        </div>
                       </div>
                       <Badge variant='outline'>
                         {readySourceItems.length} <Trans i18nKey={'张可选'} />
@@ -669,10 +684,10 @@ export function ImageWorkspace() {
                           <img
                             src={selectedSource.image_url}
                             alt={selectedSource.prompt}
-                            className='h-28 w-full rounded-2xl border object-cover'
+                            className='max-h-64 w-full rounded-lg border object-contain'
                           />
                           <div className='space-y-2'>
-                            <div className='text-foreground line-clamp-3 text-sm leading-6'>
+                            <div className='text-foreground text-sm leading-6 break-words'>
                               {selectedSource.revised_prompt ||
                                 selectedSource.prompt}
                             </div>
@@ -719,14 +734,14 @@ export function ImageWorkspace() {
                               onClick={() => setSelectedSourceId(item.id)}
                               className={`overflow-hidden rounded-2xl border text-left transition ${
                                 selectedSourceId === item.id
-                                  ? 'border-emerald-500 ring-4 ring-emerald-500/15'
-                                  : 'hover:border-slate-300'
+                                  ? 'border-primary ring-primary/20 ring-2'
+                                  : 'hover:border-primary'
                               }`}
                             >
                               <img
                                 src={item.image_url}
                                 alt={item.prompt}
-                                className='aspect-square w-full object-cover'
+                                className='aspect-square w-full object-contain'
                               />
                             </button>
                           ))}
@@ -773,22 +788,15 @@ export function ImageWorkspace() {
                   </Button>
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div className='border-border bg-card rounded-xl border p-5'>
+            <section className='image-workspace-gallery'>
               <div className='flex items-end justify-between gap-3'>
                 <div>
-                  <div className='text-foreground flex items-center gap-2 text-base font-semibold'>
+                  <h2 className='image-workspace-section-title'>
                     <Images className='size-4' />
                     <Trans i18nKey={'作品记录'} />
-                  </div>
-                  <div className='text-muted-foreground mt-1 text-sm'>
-                    <Trans
-                      i18nKey={
-                        '当前会话结果和最近历史都会保存在这里，直到自动清理为止。'
-                      }
-                    />
-                  </div>
+                  </h2>
                 </div>
                 <Button variant='outline' size='sm' onClick={refreshGallery}>
                   <RefreshCw className='size-4' />
@@ -812,9 +820,6 @@ export function ImageWorkspace() {
                   <ImageGrid
                     items={sessionItems}
                     emptyTitle={i18n.t('当前会话还没有图片')}
-                    emptyDescription={i18n.t(
-                      '左侧输入中文提示词后，新的结果会优先出现在这里。'
-                    )}
                     onPreview={setPreviewItem}
                     onReusePrompt={applyItemPrompt}
                     onEditFromItem={startEditFromItem}
@@ -825,9 +830,6 @@ export function ImageWorkspace() {
                   <ImageGrid
                     items={recentItems}
                     emptyTitle={i18n.t('最近还没有图片历史')}
-                    emptyDescription={i18n.t(
-                      '你最近生成的图片会暂时保存在这里，过期后会被自动清理。'
-                    )}
                     onPreview={setPreviewItem}
                     onReusePrompt={applyItemPrompt}
                     onEditFromItem={startEditFromItem}
@@ -835,7 +837,7 @@ export function ImageWorkspace() {
                 </TabsContent>
               </Tabs>
 
-              <div className='mt-5 grid gap-3'>
+              <div className='image-workspace-telemetry'>
                 <InfoPill
                   label={i18n.t('当前会话图片数')}
                   value={String(sessionItems.length)}
@@ -846,14 +848,20 @@ export function ImageWorkspace() {
                 />
                 <InfoPill
                   label={i18n.t('当前浏览标签')}
-                  value={galleryTab === 'session' ? '当前会话' : '最近历史'}
+                  value={
+                    galleryTab === 'session'
+                      ? i18n.t('当前会话')
+                      : i18n.t('最近历史')
+                  }
                 />
                 <InfoPill
                   label={i18n.t('当前选中来源图')}
-                  value={selectedSource ? `#${selectedSource.id}` : '未选择'}
+                  value={
+                    selectedSource ? `#${selectedSource.id}` : i18n.t('未选择')
+                  }
                 />
               </div>
-            </div>
+            </section>
           </div>
         </div>
       </div>
@@ -875,7 +883,6 @@ export function ImageWorkspace() {
 function ImageGrid(props: {
   items: ImageWorkspaceItem[]
   emptyTitle: string
-  emptyDescription: string
   onPreview: (item: ImageWorkspaceItem) => void
   onReusePrompt: (item: ImageWorkspaceItem) => void
   onEditFromItem: (item: ImageWorkspaceItem) => void
@@ -889,14 +896,13 @@ function ImageGrid(props: {
             <Images className='size-4' />
           </EmptyMedia>
           <EmptyTitle>{props.emptyTitle}</EmptyTitle>
-          <EmptyDescription>{props.emptyDescription}</EmptyDescription>
         </EmptyHeader>
       </Empty>
     )
   }
 
   return (
-    <div className='space-y-3'>
+    <div className='image-workspace-results'>
       {props.items.map((item) => {
         const isReady = item.status === 'ready' && !!item.image_url
         const isExpired = item.status === 'expired'
@@ -904,19 +910,20 @@ function ImageGrid(props: {
         return (
           <div
             key={item.id}
-            className='border-border bg-muted/40 rounded-lg border p-4'
+            className='image-workspace-result'
+            data-status={item.status}
           >
-            <div className='flex gap-4'>
+            <div className='flex min-w-0 flex-col gap-4'>
               {isReady ? (
                 <button
                   type='button'
                   onClick={() => props.onPreview(item)}
-                  className='overflow-hidden rounded-2xl border'
+                  className='image-workspace-result-image'
                 >
                   <img
                     src={item.image_url}
                     alt={item.prompt}
-                    className='size-28 object-cover'
+                    className='max-h-80 w-full object-contain'
                   />
                 </button>
               ) : (
@@ -931,11 +938,13 @@ function ImageGrid(props: {
               <div className='min-w-0 flex-1 space-y-3'>
                 <div className='flex items-start justify-between gap-3'>
                   <div className='min-w-0'>
-                    <div className='text-foreground line-clamp-3 text-sm leading-6'>
+                    <div className='text-foreground text-sm leading-6 break-words'>
                       {item.revised_prompt || item.prompt}
                     </div>
                     <div className='text-muted-foreground mt-2 flex flex-wrap items-center gap-2 text-xs'>
-                      <span>{item.model}</span>
+                      <span className='image-workspace-model-id'>
+                        {item.model}
+                      </span>
                       <span>·</span>
                       <span>
                         {dayjs.unix(item.created_at).format('MM-DD HH:mm')}
@@ -951,7 +960,10 @@ function ImageGrid(props: {
                       ) : null}
                     </div>
                   </div>
-                  <Badge variant={getStatusVariant(item.status)}>
+                  <Badge
+                    className='image-workspace-result-status'
+                    variant={getStatusVariant(item.status)}
+                  >
                     {getStatusLabel(item.status)}
                   </Badge>
                 </div>

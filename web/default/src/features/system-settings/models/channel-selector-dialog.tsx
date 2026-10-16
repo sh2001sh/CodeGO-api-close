@@ -26,6 +26,7 @@ import {
   type ColumnDef,
   type RowSelectionState,
 } from '@tanstack/react-table'
+import interfaceI18n from '@/i18n/config'
 import { Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -33,7 +34,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -143,14 +143,14 @@ export function ChannelSelectorDialog({
             onCheckedChange={(value) =>
               table.toggleAllPageRowsSelected(!!value)
             }
-            aria-label='Select all'
+            aria-label={interfaceI18n.t('Select all')}
           />
         ),
         cell: ({ row }) => (
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label='Select row'
+            aria-label={interfaceI18n.t('Select row')}
           />
         ),
         enableSorting: false,
@@ -278,7 +278,7 @@ export function ChannelSelectorDialog({
         },
       },
     ],
-    [channelEndpoints, t, updateEndpoint]
+    [channelEndpoints, t, updateEndpoint, interfaceI18n.language]
   )
 
   const filteredChannels = useMemo(() => {
@@ -331,12 +331,9 @@ export function ChannelSelectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='flex max-h-[90vh] max-w-[calc(100%-2rem)] flex-col sm:max-w-[90vw] xl:max-w-[1400px]'>
+      <DialogContent className='settings-dialog flex max-h-[90vh] max-w-[calc(100%-2rem)] flex-col sm:max-w-[90vw] xl:max-w-[1400px]'>
         <DialogHeader>
           <DialogTitle>{t('Select Sync Channels')}</DialogTitle>
-          <DialogDescription>
-            {t('Choose channels to sync upstream ratio configurations from')}
-          </DialogDescription>
         </DialogHeader>
 
         <div className='flex flex-1 flex-col gap-4 overflow-hidden'>

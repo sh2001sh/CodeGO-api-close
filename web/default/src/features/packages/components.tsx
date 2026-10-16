@@ -16,20 +16,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { ReactNode } from 'react'
-import { Crown, Fuel } from 'lucide-react'
+import { Crown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { StaggerContainer, StaggerItem } from '@/components/page-transition'
-import { SubscriptionLuckySummary } from '@/features/daily-lucky-number/components/subscription-lucky-summary'
-import { useDailyLuckyNumberSelf } from '@/features/daily-lucky-number/hooks/use-daily-lucky-number'
 import type { GroupBuyItem } from '@/features/group-buy/types'
 import {
-  getSubscriptionDisabledReasonText,
   formatSubscriptionQuotaAmount,
   isMonthlyCardPlan,
+  isActiveUserSubscription,
 } from '@/features/subscriptions/lib'
 import type {
   PlanRecord,
@@ -43,11 +47,8 @@ import {
 import { translatePlanTitle } from './lib/display'
 import { PackagePlanCard } from './package-plan-card'
 
-type FuelConfig = { minimumQuota: number; quotaStep: number }
-
 export function PlanZone(props: {
   title: string
-  description: string
   plans: PlanRecord[]
   loading: boolean
   collectiveRooms?: GroupBuyItem[]
@@ -58,22 +59,13 @@ export function PlanZone(props: {
     groupBuyId?: number
   ) => void
   subscriptions: UserSubscriptionRecord[]
-  onFuel?: (
-    subscription: UserSubscriptionRecord,
-    title: string,
-    config: FuelConfig
-  ) => void
 }) {
   const { t } = useTranslation()
 
   return (
-    <section className='space-y-3'>
-      <div className='flex items-center gap-2.5'>
-        <span aria-hidden className='bg-primary block h-3 w-[3px]' />
-        <h3 className='text-foreground text-[13px] font-semibold'>
-          {props.title}
-        </h3>
-        <span className='codego-stat-label sr-only'>{props.description}</span>
+    <section className='commerce-package-zone'>
+      <div>
+        <h3 className='text-foreground'>{props.title}</h3>
       </div>
       {props.loading ? (
         <div className='grid gap-4 sm:grid-cols-2 2xl:grid-cols-3'>
@@ -82,7 +74,7 @@ export function PlanZone(props: {
           ))}
         </div>
       ) : props.plans.length > 0 ? (
-        <StaggerContainer className='grid gap-4 sm:grid-cols-2 2xl:grid-cols-3'>
+        <StaggerContainer className='commerce-plan-grid'>
           {props.plans.map((record) => (
             <StaggerItem key={record.plan.id}>
               <PackagePlanCard
@@ -97,13 +89,12 @@ export function PlanZone(props: {
                 currentSubscription={props.subscriptions.find(
                   (item) => item.subscription.plan_id === record.plan.id
                 )}
-                onFuel={props.onFuel}
               />
             </StaggerItem>
           ))}
         </StaggerContainer>
       ) : (
-        <p className='text-muted-foreground border-border border-t pt-3 text-sm'>
+        <p className='commerce-empty'>
           {t('No plans are currently available in this section.')}
         </p>
       )}
@@ -112,22 +103,11 @@ export function PlanZone(props: {
 }
 
 export function CurrentPackagePanel(props: {
-  onRenew: (plan: PlanRecord) => void
   subscriptions: UserSubscriptionRecord[]
   plans: PlanRecord[]
   loading: boolean
-  onFuel: (
-    subscription: UserSubscriptionRecord,
-    title: string,
-    config: FuelConfig
-  ) => void
 }) {
   const { t } = useTranslation()
-  const dailyLuckyQuery = useDailyLuckyNumberSelf(
-    props.subscriptions.some((record) =>
-      Boolean(record.subscription.lucky_number)
-    )
-  )
   if (props.loading) return <Skeleton className='h-24 w-full' />
   if (props.subscriptions.length === 0) return null
 
@@ -140,21 +120,6 @@ export function CurrentPackagePanel(props: {
           plan={props.plans.find(
             (item) => item.plan.id === record.subscription.plan_id
           )}
-          onFuel={props.onFuel}
-          onRenew={props.onRenew}
-          luckySummary={
-            record.subscription.lucky_number ? (
-              <SubscriptionLuckySummary
-                record={record}
-                plan={props.plans.find(
-                  (item) => item.plan.id === record.subscription.plan_id
-                )}
-                draw={dailyLuckyQuery.data?.today_draw}
-                rewards={dailyLuckyQuery.data?.recent_rewards ?? []}
-                showLink
-              />
-            ) : null
-          }
         />
       ))}
     </section>
@@ -164,18 +129,10 @@ export function CurrentPackagePanel(props: {
 function CurrentPackageCard(props: {
   record: UserSubscriptionRecord
   plan?: PlanRecord
-  onFuel: (
-    record: UserSubscriptionRecord,
-    title: string,
-    config: FuelConfig
-  ) => void
-  luckySummary: ReactNode
-  onRenew: (plan: PlanRecord) => void
 }) {
   const { t } = useTranslation()
   const current = props.record
-  const currentPlanRecord = props.plan
-  const currentPlan = currentPlanRecord?.plan
+  const currentPlan = props.record.plan ?? props.plan?.plan
   const usage = getSubscriptionUsageStatus(current, currentPlan, t)
   const hasTotalLimit = current.subscription.amount_total > 0
   const hasPeriodLimit =
@@ -184,26 +141,20 @@ function CurrentPackageCard(props: {
   const currentTitle =
     translatePlanTitle(currentPlan?.title, t) ||
     t('Plan #{{id}}', { id: current.subscription.plan_id })
-  const canFuel =
-    current.subscription.status === 'active' &&
-    currentPlan?.fuel_enabled === true &&
-    (currentPlan?.fuel_min_quota || 0) > 0 &&
-    (currentPlan?.fuel_quota_step || 0) > 0
-  const renewalBlocked = currentPlanRecord?.action === 'disabled'
-  const renewalBlockedReason = getSubscriptionDisabledReasonText(
-    currentPlanRecord?.disabled_reason
-  )
 
   return (
     <article
       aria-label={currentTitle}
-      className='border-border bg-card flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border px-4 py-3'
+      className='commerce-entitlement border-border bg-card flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3 border'
     >
       <div className='flex min-w-0 items-center gap-2.5'>
         <Crown className='text-primary size-4 shrink-0' />
-        <span className='text-foreground truncate text-sm font-semibold'>
+        <span className='text-foreground text-lg font-semibold'>
           {currentTitle}
         </span>
+        <code className='text-muted-foreground text-sm'>
+          #{current.subscription.id}
+        </code>
       </div>
       <span className='text-muted-foreground text-xs'>{usage.label}</span>
       <div className='text-muted-foreground basis-full text-sm tabular-nums'>
@@ -260,50 +211,123 @@ function CurrentPackageCard(props: {
         </p>
       )}
       <p className='text-muted-foreground basis-full text-xs'>
-        {t('到期时间')} {formatWalletDateTime(current.subscription.end_time)}
+        {t('到期时间')}{' '}
+        {current.subscription.end_time === 0
+          ? t('永久有效')
+          : formatWalletDateTime(current.subscription.end_time)}
       </p>
-      {props.luckySummary && (
-        <div className='min-w-0 basis-full border-t pt-3'>
-          {props.luckySummary}
-        </div>
-      )}
-      <div className='ml-auto flex gap-2'>
-        {canFuel ? (
-          <Button
-            size='sm'
-            onClick={() =>
-              props.onFuel(current, currentTitle, {
-                minimumQuota: currentPlan?.fuel_min_quota || 0,
-                quotaStep: currentPlan?.fuel_quota_step || 0,
-              })
-            }
-          >
-            <Fuel className='mr-1 size-4' />
-            {t('Add quota')}
-          </Button>
-        ) : null}
-        {renewalBlocked ? (
-          <div className='flex flex-col items-end gap-1'>
-            <Button size='sm' variant='outline' disabled>
-              {t('Renewal unavailable')}
-            </Button>
-            <span className='text-muted-foreground text-xs'>
-              {renewalBlockedReason}
-            </span>
-          </div>
-        ) : (
-          <Button
-            size='sm'
-            variant='outline'
-            disabled={!currentPlanRecord}
-            onClick={() =>
-              currentPlanRecord && props.onRenew(currentPlanRecord)
-            }
-          >
-            {t('Renew')}
-          </Button>
-        )}
-      </div>
+      {currentPlan?.upgrade_group ? (
+        <p className='text-muted-foreground basis-full text-base'>
+          {t('适用分组')} · {currentPlan.upgrade_group}
+        </p>
+      ) : null}
+      {current.subscription.credit_pack_paid_quota !== undefined ? (
+        <p className='text-muted-foreground basis-full text-base'>
+          {t('实付额度')} ·{' '}
+          {formatSubscriptionQuotaAmount(
+            current.subscription.credit_pack_paid_quota
+          )}
+        </p>
+      ) : null}
+      {current.subscription.credit_pack_granted_quota !== undefined &&
+      current.subscription.credit_pack_paid_quota !== undefined ? (
+        <p className='text-muted-foreground basis-full text-base'>
+          {t('赠额')} ·{' '}
+          {formatSubscriptionQuotaAmount(
+            Math.max(
+              0,
+              current.subscription.credit_pack_granted_quota -
+                (current.subscription.credit_pack_paid_quota ?? 0)
+            )
+          )}
+        </p>
+      ) : null}
+      {current.subscription.source ? (
+        <p className='text-muted-foreground basis-full text-base'>
+          {t('Source')} · {current.subscription.source}
+        </p>
+      ) : null}
     </article>
+  )
+}
+
+export function PackageHistory(props: {
+  subscriptions: UserSubscriptionRecord[]
+  plans: PlanRecord[]
+  loading: boolean
+}) {
+  const { t } = useTranslation()
+  const records = props.subscriptions.filter(
+    (record) => !isActiveUserSubscription(record.subscription)
+  )
+  if (props.loading)
+    return <Skeleton className='h-48 w-full' aria-label={t('Loading')} />
+  return (
+    <section
+      aria-labelledby='package-history-title'
+      className='package-history space-y-6'
+    >
+      <h2 id='package-history-title' className='text-2xl font-semibold'>
+        {t('历史权益')}
+      </h2>
+      {records.length === 0 ? (
+        <div className='commerce-empty'>{t('暂无记录')}</div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('Subscription')}</TableHead>
+              <TableHead>{t('Source')}</TableHead>
+              <TableHead>{t('Remaining')}</TableHead>
+              <TableHead>{t('到期时间')}</TableHead>
+              <TableHead>{t('Status')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {records.map((record) => {
+              const plan =
+                record.plan ||
+                props.plans.find(
+                  (item) => item.plan.id === record.subscription.plan_id
+                )?.plan
+              const subscription = record.subscription
+              return (
+                <TableRow key={subscription.id}>
+                  <TableCell>
+                    <span className='block font-medium'>
+                      {translatePlanTitle(plan?.title, t) ||
+                        t('Plan #{{id}}', { id: subscription.plan_id })}
+                    </span>
+                    <code className='text-muted-foreground'>
+                      #{subscription.id}
+                    </code>
+                  </TableCell>
+                  <TableCell>{subscription.source || '--'}</TableCell>
+                  <TableCell className='tabular-nums'>
+                    {formatSubscriptionQuotaAmount(
+                      Math.max(
+                        0,
+                        subscription.amount_total - subscription.amount_used
+                      )
+                    )}{' '}
+                    / {formatSubscriptionQuotaAmount(subscription.amount_total)}
+                  </TableCell>
+                  <TableCell>
+                    {subscription.end_time === 0
+                      ? t('永久有效')
+                      : formatWalletDateTime(subscription.end_time)}
+                  </TableCell>
+                  <TableCell>
+                    <span className='commerce-status'>
+                      {getSubscriptionUsageStatus(record, plan, t).label}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      )}
+    </section>
   )
 }

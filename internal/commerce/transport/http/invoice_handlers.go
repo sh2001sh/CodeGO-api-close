@@ -10,6 +10,15 @@ import (
 )
 
 func listInvoiceEligibleOrders(c *gin.Context) {
+	if c.Query("p") != "" || c.Query("page_size") != "" || c.Query("keyword") != "" || c.Query("ps") != "" || c.Query("size") != "" {
+		payload, err := commerceapp.ListInvoiceEligibleOrdersPageWithContext(c.Request.Context(), c.GetInt("id"), c.Query("keyword"), platformpagination.GetPageQuery(c))
+		if err != nil {
+			httpapi.ApiError(c, err)
+			return
+		}
+		httpapi.ApiSuccess(c, payload)
+		return
+	}
 	orders, err := commerceapp.ListInvoiceEligibleOrders(c.GetInt("id"))
 	if err != nil {
 		httpapi.ApiError(c, err)

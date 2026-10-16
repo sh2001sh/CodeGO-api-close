@@ -9,6 +9,7 @@ import (
 	"time"
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"gorm.io/gorm"
@@ -118,13 +119,16 @@ func RunLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 
 func pendingLedgerOutboxAccountIDs(ctx context.Context, limit int) ([]string, error) {
 	accountIDs := make([]string, 0, limit)
+	// Failed accounts retain their events for an atomic retry, but must yield to
+	// less-retried accounts. MAX keeps fresh events from resetting a broken
+	// account's priority while its oldest failing event is still pending.
 	err := platformdb.DB.WithContext(ctx).
 		Where("status = ?", billingschema.BillingOutboxStatusPending).
 		Where("account_id <> ?", "").
 		Model(&billingschema.BillingOutboxEvent{}).
 		Select("account_id").
 		Group("account_id").
-		Order("MIN(created_at) asc, account_id asc").
+		Order("MAX(attempts) asc, MIN(created_at) asc, account_id asc").
 		Limit(limit).
 		Pluck("account_id", &accountIDs).Error
 	return accountIDs, err
@@ -150,6 +154,7 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 
 	processed := 0
 	now := time.Now().UTC()
+	creditedInviters := make(map[int]struct{})
 	reconcile := ledgerReconciliationDue(accountID, now)
 	repair := false
 	if reconcile {
@@ -173,9 +178,25 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 				return err
 			}
 		}
+		var events []billingschema.BillingOutboxEvent
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("account_id = ? AND status = ?", accountID, billingschema.BillingOutboxStatusPending).
+			Order("created_at asc, event_id asc").Limit(1000).Find(&events).Error; err != nil {
+			return err
+		}
+		if len(events) == 0 {
+			return nil
+		}
+		eventIDs := make([]string, 0, len(events))
+		for _, event := range events {
+			if err := consumeReferralSettlementTx(tx, event, creditedInviters); err != nil {
+				return err
+			}
+			eventIDs = append(eventIDs, event.EventID)
+		}
 
 		result := tx.Model(&billingschema.BillingOutboxEvent{}).
-			Where("account_id = ? AND status = ?", accountID, billingschema.BillingOutboxStatusPending).
+			Where("event_id IN ? AND status = ?", eventIDs, billingschema.BillingOutboxStatusPending).
 			Updates(map[string]any{
 				"status":       billingschema.BillingOutboxStatusPublished,
 				"published_at": &now,
@@ -189,6 +210,13 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 	})
 	if err == nil && reconcile {
 		markLedgerReconciled(accountID, now)
+	}
+	if err == nil {
+		for inviterID := range creditedInviters {
+			if cacheErr := identitystore.InvalidateUserCache(inviterID); cacheErr != nil {
+				platformobservability.SysError(fmt.Sprintf("invalidate referral rebate recipient cache user=%d: %s", inviterID, cacheErr.Error()))
+			}
+		}
 	}
 	return processed, err
 }

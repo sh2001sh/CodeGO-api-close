@@ -2,225 +2,56 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
 )
 
-// EnsureDefaultSubscriptionPlans creates built-in plans and repairs legacy preset snapshots.
+// EnsureDefaultSubscriptionPlans retires legacy sales without changing purchased snapshots.
 func EnsureDefaultSubscriptionPlans() error {
-	if err := migrateLegacyBlindBoxMultiplierProps(); err != nil {
-		return err
-	}
-	plans := defaultSubscriptionPlans()
-	for index := range plans {
-		existing, err := findPresetSubscriptionPlan(plans[index].Title)
-		if err == nil {
-			updates := syncPresetSubscriptionPlanFields(existing, plans[index])
-			if existing.Title != plans[index].Title {
-				updates["title"] = plans[index].Title
-			}
-			if len(updates) > 0 {
-				if err := platformdb.DB.Model(existing).Updates(updates).Error; err != nil {
-					return err
-				}
-				InvalidateSubscriptionPlanCache(existing.Id)
-			}
-			migrationPlan := plans[index]
-			migrationPlan.Id = existing.Id
-			if err := migratePresetUserSubscriptions(&migrationPlan); err != nil {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if platformdb.UsingPostgreSQL {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", int64(71020261015)).Error; err != nil {
 				return err
 			}
-			continue
 		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := tx.Model(&commerceschema.SubscriptionPlan{}).
+			Where("plan_type <> ? AND internal_only = ?", commerceschema.SubscriptionPlanTypeCreditPack, false).
+			Updates(map[string]any{"enabled": false, "lucky_draw_enabled": false, "group_buy_enabled": false}).Error; err != nil {
 			return err
 		}
-		if err := platformdb.DB.Create(&plans[index]).Error; err != nil {
-			return err
+		for _, plan := range defaultSubscriptionPlans() {
+			var existing commerceschema.SubscriptionPlan
+			err := tx.Where("title = ?", plan.Title).First(&existing).Error
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			if err := tx.Create(&plan).Error; err != nil {
+				return err
+			}
 		}
-		if err := migratePresetUserSubscriptions(&plans[index]); err != nil {
-			return err
-		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func defaultSubscriptionPlans() []commerceschema.SubscriptionPlan {
-	return []commerceschema.SubscriptionPlan{
-		{
-			Title:                "Lite月卡",
-			Subtitle:             "月卡",
-			PriceAmount:          49,
-			Currency:             "CNY",
-			DurationUnit:         commerceschema.SubscriptionDurationMonth,
-			DurationValue:        1,
-			Enabled:              true,
-			InternalOnly:         false,
-			SortOrder:            70,
-			TotalAmount:          quotaUnitsFromUSD(350),
-			PeriodAmount:         0,
-			QuotaResetPeriod:     commerceschema.SubscriptionResetNever,
-			ModelLimits:          "",
-			UpgradeGroup:         "",
-			MaxPurchasePerUser:   0,
-			PlanType:             commerceschema.SubscriptionPlanTypeMonthly,
-			MembershipTier:       commerceschema.SubscriptionMembershipTierLite,
-			LuckyDrawEnabled:     true,
-			BlindBoxBenefitCount: 0,
-			GroupBuyEnabled:      true,
-			GroupBuyBonus2:       25,
-			GroupBuyBonus3:       45,
-			GroupBuyBonus5:       65,
-			FuelEnabled:          true,
-			FuelUnitPrice:        0.175,
-			FuelMinQuota:         quotaUnitsFromUSD(10),
-			FuelQuotaStep:        quotaUnitsFromUSD(10),
-		},
-		{
-			Title:                "Standard月卡",
-			Subtitle:             "月卡",
-			PriceAmount:          89,
-			Currency:             "CNY",
-			DurationUnit:         commerceschema.SubscriptionDurationMonth,
-			DurationValue:        1,
-			Enabled:              true,
-			InternalOnly:         false,
-			SortOrder:            80,
-			TotalAmount:          quotaUnitsFromUSD(650),
-			PeriodAmount:         0,
-			QuotaResetPeriod:     commerceschema.SubscriptionResetNever,
-			PlanType:             commerceschema.SubscriptionPlanTypeMonthly,
-			MembershipTier:       commerceschema.SubscriptionMembershipTierStandard,
-			LuckyDrawEnabled:     true,
-			BlindBoxBenefitCount: 0,
-			GroupBuyEnabled:      true,
-			GroupBuyBonus2:       50,
-			GroupBuyBonus3:       90,
-			GroupBuyBonus5:       115,
-			FuelEnabled:          true,
-			FuelUnitPrice:        0.170,
-			FuelMinQuota:         quotaUnitsFromUSD(10),
-			FuelQuotaStep:        quotaUnitsFromUSD(10),
-		},
-		{
-			Title:                "Pro月卡",
-			Subtitle:             "月卡",
-			PriceAmount:          169,
-			Currency:             "CNY",
-			DurationUnit:         commerceschema.SubscriptionDurationMonth,
-			DurationValue:        1,
-			Enabled:              true,
-			InternalOnly:         false,
-			SortOrder:            60,
-			TotalAmount:          quotaUnitsFromUSD(1260),
-			PeriodAmount:         0,
-			QuotaResetPeriod:     commerceschema.SubscriptionResetNever,
-			PlanType:             commerceschema.SubscriptionPlanTypeMonthly,
-			MembershipTier:       commerceschema.SubscriptionMembershipTierPro,
-			LuckyDrawEnabled:     true,
-			BlindBoxBenefitCount: 0,
-			GroupBuyEnabled:      true,
-			GroupBuyBonus2:       95,
-			GroupBuyBonus3:       170,
-			GroupBuyBonus5:       240,
-			FuelEnabled:          true,
-			FuelUnitPrice:        0.160,
-			FuelMinQuota:         quotaUnitsFromUSD(10),
-			FuelQuotaStep:        quotaUnitsFromUSD(10),
-		},
-		{
-			Title:                "Ultra月卡",
-			Subtitle:             "月卡",
-			PriceAmount:          299,
-			Currency:             "CNY",
-			DurationUnit:         commerceschema.SubscriptionDurationMonth,
-			DurationValue:        1,
-			Enabled:              true,
-			InternalOnly:         false,
-			SortOrder:            50,
-			TotalAmount:          quotaUnitsFromUSD(2300),
-			PeriodAmount:         0,
-			QuotaResetPeriod:     commerceschema.SubscriptionResetNever,
-			PlanType:             commerceschema.SubscriptionPlanTypeMonthly,
-			MembershipTier:       commerceschema.SubscriptionMembershipTierUltra,
-			LuckyDrawEnabled:     true,
-			BlindBoxBenefitCount: 0,
-			GroupBuyEnabled:      true,
-			GroupBuyBonus2:       170,
-			GroupBuyBonus3:       300,
-			GroupBuyBonus5:       420,
-			FuelEnabled:          true,
-			FuelUnitPrice:        0.150,
-			FuelMinQuota:         quotaUnitsFromUSD(10),
-			FuelQuotaStep:        quotaUnitsFromUSD(10),
-		},
-		{
-			Title:              "新人体验卡",
-			Subtitle:           "新人专区",
-			PriceAmount:        1.9,
-			Currency:           "CNY",
-			DurationUnit:       commerceschema.SubscriptionDurationDay,
-			DurationValue:      1,
-			Enabled:            true,
-			InternalOnly:       false,
-			SortOrder:          90,
-			TotalAmount:        quotaUnitsFromUSD(15),
-			QuotaResetPeriod:   commerceschema.SubscriptionResetNever,
-			MaxPurchasePerUser: 1,
-			PlanType:           commerceschema.SubscriptionPlanTypeStarter,
-			GroupBuyEnabled:    false,
-		},
-		{
-			Title:            "标准周卡",
-			Subtitle:         "周卡",
-			PriceAmount:      34.9,
-			Currency:         "CNY",
-			DurationUnit:     commerceschema.SubscriptionDurationDay,
-			DurationValue:    7,
-			Enabled:          true,
-			InternalOnly:     false,
-			SortOrder:        40,
-			TotalAmount:      quotaUnitsFromUSD(220),
+	tiers := []struct{ price, credits float64 }{{64, 67.2}, {128, 135.68}, {500, 535}, {1000, 1080}, {3000, 3300}}
+	plans := make([]commerceschema.SubscriptionPlan, 0, len(tiers))
+	for i, tier := range tiers {
+		plans = append(plans, commerceschema.SubscriptionPlan{
+			Title: fmt.Sprintf("%g元永久额度包", tier.price), Currency: "CNY", PriceAmount: tier.price,
+			DurationUnit: commerceschema.SubscriptionDurationPermanent, DurationValue: 1,
+			Enabled: true, SortOrder: 100 - i, TotalAmount: quotaUnitsFromUSD(tier.credits),
+			PlanType:         commerceschema.SubscriptionPlanTypeCreditPack,
 			QuotaResetPeriod: commerceschema.SubscriptionResetNever,
-			PlanType:         commerceschema.SubscriptionPlanTypeWeekly,
-			GroupBuyEnabled:  true,
-			GroupBuyBonus2:   20,
-			GroupBuyBonus3:   35,
-			GroupBuyBonus5:   55,
-		},
-		{
-			Title:            "50刀日卡",
-			Subtitle:         "日卡",
-			PriceAmount:      8.9,
-			Currency:         "CNY",
-			DurationUnit:     commerceschema.SubscriptionDurationDay,
-			DurationValue:    1,
-			Enabled:          true,
-			InternalOnly:     false,
-			SortOrder:        30,
-			TotalAmount:      quotaUnitsFromUSD(50),
-			QuotaResetPeriod: commerceschema.SubscriptionResetNever,
-			PlanType:         commerceschema.SubscriptionPlanTypeDaily,
-			GroupBuyEnabled:  false,
-		},
-		{
-			Title:            "100刀日卡",
-			Subtitle:         "日卡",
-			PriceAmount:      16.9,
-			Currency:         "CNY",
-			DurationUnit:     commerceschema.SubscriptionDurationDay,
-			DurationValue:    1,
-			Enabled:          true,
-			InternalOnly:     false,
-			SortOrder:        20,
-			TotalAmount:      quotaUnitsFromUSD(100),
-			QuotaResetPeriod: commerceschema.SubscriptionResetNever,
-			PlanType:         commerceschema.SubscriptionPlanTypeDaily,
-			GroupBuyEnabled:  false,
-		},
+		})
 	}
+	return plans
 }
 
 func legacyPresetSubscriptionPlanTitleMap() map[string]string {

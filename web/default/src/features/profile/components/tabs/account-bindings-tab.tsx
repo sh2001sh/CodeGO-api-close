@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Mail, Shield, Send, Link2, Unlink } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { FcGoogle } from 'react-icons/fc'
 import { SiGithub, SiWechat, SiLinux } from 'react-icons/si'
 import { toast } from 'sonner'
 import { IconDiscord } from '@/assets/brand-icons'
@@ -27,6 +28,8 @@ import {
   handleOIDCOAuth,
   handleDiscordOAuth,
   handleLinuxDOOAuth,
+  buildCustomOAuthUrl,
+  getOAuthState,
 } from '@/lib/oauth'
 import { useDialogs } from '@/hooks/use-dialog'
 import { useStatus } from '@/hooks/use-status'
@@ -34,7 +37,11 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { StatusBadge } from '@/components/status-badge'
-import { OAUTH_BIND_STORAGE_KEY } from '@/features/auth/constants'
+import {
+  OAUTH_BIND_STORAGE_KEY,
+  OAUTH_BIND_PROVIDER_KEY,
+} from '@/features/auth/constants'
+import type { CustomOAuthProviderInfo } from '@/features/auth/types'
 import {
   getSelfOAuthBindings,
   unbindCustomOAuth,
@@ -68,10 +75,9 @@ export function AccountBindingsTab({
     null
   )
   const [unbinding, setUnbinding] = useState(false)
+  const [bindingProvider, setBindingProvider] = useState<number | null>(null)
 
-  const customProviders = status?.custom_oauth_providers as
-    | Array<{ id: string; name: string }>
-    | undefined
+  const customProviders = status?.custom_oauth_providers
 
   const fetchCustomBindings = useCallback(async () => {
     if (!customProviders || customProviders.length === 0) return
@@ -113,9 +119,20 @@ export function AccountBindingsTab({
     }
   }
 
-  const handleBindCustomOAuth = (provider: { id: string; name: string }) => {
-    const redirectUrl = `${window.location.origin}/oauth/${provider.id}?bind=true`
-    window.location.href = `/api/oauth/${provider.id}?redirect=${encodeURIComponent(redirectUrl)}`
+  const handleBindCustomOAuth = async (provider: CustomOAuthProviderInfo) => {
+    setBindingProvider(provider.id)
+    try {
+      const state = await getOAuthState()
+      if (!state) throw new Error('Missing OAuth state')
+      const url = buildCustomOAuthUrl(provider, state)
+      // Keep the signed-in session: the callback binds to the current user.
+      window.sessionStorage.setItem(OAUTH_BIND_PROVIDER_KEY, provider.slug)
+      window.location.assign(url)
+    } catch {
+      toast.error(t('Failed to initialize OAuth'))
+    } finally {
+      setBindingProvider(null)
+    }
   }
 
   useEffect(() => {
@@ -130,6 +147,7 @@ export function AccountBindingsTab({
           timestamp?: number
         }
         if (payload?.status === 'success') {
+          void fetchCustomBindings()
           onUpdate()
         }
       } catch {
@@ -144,7 +162,7 @@ export function AccountBindingsTab({
 
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
-  }, [onUpdate])
+  }, [onUpdate, fetchCustomBindings])
 
   // Memoize bindings to prevent unnecessary recalculations
   const bindings: BindingItem[] = useMemo(() => {
@@ -326,7 +344,11 @@ export function AccountBindingsTab({
                 >
                   <div className='flex min-w-0 items-center gap-2.5 sm:gap-3'>
                     <div className='bg-muted shrink-0 rounded-md p-1.5 sm:p-2'>
-                      <Link2 className='h-4 w-4' />
+                      {provider.slug === 'google' ? (
+                        <FcGoogle className='h-4 w-4' aria-hidden='true' />
+                      ) : (
+                        <Link2 className='h-4 w-4' />
+                      )}
                     </div>
                     <div className='min-w-0'>
                       <div className='flex items-center gap-1.5'>
@@ -341,7 +363,7 @@ export function AccountBindingsTab({
                       </div>
                       <p className='text-muted-foreground truncate text-xs'>
                         {isBound
-                          ? binding?.external_id || t('Bound')
+                          ? binding?.provider_user_id || t('Bound')
                           : t('Not bound')}
                       </p>
                     </div>
@@ -362,6 +384,7 @@ export function AccountBindingsTab({
                       size='sm'
                       className='h-7 shrink-0 px-2.5 text-xs'
                       onClick={() => handleBindCustomOAuth(provider)}
+                      disabled={bindingProvider !== null}
                     >
                       {t('Bind')}
                     </Button>

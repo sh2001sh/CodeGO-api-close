@@ -1,0 +1,282 @@
+.admin-workspace {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  color: var(--ink-primary, var(--foreground));
+  background: var(--bg-canvas, var(--background));
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-workspace .codego-page-intro {
+  padding-block: 28px 20px;
+  border-bottom: 1px solid var(--hairline-light, var(--border));
+}
+
+.admin-workspace .codego-page-title {
+  font-size: 28px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  white-space: normal;
+  overflow: visible;
+}
+
+.admin-workspace .codego-page-content {
+  padding-top: 24px;
+}
+
+.admin-workspace
+  :is(
+    button:not([role='switch']):not([role='checkbox']),
+    input,
+    select,
+    [role='combobox']
+  ) {
+  min-height: 44px;
+}
+
+.admin-workspace :is(input, select, textarea) {
+  caret-color: var(--brand-orange, var(--primary));
+  font-size: 14px;
+  border-radius: 12px;
+}
+
+.admin-workspace
+  :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.admin-workspace [data-slot='table-header'] {
+  background: var(--bg-subtle, var(--muted));
+}
+
+.admin-workspace [data-slot='table-head'] {
+  height: 44px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary, var(--muted-foreground));
+}
+
+.admin-workspace [data-slot='table-cell'] {
+  height: 56px;
+  padding-block: 10px;
+  font-size: 14px;
+}
+
+.admin-workspace [data-slot='table-row'] {
+  transition: background-color 180ms var(--ease-out, ease-out);
+}
+
+.admin-workspace [data-state='selected'][data-slot='table-row'] {
+  background: color-mix(
+    in srgb,
+    var(--brand-orange, var(--primary)) 6%,
+    var(--surface-card, var(--card))
+  );
+}
+
+.admin-workspace [data-slot='tabs-list'] {
+  height: auto;
+  min-height: 48px;
+  justify-content: flex-start;
+  max-width: 100%;
+  gap: 4px;
+  border: 1px solid var(--hairline-light, var(--border));
+  border-radius: 16px;
+  padding: 4px;
+  background: var(--bg-subtle, var(--muted));
+}
+
+.admin-workspace [data-slot='tabs-trigger'] {
+  min-height: 44px;
+  padding-inline: 16px;
+  flex: 0 1 auto;
+  border-radius: 12px;
+  color: var(--ink-secondary, var(--muted-foreground));
+  box-shadow: none;
+}
+
+.admin-workspace
+  [data-slot='tabs-trigger']:is([data-active], [data-state='active']) {
+  color: var(--ink-primary, var(--foreground));
+  background: var(--surface-card, var(--card));
+  border-color: var(--hairline-light, var(--border));
+  box-shadow: 0 2px 5px rgb(13 13 16 / 5%);
+}
+
+.admin-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  min-height: 52px;
+  padding: 4px 2px 12px;
+}
+
+.admin-record-meta h2 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.admin-record-meta dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+
+.admin-record-meta dl > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.admin-record-meta dt {
+  color: var(--muted-foreground);
+}
+.admin-record-meta dd {
+  font-weight: 600;
+}
+
+.admin-query-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--destructive);
+  border-radius: 12px;
+  color: var(--telemetry-rose, var(--destructive));
+  background: color-mix(
+    in srgb,
+    var(--telemetry-rose, var(--destructive)) 5%,
+    var(--surface-card, var(--card))
+  );
+}
+
+.admin-ledger-panel {
+  overflow: hidden;
+  border: 1px solid var(--hairline-light, var(--border));
+  border-radius: 20px;
+  background: var(--surface-card, var(--card));
+}
+
+.admin-workspace .admin-ledger-panel > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-editor {
+  color: var(--ink-primary, var(--foreground));
+  background: var(--bg-canvas, var(--background));
+}
+
+.admin-editor :is(input, select, textarea, [role='combobox']) {
+  min-height: 44px;
+  caret-color: var(--brand-orange, var(--primary));
+  font-size: 14px;
+  border-radius: 12px;
+}
+
+.admin-editor button:not([role='switch']):not([role='checkbox']) {
+  min-height: 44px;
+}
+
+.admin-workspace [data-slot='switch']::after,
+.admin-editor [data-slot='switch']::after {
+  inset-block: -13px;
+}
+.admin-editor [data-slot='sheet-title'],
+.admin-editor [data-slot='dialog-title'] {
+  font-size: 24px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.admin-editor [data-slot='form-label'] {
+  font-size: 14px;
+}
+.admin-editor [data-slot='form-message'] {
+  font-size: 13px;
+}
+
+.admin-workspace .admin-records {
+  min-width: 0;
+  border: 1px solid var(--hairline-light, var(--border));
+  border-radius: 20px;
+  padding: 16px;
+  background: var(--surface-card, var(--card));
+}
+
+.admin-workspace .admin-records [data-slot='table-container'] {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 12px;
+}
+
+.admin-workspace [data-slot='badge'] {
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.admin-workspace [data-slot='tabs-content'] {
+  min-width: 0;
+}
+.admin-editor :is(input, select, textarea, button, a):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+@media (max-width: 767px) {
+  .admin-workspace .codego-page-intro {
+    padding-block: 24px 20px;
+  }
+  .admin-workspace [data-slot='tabs-list'] {
+    flex-wrap: wrap;
+  }
+  .admin-workspace .codego-page-title {
+    font-size: 24px;
+  }
+  .admin-workspace .admin-records {
+    padding: 12px;
+  }
+  :is(.admin-workspace, .admin-editor)
+    :is(.text-xs, [class*='text-[10px]'], [class*='text-[11px]']) {
+    font-size: 12px;
+  }
+  :is(.admin-workspace, .admin-editor) :is(input, select, textarea) {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 479px) {
+  .admin-workspace .admin-ledger-panel > header {
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-workspace *,
+  .admin-workspace *::before,
+  .admin-workspace *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .admin-editor *,
+  .admin-editor *::before,
+  .admin-editor *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

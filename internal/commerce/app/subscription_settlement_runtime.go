@@ -15,6 +15,17 @@ import (
 // SettleSubscriptionReservation atomically settles the ledger reservation and updates
 // the subscription usage projection to the confirmed upstream usage.
 func SettleSubscriptionReservation(requestID string, subscriptionID int, modelName string, actualAmount int64) error {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		return SettleSubscriptionReservationTx(tx, requestID, subscriptionID, modelName, actualAmount)
+	})
+}
+
+// SettleSubscriptionReservationTx lets the billing caller persist final route
+// evidence in the same transaction as the native settlement and usage projection.
+func SettleSubscriptionReservationTx(tx *gorm.DB, requestID string, subscriptionID int, modelName string, actualAmount int64) error {
+	if tx == nil {
+		return errors.New("tx is nil")
+	}
 	if strings.TrimSpace(requestID) == "" {
 		return errors.New("requestId is empty")
 	}
@@ -25,22 +36,20 @@ func SettleSubscriptionReservation(requestID string, subscriptionID int, modelNa
 		return errors.New("actual amount cannot be negative")
 	}
 
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		record := &commerceschema.SubscriptionPreConsumeRecord{}
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("request_id = ?", requestID).First(record).Error; err != nil {
-			return err
-		}
-		if record.UserSubscriptionId != subscriptionID {
-			return errors.New("subscription reservation ownership mismatch")
-		}
-		if record.Status == "refunded" {
-			return errors.New("subscription pre-consume already refunded")
-		}
-		if err := lockUserSubscriptionTx(tx, record.UserSubscriptionId); err != nil {
-			return err
-		}
-		return settleSubscriptionReservationTx(tx, record, actualAmount)
-	})
+	record := &commerceschema.SubscriptionPreConsumeRecord{}
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("request_id = ?", requestID).First(record).Error; err != nil {
+		return err
+	}
+	if record.UserSubscriptionId != subscriptionID {
+		return errors.New("subscription reservation ownership mismatch")
+	}
+	if record.Status == "refunded" {
+		return errors.New("subscription pre-consume already refunded")
+	}
+	if err := lockUserSubscriptionTx(tx, record.UserSubscriptionId); err != nil {
+		return err
+	}
+	return settleSubscriptionReservationTx(tx, record, actualAmount)
 }
 
 func settleSubscriptionReservationTx(tx *gorm.DB, record *commerceschema.SubscriptionPreConsumeRecord, actualAmount int64) error {

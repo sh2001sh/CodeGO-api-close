@@ -45,13 +45,17 @@ func initResources() error {
 		platformobservability.FatalLog("failed to initialize database: " + err.Error())
 		return err
 	}
-	if err := commerceapp.EnsureDefaultSubscriptionPlans(); err != nil {
-		platformobservability.FatalLog("failed to initialize default subscription plans: " + err.Error())
-		return err
-	}
-	if err := commerceapp.MigrateBlindBoxLegacyCredits(); err != nil {
-		platformobservability.FatalLog("failed to migrate legacy blind box credits: " + err.Error())
-		return err
+	// Commerce initialization belongs to the master. Starting a gateway must
+	// not rewrite plan snapshots or move legacy wallet credits.
+	if platformconfig.IsMasterNode {
+		if err := commerceapp.EnsureDefaultSubscriptionPlans(); err != nil {
+			platformobservability.FatalLog("failed to initialize default subscription plans: " + err.Error())
+			return err
+		}
+		if err := commerceapp.MigrateBlindBoxLegacyCredits(); err != nil {
+			platformobservability.FatalLog("failed to migrate legacy blind box credits: " + err.Error())
+			return err
+		}
 	}
 	if err := auditprojection.EnsureSchema(); err != nil {
 		platformobservability.FatalLog("failed to initialize audit projection schema: " + err.Error())
@@ -62,9 +66,6 @@ func initResources() error {
 
 	if err := commerceapp.InitGhostUsers(); err != nil {
 		platformobservability.SysLog("failed to initialize ghost users: " + err.Error())
-	}
-	if err := commerceapp.EnsureGhostGroupBuys(); err != nil {
-		platformobservability.SysLog("failed to ensure ghost group buys: " + err.Error())
 	}
 
 	platformstore.InitOptionMap()

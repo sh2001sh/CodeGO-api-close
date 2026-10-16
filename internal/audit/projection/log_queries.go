@@ -54,6 +54,10 @@ const usedLogGroupsCacheTTL = 5 * time.Minute
 
 var usedLogGroupsLoads singleflight.Group
 
+// Only coalesce identical in-flight reads. No balance or usage result survives
+// the call, so a completed request never hides newly committed usage.
+var logStatLoads singleflight.Group
+
 func GetLogByTokenID(tokenID int) ([]*auditschema.Log, error) {
 	var logs []*auditschema.Log
 	err := platformdb.LogDB.Model(&auditschema.Log{}).
@@ -230,9 +234,21 @@ func logSlowLogQuery(scope string, query auditdomain.LogListQuery, rows int, cou
 }
 
 func SumUsedQuota(query auditdomain.LogListQuery) (auditschema.Stat, error) {
+	realtimeCutoff := time.Now().Add(-60 * time.Second).Unix()
+	key := fmt.Sprintf("%p:%#v:%d", platformdb.LogDB, query, realtimeCutoff)
+	value, err, _ := logStatLoads.Do(key, func() (any, error) {
+		return sumUsedQuota(query, realtimeCutoff)
+	})
+	if err != nil {
+		return auditschema.Stat{}, err
+	}
+	return value.(auditschema.Stat), nil
+}
+
+func sumUsedQuota(query auditdomain.LogListQuery, realtimeCutoff int64) (auditschema.Stat, error) {
 	stat := auditschema.Stat{}
-	tx := platformdb.LogDB.Table("logs").Select("sum(quota) quota")
-	rpmTpmQuery := platformdb.LogDB.Table("logs").Select("count(*) rpm, sum(prompt_tokens) + sum(completion_tokens) tpm")
+	tx := platformdb.LogDB.Table("logs").Select("COALESCE(SUM(quota), 0) quota")
+	rpmTpmQuery := platformdb.LogDB.Table("logs").Select("COUNT(*) rpm, COALESCE(SUM(prompt_tokens) + SUM(completion_tokens), 0) tpm")
 
 	if query.UserID > 0 {
 		tx = tx.Where("user_id = ?", query.UserID)
@@ -260,22 +276,15 @@ func SumUsedQuota(query auditdomain.LogListQuery) (auditschema.Stat, error) {
 
 	tx = tx.Where("type = ?", auditschema.LogTypeConsume)
 	rpmTpmQuery = rpmTpmQuery.Where("type = ?", auditschema.LogTypeConsume)
-	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
+	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", realtimeCutoff)
 
-	if err := tx.Scan(&stat).Error; err != nil {
+	// Quota follows the selected range; RPM/TPM retain their independent live
+	// minute window. Joining the aggregate rows saves a database round trip.
+	if err := platformdb.LogDB.Table("(?) AS quota_stat CROSS JOIN (?) AS live_stat", tx, rpmTpmQuery).
+		Select("quota_stat.quota, live_stat.rpm, live_stat.tpm").Scan(&stat).Error; err != nil {
 		platformobservability.SysError("failed to query log stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
-	var realtimeStat struct {
-		Rpm int `gorm:"column:rpm"`
-		Tpm int `gorm:"column:tpm"`
-	}
-	if err := rpmTpmQuery.Scan(&realtimeStat).Error; err != nil {
-		platformobservability.SysError("failed to query rpm/tpm stat: " + err.Error())
-		return stat, errors.New("查询统计数据失败")
-	}
-	stat.Rpm = realtimeStat.Rpm
-	stat.Tpm = realtimeStat.Tpm
 	return stat, nil
 }
 

@@ -20,14 +20,11 @@ import type { TFunction } from 'i18next'
 import {
   Box,
   Cable,
-  Clover,
   Egg,
   FlaskConical,
   Gauge,
   Gift,
   KeyRound,
-  Package,
-  ReceiptText,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -74,6 +71,11 @@ export function buildSidebarData(t: TFunction): SidebarData {
             icon: ScrollText,
           },
           {
+            title: t('渠道主工作台'),
+            url: '/channel-workbench',
+            icon: Store,
+          },
+          {
             title: t('Debug'),
             url: '/playground',
             icon: FlaskConical,
@@ -92,7 +94,7 @@ export function buildSidebarData(t: TFunction): SidebarData {
           {
             title: t('Plans'),
             url: '/packages',
-            icon: Package,
+            icon: Box,
           },
           {
             title: t('Blind box'),
@@ -110,32 +112,10 @@ export function buildSidebarData(t: TFunction): SidebarData {
             url: '/profile',
             icon: User,
           },
-        ],
-      },
-      {
-        id: 'more',
-        title: t('More'),
-        items: [
           {
-            title: t('More'),
+            title: t('Invites'),
+            url: '/invite-rewards',
             icon: UserPlus,
-            items: [
-              {
-                title: t('Daily Lucky Number'),
-                url: '/daily-lucky-number',
-                icon: Clover,
-              },
-              {
-                title: t('Invites'),
-                url: '/invite-rewards',
-                icon: UserPlus,
-              },
-              {
-                title: t('Electronic invoices'),
-                url: '/invoices',
-                icon: ReceiptText,
-              },
-            ],
           },
         ],
       },
@@ -183,13 +163,6 @@ export function buildSidebarData(t: TFunction): SidebarData {
                 activeUrls: ['/subscriptions'],
                 configUrls: ['/blind-box-admin'],
                 icon: Egg,
-              },
-              {
-                title: t('Daily Lucky Number'),
-                url: '/subscriptions#daily-lucky-admin',
-                activeUrls: ['/subscriptions'],
-                configUrls: ['/daily-lucky-admin'],
-                icon: Clover,
               },
               {
                 title: t('System settings'),

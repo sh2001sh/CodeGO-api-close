@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -25,7 +25,6 @@ import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -33,7 +32,9 @@ import {
 } from '@/components/ui/form'
 import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
+import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 import {
   HEADER_NAV_DEFAULT,
   type HeaderNavModulesConfig,
@@ -102,9 +103,7 @@ export function HeaderNavigationSection({
     defaultValues: formDefaults,
   })
 
-  useEffect(() => {
-    form.reset(formDefaults)
-  }, [formDefaults, form])
+  useResetForm(form, formDefaults)
 
   const onSubmit = async (values: HeaderNavFormValues) => {
     const payload: HeaderNavModulesConfig = {
@@ -134,6 +133,7 @@ export function HeaderNavigationSection({
       key: 'HeaderNavModules',
       value: serialized,
     })
+    form.reset(values)
   }
 
   const resetToDefault = () => {
@@ -203,10 +203,13 @@ export function HeaderNavigationSection({
   return (
     <SettingsSection
       title={t('Header navigation')}
-      description={t('Enable or disable top navigation modules globally.')}
+      description={t('Configure header navigation modules')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <div className='grid gap-4 md:grid-cols-2'>
             {simpleModules.map((module) => (
               <FormField
@@ -219,7 +222,6 @@ export function HeaderNavigationSection({
                       <FormLabel className='text-base'>
                         {module.title}
                       </FormLabel>
-                      <FormDescription>{module.description}</FormDescription>
                     </div>
                     <FormControl>
                       <Switch
@@ -246,7 +248,6 @@ export function HeaderNavigationSection({
                         <FormLabel className='text-base'>
                           {module.title}
                         </FormLabel>
-                        <FormDescription>{module.description}</FormDescription>
                       </div>
                       <FormControl>
                         <Switch
@@ -268,9 +269,6 @@ export function HeaderNavigationSection({
                         <FormLabel className='text-base'>
                           {module.requireAuthTitle}
                         </FormLabel>
-                        <FormDescription>
-                          {module.requireAuthDescription}
-                        </FormDescription>
                       </div>
                       <FormControl>
                         <Switch
@@ -287,7 +285,7 @@ export function HeaderNavigationSection({
             ))}
           </div>
 
-          <div className='flex flex-wrap gap-3'>
+          <div className='settings-save-bar flex flex-wrap gap-3'>
             <Button type='button' variant='outline' onClick={resetToDefault}>
               {t('Reset to default')}
             </Button>

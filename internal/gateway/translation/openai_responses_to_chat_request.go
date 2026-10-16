@@ -54,6 +54,9 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := validateChatToolCallHistory(messages); err != nil {
+		return nil, nil, err
+	}
 	if instruction := responsesInstructionText(req.Instructions); instruction != "" {
 		messages = append([]dto.Message{{Role: "system", Content: instruction}}, messages...)
 	}
@@ -91,26 +94,28 @@ func buildResponsesBridgeChatRequest(
 	responseFormat *dto.ResponseFormat,
 ) *dto.GeneralOpenAIRequest {
 	chat := &dto.GeneralOpenAIRequest{
-		Model:            req.Model,
-		Messages:         messages,
-		Stream:           req.Stream,
-		Temperature:      req.Temperature,
-		TopP:             req.TopP,
-		FrequencyPenalty: req.FrequencyPenalty,
-		PresencePenalty:  req.PresencePenalty,
-		ResponseFormat:   responseFormat,
-		Tools:            tools,
-		ToolChoice:       toolChoice,
-		User:             req.User,
-		Store:            req.Store,
-		Metadata:         req.Metadata,
-		ServiceTier:      rawStringMessage(req.ServiceTier),
-		PromptCacheKey:   rawString(req.PromptCacheKey),
-		ParallelTooCalls: rawBoolPointer(req.ParallelToolCalls),
-		TopLogProbs:      req.TopLogProbs,
+		Model:                req.Model,
+		Messages:             messages,
+		Stream:               req.Stream,
+		Temperature:          req.Temperature,
+		TopP:                 req.TopP,
+		FrequencyPenalty:     req.FrequencyPenalty,
+		PresencePenalty:      req.PresencePenalty,
+		ResponseFormat:       responseFormat,
+		Tools:                tools,
+		ToolChoice:           toolChoice,
+		User:                 req.User,
+		Store:                req.Store,
+		Metadata:             req.Metadata,
+		ServiceTier:          rawStringMessage(req.ServiceTier),
+		PromptCacheKey:       rawString(req.PromptCacheKey),
+		PromptCacheRetention: req.PromptCacheRetention,
+		SafetyIdentifier:     req.SafetyIdentifier,
+		ParallelTooCalls:     rawBoolPointer(req.ParallelToolCalls),
+		TopLogProbs:          req.TopLogProbs,
 	}
 	if req.MaxOutputTokens != nil {
-		chat.MaxTokens = req.MaxOutputTokens
+		chat.MaxCompletionTokens = req.MaxOutputTokens
 	}
 	if req.Reasoning != nil {
 		chat.ReasoningEffort = req.Reasoning.Effort
@@ -148,6 +153,9 @@ func responsesInputToChatMessages(raw json.RawMessage, meta *ResponsesChatBridge
 			return nil, nil, fmt.Errorf("input[%d] must be an object: %w", index, err)
 		}
 		itemType := rawString(envelope["type"])
+		if itemType != "function_call_output" && itemType != "custom_tool_call_output" && itemType != "tool_search_output" && itemType != "additional_tools" {
+			builder.flushToolMedia()
+		}
 		switch itemType {
 		case "", "message":
 			if err := builder.addMessage(envelope); err != nil {
@@ -184,6 +192,7 @@ func responsesInputToChatMessages(raw json.RawMessage, meta *ResponsesChatBridge
 		}
 	}
 	builder.flushPendingAssistant()
+	builder.flushToolMedia()
 	return builder.messages, additionalTools, nil
 }
 
@@ -213,6 +222,7 @@ type responsesChatMessageBuilder struct {
 	messages         []dto.Message
 	pendingTools     []dto.ToolCallRequest
 	pendingReasoning []string
+	pendingMedia     []dto.MediaContent
 	meta             *ResponsesChatBridgeMeta
 }
 
@@ -236,6 +246,24 @@ func (b *responsesChatMessageBuilder) addMessage(item map[string]json.RawMessage
 		b.flushPendingAssistant()
 	}
 	message := dto.Message{Role: role, Content: content}
+	if role == "assistant" {
+		if parts, ok := content.([]dto.MediaContent); ok {
+			var refusal strings.Builder
+			var retained []dto.MediaContent
+			for _, part := range parts {
+				if part.Type == "refusal" {
+					refusal.WriteString(part.Text)
+				} else {
+					retained = append(retained, part)
+				}
+			}
+			if refusal.Len() > 0 {
+				value := refusal.String()
+				message.Refusal = &value
+				message.Content = retained
+			}
+		}
+	}
 	if role == "assistant" && len(b.pendingReasoning) > 0 {
 		reasoning := strings.Join(b.pendingReasoning, "")
 		message.ReasoningContent = &reasoning
@@ -283,6 +311,12 @@ func (b *responsesChatMessageBuilder) addToolCall(itemType string, item map[stri
 		b.meta.NamespaceTools[qualified] = ResponsesNamespaceTool{Name: name, Namespace: namespace}
 		name = qualified
 	}
+	if itemType == "custom_tool_call" {
+		b.meta.CustomToolNames[name] = struct{}{}
+	}
+	if itemType == "tool_search_call" {
+		b.meta.ToolSearchNames[name] = struct{}{}
+	}
 	b.pendingTools = append(b.pendingTools, dto.ToolCallRequest{
 		ID: callID, Type: "function",
 		Function: dto.FunctionRequest{Name: name, Arguments: arguments},
@@ -296,10 +330,24 @@ func (b *responsesChatMessageBuilder) addToolOutput(item map[string]json.RawMess
 	if callID == "" {
 		return errors.New("tool output requires call_id")
 	}
-	b.messages = append(b.messages, dto.Message{
-		Role: "tool", ToolCallId: callID, Content: responsesToolOutputText(item["output"]),
-	})
+	text, media, err := responsesToolOutputToChat(item["output"])
+	if err != nil {
+		return err
+	}
+	b.messages = append(b.messages, dto.Message{Role: "tool", ToolCallId: callID, Content: text})
+	if len(media) > 0 {
+		b.pendingMedia = append(b.pendingMedia, dto.MediaContent{Type: dto.ContentTypeText, Text: "Tool output for call " + callID})
+		b.pendingMedia = append(b.pendingMedia, media...)
+	}
 	return nil
+}
+
+func (b *responsesChatMessageBuilder) flushToolMedia() {
+	if len(b.pendingMedia) == 0 {
+		return
+	}
+	b.messages = append(b.messages, dto.Message{Role: "user", Content: b.pendingMedia})
+	b.pendingMedia = nil
 }
 
 func (b *responsesChatMessageBuilder) flushPendingAssistant() {

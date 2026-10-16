@@ -382,11 +382,12 @@ func routePoolAutoBuildConfig(pool marketplaceschema.RoutePool) RoutePoolAutoBui
 		models = []string{strings.TrimSpace(pool.AutoBuildModel)}
 	}
 	consumerWeight, successWeight, ttftWeight, cacheWeight := normalizeAutoBuildWeights(pool.AutoBuildConsumerWeight, pool.AutoBuildSuccessWeight, pool.AutoBuildTTFTWeight, pool.AutoBuildCacheWeight)
-	return RoutePoolAutoBuildConfig{Enabled: pool.AutoBuildEnabled, Schedule: pool.AutoBuildSchedule, IntervalMinutes: pool.AutoBuildInterval, DailyTime: pool.AutoBuildDailyTime, Models: models, ConsumerWeight: consumerWeight, SuccessWeight: successWeight, TTFTWeight: ttftWeight, CacheWeight: cacheWeight, Size: pool.AutoBuildSize, Explore: pool.AutoBuildExplore, LastBuiltAt: pool.AutoBuildLastAt, NextBuildAt: pool.AutoBuildNextAt, LastError: pool.AutoBuildLastError}
+	return RoutePoolAutoBuildConfig{Enabled: pool.AutoBuildEnabled, CreditPackOnly: pool.AutoBuildCreditPackOnly, Schedule: pool.AutoBuildSchedule, IntervalMinutes: pool.AutoBuildInterval, DailyTime: pool.AutoBuildDailyTime, Models: models, ConsumerWeight: consumerWeight, SuccessWeight: successWeight, TTFTWeight: ttftWeight, CacheWeight: cacheWeight, Size: pool.AutoBuildSize, Explore: pool.AutoBuildExplore, LastBuiltAt: pool.AutoBuildLastAt, NextBuildAt: pool.AutoBuildNextAt, LastError: pool.AutoBuildLastError}
 }
 
 func applyRoutePoolAutoBuild(pool *marketplaceschema.RoutePool, cfg RoutePoolAutoBuildConfig) {
 	pool.AutoBuildEnabled = cfg.Enabled
+	pool.AutoBuildCreditPackOnly = cfg.CreditPackOnly
 	pool.AutoBuildSchedule = cfg.Schedule
 	if pool.AutoBuildSchedule != "daily" {
 		pool.AutoBuildSchedule = "interval"
@@ -448,6 +449,9 @@ func RunRoutePoolAutoBuild(ownerUserID int, poolID string) (*RoutePoolView, erro
 	config := routePoolAutoBuildConfig(pool)
 	candidates := make([]AutoRoutePoolItem, 0, len(all.Items))
 	for _, item := range all.Items {
+		if config.CreditPackOnly && !item.CreditPackSupported {
+			continue
+		}
 		if len(config.Models) == 0 || containsAnyModel(item.Models, config.Models) {
 			candidates = append(candidates, item)
 		}
@@ -649,7 +653,7 @@ func buildRoutePoolItems(ownerUserID int, groups []marketplaceschema.Group, chan
 			channelID = *channel.InternalChannelID
 		}
 		snapshot := snapshots[group.ID]
-		items = append(items, AutoRoutePoolItem{GroupID: group.ID, SourceType: marketplacedomain.SourceTypeMarketplaceUser, PublicSlug: group.PublicSlug, SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID), SourceLabel: publicSourceLabel(channel), LifecycleStatus: group.LifecycleStatus, Multiplier: group.Multiplier, Availability: round2(availability * 100), SuccessRate: round2(snapshot.RawSuccessRate), CacheHitRate: round2(snapshot.CacheHitRate), AvgTTFTMs: round2(snapshot.AvgTTFTMs), AvgLatencyMS: round2(snapshot.AvgLatencyMs), LatestRequestStatus: latestRequestStatus(series[channelID]), MetricsAvailable: snapshot.RequestCount > 0, RouteScore: round2(score), Observing: snapshot.Observing, RequestCount: snapshot.RequestCount, Models: decodeModels(channel.DeclaredModels), AvgConsumerAmount: snapshot.AvgConsumerAmount, AvgConsumerAmountByModel: decodeConsumerAmountsByModel(snapshot.AvgConsumerAmountByModel), MultiplierCardSupported: channel.MultiplierCardSupported, MultiplierCardUserEnabled: channel.MultiplierCardUserEnabled, Selected: isSelected, Priority: priority})
+		items = append(items, AutoRoutePoolItem{GroupID: group.ID, SourceType: marketplacedomain.SourceTypeMarketplaceUser, PublicSlug: group.PublicSlug, SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID), SourceLabel: publicSourceLabel(channel), LifecycleStatus: group.LifecycleStatus, Multiplier: group.Multiplier, Availability: round2(availability * 100), SuccessRate: round2(snapshot.RawSuccessRate), CacheHitRate: round2(snapshot.CacheHitRate), AvgTTFTMs: round2(snapshot.AvgTTFTMs), AvgLatencyMS: round2(snapshot.AvgLatencyMs), LatestRequestStatus: latestRequestStatus(series[channelID]), MetricsAvailable: snapshot.RequestCount > 0, RouteScore: round2(score), Observing: snapshot.Observing, RequestCount: snapshot.RequestCount, Models: decodeModels(channel.DeclaredModels), AvgConsumerAmount: snapshot.AvgConsumerAmount, AvgConsumerAmountByModel: decodeConsumerAmountsByModel(snapshot.AvgConsumerAmountByModel), MultiplierCardSupported: channel.MultiplierCardSupported, MultiplierCardUserEnabled: channel.MultiplierCardUserEnabled, CreditPackSupported: channel.CreditPackSupported, Selected: isSelected, Priority: priority})
 	}
 	items = append(items, loadOfficialAutoRouteItems(ownerUserID, selected)...)
 	sort.SliceStable(items, func(i, j int) bool {

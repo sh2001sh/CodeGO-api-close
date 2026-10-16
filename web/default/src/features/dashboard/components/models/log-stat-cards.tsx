@@ -111,7 +111,7 @@ export function LogStatCards(props: LogStatCardsProps) {
   }))
 
   return (
-    <div className='codego-fact-row grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'>
+    <div className='solaris-stat-grid grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5'>
       {items.map((it, idx) => {
         const Icon = it.icon
         return (
@@ -131,7 +131,10 @@ export function LogStatCards(props: LogStatCardsProps) {
                 --
               </div>
             ) : (
-              <div className='text-foreground mt-3 text-2xl leading-none font-semibold tabular-nums'>
+              <div
+                key={it.value}
+                className='solaris-stat-value text-foreground mt-3 text-2xl leading-none font-semibold tabular-nums'
+              >
                 {it.value}
               </div>
             )}

@@ -54,20 +54,22 @@ function buildStats(
       key: 'context',
       icon: Layers,
       label: t('Context'),
-      value: formatTokenCount(metadata.context_length),
-      hint: t('Maximum input window'),
+      value:
+        metadata.context_length > 0
+          ? formatTokenCount(metadata.context_length)
+          : t('待核验'),
     },
   ]
 
-  if (metadata.max_output_tokens > 0) {
-    stats.push({
-      key: 'max-output',
-      icon: Maximize2,
-      label: t('Max output'),
-      value: formatTokenCount(metadata.max_output_tokens),
-      hint: t('Maximum tokens per response'),
-    })
-  }
+  stats.push({
+    key: 'max-output',
+    icon: Maximize2,
+    label: t('Max output'),
+    value:
+      metadata.max_output_tokens > 0
+        ? formatTokenCount(metadata.max_output_tokens)
+        : t('待核验'),
+  })
 
   stats.push({
     key: 'modalities',
@@ -81,23 +83,23 @@ function buildStats(
     ),
   })
 
-  if (metadata.knowledge_cutoff) {
-    stats.push({
-      key: 'knowledge',
-      icon: Sparkles,
-      label: t('Knowledge cutoff'),
-      value: formatYearMonth(metadata.knowledge_cutoff),
-    })
-  }
+  stats.push({
+    key: 'knowledge',
+    icon: Sparkles,
+    label: t('Knowledge cutoff'),
+    value: metadata.knowledge_cutoff
+      ? formatYearMonth(metadata.knowledge_cutoff)
+      : t('待核验'),
+  })
 
-  if (metadata.release_date) {
-    stats.push({
-      key: 'release',
-      icon: CalendarClock,
-      label: t('Released'),
-      value: formatYearMonth(metadata.release_date),
-    })
-  }
+  stats.push({
+    key: 'release',
+    icon: CalendarClock,
+    label: t('Released'),
+    value: metadata.release_date
+      ? formatYearMonth(metadata.release_date)
+      : t('待核验'),
+  })
 
   return stats
 }
@@ -134,11 +136,6 @@ export function ModelDetailsQuickStats(props: QuickStatsProps) {
             <span className='text-foreground truncate text-sm font-semibold tabular-nums'>
               {stat.value}
             </span>
-            {stat.hint && (
-              <span className='text-muted-foreground/60 truncate text-[10px]'>
-                {stat.hint}
-              </span>
-            )}
           </div>
         )
       })}

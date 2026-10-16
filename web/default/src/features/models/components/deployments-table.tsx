@@ -39,6 +39,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { DataTablePage } from '@/components/data-table'
+import { AdminTableStatus } from '@/features/channels/components/admin-table-status'
 import { deleteDeployment, listDeployments, searchDeployments } from '../api'
 import { getDeploymentStatusOptions } from '../constants'
 import { deploymentsQueryKeys } from '../lib'
@@ -117,7 +118,7 @@ export function DeploymentsTable() {
   const [deleteTarget, setDeleteTarget] = useState<Deployment | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: deploymentsQueryKeys.list({
       keyword,
       status: activeStatus,
@@ -230,15 +231,24 @@ export function DeploymentsTable() {
 
   return (
     <>
+      <AdminTableStatus
+        title={t('Deployments')}
+        total={data?.data?.total}
+        loading={isLoading}
+        fetching={isFetching}
+        failed={isError || data?.success === false}
+        onRetry={() => void refetch()}
+      />
       <DataTablePage
+        className='admin-records'
+        tableClassName='rounded-lg'
+        tableHeaderClassName='sticky top-0 z-10'
         table={table}
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
         emptyTitle={t('No Deployments Found')}
-        emptyDescription={t(
-          'No deployments available. Create one to get started.'
-        )}
+        emptyDescription=''
         skeletonKeyPrefix='deployment-skeleton'
         applyHeaderSize
         toolbarProps={{

@@ -16,8 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18next from 'i18next'
 import { parseCurrencyDisplayType } from '@/lib/currency'
 import { BalanceBlindBoxSettingsAdmin } from '@/features/subscriptions/components/balance-blind-box-settings-admin'
+import { SettingsSection } from '../components/settings-section'
 import { CheckinSettingsSection } from '../general/checkin-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
@@ -254,7 +256,11 @@ const BILLING_SECTIONS = [
     titleKey: 'Blind Box Event',
     descriptionKey:
       'Configure blind box pricing, probability tiers, and pity rules',
-    build: () => <BalanceBlindBoxSettingsAdmin />,
+    build: () => (
+      <SettingsSection title={i18next.t('Blind Box Event')}>
+        <BalanceBlindBoxSettingsAdmin />
+      </SettingsSection>
+    ),
   },
 ] as const
 

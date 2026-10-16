@@ -21,6 +21,7 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -59,6 +60,23 @@ func CreatePendingSubscriptionOrderWithDiscounts(order *commerceschema.Subscript
 	appliedRate := 0.0
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		order.FulfillmentStatus = commerceschema.SubscriptionOrderFulfillmentPending
+		plan, err := getSubscriptionPlanRecordTx(tx, order.PlanId)
+		if err != nil {
+			return err
+		}
+		if plan.PlanType == commerceschema.SubscriptionPlanTypeCreditPack {
+			if !plan.Enabled || plan.TotalAmount <= 0 || order.Money != plan.PriceAmount || baseMoney != plan.PriceAmount || order.PurchaseType != commerceschema.SubscriptionPurchaseTypeNormal {
+				return errors.New("invalid credit pack checkout")
+			}
+			order.CreditPackQuota = plan.TotalAmount
+			order.CreditPackPaidQuota = quotaUnitsFromUSD(order.Money)
+			order.CreditPackChannelShareBPS = creditPackChannelShareBPS
+			if !validCreditPackPurchaseQuota(order.CreditPackQuota, order.CreditPackPaidQuota) {
+				return errors.New("credit pack bonus must be between 5% and 10%")
+			}
+			order.OriginalMoney = plan.PriceAmount
+			return tx.Create(order).Error
+		}
 		baseMoney = math.Round(baseMoney*100) / 100
 		if err := applyFirstPurchaseDiscountTx(tx, order, baseMoney, time.Now()); err != nil {
 			return err
@@ -148,13 +166,21 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 	var upgradeGroup string
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		order := &commerceschema.SubscriptionOrder{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(subscriptionTradeNoColumn()+" = ?", tradeNo).First(order).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(subscriptionTradeNoColumn()+" = ?", tradeNo).First(order).Error; err != nil {
 			return commerceschema.ErrSubscriptionOrderNotFound
 		}
 		if order.Status != constant.TopUpStatusSuccess {
 			return commerceschema.ErrSubscriptionOrderStatusInvalid
 		}
 		if order.FulfillmentStatus == commerceschema.SubscriptionOrderFulfillmentCompleted {
+			return nil
+		}
+		if order.CreditPackQuota > 0 {
+			if err := fulfillCreditPackTx(tx, order); err != nil {
+				return err
+			}
+			logUserID, logMoney, logPaymentMethod = order.UserId, order.Money, order.PaymentMethod
+			logPlanTitle = "永久额度包"
 			return nil
 		}
 		if order.PurchaseType == "subscription_booster" {
@@ -196,11 +222,6 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 		if err := awardReferralFirstPurchaseBonusTx(tx, order.UserId, purchaseType, "subscription_order", order.TradeNo); err != nil {
 			return err
 		}
-		if commercedomain.NormalizeSubscriptionPlanType(plan.PlanType) == commerceschema.SubscriptionPlanTypeMonthly {
-			if err := AwardReferralSubscriptionResetOpportunityTx(tx, order.UserId, commercedomain.ReferralPurchaseTypeMonthCard, "subscription_order", order.TradeNo); err != nil {
-				return err
-			}
-		}
 		if err := ConsumeReservedBlindBoxPropByTradeNoTx(tx, tradeNo, commerceschema.BlindBoxPropOrderTypeSubscription); err != nil {
 			return err
 		}
@@ -229,6 +250,7 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 		_ = identitystore.UpdateUserGroupCache(logUserID, upgradeGroup)
 	}
 	if logUserID > 0 {
+		invalidateTopUpUserCache(logUserID)
 		auditapp.RecordLog(logUserID, auditschema.LogTypeTopup, fmt.Sprintf("订阅购买成功，套餐: %s，支付金额: %.2f，支付方式: %s", logPlanTitle, logMoney, logPaymentMethod))
 	}
 	return nil

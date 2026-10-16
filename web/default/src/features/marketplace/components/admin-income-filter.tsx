@@ -35,8 +35,8 @@ export function AdminIncomeFilter(props: {
   ).length
 
   return (
-    <div className='grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.55fr)]'>
-      <section className='border-border overflow-hidden rounded-md border'>
+    <div className='governance-income-selection'>
+      <section className='governance-income-candidates'>
         <div className='bg-muted/15 border-border border-b p-4'>
           <div className='flex flex-col gap-3 lg:flex-row lg:items-end'>
             <label className='min-w-0 flex-1 space-y-1.5'>
@@ -164,12 +164,9 @@ export function AdminIncomeFilter(props: {
             })}
           </div>
         )}
-        <div className='text-muted-foreground border-border border-t px-4 py-2 text-xs'>
-          {t('收益按历史结算记录统计，渠道删除后仍会保留。')}
-        </div>
       </section>
 
-      <section className='border-border overflow-hidden rounded-md border'>
+      <section className='governance-income-batch'>
         <div className='bg-muted/15 border-border flex min-h-14 items-center justify-between gap-3 border-b px-4 py-3'>
           <div>
             <h3 className='text-sm font-semibold'>{t('本次回收对象')}</h3>
@@ -187,7 +184,7 @@ export function AdminIncomeFilter(props: {
         </div>
         {props.selectedOwners.length === 0 ? (
           <p className='text-muted-foreground px-4 py-10 text-center text-sm'>
-            {t('从左侧搜索结果中添加渠道主')}
+            {t('无数据')}
           </p>
         ) : (
           <div className='max-h-72 divide-y overflow-y-auto'>

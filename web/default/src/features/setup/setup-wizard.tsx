@@ -24,18 +24,11 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useSystemConfig } from '@/hooks/use-system-config'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Form } from '@/components/ui/form'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/error-state'
-import { LanguageSwitcher } from '@/components/language-switcher'
+import { PublicLayout } from '@/components/layout'
 import { LoadingState } from '@/components/loading-state'
 import { buildSetupPayload, getSetupStatus, submitSetup } from './api'
 import { AdminStep } from './components/admin-step'
@@ -43,6 +36,7 @@ import { CompleteStep } from './components/complete-step'
 import { DatabaseStep } from './components/database-step'
 import { StepNavigation } from './components/step-navigation'
 import { UsageModeStep } from './components/usage-mode-step'
+import './setup.css'
 import type { SetupFormValues, SetupStatus } from './types'
 
 const STEPS = [
@@ -277,124 +271,117 @@ export function SetupWizard() {
   }
 
   return (
-    <div className='bg-muted/40 relative min-h-svh py-10'>
-      <div className='absolute top-4 right-4 sm:top-6 sm:right-6'>
-        <LanguageSwitcher />
-      </div>
-      <div className='container mx-auto flex max-w-5xl flex-col gap-8 px-4 sm:px-6'>
-        <div className='flex flex-col items-center gap-3'>
-          <div className='relative h-12 w-12'>
+    <PublicLayout showMainContainer={false}>
+      <main
+        id='content'
+        tabIndex={-1}
+        className='market-setup relative min-h-svh py-16'
+      >
+        <div className='container mx-auto flex max-w-5xl flex-col gap-8 px-4 sm:px-6'>
+          <div className='flex flex-col items-center gap-3'>
+            <div className='relative h-12 w-12'>
+              {systemConfigLoading ? (
+                <Skeleton className='absolute inset-0 rounded-full' />
+              ) : (
+                <img
+                  src={logo}
+                  alt={t('System logo')}
+                  className='h-12 w-12 rounded-full object-cover shadow-sm'
+                />
+              )}
+            </div>
             {systemConfigLoading ? (
-              <Skeleton className='absolute inset-0 rounded-full' />
+              <Skeleton className='h-7 w-40' />
             ) : (
-              <img
-                src={logo}
-                alt={t('System logo')}
-                className='h-12 w-12 rounded-full object-cover shadow-sm'
-              />
+              <span className='text-2xl font-semibold tracking-tight'>
+                {t('Initialize')} {systemName}
+              </span>
             )}
           </div>
-          {systemConfigLoading ? (
-            <Skeleton className='h-7 w-40' />
-          ) : (
-            <h1 className='text-2xl font-semibold tracking-tight'>
-              {t('Initialize')} {systemName}
-            </h1>
-          )}
-          <p className='text-muted-foreground text-center text-sm sm:text-base'>
-            {t(
-              'Follow the guided steps to prepare your workspace before the first login.'
-            )}
-          </p>
-        </div>
 
-        <Card className='shadow-lg'>
-          <CardHeader className='space-y-2'>
-            <CardTitle className='text-xl font-semibold'>
-              {t('System setup wizard')}
-            </CardTitle>
-            <CardDescription>
-              {t('Complete these steps to finish the initial installation.')}
-            </CardDescription>
-          </CardHeader>
+          <Card className='market-setup-panel'>
+            <CardHeader className='space-y-2'>
+              <h1 className='text-xl font-semibold'>
+                {t('System setup wizard')}
+              </h1>
+            </CardHeader>
 
-          <CardContent className='space-y-6'>
-            <ol className='grid gap-3 sm:grid-cols-4'>
-              {STEPS.map((step, index) => {
-                const isActive = currentStep === index
-                const isCompleted = currentStep > index
-                return (
-                  <li
-                    key={step.titleKey}
-                    className={cn(
-                      'rounded-xl border p-3',
-                      isActive
-                        ? 'border-primary ring-primary/20 ring-2'
-                        : isCompleted
-                          ? 'border-primary/40 bg-primary/5'
-                          : 'border-muted bg-card'
-                    )}
-                  >
-                    <div className='flex items-start gap-3'>
-                      <span
-                        className={cn(
-                          'flex size-6 items-center justify-center rounded-md border text-xs font-semibold',
-                          isActive
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : isCompleted
+            <CardContent className='space-y-6'>
+              <ol className='grid gap-3 sm:grid-cols-4'>
+                {STEPS.map((step, index) => {
+                  const isActive = currentStep === index
+                  const isCompleted = currentStep > index
+                  return (
+                    <li
+                      key={step.titleKey}
+                      aria-current={isActive ? 'step' : undefined}
+                      className={cn(
+                        'rounded-xl border p-3',
+                        isActive
+                          ? 'border-primary ring-primary/20 ring-2'
+                          : isCompleted
+                            ? 'border-primary/40 bg-primary/5'
+                            : 'border-muted bg-card'
+                      )}
+                    >
+                      <div className='flex items-start gap-3'>
+                        <span
+                          className={cn(
+                            'flex size-6 items-center justify-center rounded-md border text-xs font-semibold',
+                            isActive
                               ? 'border-primary bg-primary text-primary-foreground'
-                              : 'border-muted-foreground/40 text-muted-foreground'
-                        )}
-                      >
-                        {index + 1}
-                      </span>
-                      <div className='space-y-1'>
-                        <p className='text-sm font-semibold'>
-                          {t(step.titleKey)}
-                        </p>
-                        <p className='text-muted-foreground text-xs'>
-                          {t(step.descriptionKey)}
-                        </p>
+                              : isCompleted
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-muted-foreground/40 text-muted-foreground'
+                          )}
+                        >
+                          {index + 1}
+                        </span>
+                        <div className='space-y-1'>
+                          <p className='text-sm font-semibold'>
+                            {t(step.titleKey)}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                )
-              })}
-            </ol>
+                    </li>
+                  )
+                })}
+              </ol>
 
-            {isLoading ? (
-              <LoadingState message={t('Loading setup status…')} />
-            ) : isError ? (
-              <ErrorState
-                title={t('We could not load the setup status.')}
-                onRetry={() => refetch()}
-              />
-            ) : (
-              <Form {...form}>
-                <form
-                  className='space-y-6'
-                  onSubmit={(event) => event.preventDefault()}
-                >
-                  {currentStepComponent}
-                </form>
-              </Form>
+              {isLoading ? (
+                <LoadingState message={t('Loading setup status…')} />
+              ) : isError ? (
+                <ErrorState
+                  title={t('We could not load the setup status.')}
+                  onRetry={() => refetch()}
+                />
+              ) : (
+                <Form {...form}>
+                  <form
+                    className='space-y-6'
+                    onSubmit={(event) => event.preventDefault()}
+                  >
+                    {currentStepComponent}
+                  </form>
+                </Form>
+              )}
+            </CardContent>
+
+            {!isLoading && !isError && (
+              <CardFooter className='w-full justify-end border-t'>
+                <StepNavigation
+                  currentStep={currentStep}
+                  totalSteps={STEPS.length}
+                  onBack={handlePreviousStep}
+                  onNext={handleNextStep}
+                  onSubmit={handleSubmit}
+                  isSubmitting={mutation.isPending}
+                />
+              </CardFooter>
             )}
-          </CardContent>
-
-          {!isLoading && !isError && (
-            <CardFooter className='w-full justify-end border-t'>
-              <StepNavigation
-                currentStep={currentStep}
-                totalSteps={STEPS.length}
-                onBack={handlePreviousStep}
-                onNext={handleNextStep}
-                onSubmit={handleSubmit}
-                isSubmitting={mutation.isPending}
-              />
-            </CardFooter>
-          )}
-        </Card>
-      </div>
-    </div>
+          </Card>
+        </div>
+      </main>
+    </PublicLayout>
   )
 }

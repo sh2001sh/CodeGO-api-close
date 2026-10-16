@@ -116,6 +116,7 @@ func loadOfficialAutoRouteItemsFiltered(ownerUserID int, selected map[string]int
 			RouteScore:          round2(math.Max(multiplier, 0.000001)),
 			Models:              models, AvgConsumerAmount: consumerStats.averageConsumerAmount(), AvgConsumerAmountByModel: consumerStats.averageConsumerAmountsByModel(), Selected: isSelected, Priority: priority,
 			MultiplierCardSupported: capability.MultiplierCard, MultiplierCardUserEnabled: capability.MultiplierCard,
+			CreditPackSupported: true,
 		})
 	}
 	return items

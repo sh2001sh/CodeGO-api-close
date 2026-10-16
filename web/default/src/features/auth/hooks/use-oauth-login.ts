@@ -22,7 +22,9 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { api, cancelSelfRequests } from '@/lib/api'
+import { buildCustomOAuthUrl } from '@/lib/oauth'
 import { getOAuthState } from '../api'
+import { OAUTH_BIND_PROVIDER_KEY } from '../constants'
 import {
   buildGitHubOAuthUrl,
   buildDiscordOAuthUrl,
@@ -61,6 +63,7 @@ export function useOAuthLogin(
   }, [t])
 
   const resetSession = async () => {
+    window.sessionStorage.removeItem(OAUTH_BIND_PROVIDER_KEY)
     saveAuthRedirect(redirectTo)
     cancelSelfRequests()
     try {
@@ -207,17 +210,7 @@ export function useOAuthLogin(
         return
       }
 
-      const redirectUri = `${window.location.origin}/oauth/${provider.slug}`
-      const url = new URL(provider.authorization_endpoint)
-      url.searchParams.set('client_id', provider.client_id)
-      url.searchParams.set('redirect_uri', redirectUri)
-      url.searchParams.set('response_type', 'code')
-      url.searchParams.set('state', state)
-      if (provider.scopes) {
-        url.searchParams.set('scope', provider.scopes)
-      }
-
-      window.open(url.toString(), '_self')
+      window.open(buildCustomOAuthUrl(provider, state), '_self')
     } catch (_error) {
       toast.error(
         t('Failed to start {{provider}} login', { provider: provider.name })

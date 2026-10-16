@@ -94,6 +94,7 @@ func ListAutoRoutePool(ownerUserID int) (*AutoRoutePoolView, error) {
 			AvgConsumerAmountByModel: decodeConsumerAmountsByModel(snapshot.AvgConsumerAmountByModel),
 			Selected:                 isSelected,
 			Priority:                 priority,
+			CreditPackSupported:      channel.CreditPackSupported,
 		})
 	}
 	officialItems := loadOfficialAutoRouteItems(ownerUserID, selected)
@@ -327,6 +328,22 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 	}
 	candidates := make([]scoredBinding, 0, len(selected))
 	overLimitCount := 0
+	channelIDs := make([]string, 0, len(channels))
+	for id := range channels {
+		channelIDs = append(channelIDs, id)
+	}
+	overrides := make(map[string]float64, len(channelIDs))
+	if len(channelIDs) > 0 {
+		var rows []marketplaceschema.UserMultiplier
+		if err := platformdb.DB.Where("user_id = ? AND channel_id IN ?", ownerUserID, channelIDs).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if row.Multiplier > 0 {
+				overrides[row.ChannelID] = row.Multiplier
+			}
+		}
+	}
 	for _, group := range groups {
 		priority, ok := selected[group.ID]
 		if !ok {
@@ -337,9 +354,8 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 			continue
 		}
 		effectiveMultiplier := group.Multiplier
-		var userOverride marketplaceschema.UserMultiplier
-		if err := platformdb.DB.Where("channel_id = ? AND user_id = ?", channel.ID, ownerUserID).First(&userOverride).Error; err == nil && userOverride.Multiplier > 0 {
-			effectiveMultiplier = userOverride.Multiplier
+		if override, ok := overrides[channel.ID]; ok {
+			effectiveMultiplier = override
 		}
 		if !MultiplierWithinLimit(effectiveMultiplier, multiplierLimit) {
 			overLimitCount++
@@ -364,7 +380,8 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 			priority: priority,
 		})
 	}
-	for _, item := range loadOfficialAutoRouteItemsForSelection(ownerUserID, selected) {
+	// Routing needs models and prices, not dashboard audit aggregates.
+	for _, item := range loadOfficialAutoRouteItemsFiltered(ownerUserID, selected, true, false) {
 		priority, ok := selected[item.GroupID]
 		if !ok || !containsFold(item.Models, modelName) {
 			continue

@@ -4,6 +4,7 @@ import commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 
 type SubscriptionSummary struct {
 	Subscription *commerceschema.UserSubscription `json:"subscription"`
+	Plan         *commerceschema.SubscriptionPlan `json:"plan,omitempty"`
 }
 
 type SubscriptionPurchasePreview struct {
@@ -20,15 +21,18 @@ type SubscriptionPurchasePreview struct {
 }
 
 type SubscriptionPreConsumeResult struct {
-	UserSubscriptionId int
-	PreConsumed        int64
-	AmountTotal        int64
-	AmountUsedBefore   int64
-	AmountUsedAfter    int64
-	ReservationID      string
-	AccountID          string
-	PlanID             int
-	PlanTitle          string
+	UserSubscriptionId        int
+	PreConsumed               int64
+	AmountTotal               int64
+	AmountUsedBefore          int64
+	AmountUsedAfter           int64
+	ReservationID             string
+	AccountID                 string
+	PlanID                    int
+	PlanTitle                 string
+	CreditPackGrantedQuota    int64
+	CreditPackPaidQuota       int64
+	CreditPackChannelShareBPS int64
 }
 
 type SubscriptionPlanInfo struct {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"slices"
 	"strings"
 	"sync"
@@ -33,15 +34,18 @@ const (
 )
 
 type RecordParams struct {
-	RequestID              string
-	GroupID                string
-	OwnerUserID            int
-	ConsumerUserID         int
-	BillingSource          string
-	ConsumerDebitAmount    int64
-	SettlementGrossAmount  int64
-	WalletMultiplier       float64
-	SubscriptionMultiplier float64
+	RequestID                 string
+	GroupID                   string
+	OwnerUserID               int
+	ConsumerUserID            int
+	BillingSource             string
+	ConsumerDebitAmount       int64
+	SettlementGrossAmount     int64
+	WalletMultiplier          float64
+	SubscriptionMultiplier    float64
+	CreditPackGrantedQuota    int64
+	CreditPackPaidQuota       int64
+	CreditPackChannelShareBPS int64
 }
 
 type ReleaseHook func(tx *gorm.DB, userID int, amount int64, idempotencyKey string, reasonCode string) error
@@ -69,9 +73,11 @@ type ReclaimResult struct {
 }
 
 type reclaimBatchOwnerAmount struct {
-	OwnerUserID int   `gorm:"column:owner_user_id"`
-	Count       int   `gorm:"column:count"`
-	Amount      int64 `gorm:"column:amount"`
+	OwnerUserID     int       `gorm:"column:owner_user_id"`
+	Count           int       `gorm:"column:count"`
+	Amount          int64     `gorm:"column:amount"`
+	CursorCreatedAt time.Time `gorm:"column:cursor_created_at"`
+	CursorID        string    `gorm:"column:cursor_id"`
 }
 
 var (
@@ -96,60 +102,77 @@ func RegisterReclaimHook(hook ReclaimHook) { reclaimHook = hook }
 func RegisterForfeitHook(hook ForfeitHook) { forfeitHook = hook }
 
 func Record(params RecordParams) error {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error { return RecordTx(tx, params) })
+}
+
+// RecordTx lets durable relay settlement processing create late marketplace
+// records in the same transaction as their final referral allocation.
+func RecordTx(tx *gorm.DB, params RecordParams) error {
 	if params.RequestID == "" || params.GroupID == "" || params.OwnerUserID <= 0 || params.SettlementGrossAmount <= 0 {
 		return nil
 	}
 	commission := percentage(params.SettlementGrossAmount, 5)
-	fee := int64(0)
-	ownerNet := params.SettlementGrossAmount - commission
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
-			AccountType: "marketplace_owner_pending", OwnerType: "user", OwnerID: int64(params.OwnerUserID), QuotaUnit: "quota",
-		})
-		if err != nil {
-			return err
-		}
-		platformAccount, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
-			AccountType: "marketplace_platform_revenue", OwnerType: "system", OwnerID: 1, QuotaUnit: "quota",
-		})
-		if err != nil {
-			return err
-		}
-		settlement := marketplaceschema.Settlement{
-			RequestID: params.RequestID, GroupID: params.GroupID, OwnerUserID: params.OwnerUserID,
-			ConsumerUserID: params.ConsumerUserID, BillingSource: params.BillingSource,
-			ConsumerAmount: params.ConsumerDebitAmount, SettlementGrossAmount: params.SettlementGrossAmount,
-			PlatformCommission: commission, TransactionFee: fee, OwnerNetAmount: ownerNet,
-			Multiplier: params.WalletMultiplier, SubscriptionMultiplier: params.SubscriptionMultiplier,
-			Status: statusPending, PendingAccountID: account.AccountID,
-			AvailableAt: time.Now().UTC().Add(24 * time.Hour),
-		}
-		result := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "request_id"}}, DoNothing: true}).Create(&settlement)
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return nil
-		}
-		_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
-			AccountID: account.AccountID, Amount: ownerNet, IdempotencyKey: "marketplace-pending:" + params.RequestID,
-			ReasonCode: "marketplace_owner_pending", ReferenceType: "marketplace_settlement", ReferenceID: settlement.ID,
-			OperatorType: "system", OperatorID: "marketplace",
-		})
-		if err != nil {
-			return err
-		}
-		if commission <= 0 {
-			return nil
-		}
-		_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
-			AccountID: platformAccount.AccountID, Amount: commission,
-			IdempotencyKey: "marketplace-platform:" + params.RequestID,
-			ReasonCode:     "marketplace_platform_revenue", ReferenceType: "marketplace_settlement", ReferenceID: settlement.ID,
-			OperatorType: "system", OperatorID: "marketplace",
-		})
+	discount, fee, err := creditPackCharges(params)
+	if err != nil {
 		return err
+	}
+	if fee > params.SettlementGrossAmount-commission {
+		return errors.New("credit pack fees exceed settlement gross amount")
+	}
+	ownerNet := params.SettlementGrossAmount - commission - fee
+	if tx == nil {
+		return errors.New("marketplace settlement transaction is required")
+	}
+	account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
+		AccountType: "marketplace_owner_pending", OwnerType: "user", OwnerID: int64(params.OwnerUserID), QuotaUnit: "quota",
 	})
+	if err != nil {
+		return err
+	}
+	platformAccount, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
+		AccountType: "marketplace_platform_revenue", OwnerType: "system", OwnerID: 1, QuotaUnit: "quota",
+	})
+	if err != nil {
+		return err
+	}
+	settlement := marketplaceschema.Settlement{
+		RequestID: params.RequestID, GroupID: params.GroupID, OwnerUserID: params.OwnerUserID,
+		ConsumerUserID: params.ConsumerUserID, BillingSource: params.BillingSource,
+		ConsumerAmount: params.ConsumerDebitAmount, SettlementGrossAmount: params.SettlementGrossAmount,
+		PlatformCommission: commission, TransactionFee: fee, OwnerNetAmount: ownerNet,
+		Multiplier: params.WalletMultiplier, SubscriptionMultiplier: params.SubscriptionMultiplier,
+		CreditPackGrantedQuota: params.CreditPackGrantedQuota, CreditPackPaidQuota: params.CreditPackPaidQuota,
+		CreditPackChannelShareBPS: params.CreditPackChannelShareBPS,
+		CreditPackDiscountAmount:  discount, CreditPackPlatformSubsidyAmount: discount - fee,
+		ReferralRebatePending: params.CreditPackGrantedQuota > 0,
+		Status:                statusPending, PendingAccountID: account.AccountID,
+		AvailableAt: time.Now().UTC().Add(24 * time.Hour),
+	}
+	result := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "request_id"}}, DoNothing: true}).Create(&settlement)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil
+	}
+	_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+		AccountID: account.AccountID, Amount: ownerNet, IdempotencyKey: "marketplace-pending:" + params.RequestID,
+		ReasonCode: "marketplace_owner_pending", ReferenceType: "marketplace_settlement", ReferenceID: settlement.ID,
+		OperatorType: "system", OperatorID: "marketplace",
+	})
+	if err != nil {
+		return err
+	}
+	if commission+fee <= 0 {
+		return nil
+	}
+	_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+		AccountID: platformAccount.AccountID, Amount: commission + fee,
+		IdempotencyKey: "marketplace-platform:" + params.RequestID,
+		ReasonCode:     "marketplace_platform_revenue", ReferenceType: "marketplace_settlement", ReferenceID: settlement.ID,
+		OperatorType: "system", OperatorID: "marketplace",
+	})
+	return err
 }
 
 func StartReleaseWorker(ctx context.Context) {
@@ -185,8 +208,8 @@ func StartReleaseWorker(ctx context.Context) {
 	})
 }
 
-// StartReclaimWorker processes administrator income-reclaim tasks in bounded
-// transactions. A single worker per process keeps work fair; row locks on the
+// StartReclaimWorker processes administrator income-reclaim tasks outside HTTP
+// requests. A single worker per process keeps work fair; row locks on the
 // task itself keep multiple control-plane processes from processing a task at
 // the same time.
 func StartReclaimWorker(ctx context.Context) {
@@ -235,6 +258,7 @@ func releaseDue(ctx context.Context, limit int, concurrency int) (int, error) {
 	var settlements []marketplaceschema.Settlement
 	if err := platformdb.DB.WithContext(ctx).Select("id").
 		Where("status = ? AND available_at <= ?", statusPending, time.Now().UTC()).
+		Where("referral_rebate_pending = ?", false).
 		Order("available_at asc").Limit(limit).Find(&settlements).Error; err != nil {
 		return 0, err
 	}
@@ -381,8 +405,8 @@ func GetIncomeReclaimTask(operationID string) (marketplaceschema.IncomeReclaim, 
 	return task, nil
 }
 
-// ReclaimPending remains for command-line and legacy callers. Unlike the old
-// implementation, every pass is a separate short transaction.
+// ReclaimPending waits for completion for command-line and legacy callers.
+// HTTP callers enqueue a task instead, so large audits do not hold a request.
 func ReclaimPending(filter ReleaseFilter) (ReclaimResult, error) {
 	task, err := CreateIncomeReclaimTask(filter)
 	if err != nil {
@@ -419,8 +443,9 @@ func processNextIncomeReclaimTask() (bool, error) {
 	return err == nil, err
 }
 
-// ProcessIncomeReclaimTask commits at most reclaimBatchSize settlements and
-// their wallet transfers. The task row is locked as the cross-process mutex.
+// ProcessIncomeReclaimTask aggregates PostgreSQL settlements and transfers each
+// owner's total once, atomically with the audit updates. Legacy non-PostgreSQL
+// stores retain bounded batches. The task row is the cross-process mutex.
 func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeReclaim, error) {
 	var result marketplaceschema.IncomeReclaim
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
@@ -440,12 +465,15 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 		if err := lockReclaimOwnersTx(tx, filter.OwnerUserIDs); err != nil {
 			return err
 		}
-		if task.BatchNumber == 0 && filter.MaxAmount > 0 {
+		reclaimAll := filter.MaxAmount == 0
+		if filter.MaxAmount > 0 {
 			available, err := reclaimableAmountTx(tx, filter)
 			if err != nil {
 				return err
 			}
-			if available < filter.MaxAmount {
+			remaining := filter.MaxAmount - task.Amount
+			reclaimAll = available == remaining
+			if available < remaining {
 				if err := tx.Model(&task).Updates(map[string]any{"status": reclaimTaskFailed, "error_message": "所选范围的可回收收益不足，未扣除额度，请刷新后重试"}).Error; err != nil {
 					return err
 				}
@@ -462,14 +490,34 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 			if filter.MaxAmount > 0 {
 				remaining = filter.MaxAmount - task.Amount
 			}
-			amounts, err := reclaimPostgresBatchTx(tx, filter, remaining, time.Now().UTC())
-			if err != nil {
-				return err
+			now := time.Now().UTC()
+			var cursorCreatedAt time.Time
+			cursorID := ""
+			for {
+				allocationLimit := remaining - batchAmount
+				if reclaimAll {
+					allocationLimit = 0
+				}
+				amounts, err := reclaimPostgresTx(tx, filter, allocationLimit, now, cursorCreatedAt, cursorID)
+				if err != nil {
+					return err
+				}
+				updatedCount := 0
+				for _, item := range amounts {
+					ownerAmounts[item.OwnerUserID] += item.Amount
+					batchAmount += item.Amount
+					batchCount += item.Count
+					updatedCount += item.Count
+				}
+				if len(amounts) > 0 {
+					cursorCreatedAt, cursorID = amounts[0].CursorCreatedAt, amounts[0].CursorID
+				}
+				if updatedCount < reclaimBatchSize || (filter.MaxAmount > 0 && batchAmount >= remaining) {
+					break
+				}
 			}
-			for _, item := range amounts {
-				ownerAmounts[item.OwnerUserID] = item.Amount
-				batchAmount += item.Amount
-				batchCount += item.Count
+			if filter.MaxAmount > 0 && batchAmount != remaining {
+				return errors.New("可回收收益发生变化，未扣除额度，请刷新后重试")
 			}
 		} else {
 			query := reclaimSettlementQuery(tx, filter).
@@ -543,7 +591,7 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 		}
 		newCount, newAmount, newBatchNumber := task.Count+batchCount, task.Amount+batchAmount, task.BatchNumber+1
 		updates := map[string]any{"status": reclaimTaskRunning, "count": newCount, "amount": newAmount, "batch_number": newBatchNumber, "owner_amounts": string(ownerAmountsJSON), "error_message": ""}
-		if (filter.MaxAmount > 0 && newAmount == filter.MaxAmount) || batchCount < reclaimBatchSize {
+		if platformdb.UsingPostgreSQL || (filter.MaxAmount > 0 && newAmount == filter.MaxAmount) || batchCount < reclaimBatchSize {
 			updates["status"] = reclaimTaskCompleted
 		}
 		if err := tx.Model(&marketplaceschema.IncomeReclaim{}).Where("id = ?", task.ID).Updates(updates).Error; err != nil {
@@ -560,35 +608,38 @@ func ProcessIncomeReclaimTask(operationID string) (marketplaceschema.IncomeRecla
 	if err != nil {
 		// All financial mutations above have rolled back. Record the failure in a
 		// separate short transaction so the same operation ID can resume later.
-		_ = platformdb.DB.Model(&marketplaceschema.IncomeReclaim{}).Where("id = ?", operationID).Updates(map[string]any{"status": reclaimTaskFailed, "error_message": err.Error()}).Error
+		if recordErr := platformdb.DB.Model(&marketplaceschema.IncomeReclaim{}).Where("id = ? AND status <> ?", operationID, reclaimTaskCompleted).Updates(map[string]any{"status": reclaimTaskFailed, "error_message": err.Error()}).Error; recordErr != nil {
+			return marketplaceschema.IncomeReclaim{}, errors.Join(err, fmt.Errorf("record reclaim failure: %w", recordErr))
+		}
 		return marketplaceschema.IncomeReclaim{}, err
 	}
 	return result, nil
 }
 
-// reclaimPostgresBatchTx avoids sending thousands of settlement IDs back to
-// PostgreSQL in an IN list. The candidate lock, partial-amount calculation,
-// update, and per-owner aggregation stay in one statement and one transaction.
-func reclaimPostgresBatchTx(tx *gorm.DB, filter ReleaseFilter, remaining int64, now time.Time) ([]reclaimBatchOwnerAmount, error) {
+// Audit rows are updated in bounded SQL batches to avoid million-row window
+// spills. The caller accumulates owner totals within the same transaction and
+// debits each wallet once after ALL audit updates, rather than once per batch.
+func reclaimPostgresTx(tx *gorm.DB, filter ReleaseFilter, remaining int64, now time.Time, cursorCreatedAt time.Time, cursorID string) ([]reclaimBatchOwnerAmount, error) {
 	locked := reclaimSettlementQuery(tx, filter).
 		Select("id", "owner_user_id", "owner_net_amount", "reclaimed_amount", "created_at").
-		Order("created_at ASC, id ASC").Limit(reclaimBatchSize).
-		Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
+		Order("created_at ASC, id ASC").
+		Limit(reclaimBatchSize).
+		Clauses(clause.Locking{Strength: "UPDATE"})
+	if cursorID != "" {
+		locked = locked.Where("(created_at, id) > (?, ?)", cursorCreatedAt, cursorID)
+	}
+	allocation := "owner_net_amount - reclaimed_amount"
+	if remaining > 0 {
+		allocation = fmt.Sprintf(`LEAST(owner_net_amount - reclaimed_amount,
+			GREATEST(%d::BIGINT - COALESCE(SUM(owner_net_amount - reclaimed_amount) OVER (
+				ORDER BY created_at ASC, id ASC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0), 0))`, remaining)
+	}
 	table := marketplaceschema.Settlement{}.TableName()
 	statement := fmt.Sprintf(`
 WITH locked AS (?),
 amounts AS (
 	SELECT id, owner_user_id, owner_net_amount, reclaimed_amount,
-		CASE WHEN CAST(? AS BIGINT) <= 0 THEN owner_net_amount - reclaimed_amount
-		ELSE LEAST(
-			owner_net_amount - reclaimed_amount,
-			GREATEST(CAST(? AS BIGINT) - COALESCE(
-				SUM(owner_net_amount - reclaimed_amount) OVER (
-					ORDER BY created_at ASC, id ASC
-					ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-				), 0
-			), 0))
-		END AS reclaim_amount
+		%s AS reclaim_amount
 	FROM locked
 ),
 updated AS (
@@ -603,12 +654,14 @@ updated AS (
 	WHERE settlement.id = amounts.id AND amounts.reclaim_amount > 0
 	RETURNING settlement.owner_user_id, amounts.reclaim_amount
 )
-SELECT owner_user_id, COUNT(*) AS count, COALESCE(SUM(reclaim_amount), 0) AS amount
+SELECT owner_user_id, COUNT(*) AS count, COALESCE(SUM(reclaim_amount), 0) AS amount,
+	(SELECT created_at FROM locked ORDER BY created_at DESC, id DESC LIMIT 1) AS cursor_created_at,
+	(SELECT id FROM locked ORDER BY created_at DESC, id DESC LIMIT 1) AS cursor_id
 FROM updated
 GROUP BY owner_user_id
-ORDER BY owner_user_id`, table)
+ORDER BY owner_user_id`, allocation, table)
 	var result []reclaimBatchOwnerAmount
-	err := tx.Raw(statement, locked, remaining, remaining, now, statusReclaimed).Scan(&result).Error
+	err := tx.Raw(statement, locked, now, statusReclaimed).Scan(&result).Error
 	return result, err
 }
 
@@ -727,6 +780,13 @@ func forfeitOne(settlementID string) error {
 		if item.Status != statusPending {
 			return nil
 		}
+		if item.ReferralRebatePending {
+			return errors.New("marketplace referral allocation is pending")
+		}
+		if item.OwnerNetAmount == 0 {
+			now := time.Now().UTC()
+			return tx.Model(&item).Updates(map[string]any{"status": statusForfeited, "forfeited_at": now}).Error
+		}
 		if err := forfeitHook(tx, item.PendingAccountID, 1, item.OwnerNetAmount, "marketplace-forfeit:"+item.ID); err != nil {
 			return err
 		}
@@ -738,6 +798,13 @@ func forfeitOne(settlementID string) error {
 func forfeitOneTx(tx *gorm.DB, item *marketplaceschema.Settlement) error {
 	if item.Status != statusPending {
 		return nil
+	}
+	if item.ReferralRebatePending {
+		return errors.New("marketplace referral allocation is pending")
+	}
+	if item.OwnerNetAmount == 0 {
+		now := time.Now().UTC()
+		return tx.Model(item).Updates(map[string]any{"status": statusForfeited, "forfeited_at": now}).Error
 	}
 	if err := forfeitHook(tx, item.PendingAccountID, 1, item.OwnerNetAmount, "marketplace-forfeit:"+item.ID); err != nil {
 		return err
@@ -754,6 +821,13 @@ func releaseOne(settlementID string) error {
 		}
 		if item.Status != statusPending {
 			return nil
+		}
+		if item.ReferralRebatePending {
+			return errors.New("marketplace referral allocation is pending")
+		}
+		if item.OwnerNetAmount == 0 {
+			now := time.Now().UTC()
+			return tx.Model(&item).Updates(map[string]any{"status": statusReleased, "released_at": now}).Error
 		}
 		reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
 			AccountID: item.PendingAccountID, RequestID: "marketplace-release:" + item.ID,
@@ -777,5 +851,39 @@ func releaseOne(settlementID string) error {
 }
 
 func percentage(amount int64, percent int64) int64 {
-	return (amount*percent + 50) / 100
+	return roundedRatio(new(big.Int).Mul(big.NewInt(amount), big.NewInt(percent)), big.NewInt(100))
+}
+
+// creditPackCharges uses the purchase snapshot rather than today's plan price.
+// Both amounts round half up once at the quota unit; the fee is computed from
+// the exact discount ratio, avoiding another rounding step for small requests.
+func creditPackCharges(params RecordParams) (discount, fee int64, err error) {
+	if params.CreditPackGrantedQuota == 0 && params.CreditPackPaidQuota == 0 && params.CreditPackChannelShareBPS == 0 {
+		if params.BillingSource == "credit_pack" {
+			return 0, 0, errors.New("credit pack settlement snapshot is missing")
+		}
+		return 0, 0, nil
+	}
+	if params.CreditPackGrantedQuota <= 0 || params.CreditPackPaidQuota <= 0 ||
+		params.CreditPackPaidQuota > params.CreditPackGrantedQuota ||
+		params.CreditPackChannelShareBPS < 0 || params.CreditPackChannelShareBPS > 10000 {
+		return 0, 0, errors.New("invalid credit pack settlement snapshot")
+	}
+	numerator := new(big.Int).Mul(big.NewInt(params.SettlementGrossAmount), big.NewInt(params.CreditPackGrantedQuota-params.CreditPackPaidQuota))
+	denominator := big.NewInt(params.CreditPackGrantedQuota)
+	discount = roundedRatio(numerator, denominator)
+	feeNumerator := new(big.Int).Mul(numerator, big.NewInt(params.CreditPackChannelShareBPS))
+	feeDenominator := new(big.Int).Mul(denominator, big.NewInt(10000))
+	return discount, roundedRatio(feeNumerator, feeDenominator), nil
+}
+
+// Callers provide nonnegative numerators and positive denominators whose
+// quotient fits int64, even when their intermediate products do not.
+func roundedRatio(numerator, denominator *big.Int) int64 {
+	quotient, remainder := new(big.Int), new(big.Int)
+	quotient.QuoRem(numerator, denominator, remainder)
+	if remainder.Lsh(remainder, 1).Cmp(denominator) >= 0 {
+		quotient.Add(quotient, big.NewInt(1))
+	}
+	return quotient.Int64()
 }

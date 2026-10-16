@@ -130,7 +130,7 @@ export function EmailBindDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='profile-dialog sm:max-w-md'>
         <DialogHeader>
           <DialogTitle>{t('Bind Email')}</DialogTitle>
           <DialogDescription>

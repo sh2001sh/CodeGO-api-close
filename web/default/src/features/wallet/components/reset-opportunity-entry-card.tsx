@@ -30,7 +30,7 @@ export function ResetOpportunityEntryCard(
         <div className='flex min-w-0 items-center gap-2.5'>
           <span aria-hidden className='bg-primary block h-3 w-[3px] shrink-0' />
           <div className='text-foreground truncate text-[13px] font-semibold'>
-            {props.title || t('Quota reset opportunity')}
+            {props.title || t('历史刷新权益')}
           </div>
         </div>
         <div className='border-warning/20 bg-background/80 text-foreground rounded-full border px-3 py-1 text-xs font-semibold'>
@@ -61,7 +61,7 @@ export function ResetOpportunityEntryCard(
         variant='outline'
         render={<Link to='/invite-rewards' />}
       >
-        <span>{t('Invite and reset')}</span>
+        <span>{t('历史刷新权益')}</span>
         <ArrowRight data-icon='inline-end' />
       </Button>
     </div>

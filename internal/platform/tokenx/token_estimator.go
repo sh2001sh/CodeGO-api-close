@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Provider identifies the family-specific token estimation profile.
@@ -150,6 +151,11 @@ func isEmoji(r rune) bool {
 }
 
 func isMathSymbol(r rune) bool {
+	// All symbols in this category are non-ASCII. Avoid scanning the Unicode
+	// list for every punctuation byte in code, URLs and long plain prompts.
+	if r < utf8.RuneSelf {
+		return false
+	}
 	mathSymbols := "∑∫∂√∞≤≥≠≈±×÷∈∉∋∌⊂⊃⊆⊇∪∩∧∨¬∀∃∄∅∆∇∝∟∠∡∢°′″‴⁺⁻⁼⁽⁾ⁿ₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎²³¹⁴⁵⁶⁷⁸⁹⁰"
 	for _, m := range mathSymbols {
 		if r == m {

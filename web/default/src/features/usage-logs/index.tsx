@@ -104,15 +104,12 @@ function UsageLogsContent() {
 
   return (
     <>
-      <SectionPageLayout>
+      <SectionPageLayout kicker=''>
         <SectionPageLayout.Title>
           {t(pageMeta.titleKey)}
         </SectionPageLayout.Title>
-        <SectionPageLayout.Description>
-          {t(pageMeta.descriptionKey)}
-        </SectionPageLayout.Description>
         <SectionPageLayout.Content>
-          <div className='space-y-4'>
+          <div className='solaris-usage-workbench space-y-4'>
             {showTaskSwitcher && (
               <Tabs value={activeCategory} onValueChange={handleSectionChange}>
                 <TabsList className='h-auto max-w-full flex-wrap justify-start'>

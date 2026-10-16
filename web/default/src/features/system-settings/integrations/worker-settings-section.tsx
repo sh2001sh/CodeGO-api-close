@@ -35,6 +35,7 @@ import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 import { removeTrailingSlash } from './utils'
 
 const createWorkerSchema = (t: (key: string) => string) =>
@@ -97,18 +98,21 @@ export function WorkerSettingsSection({
     for (const update of updates) {
       await updateOption.mutateAsync(update)
     }
+    form.reset({
+      ...values,
+      WorkerUrl: sanitizedUrl,
+      WorkerValidKey: sanitizedKey,
+    })
   }
 
   return (
     <SettingsSection
       title={t('Worker Proxy')}
-      description={t(
-        'Configure upstream worker or proxy service for outbound requests'
-      )}
+      description={t('Configure worker service settings')}
     >
       <Form {...form}>
         <form
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
           autoComplete='off'
           className='space-y-6'
         >
@@ -128,10 +132,8 @@ export function WorkerSettingsSection({
                     onChange={(event) => field.onChange(event.target.value)}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'Requests will be forwarded to this worker. Trailing slashes are removed automatically.'
-                  )}
+                <FormDescription className='settings-field-fact'>
+                  {t('URL · Trailing slash removed')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -147,16 +149,13 @@ export function WorkerSettingsSection({
                 <FormControl>
                   <Input
                     type='password'
-                    placeholder={t('Enter new key to update')}
                     autoComplete='new-password'
                     {...field}
                     onChange={(event) => field.onChange(event.target.value)}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'Used to authenticate with the worker. Leave blank to keep the existing secret.'
-                  )}
+                <FormDescription className='settings-field-fact'>
+                  {t('Empty: unchanged')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -172,11 +171,7 @@ export function WorkerSettingsSection({
                   <FormLabel className='text-base'>
                     {t('Allow HTTP image requests')}
                   </FormLabel>
-                  <FormDescription>
-                    {t(
-                      'Enable when proxying workers that fetch images over HTTP.'
-                    )}
-                  </FormDescription>
+                  <FormDescription>{t('HTTP image proxy')}</FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -188,11 +183,13 @@ export function WorkerSettingsSection({
             )}
           />
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending
-              ? t('Saving...')
-              : t('Save Worker settings')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending
+                ? t('Saving...')
+                : t('Save Worker settings')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

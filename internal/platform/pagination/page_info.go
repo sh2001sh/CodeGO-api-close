@@ -53,12 +53,7 @@ func GetPageQuery(c *gin.Context) *PageInfo {
 		pageInfo.PageSize = pageSize
 	}
 	if pageInfo.Page < 1 {
-		page, _ := strconv.Atoi(c.Query("p"))
-		if page != 0 {
-			pageInfo.Page = page
-		} else {
-			pageInfo.Page = 1
-		}
+		pageInfo.Page = 1
 	}
 
 	if pageInfo.PageSize <= 0 {
@@ -79,6 +74,10 @@ func GetPageQuery(c *gin.Context) *PageInfo {
 
 	if pageInfo.PageSize > maxItemsPerPage {
 		pageInfo.PageSize = maxItemsPerPage
+	}
+	// Keep both the start and end offsets representable for extreme page inputs.
+	if maxPage := int(^uint(0)>>1) / pageInfo.PageSize; pageInfo.Page > maxPage {
+		pageInfo.Page = maxPage
 	}
 
 	return pageInfo

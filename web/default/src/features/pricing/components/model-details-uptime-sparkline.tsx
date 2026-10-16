@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo } from 'react'
+import interfaceI18n from '@/i18n/config'
 import { Activity, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -74,6 +75,8 @@ function overallTextColour(pct: number): string {
 }
 
 export function UptimeSparkline(props: UptimeSparklineProps) {
+  useTranslation()
+
   const size = props.size ?? 'md'
   const showOverall = props.showOverall ?? true
 
@@ -97,7 +100,7 @@ export function UptimeSparkline(props: UptimeSparklineProps) {
       <div
         className={cn('flex items-end', containerHeight, gap)}
         role='img'
-        aria-label={`30 day uptime ${overall.toFixed(2)}%`}
+        aria-label={`${interfaceI18n.t('Success rate')} ${overall.toFixed(2)}%`}
       >
         {props.series.map((day) => (
           <Tooltip key={day.date}>
@@ -127,7 +130,7 @@ export function UptimeSparkline(props: UptimeSparklineProps) {
               <div>{day.uptime_pct.toFixed(2)}%</div>
               {day.outage_minutes > 0 && (
                 <div className='text-muted-foreground'>
-                  {day.outage_minutes} min outage
+                  {day.outage_minutes} {interfaceI18n.t('min outage')}
                 </div>
               )}
             </TooltipContent>

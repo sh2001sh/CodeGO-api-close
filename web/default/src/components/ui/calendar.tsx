@@ -17,19 +17,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import * as React from 'react'
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ArrowDownIcon,
-} from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
+import { normalizeInterfaceLanguage, toIntlLocale } from '@/i18n/languages'
+import { enUS, fr, ru, ja, vi, zhCN, zhHK } from 'date-fns/locale'
+import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import {
   DayPicker,
   getDefaultClassNames,
   type DayButton,
   type Locale,
 } from 'react-day-picker'
-import { toIntlLocale } from '@/i18n/languages'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
 
@@ -39,13 +36,25 @@ function Calendar({
   showOutsideDays = true,
   captionLayout = 'label',
   buttonVariant = 'ghost',
-  locale,
+  locale: suppliedLocale,
   formatters,
   components,
   ...props
 }: React.ComponentProps<typeof DayPicker> & {
   buttonVariant?: React.ComponentProps<typeof Button>['variant']
 }) {
+  const { i18n } = useTranslation()
+  const calendarLocales: Record<string, Locale> = {
+    en: enUS,
+    fr,
+    ru,
+    ja,
+    vi,
+    zh: zhCN,
+    'zh-TW': zhHK,
+  }
+  const locale =
+    suppliedLocale ?? calendarLocales[normalizeInterfaceLanguage(i18n.language)]
   const defaultClassNames = getDefaultClassNames()
 
   return (
@@ -168,8 +177,7 @@ function Calendar({
         Chevron: ({ className, orientation, ...props }) => {
           if (orientation === 'left') {
             return (
-              <HugeiconsIcon
-                icon={ArrowLeftIcon}
+              <ChevronLeft
                 strokeWidth={2}
                 className={cn('size-4', className)}
                 {...props}
@@ -179,8 +187,7 @@ function Calendar({
 
           if (orientation === 'right') {
             return (
-              <HugeiconsIcon
-                icon={ArrowRightIcon}
+              <ChevronRight
                 strokeWidth={2}
                 className={cn('size-4', className)}
                 {...props}
@@ -189,8 +196,7 @@ function Calendar({
           }
 
           return (
-            <HugeiconsIcon
-              icon={ArrowDownIcon}
+            <ChevronDown
               strokeWidth={2}
               className={cn('size-4', className)}
               {...props}
@@ -220,9 +226,21 @@ function CalendarDayButton({
   className,
   day,
   modifiers,
-  locale,
+  locale: suppliedLocale,
   ...props
 }: React.ComponentProps<typeof DayButton> & { locale?: Partial<Locale> }) {
+  const { i18n } = useTranslation()
+  const calendarLocales: Record<string, Locale> = {
+    en: enUS,
+    fr,
+    ru,
+    ja,
+    vi,
+    zh: zhCN,
+    'zh-TW': zhHK,
+  }
+  const locale =
+    suppliedLocale ?? calendarLocales[normalizeInterfaceLanguage(i18n.language)]
   const defaultClassNames = getDefaultClassNames()
 
   const ref = React.useRef<HTMLButtonElement>(null)

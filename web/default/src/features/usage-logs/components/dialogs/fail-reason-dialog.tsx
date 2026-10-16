@@ -46,7 +46,7 @@ export function FailReasonDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-lg'>
+      <DialogContent className='solaris-log-details sm:max-w-lg'>
         <DialogHeader>
           <DialogTitle>{t('Fail Reason Details')}</DialogTitle>
           <DialogDescription>
@@ -60,21 +60,21 @@ export function FailReasonDialog({
               <Label className='text-sm font-semibold'>
                 {t('Error Message')}
               </Label>
-              <div className='bg-muted/50 relative rounded-md border border-destructive/30 p-3'>
+              <div className='bg-muted/50 border-destructive/30 relative rounded-md border p-3'>
                 <Button
                   variant='ghost'
                   size='sm'
-                  className='absolute top-2 right-2 h-8 w-8 p-0'
+                  className='absolute top-2 right-2 h-11 w-11 p-0'
                   onClick={() => copyToClipboard(failReason)}
                   title={t('Copy to clipboard')}
                 >
                   {copiedText === failReason ? (
-                    <Check className='size-4 text-success' />
+                    <Check className='text-success size-4' />
                   ) : (
                     <Copy className='size-4' />
                   )}
                 </Button>
-                <p className='overflow-wrap-anywhere pr-10 text-sm leading-relaxed break-all whitespace-pre-wrap text-destructive'>
+                <p className='overflow-wrap-anywhere text-destructive pr-12 text-sm leading-relaxed break-all whitespace-pre-wrap'>
                   {failReason || '-'}
                 </p>
               </div>

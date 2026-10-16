@@ -22,13 +22,14 @@ var (
 )
 
 type InvoiceEligibleOrder struct {
-	SourceType  string  `json:"source_type"`
-	TradeNo     string  `json:"trade_no"`
-	OrderTitle  string  `json:"order_title"`
-	OrderAmount float64 `json:"order_amount"`
-	Currency    string  `json:"currency"`
-	PaidAt      int64   `json:"paid_at"`
-	Requested   bool    `json:"requested"`
+	SourceType   string  `json:"source_type"`
+	TradeNo      string  `json:"trade_no"`
+	OrderTitle   string  `json:"order_title"`
+	OrderAmount  float64 `json:"order_amount"`
+	Currency     string  `json:"currency"`
+	PaidAt       int64   `json:"paid_at"`
+	Requested    bool    `json:"requested"`
+	RefundStatus string  `json:"refund_status"`
 }
 
 type CreateInvoiceRequestInput struct {
@@ -73,19 +74,16 @@ func ListInvoiceEligibleOrders(userID int) ([]InvoiceEligibleOrder, error) {
 	for _, order := range subscriptions {
 		subscriptionTrades[order.TradeNo] = struct{}{}
 		title := "套餐订单"
-		currency := "CNY"
+		currency := commercialPaymentCurrency(order.PaymentProvider, order.PaymentMethod, order.ProviderPayload, order.Money)
 		var plan commerceschema.SubscriptionPlan
 		if planErr := platformdb.DB.Select("title, currency").First(&plan, order.PlanId).Error; planErr == nil {
 			title = plan.Title
-			if strings.TrimSpace(plan.Currency) != "" {
-				currency = plan.Currency
-			}
 		}
 		orders = append(orders, InvoiceEligibleOrder{
 			SourceType: commerceschema.InvoiceSourceSubscription,
 			TradeNo:    order.TradeNo, OrderTitle: title, OrderAmount: order.Money,
 			Currency: currency, PaidAt: order.CompleteTime,
-			Requested: requested[invoiceOrderKey(commerceschema.InvoiceSourceSubscription, order.TradeNo)],
+			Requested: requested[invoiceOrderKey(commerceschema.InvoiceSourceSubscription, order.TradeNo)], RefundStatus: order.RefundStatus,
 		})
 	}
 
@@ -101,8 +99,8 @@ func ListInvoiceEligibleOrders(userID int) ([]InvoiceEligibleOrder, error) {
 		orders = append(orders, InvoiceEligibleOrder{
 			SourceType: commerceschema.InvoiceSourceTopUp,
 			TradeNo:    topup.TradeNo, OrderTitle: "钱包充值", OrderAmount: topup.Money,
-			Currency: "CNY", PaidAt: topup.CompleteTime,
-			Requested: requested[invoiceOrderKey(commerceschema.InvoiceSourceTopUp, topup.TradeNo)],
+			Currency: commercialPaymentCurrency(topup.PaymentProvider, topup.PaymentMethod, topup.ProviderPayload, topup.Money), PaidAt: topup.CompleteTime,
+			Requested: requested[invoiceOrderKey(commerceschema.InvoiceSourceTopUp, topup.TradeNo)], RefundStatus: topup.RefundStatus,
 		})
 	}
 	sort.Slice(orders, func(i, j int) bool { return orders[i].PaidAt > orders[j].PaidAt })
@@ -112,7 +110,8 @@ func ListInvoiceEligibleOrders(userID int) ([]InvoiceEligibleOrder, error) {
 func ListUserInvoiceRequests(userID int, page *platformpagination.PageInfo) (*platformpagination.PageInfo, error) {
 	var requests []commerceschema.InvoiceRequest
 	var total int64
-	query := platformdb.DB.Model(&commerceschema.InvoiceRequest{}).Where("user_id = ?", userID)
+	query := platformdb.DB.Model(&commerceschema.InvoiceRequest{}).Where("user_id = ?", userID).
+		Where("COALESCE(remark, '') NOT LIKE ? AND COALESCE(remark, '') NOT LIKE ?", invoiceArchivePrefix+"%", `{"commercial_invoice_version":%`)
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err
 	}
@@ -127,7 +126,8 @@ func ListUserInvoiceRequests(userID int, page *platformpagination.PageInfo) (*pl
 func ListAdminInvoiceRequests(status string, page *platformpagination.PageInfo) (*platformpagination.PageInfo, error) {
 	var requests []commerceschema.InvoiceRequest
 	var total int64
-	query := platformdb.DB.Model(&commerceschema.InvoiceRequest{})
+	query := platformdb.DB.Model(&commerceschema.InvoiceRequest{}).
+		Where("COALESCE(remark, '') NOT LIKE ? AND COALESCE(remark, '') NOT LIKE ?", invoiceArchivePrefix+"%", `{"commercial_invoice_version":%`)
 	if status = strings.TrimSpace(status); status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -229,6 +229,9 @@ func UpdateAdminInvoiceRequest(id int64, adminID int, input UpdateInvoiceRequest
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").First(&result, id).Error; err != nil {
 			return err
+		}
+		if isCommercialInvoiceArchive(result.Remark) {
+			return ErrCommercialInvoiceConflict
 		}
 		result.Status, result.InvoiceNumber = input.Status, input.InvoiceNumber
 		result.AdminNote, result.HandledBy = input.AdminNote, adminID

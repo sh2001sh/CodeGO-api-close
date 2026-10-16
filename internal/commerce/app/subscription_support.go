@@ -109,16 +109,31 @@ func validateSubscriptionPlanInput(plan *commerceschema.SubscriptionPlan) error 
 	if plan.MaxPurchasePerUser < 0 {
 		return errors.New("max_purchase_per_user must be >= 0")
 	}
+	plan.Currency = normalizeSubscriptionCurrency(plan.Currency)
+	if plan.DurationUnit == commerceschema.SubscriptionDurationPermanent {
+		plan.PlanType = commerceschema.SubscriptionPlanTypeCreditPack
+	}
 	plan.PlanType = commercedomain.NormalizeSubscriptionPlanType(plan.PlanType)
 	plan.MembershipTier = commercedomain.NormalizeSubscriptionMembershipTier(plan.MembershipTier)
+	plan.LuckyDrawEnabled = false
+	plan.GroupBuyEnabled = false
+	if plan.PlanType == commerceschema.SubscriptionPlanTypeCreditPack {
+		if plan.Currency != "CNY" || plan.PriceAmount < 64 || plan.TotalAmount <= 0 {
+			return errors.New("credit packs require CNY, a price of at least 64, and positive quota")
+		}
+		plan.DurationUnit = commerceschema.SubscriptionDurationPermanent
+		plan.DurationValue = 1
+		plan.CustomSeconds = 0
+		plan.QuotaResetPeriod = commerceschema.SubscriptionResetNever
+		plan.PeriodAmount = 0
+		plan.QuotaResetCustomSeconds = 0
+		plan.FuelEnabled = false
+		plan.UpgradeGroup = ""
+		plan.ModelLimits = ""
+		plan.MembershipTier = commerceschema.SubscriptionMembershipTierNone
+	}
 	// Subscription blind-box gifts are paused. Keep the column for historical data and API compatibility.
 	plan.BlindBoxBenefitCount = 0
-	if plan.PlanType != commerceschema.SubscriptionPlanTypeMonthly {
-		plan.LuckyDrawEnabled = false
-	}
-	if plan.LuckyDrawEnabled && plan.MembershipTier == commerceschema.SubscriptionMembershipTierNone {
-		return errors.New("lucky draw requires an explicit membership tier")
-	}
 	if plan.PlanType == commerceschema.SubscriptionPlanTypeStarter && plan.MaxPurchasePerUser == 0 {
 		plan.MaxPurchasePerUser = 1
 	}

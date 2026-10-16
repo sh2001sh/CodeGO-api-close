@@ -16,12 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { z } from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
+import { isSidebarModuleEnabled } from '@/lib/nav-modules'
 import { Main } from '@/components/layout'
 import { Playground } from '@/features/playground'
-import { isSidebarModuleEnabled } from '@/lib/nav-modules'
 
 export const Route = createFileRoute('/_authenticated/playground/')({
+  validateSearch: z.object({
+    model: z.string().optional(),
+    group: z.string().optional(),
+  }),
   beforeLoad: () => {
     if (!isSidebarModuleEnabled('chat', 'playground')) {
       throw redirect({ to: '/dashboard' })
@@ -31,9 +36,10 @@ export const Route = createFileRoute('/_authenticated/playground/')({
 })
 
 function PlaygroundPage() {
+  const search = Route.useSearch()
   return (
     <Main className='p-0'>
-      <Playground />
+      <Playground initialModel={search.model} initialGroup={search.group} />
     </Main>
   )
 }

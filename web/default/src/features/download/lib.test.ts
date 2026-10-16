@@ -185,11 +185,13 @@ describe('download lib', () => {
     const cards = buildDownloadCards(release, copy)
 
     assert.equal(
-      getRecommendedDownloadCard(cards, { platform: 'linux', arch: 'x64' })?.key,
+      getRecommendedDownloadCard(cards, { platform: 'linux', arch: 'x64' })
+        ?.key,
       'linux'
     )
     assert.equal(
-      getRecommendedDownloadCard(cards, { platform: 'macos', arch: 'arm64' })?.key,
+      getRecommendedDownloadCard(cards, { platform: 'macos', arch: 'arm64' })
+        ?.key,
       'macos-arm64'
     )
     assert.equal(
@@ -197,7 +199,10 @@ describe('download lib', () => {
       null
     )
     assert.equal(
-      getRecommendedDownloadCard(cards, { platform: 'unknown', arch: 'unknown' })?.key,
+      getRecommendedDownloadCard(cards, {
+        platform: 'unknown',
+        arch: 'unknown',
+      })?.key,
       'windows'
     )
     assert.equal(

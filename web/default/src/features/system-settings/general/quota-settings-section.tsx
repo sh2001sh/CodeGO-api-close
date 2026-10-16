@@ -129,9 +129,7 @@ export function QuotaSettingsSection({
                     ref={field.ref}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('Initial quota given to new users')}
-                </FormDescription>
+
                 <FormMessage />
               </FormItem>
             )}
@@ -153,9 +151,7 @@ export function QuotaSettingsSection({
                     ref={field.ref}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('Quota consumed before charging users')}
-                </FormDescription>
+
                 <FormMessage />
               </FormItem>
             )}
@@ -177,8 +173,8 @@ export function QuotaSettingsSection({
                     ref={field.ref}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('Deprecated legacy setting. The current invite system grants refresh chances instead of wallet quota.')}
+                <FormDescription className='settings-field-fact'>
+                  {t('Deprecated · Invite rewards: refresh chances')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -201,8 +197,8 @@ export function QuotaSettingsSection({
                     ref={field.ref}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('Deprecated legacy setting. New invitees no longer receive extra wallet quota through invitation rewards.')}
+                <FormDescription className='settings-field-fact'>
+                  {t('Deprecated · Invite wallet quota: disabled')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -218,10 +214,8 @@ export function QuotaSettingsSection({
                   <FormLabel className='text-base'>
                     {t('Pre-Consume for Free Models')}
                   </FormLabel>
-                  <FormDescription>
-                    {t(
-                      'When enabled, zero-cost models also pre-consume quota before final settlement.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('Zero-cost models: quota pre-consumption')}
                   </FormDescription>
                 </div>
                 <FormControl>
@@ -247,9 +241,7 @@ export function QuotaSettingsSection({
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('External link for users to purchase quota')}
-                </FormDescription>
+
                 <FormMessage />
               </FormItem>
             )}
@@ -267,20 +259,20 @@ export function QuotaSettingsSection({
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('Link to your documentation site')}
-                </FormDescription>
+
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <Button
-            type='submit'
-            disabled={updateOption.isPending || isSubmitting}
-          >
-            {updateOption.isPending ? t('Saving...') : t('Save Changes')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button
+              type='submit'
+              disabled={updateOption.isPending || isSubmitting}
+            >
+              {updateOption.isPending ? t('Saving...') : t('Save Changes')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

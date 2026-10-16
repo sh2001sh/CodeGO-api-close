@@ -1,3 +1,4 @@
+import interfaceI18n from '@/i18n/config'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -134,9 +135,10 @@ export function getUsageLogRoutePoolName(
   other: LogOtherData | null
 ): string {
   if (other?.route_pool_name) return other.route_pool_name
-  if (logGroup?.startsWith('market:pool:')) return '路由池（名称未记录）'
+  if (logGroup?.startsWith('market:pool:'))
+    return interfaceI18n.t('路由池（名称未记录）')
   if (other?.route_summary || logGroup === 'market:auto' || logGroup === 'auto')
-    return '自动路由池'
+    return interfaceI18n.t('自动路由池')
   return ''
 }
 

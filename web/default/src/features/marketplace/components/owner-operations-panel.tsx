@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import {
   useMutation,
+  useInfiniteQuery,
   useQuery,
   useQueryClient,
+  type InfiniteData,
   type QueryClient,
-  type UseQueryResult,
+  type UseInfiniteQueryResult,
 } from '@tanstack/react-query'
+import { getIntlLocale } from '@/i18n/format'
 import { Check, RefreshCw, RotateCcw, Search, Send, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -21,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { BoundedSelect } from '@/components/bounded-select'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import {
@@ -70,7 +74,7 @@ export function OwnerOperationsPanel({
   )
     ? channelID
     : manageableChannels[0]?.id || ''
-  const usage = useQuery({
+  const usage = useInfiniteQuery({
     queryKey: [
       'marketplace-owner-usage',
       activeChannelID,
@@ -78,7 +82,8 @@ export function OwnerOperationsPanel({
       search,
       rankingSort,
     ],
-    queryFn: () =>
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
       getMyMarketplaceUserUsage({
         channelId: activeChannelID || undefined,
         startTimestamp: range.start
@@ -90,17 +95,30 @@ export function OwnerOperationsPanel({
         search: search || undefined,
         sort: rankingSort,
         direction: 'desc',
-        page: 1,
+        page: pageParam,
         pageSize: 200,
       }),
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.page_size < lastPage.total
+        ? lastPage.page + 1
+        : undefined,
   })
-  const requests = useQuery({
+  const requests = useInfiniteQuery({
     queryKey: ['marketplace-owner-bargains'],
-    queryFn: () => getMyMarketplaceBargainRequests('pending'),
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      getMyMarketplaceBargainRequests('pending', pageParam),
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.page_size < lastPage.total
+        ? lastPage.page + 1
+        : undefined,
   })
-  const multiplierUsers = useQuery({
-    queryKey: ['marketplace-owner-multipliers'],
-    queryFn: getOwnerMultipliers,
+  const multiplierUsers = useInfiniteQuery({
+    queryKey: ['marketplace-owner-multipliers', 'infinite'],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => getOwnerMultipliers(pageParam),
+    getNextPageParam: (lastPage, _pages, lastPageParam) =>
+      lastPageParam * 50 < lastPage.total ? lastPageParam + 1 : undefined,
   })
   const [multiplierSelection, setMultiplierSelection] = useState<Set<string>>(
     new Set()
@@ -120,8 +138,13 @@ export function OwnerOperationsPanel({
     },
   })
   const rankedUsers = useMemo(
-    () => rankOwnerUsers(usage.data?.items ?? [], activeChannelID, rankingSort),
-    [activeChannelID, usage.data?.items, rankingSort]
+    () =>
+      rankOwnerUsers(
+        usage.data?.pages.flatMap((page) => page.items) ?? [],
+        activeChannelID,
+        rankingSort
+      ),
+    [activeChannelID, usage.data, rankingSort]
   )
   const [selectedIDs, setSelectedIDs] = useState<Set<string>>(new Set())
   const [rankStart, setRankStart] = useState('1')
@@ -152,6 +175,10 @@ export function OwnerOperationsPanel({
   }
   const selectRankRange = () => {
     const start = Math.max(1, Number(rankStart) || 1)
+    if (start > rankedUsers.length || Number(rankEnd) > rankedUsers.length) {
+      toast.error(t('请先加载更多用户，再选择该排名范围'))
+      return
+    }
     const end = Math.min(
       rankedUsers.length,
       Number(rankEnd) || rankedUsers.length
@@ -165,13 +192,10 @@ export function OwnerOperationsPanel({
     )
   }
   return (
-    <section className='border-border bg-card mt-3 overflow-hidden rounded-lg border'>
+    <section className='owner-operations-panel'>
       <header className='flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4'>
         <div>
           <h3 className='font-semibold'>{t('渠道运营')}</h3>
-          <p className='text-muted-foreground mt-1 text-xs'>
-            {t('按渠道用户使用排名发放福利、处理倍率议价并设置分时策略。')}
-          </p>
         </div>
         <Button
           variant='outline'
@@ -187,9 +211,6 @@ export function OwnerOperationsPanel({
         <div className='flex flex-wrap items-center justify-between gap-2'>
           <div>
             <h4 className='font-medium'>{t('已调整专属倍率的用户')}</h4>
-            <p className='text-muted-foreground mt-1 text-xs'>
-              {t('包含砍价成功和渠道主手动调整的用户，可批量设置或清除。')}
-            </p>
           </div>
           <div className='flex flex-wrap items-center gap-2'>
             <Input
@@ -243,7 +264,9 @@ export function OwnerOperationsPanel({
           </div>
         </div>
         <div className='mt-3 grid gap-2 md:grid-cols-2'>
-          {(multiplierUsers.data?.items ?? []).map((item) => {
+          {(
+            multiplierUsers.data?.pages.flatMap((page) => page.items) ?? []
+          ).map((item) => {
             const key = `${item.channel_id}:${item.user_id}`
             const checked = multiplierSelection.has(key)
             return (
@@ -254,14 +277,18 @@ export function OwnerOperationsPanel({
                 <input
                   type='checkbox'
                   checked={checked}
-                  onChange={() =>
+                  onChange={() => {
+                    if (!checked && multiplierSelection.size >= 100) {
+                      toast.error(t('每次请选择 1 至 100 条专属倍率'))
+                      return
+                    }
                     setMultiplierSelection((current) => {
                       const next = new Set(current)
                       if (checked) next.delete(key)
                       else next.add(key)
                       return next
                     })
-                  }
+                  }}
                 />
                 <span className='min-w-0 flex-1'>
                   <b>{item.external_user_id || item.user_id}</b> ·{' '}
@@ -274,6 +301,21 @@ export function OwnerOperationsPanel({
             )
           })}
         </div>
+        {multiplierUsers.data && (
+          <LoadMore
+            loaded={multiplierUsers.data.pages.reduce(
+              (count, page) => count + page.items.length,
+              0
+            )}
+            total={multiplierUsers.data.pages[0].total}
+            hasMore={multiplierUsers.hasNextPage}
+            loading={
+              multiplierUsers.isFetching || batchMultiplierMutation.isPending
+            }
+            retry={multiplierUsers.isFetchNextPageError}
+            onLoad={() => void multiplierUsers.fetchNextPage()}
+          />
+        )}
         {multiplierUsers.isError && (
           <p role='alert' className='text-destructive mt-3 text-xs'>
             {t('专属倍率用户加载失败，请刷新重试。')}
@@ -281,7 +323,7 @@ export function OwnerOperationsPanel({
         )}
         {!multiplierUsers.isLoading &&
           !multiplierUsers.isError &&
-          !multiplierUsers.data?.items.length && (
+          !multiplierUsers.data?.pages[0].items.length && (
             <p className='text-muted-foreground mt-3 text-xs'>
               {t('暂无专属倍率用户')}
             </p>
@@ -312,7 +354,7 @@ export function OwnerOperationsPanel({
             setSearch('')
             setSelectedIDs(new Set())
           }}
-          summary={usage.data?.summary}
+          summary={usage.data?.pages[0].summary}
           users={rankedUsers}
           rankingSort={rankingSort}
           onRankingSortChange={(value) => {
@@ -329,6 +371,18 @@ export function OwnerOperationsPanel({
           onWelfare={setWelfare}
           loading={usage.isLoading}
           error={usage.isError}
+          loadMore={
+            usage.data && (
+              <LoadMore
+                loaded={rankedUsers.length}
+                total={usage.data.pages[0].total}
+                hasMore={usage.hasNextPage}
+                loading={usage.isFetching || welfareMutation.isPending}
+                retry={usage.isFetchNextPageError}
+                onLoad={() => void usage.fetchNextPage()}
+              />
+            )
+          }
         />
       </div>
       <TimeMultiplierPanel channelID={activeChannelID} />
@@ -363,7 +417,10 @@ export function OwnerOperationsPanel({
 }
 
 function BargainRequests(props: {
-  query: UseQueryResult<MarketplaceBargainRequestList, Error>
+  query: UseInfiniteQueryResult<
+    InfiniteData<MarketplaceBargainRequestList>,
+    Error
+  >
   client: QueryClient
 }) {
   const { t } = useTranslation()
@@ -377,23 +434,32 @@ function BargainRequests(props: {
       await props.client.invalidateQueries({
         queryKey: ['marketplace-owner-bargains'],
       })
+      await props.client.invalidateQueries({
+        queryKey: ['marketplace-owner-multipliers'],
+      })
       toast.success(t('议价申请已处理'))
       setPending(null)
     },
   })
   const data = props.query.data
+  const items = data?.pages.flatMap((page) => page.items) ?? []
   return (
     <div className='p-4'>
       <h4 className='text-sm font-medium'>{t('待处理倍率议价')}</h4>
+      {props.query.isError && data && (
+        <p role='alert' className='text-destructive mt-3 text-sm'>
+          {t('加载议价申请失败，请刷新后重试。')}
+        </p>
+      )}
       {props.query.isLoading ? (
         <p className='text-muted-foreground mt-3 text-sm'>{t('Loading...')}</p>
-      ) : props.query.isError ? (
+      ) : props.query.isError && !data ? (
         <p className='text-destructive mt-3 text-sm'>
           {t('加载议价申请失败，请刷新后重试。')}
         </p>
-      ) : data?.items.length ? (
+      ) : items.length ? (
         <div className='mt-3 space-y-2'>
-          {data.items.map((item) => (
+          {items.map((item) => (
             <div
               key={item.id}
               className='border-border rounded-md border p-3 text-sm'
@@ -433,6 +499,16 @@ function BargainRequests(props: {
         <p className='text-muted-foreground mt-3 text-sm'>
           {t('暂无待处理申请')}
         </p>
+      )}
+      {data && (
+        <LoadMore
+          loaded={items.length}
+          total={data.pages[0].total}
+          hasMore={props.query.hasNextPage}
+          loading={props.query.isFetching || resolve.isPending}
+          retry={props.query.isFetchNextPageError}
+          onLoad={() => void props.query.fetchNextPage()}
+        />
       )}
       <ConfirmDialog
         open={pending != null}
@@ -482,8 +558,17 @@ function UserWelfarePanel(props: {
   onWelfare: (value: { type: WelfareType; amount: string }) => void
   loading: boolean
   error: boolean
+  loadMore: ReactNode
 }) {
   const { t } = useTranslation()
+  const channelOptions = useMemo(
+    () =>
+      props.channels.map((channel) => ({
+        value: channel.id,
+        label: channel.system_display_name,
+      })),
+    [props.channels]
+  )
   const [amount, setAmount] = useState('')
   const [type, setType] = useState<WelfareType>('transfer')
   const toggle = (id: string) => {
@@ -510,10 +595,7 @@ function UserWelfarePanel(props: {
         <div>
           <h4 className='text-sm font-medium'>{t('渠道用户福利')}</h4>
           <p className='text-muted-foreground mt-1 text-xs'>
-            {t('按已结算请求次数或消耗额度排名，选择用户后统一发放。')}
-          </p>
-          <p className='text-muted-foreground mt-1 text-xs'>
-            {t('消耗额度按请求结算时的余额等值计算，统一余额与套餐口径。')}
+            {t('消耗额度')} · {t('余额等值')}
           </p>
         </div>
         <Badge variant='outline'>
@@ -521,27 +603,14 @@ function UserWelfarePanel(props: {
         </Badge>
       </div>
       <div className='mt-4 grid gap-3 sm:grid-cols-2'>
-        <Select
+        <BoundedSelect
           value={props.activeChannelID}
-          onValueChange={(value) => {
-            if (value) props.onChannelChange(value)
-          }}
-        >
-          <SelectTrigger className='w-full min-w-0' aria-label={t('选择渠道')}>
-            <SelectValue placeholder={t('选择渠道')}>
-              {props.channels.find(
-                (channel) => channel.id === props.activeChannelID
-              )?.system_display_name || t('选择渠道')}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {props.channels.map((channel) => (
-              <SelectItem key={channel.id} value={channel.id}>
-                {channel.system_display_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={channelOptions}
+          onValueChange={props.onChannelChange}
+          placeholder={t('选择渠道')}
+          aria-label={t('选择渠道')}
+          className='w-full min-w-0'
+        />
         <Select
           value={props.rankingSort}
           onValueChange={(value) => {
@@ -618,7 +687,9 @@ function UserWelfarePanel(props: {
           <div key={String(label)} className='bg-card px-3 py-2'>
             <div className='text-muted-foreground text-xs'>{label}</div>
             <div className='mt-1 font-semibold tabular-nums'>
-              {typeof value === 'number' ? value.toLocaleString() : value}
+              {typeof value === 'number'
+                ? value.toLocaleString(getIntlLocale())
+                : value}
             </div>
           </div>
         ))}
@@ -640,7 +711,7 @@ function UserWelfarePanel(props: {
             type='number'
             min={1}
             value={props.rankEnd}
-            placeholder={t('末位')}
+            placeholder={t('当前已加载末位')}
             onChange={(event) => props.onRankEndChange(event.target.value)}
             aria-label={t('结束排名')}
           />
@@ -668,14 +739,14 @@ function UserWelfarePanel(props: {
           {t('该渠道还没有可用于福利发放的用户使用记录。')}
         </p>
       )}
-      {!props.loading && !props.error && props.users.length > 0 && (
-        <div className='mt-3 max-h-80 overflow-auto border-y'>
+      {!props.loading && props.users.length > 0 && (
+        <div className='owner-ranking-scroll mt-3 max-h-80 overflow-auto border-y'>
           <div className='bg-card sticky top-0 grid grid-cols-[1rem_2rem_minmax(5rem,1fr)_4rem_5rem_6rem_6rem] items-center gap-2 border-b px-2 py-2 text-xs font-medium'>
             <input
               type='checkbox'
               checked={props.selectedIDs.size === props.users.length}
               onChange={toggleAll}
-              aria-label={t('全选用户')}
+              aria-label={t('全选已加载用户')}
             />
             <span>#</span>
             <span>{t('用户')}</span>
@@ -701,7 +772,7 @@ function UserWelfarePanel(props: {
                 {item.external_user_id || item.user_id}
               </span>
               <span className='text-right tabular-nums'>
-                {item.request_count.toLocaleString()}
+                {item.request_count.toLocaleString(getIntlLocale())}
               </span>
               <span className='text-right tabular-nums'>
                 {(item.success_rate * 100).toFixed(1)}%
@@ -716,6 +787,7 @@ function UserWelfarePanel(props: {
           ))}
         </div>
       )}
+      {props.loadMore}
       <div className='mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto]'>
         <Select
           value={type}
@@ -758,6 +830,37 @@ function UserWelfarePanel(props: {
   )
 }
 
+function LoadMore(props: {
+  loaded: number
+  total: number
+  hasMore: boolean
+  loading: boolean
+  retry: boolean
+  onLoad: () => void
+}) {
+  const { t } = useTranslation()
+  let label = t('加载更多')
+  if (props.retry) label = t('重试')
+  else if (props.loading) label = t('加载中…')
+  return (
+    <div className='mt-3 flex items-center justify-between gap-3 text-xs'>
+      <span className='text-muted-foreground tabular-nums'>
+        {props.loaded} / {props.total}
+      </span>
+      {(props.hasMore || props.retry) && (
+        <Button
+          variant='outline'
+          size='sm'
+          disabled={props.loading}
+          onClick={props.onLoad}
+        >
+          {label}
+        </Button>
+      )}
+    </div>
+  )
+}
+
 function WelfareConfirmSummary(props: {
   users: MarketplaceOwnerUsageItem[]
   welfare: { type: WelfareType; amount: string } | null
@@ -776,9 +879,6 @@ function WelfareConfirmSummary(props: {
           : t('将向 {{count}} 位已选用户各发放 1 个盲盒。', {
               count: props.users.length,
             })}
-      </p>
-      <p className='text-muted-foreground'>
-        {t('发放后将展示每位用户的处理结果。')}
       </p>
     </div>
   )
@@ -918,9 +1018,14 @@ function TimeMultiplierPanel(props: { channelID: string }) {
             className='flex items-center justify-between text-xs'
           >
             <span>
-              {new Date(item.start_timestamp * 1000).toLocaleString()} -{' '}
-              {new Date(item.end_timestamp * 1000).toLocaleString()} ·{' '}
-              {item.multiplier}x {item.label}
+              {new Date(item.start_timestamp * 1000).toLocaleString(
+                getIntlLocale()
+              )}{' '}
+              -{' '}
+              {new Date(item.end_timestamp * 1000).toLocaleString(
+                getIntlLocale()
+              )}{' '}
+              · {item.multiplier}x {item.label}
             </span>
             <Button
               variant='ghost'

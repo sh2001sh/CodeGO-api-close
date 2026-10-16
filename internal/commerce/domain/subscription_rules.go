@@ -8,6 +8,8 @@ import (
 
 func NormalizeSubscriptionPlanType(planType string) string {
 	switch strings.TrimSpace(strings.ToLower(planType)) {
+	case commerceschema.SubscriptionPlanTypeCreditPack:
+		return commerceschema.SubscriptionPlanTypeCreditPack
 	case commerceschema.SubscriptionPlanTypeStarter:
 		return commerceschema.SubscriptionPlanTypeStarter
 	case commerceschema.SubscriptionPlanTypeWeekly:

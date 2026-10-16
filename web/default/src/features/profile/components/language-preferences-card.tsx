@@ -67,9 +67,12 @@ export function LanguagePreferencesCard(props: LanguagePreferencesCardProps) {
     const previousLanguage = currentLanguage
     setCurrentLanguage(nextLanguage)
     setSaving(true)
-    await i18n.changeLanguage(nextLanguage)
-
     try {
+      await i18n.changeLanguage(nextLanguage)
+      if (normalizeInterfaceLanguage(i18n.language) !== nextLanguage) {
+        setCurrentLanguage(normalizeInterfaceLanguage(i18n.language))
+        return
+      }
       const response = await updateUserLanguage(nextLanguage)
       if (!response.success) {
         throw new Error(response.message || t('Failed to update settings'))
@@ -94,7 +97,11 @@ export function LanguagePreferencesCard(props: LanguagePreferencesCardProps) {
     } catch (_error) {
       setCurrentLanguage(previousLanguage)
       await i18n.changeLanguage(previousLanguage)
-      toast.error(t('Failed to update settings'))
+      toast.error(
+        _error instanceof Error
+          ? _error.message
+          : t('Failed to update settings')
+      )
     } finally {
       setSaving(false)
     }
@@ -109,11 +116,6 @@ export function LanguagePreferencesCard(props: LanguagePreferencesCardProps) {
       <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4'>
         <div className='space-y-1'>
           <div className='text-sm font-medium'>{t('Interface Language')}</div>
-          <p className='text-muted-foreground line-clamp-2 text-xs sm:text-sm'>
-            {t(
-              'Language preferences sync across your signed-in devices and affect API error messages.'
-            )}
-          </p>
         </div>
         <div className='flex items-center gap-2 sm:min-w-48'>
           <Select

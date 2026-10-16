@@ -25,6 +25,7 @@ export function formatDuration(
   t: TFunction
 ): string {
   const unit = plan?.duration_unit || 'month'
+  if (unit === 'permanent') return t('长期有效')
   const value = plan?.duration_value || 1
   const unitLabels: Record<string, string> = {
     year: value === 1 ? t('year') : t('years'),

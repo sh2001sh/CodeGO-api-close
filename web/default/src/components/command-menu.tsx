@@ -23,8 +23,8 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useSearch } from '@/context/search-provider'
 import { useTheme } from '@/context/theme-provider'
-import { useSidebarData } from '@/hooks/use-sidebar-data'
 import { useSidebarConfig } from '@/hooks/use-sidebar-config'
+import { useSidebarData } from '@/hooks/use-sidebar-data'
 import {
   Command,
   CommandDialog,
@@ -35,8 +35,8 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command'
-import { getNavGroupsForPath } from './layout/lib/workspace-registry'
 import { filterNavGroupsByRole } from './layout/lib/filter-nav-groups'
+import { getNavGroupsForPath } from './layout/lib/workspace-registry'
 import { ScrollArea } from './ui/scroll-area'
 
 export function CommandMenu() {
@@ -116,10 +116,16 @@ export function CommandMenu() {
             ))}
             <CommandSeparator />
             <CommandGroup heading='Theme'>
-              <CommandItem className='min-h-11' onSelect={() => runCommand(() => setTheme('light'))}>
+              <CommandItem
+                className='min-h-11'
+                onSelect={() => runCommand(() => setTheme('light'))}
+              >
                 <Sun /> <span>{t('Light')}</span>
               </CommandItem>
-              <CommandItem className='min-h-11' onSelect={() => runCommand(() => setTheme('dark'))}>
+              <CommandItem
+                className='min-h-11'
+                onSelect={() => runCommand(() => setTheme('dark'))}
+              >
                 <Moon className='scale-90' />
                 <span>{t('Dark')}</span>
               </CommandItem>

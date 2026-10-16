@@ -56,7 +56,7 @@ type GeneralOpenAIRequest struct {
 	FunctionCall        json.RawMessage   `json:"function_call,omitempty"`
 	User                json.RawMessage   `json:"user,omitempty"`
 	// ServiceTier specifies upstream service level and may affect billing.
-	// This field is filtered by default and can be enabled via channel setting allow_service_tier.
+	// Fast (priority) and UltraFast (ultrafast) pass through; other tiers require allow_service_tier.
 	ServiceTier json.RawMessage `json:"service_tier,omitempty"`
 	LogProbs    *bool           `json:"logprobs,omitempty"`
 	TopLogProbs *int            `json:"top_logprobs,omitempty"`
@@ -288,6 +288,7 @@ type Message struct {
 	Reasoning        *string         `json:"reasoning,omitempty"`
 	ToolCalls        json.RawMessage `json:"tool_calls,omitempty"`
 	ToolCallId       string          `json:"tool_call_id,omitempty"`
+	Refusal          *string         `json:"refusal,omitempty"`
 	parsedContent    []MediaContent
 	//parsedStringContent *string
 }
@@ -885,7 +886,7 @@ type OpenAIResponsesRequest struct {
 	PreviousResponseID string          `json:"previous_response_id,omitempty"`
 	Reasoning          *Reasoning      `json:"reasoning,omitempty"`
 	// ServiceTier specifies upstream service level and may affect billing.
-	// This field is filtered by default and can be enabled via channel setting allow_service_tier.
+	// Fast (priority) and UltraFast (ultrafast) pass through; other tiers require allow_service_tier.
 	ServiceTier string `json:"service_tier,omitempty"`
 	// Store controls whether upstream may store request/response data.
 	// This field is allowed by default and can be disabled via channel setting disable_store.

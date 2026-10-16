@@ -39,6 +39,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const numericString = z.string().refine((value) => {
   const trimmed = value.trim()
@@ -240,17 +241,19 @@ export function MonitoringSettingsSection({
     }
 
     baselineRef.current = normalized
+    form.reset(form.getValues())
   }
 
   return (
     <SettingsSection
       title={t('Monitoring & Alerts')}
-      description={t(
-        'Automatically test channels and notify users when limits are hit'
-      )}
+      description={t('Configure channel monitoring and automation')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <div className='grid gap-6 md:grid-cols-2'>
             <FormField
               control={form.control}
@@ -261,9 +264,6 @@ export function MonitoringSettingsSection({
                     <FormLabel className='text-base'>
                       {t('Scheduled channel tests')}
                     </FormLabel>
-                    <FormDescription>
-                      {t('Automatically probe all channels in the background')}
-                    </FormDescription>
                   </div>
                   <FormControl>
                     <Switch
@@ -300,9 +300,7 @@ export function MonitoringSettingsSection({
                       ref={field.ref}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('How frequently the system tests all channels')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -325,11 +323,7 @@ export function MonitoringSettingsSection({
                       onChange={(event) => field.onChange(event.target.value)}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Automatically disable channels exceeding this response time'
-                    )}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -350,9 +344,7 @@ export function MonitoringSettingsSection({
                       onChange={(event) => field.onChange(event.target.value)}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('Send email alerts when a user falls below this quota')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -369,9 +361,6 @@ export function MonitoringSettingsSection({
                     <FormLabel className='text-base'>
                       {t('Disable on failure')}
                     </FormLabel>
-                    <FormDescription>
-                      {t('Automatically disable channels when tests fail')}
-                    </FormDescription>
                   </div>
                   <FormControl>
                     <Switch
@@ -392,9 +381,6 @@ export function MonitoringSettingsSection({
                     <FormLabel className='text-base'>
                       {t('Re-enable on success')}
                     </FormLabel>
-                    <FormDescription>
-                      {t('Bring channels back online after successful checks')}
-                    </FormDescription>
                   </div>
                   <FormControl>
                     <Switch
@@ -421,10 +407,8 @@ export function MonitoringSettingsSection({
                     onChange={(event) => field.onChange(event.target.value)}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'If an upstream error contains any of these keywords (case insensitive), the channel will be disabled automatically.'
-                  )}
+                <FormDescription className='settings-field-fact'>
+                  {t('Case-insensitive · Matching error: disable channel')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -445,10 +429,8 @@ export function MonitoringSettingsSection({
                       onChange={(event) => field.onChange(event.target.value)}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Accepts comma-separated status codes and inclusive ranges.'
-                    )}{' '}
+                  <FormDescription className='settings-field-fact'>
+                    {t('200, 429, 500–599')}{' '}
                     {autoDisableParsed.ok &&
                       autoDisableParsed.normalized &&
                       autoDisableParsed.normalized !== field.value.trim() && (
@@ -475,10 +457,8 @@ export function MonitoringSettingsSection({
                       onChange={(event) => field.onChange(event.target.value)}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Accepts comma-separated status codes and inclusive ranges.'
-                    )}{' '}
+                  <FormDescription className='settings-field-fact'>
+                    {t('200, 429, 500–599')}{' '}
                     {autoRetryParsed.ok &&
                       autoRetryParsed.normalized &&
                       autoRetryParsed.normalized !== field.value.trim() && (
@@ -493,11 +473,13 @@ export function MonitoringSettingsSection({
             />
           </div>
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending
-              ? t('Saving...')
-              : t('Save monitoring rules')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending
+                ? t('Saving...')
+                : t('Save monitoring rules')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

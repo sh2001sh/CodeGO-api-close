@@ -1,465 +1,524 @@
-/*
-Copyright (C) 2026 codego-api contributors
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-*/
-import { useMemo, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import i18n from '@/i18n/config'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getIntlLocale } from '@/i18n/format'
 import {
-  CircleCheckBig,
-  FileClock,
-  FilePlus2,
-  ReceiptText,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  History,
   RefreshCw,
-  ScrollText,
+  X,
 } from 'lucide-react'
-import { useTranslation, Trans } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { ROLE } from '@/lib/roles'
-import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
+import { COMPANY } from '@/lib/company'
+import { formatTimestamp } from '@/lib/format'
+import { useDebounce } from '@/hooks/use-debounce'
 import { Button } from '@/components/ui/button'
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { SectionPageLayout } from '@/components/layout'
-import { getInvoiceEligibleOrders, getInvoiceRequests } from './api'
-import { InvoiceAdminPanel } from './components/invoice-admin-panel'
-import { InvoiceRequestDialog } from './components/invoice-request-dialog'
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import '@/features/wallet/commerce.css'
+import { getInvoiceEligibleOrdersPage, getInvoiceRequests } from './api'
 import {
-  InvoiceRequestsTable,
-  InvoiceStatusBadge,
-} from './components/invoice-requests-table'
-import type { InvoiceEligibleOrder, InvoiceRequest } from './types'
+  downloadInvoice,
+  getInvoiceDocuments,
+  InvoiceError,
+  type InvoiceBuyer,
+  type InvoiceDocument,
+  type InvoiceIssueInput,
+} from './commercial-api'
+import { InvoiceRequestsTable } from './components/invoice-requests-table'
+import type { InvoiceEligibleOrder } from './types'
 
-function formatMoney(order: InvoiceEligibleOrder | InvoiceRequest) {
-  return order.currency + ' ' + order.order_amount.toFixed(2)
+type BuyerDraft = {
+  order: InvoiceEligibleOrder
+  previous?: InvoiceDocument
+  requestId?: string
 }
 
-function formatDate(timestamp: number) {
-  return timestamp
-    ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium' }).format(
-        timestamp * 1000
-      )
-    : '-'
-}
-
-function getOrderSourceLabel(sourceType: InvoiceEligibleOrder['source_type']) {
-  return sourceType === 'subscription' ? '套餐订单' : '充值订单'
-}
-
-function buildRequestSummary(requests: InvoiceRequest[] | undefined) {
-  return (
-    requests?.reduce(
-      (summary, request) => {
-        summary.total += 1
-        summary[request.status] += 1
-        return summary
-      },
-      { total: 0, pending: 0, issued: 0, rejected: 0 }
-    ) ?? { total: 0, pending: 0, issued: 0, rejected: 0 }
-  )
-}
-
-function SummaryCard({
-  title,
-  value,
-  hint,
-  icon: Icon,
-}: {
-  title: string
-  value: string
-  hint: string
-  icon: typeof ReceiptText
-}) {
-  return (
-    <Card size='sm' className='bg-card/95'>
-      <CardHeader className='gap-2'>
-        <div className='flex items-center justify-between gap-3'>
-          <div className='space-y-1'>
-            <CardDescription>{title}</CardDescription>
-            <CardTitle className='text-2xl font-semibold tracking-tight'>
-              {value}
-            </CardTitle>
-          </div>
-          <div className='bg-primary/10 text-primary flex size-10 items-center justify-center rounded-xl'>
-            <Icon className='size-5' />
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <p className='text-muted-foreground text-sm'>{hint}</p>
-      </CardContent>
-    </Card>
-  )
-}
-
-export function Invoices() {
-  useTranslation()
+export function OrderInvoices() {
+  const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
-  const user = useAuthStore((state) => state.auth.user)
-  const [selectedOrderKeys, setSelectedOrderKeys] = useState<string[]>([])
-  const [dialogOrders, setDialogOrders] = useState<InvoiceEligibleOrder[]>([])
+  const userId = useAuthStore((state) => state.auth.user?.id ?? 0)
+  const [orderSearch, setOrderSearch] = useState('')
+  const keyword = useDebounce(orderSearch.trim(), 250)
+  const [pagination, setPagination] = useState({ scope: '', page: 1 })
+  const page = pagination.scope === keyword ? pagination.page : 1
   const orders = useQuery({
-    queryKey: ['invoice-eligible-orders'],
-    queryFn: getInvoiceEligibleOrders,
+    queryKey: ['invoice-eligible-orders', userId, page, keyword],
+    queryFn: ({ signal }) =>
+      getInvoiceEligibleOrdersPage(page, keyword, signal),
+    enabled: userId > 0,
   })
-  const requests = useQuery({
-    queryKey: ['invoice-requests'],
-    queryFn: getInvoiceRequests,
+  const historical = useQuery({
+    queryKey: ['invoice-historical-requests', userId],
+    queryFn: ({ signal }) => getInvoiceRequests(signal),
+    enabled: userId > 0,
   })
-
-  const refresh = () => {
-    void queryClient.invalidateQueries({
-      queryKey: ['invoice-eligible-orders'],
+  const [draft, setDraft] = useState<BuyerDraft | null>(null)
+  const [history, setHistory] = useState<InvoiceEligibleOrder | null>(null)
+  const pageCount = Math.max(1, Math.ceil((orders.data?.total ?? 0) / 50))
+  if (pagination.scope !== keyword) {
+    setPagination({ scope: keyword, page: 1 })
+  } else if (orders.data && page > pageCount) {
+    setPagination({ scope: keyword, page: pageCount })
+  }
+  const pageOrders = orders.data?.items ?? []
+  const setPage = (value: number) => {
+    if (!Number.isFinite(value)) return
+    setPagination({
+      scope: keyword,
+      page: Math.max(1, Math.min(pageCount, Math.trunc(value))),
     })
-    void queryClient.invalidateQueries({ queryKey: ['invoice-requests'] })
   }
-
-  const eligibleOrders = useMemo(() => orders.data ?? [], [orders.data])
-  const requestItems = requests.data?.items
-  const invoiceRequests = requestItems ?? []
-  const requestSummary = useMemo(
-    () => buildRequestSummary(requestItems),
-    [requestItems]
-  )
-  const readyToApplyCount = eligibleOrders.filter(
-    (order) => !order.requested
-  ).length
-  const selectedOrders = useMemo(
-    () =>
-      eligibleOrders.filter(
-        (order) =>
-          !order.requested &&
-          selectedOrderKeys.includes(order.source_type + '-' + order.trade_no)
-      ),
-    [eligibleOrders, selectedOrderKeys]
-  )
-  const selectedTotal = selectedOrders.reduce(
-    (sum, order) => sum + order.order_amount,
-    0
-  )
-  const toggleOrder = (order: InvoiceEligibleOrder) => {
-    const key = order.source_type + '-' + order.trade_no
-    setSelectedOrderKeys((current) =>
-      current.includes(key)
-        ? current.filter((item) => item !== key)
-        : [...current, key]
-    )
-  }
-
+  const documents = useQuery({
+    queryKey: ['order-invoice-documents', userId, history],
+    queryFn: ({ signal }) => getInvoiceDocuments(history!, signal),
+    enabled: userId > 0 && Boolean(history),
+  })
+  const download = useMutation({
+    mutationFn: (input: {
+      order: InvoiceEligibleOrder
+      action?: 'document' | 'corrections' | 'credit-note'
+      body?: InvoiceIssueInput
+      number?: string
+    }) => downloadInvoice(input.order, input.action, input.body, input.number),
+    onSuccess: () => {
+      setDraft(null)
+      void queryClient.invalidateQueries({
+        queryKey: ['order-invoice-documents'],
+      })
+      void queryClient.invalidateQueries({
+        queryKey: ['invoice-eligible-orders'],
+      })
+    },
+    onError: (error, input) => {
+      if (
+        error instanceof InvoiceError &&
+        error.status === 428 &&
+        !input.body
+      ) {
+        setDraft({ order: input.order })
+        return
+      }
+      toast.error(t(error.message))
+    },
+  })
   return (
-    <>
-      <SectionPageLayout>
-        <SectionPageLayout.Title>
-          <Trans i18nKey={'电子发票'} />
-        </SectionPageLayout.Title>
-        <SectionPageLayout.Description>
-          <Trans
-            i18nKey={'统一查看可开票订单、提交申请，并跟踪开票与交付状态。'}
-          />
-        </SectionPageLayout.Description>
-        <SectionPageLayout.Actions>
-          <Button
-            variant='outline'
-            onClick={refresh}
-            title={i18n.t('刷新订单与申请状态')}
-          >
-            <RefreshCw />
-            <Trans i18nKey={'刷新'} />
+    <section
+      className='commerce-workspace commerce-invoices space-y-6'
+      aria-busy={orders.isFetching}
+    >
+      <header className='commerce-section-heading'>
+        <h2 className='text-2xl font-semibold'>{t('invoice.commercial')}</h2>
+        <Button
+          variant='outline'
+          size='icon'
+          aria-label={t('Refresh')}
+          onClick={() => void orders.refetch()}
+        >
+          <RefreshCw size={16} />
+        </Button>
+      </header>
+      <div className='commerce-invoice-issuer flex flex-wrap gap-x-6 gap-y-2'>
+        <span>{COMPANY.name}</span>
+        <span>
+          {i18n.language === 'zh'
+            ? COMPANY.simplifiedName
+            : COMPANY.traditionalName}
+        </span>
+        <span>BRN {COMPANY.registrationNumber}</span>
+      </div>
+      {orders.isError ? (
+        <div role='alert' className='commerce-error'>
+          {t('invoice.ordersFailed')}{' '}
+          <Button variant='outline' onClick={() => void orders.refetch()}>
+            {t('Retry')}
           </Button>
-        </SectionPageLayout.Actions>
-        <SectionPageLayout.Content>
-          <div className='space-y-4'>
-            <div className='grid gap-4 md:grid-cols-3'>
-              <SummaryCard
-                title={i18n.t('可申请订单')}
-                value={String(readyToApplyCount)}
-                hint={i18n.t('已支付且未申请发票的订单数量')}
-                icon={ReceiptText}
-              />
-              <SummaryCard
-                title={i18n.t('待处理申请')}
-                value={String(requestSummary.pending)}
-                hint={i18n.t('已提交，等待管理员开具或驳回')}
-                icon={FileClock}
-              />
-              <SummaryCard
-                title={i18n.t('已完成开票')}
-                value={String(requestSummary.issued)}
-                hint={i18n.t('已开具并通过邮箱或链接交付')}
-                icon={CircleCheckBig}
-              />
+        </div>
+      ) : null}
+      {orders.isLoading ? <div role='status'>{t('Loading')}</div> : null}
+      {orders.data?.total === 0 && !keyword ? (
+        <div role='status' className='commerce-empty'>
+          {t('invoice.noOrders')}
+        </div>
+      ) : null}
+      <div className='flex flex-wrap items-center justify-between gap-4'>
+        <Label htmlFor='invoice-order-search' className='sr-only'>
+          {t('Search')}
+        </Label>
+        <Input
+          id='invoice-order-search'
+          type='search'
+          className='w-full sm:max-w-80'
+          value={orderSearch}
+          onChange={(event) => setOrderSearch(event.target.value)}
+          placeholder={t('Search')}
+        />
+        {pageCount > 1 && (
+          <nav
+            className='commerce-invoice-pagination flex flex-wrap items-center gap-3'
+            aria-label={t('pagination')}
+          >
+            <span className='text-muted-foreground text-sm'>
+              {t('Total')}{' '}
+              {(orders.data?.total ?? 0).toLocaleString(getIntlLocale())}
+            </span>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Button
+                variant='outline'
+                disabled={page === 1 || orders.isFetching}
+                onClick={() => setPage(page - 1)}
+              >
+                <ChevronLeft aria-hidden='true' />
+                {t('上一页')}
+              </Button>
+              <label className='flex items-center gap-2 text-sm'>
+                <span className='sr-only'>{t('Page')}</span>
+                <Input
+                  type='number'
+                  className='w-[68px] text-center tabular-nums'
+                  min={1}
+                  max={pageCount}
+                  value={page}
+                  aria-label={t('Page')}
+                  disabled={orders.isFetching}
+                  onChange={(event) => setPage(Number(event.target.value))}
+                />
+                <span>/ {pageCount.toLocaleString(getIntlLocale())}</span>
+              </label>
+              <Button
+                variant='outline'
+                disabled={page === pageCount || orders.isFetching}
+                onClick={() => setPage(page + 1)}
+              >
+                {t('下一页')}
+                <ChevronRight aria-hidden='true' />
+              </Button>
             </div>
-
-            <div className='grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]'>
-              <Card className='bg-card/95'>
-                <CardHeader className='gap-3 border-b'>
-                  <div className='flex flex-wrap items-start justify-between gap-3'>
-                    <div className='space-y-1'>
-                      <CardTitle className='flex items-center gap-2'>
-                        <ReceiptText className='text-primary size-4.5' />
-                        <Trans i18nKey={'可开票订单'} />
-                      </CardTitle>
-                      <CardDescription>
-                        <Trans
-                          i18nKey={
-                            '每笔已支付订单仅可申请一次。已申请订单会保留在列表中，方便核对状态。'
-                          }
-                        />
-                      </CardDescription>
-                    </div>
-                    <CardAction className='static'>
-                      <div className='flex flex-wrap items-center gap-2'>
-                        <Badge variant='secondary'>
-                          {readyToApplyCount} <Trans i18nKey={'笔待申请'} />
-                        </Badge>
-                        {selectedOrders.length > 0 ? (
-                          <span className='text-muted-foreground text-xs tabular-nums'>
-                            <Trans i18nKey={'已选'} /> {selectedOrders.length}{' '}
-                            <Trans i18nKey={'笔 ·'} />{' '}
-                            {selectedOrders[0].currency}{' '}
-                            {selectedTotal.toFixed(2)}
-                          </span>
-                        ) : null}
-                        <Button
-                          size='sm'
-                          disabled={selectedOrders.length === 0}
-                          onClick={() => setDialogOrders(selectedOrders)}
-                        >
-                          <FilePlus2 />
-                          {selectedOrders.length > 1
-                            ? i18n.t('合并开票（{{param0}}）', {
-                                param0: selectedOrders.length,
-                              })
-                            : i18n.t('申请发票')}
-                        </Button>
-                      </div>
-                    </CardAction>
-                  </div>
-                </CardHeader>
-                <CardContent className='space-y-3'>
-                  {orders.isLoading ? (
-                    <p className='text-muted-foreground py-10 text-center text-sm'>
-                      <Trans i18nKey={'正在加载订单...'} />
-                    </p>
-                  ) : null}
-                  {orders.isError ? (
-                    <p className='text-destructive py-10 text-center text-sm'>
-                      <Trans i18nKey={'订单数据加载失败，请刷新重试'} />
-                    </p>
-                  ) : null}
-                  {eligibleOrders.length === 0 ? (
-                    <div className='bg-muted/20 flex min-h-56 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed px-6 text-center'>
-                      <ReceiptText className='text-muted-foreground size-5' />
-                      <p className='font-medium'>
-                        <Trans i18nKey={'暂无符合条件的已支付订单'} />
-                      </p>
-                      <p className='text-muted-foreground max-w-md text-sm'>
-                        <Trans
-                          i18nKey={
-                            '充值或套餐支付完成后，符合开票条件的订单会出现在这里。'
-                          }
-                        />
-                      </p>
-                    </div>
-                  ) : null}
-                  {eligibleOrders.map((order) => (
-                    <div
-                      key={order.source_type + '-' + order.trade_no}
-                      className={cn(
-                        'bg-background/75 border-border/80 flex flex-col gap-3 rounded-2xl border px-4 py-4 transition-colors sm:flex-row sm:items-start',
-                        selectedOrderKeys.includes(
-                          order.source_type + '-' + order.trade_no
-                        ) &&
-                          'border-primary/70 bg-primary/5 ring-primary/15 ring-2'
-                      )}
-                    >
-                      <div className='flex min-w-0 flex-1 items-start gap-3'>
-                        <Checkbox
-                          checked={selectedOrderKeys.includes(
-                            order.source_type + '-' + order.trade_no
-                          )}
-                          disabled={order.requested}
-                          onCheckedChange={() => toggleOrder(order)}
-                          aria-label={`选择${order.order_title}`}
-                          className='border-foreground/60 bg-background data-checked:border-primary data-checked:bg-primary mt-0.5 size-6 rounded-md border-2 shadow-sm after:-inset-y-2.5 [&_svg]:size-4.5'
-                        />
-                        <div className='min-w-0 space-y-2'>
-                          <div className='flex flex-wrap items-center gap-2'>
-                            <h3 className='font-medium'>{order.order_title}</h3>
-                            <Badge
-                              variant={
-                                order.requested ? 'secondary' : 'default'
-                              }
-                            >
-                              {order.requested
-                                ? i18n.t('已申请')
-                                : i18n.t('可申请')}
-                            </Badge>
-                            <Badge variant='outline'>
-                              {getOrderSourceLabel(order.source_type)}
-                            </Badge>
-                          </div>
-                          <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm'>
-                            <span>{formatMoney(order)}</span>
-                            <span>{formatDate(order.paid_at)}</span>
-                            <span className='truncate font-mono text-xs'>
-                              {order.trade_no}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <Button
-                        size='sm'
-                        variant={order.requested ? 'outline' : 'default'}
-                        disabled={order.requested}
-                        onClick={() => setDialogOrders([order])}
-                        className='sm:min-w-28'
-                      >
-                        <FilePlus2 />
-                        {order.requested
-                          ? i18n.t('已提交申请')
-                          : i18n.t('申请发票')}
-                      </Button>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <div className='space-y-4'>
-                <Card className='bg-card/95'>
-                  <CardHeader className='gap-3 border-b'>
-                    <CardTitle className='flex items-center gap-2'>
-                      <ScrollText className='text-primary size-4.5' />
-                      <Trans i18nKey={'申请说明'} />
-                    </CardTitle>
-                    <CardDescription>
-                      <Trans
-                        i18nKey={
-                          '先确认订单，再填写抬头与接收邮箱；开票完成后会通过邮箱或下载链接交付。'
-                        }
-                      />
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className='space-y-3'>
-                    <div className='bg-background/75 border-border/80 rounded-2xl border px-4 py-3'>
-                      <div className='text-sm font-medium'>
-                        <Trans i18nKey={'1. 选择订单'} />
-                      </div>
-                      <p className='text-muted-foreground mt-1 text-sm leading-6'>
-                        <Trans
-                          i18nKey={
-                            '仅展示已支付且符合开票条件的充值或套餐订单。'
-                          }
-                        />
-                      </p>
-                    </div>
-                    <div className='bg-background/75 border-border/80 rounded-2xl border px-4 py-3'>
-                      <div className='text-sm font-medium'>
-                        <Trans i18nKey={'2. 填写开票信息'} />
-                      </div>
-                      <p className='text-muted-foreground mt-1 text-sm leading-6'>
-                        <Trans
-                          i18nKey={
-                            '企业发票需填写抬头与税号；个人发票只需抬头和接收邮箱。'
-                          }
-                        />
-                      </p>
-                    </div>
-                    <div className='bg-background/75 border-border/80 rounded-2xl border px-4 py-3'>
-                      <div className='text-sm font-medium'>
-                        <Trans i18nKey={'3. 跟踪处理结果'} />
-                      </div>
-                      <p className='text-muted-foreground mt-1 text-sm leading-6'>
-                        <Trans
-                          i18nKey={
-                            '待处理、已开具、已驳回都会展示在申请记录中，驳回原因也会保留。'
-                          }
-                        />
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className='bg-card/95'>
-                  <CardHeader className='gap-3 border-b'>
-                    <div className='flex flex-wrap items-start justify-between gap-3'>
-                      <div className='space-y-1'>
-                        <CardTitle>
-                          <Trans i18nKey={'申请记录'} />
-                        </CardTitle>
-                        <CardDescription>
-                          <Trans
-                            i18nKey={
-                              '已提交申请的处理状态、发票号码和交付方式都会在这里更新。'
-                            }
-                          />
-                        </CardDescription>
-                      </div>
-                      {invoiceRequests.length > 0 ? (
-                        <div className='flex flex-wrap gap-2'>
-                          <InvoiceStatusBadge status='pending' />
-                          <InvoiceStatusBadge status='issued' />
-                          <InvoiceStatusBadge status='rejected' />
-                        </div>
-                      ) : null}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {requests.isLoading ? (
-                      <p className='text-muted-foreground py-10 text-center text-sm'>
-                        <Trans i18nKey={'正在加载申请记录...'} />
-                      </p>
-                    ) : null}
-                    {requests.isError ? (
-                      <p className='text-destructive py-10 text-center text-sm'>
-                        <Trans i18nKey={'申请记录加载失败'} />
-                      </p>
-                    ) : null}
-                    {requests.data ? (
-                      <InvoiceRequestsTable requests={invoiceRequests} />
-                    ) : null}
-                  </CardContent>
-                </Card>
+          </nav>
+        )}
+      </div>
+      {orders.data?.total === 0 && Boolean(keyword) && (
+        <div role='status' className='commerce-empty'>
+          {t('No results found')}
+        </div>
+      )}
+      <div className='commerce-invoice-list'>
+        {pageOrders.map((order) => (
+          <article
+            key={`${order.source_type}:${order.trade_no}`}
+            className='commerce-invoice-order'
+          >
+            <div className='commerce-invoice-summary'>
+              <div className='commerce-invoice-identity space-y-1'>
+                <code className='block'>{order.trade_no}</code>
+                <div className='text-muted-foreground text-base'>
+                  {t(order.order_title)} · {formatTimestamp(order.paid_at)}
+                </div>
+              </div>
+              <div className='commerce-invoice-amount'>
+                {order.order_amount.toLocaleString(getIntlLocale(), {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{' '}
+                {order.currency}
               </div>
             </div>
-
-            {user?.role !== undefined && user.role >= ROLE.ADMIN ? (
-              <InvoiceAdminPanel />
-            ) : null}
-          </div>
-        </SectionPageLayout.Content>
-      </SectionPageLayout>
-
-      <InvoiceRequestDialog
-        key={dialogOrders
-          .map((order) => order.source_type + '-' + order.trade_no)
-          .join('|')}
-        orders={dialogOrders}
-        open={dialogOrders.length > 0}
-        onOpenChange={(open) => !open && setDialogOrders([])}
-        onSubmitted={refresh}
+            <div className='commerce-invoice-actions'>
+              <Button
+                variant='outline'
+                disabled={download.isPending}
+                onClick={() => download.mutate({ order })}
+              >
+                <Download size={15} />
+                {t('invoice.downloadPdf')}
+              </Button>
+              <Button
+                variant='ghost'
+                disabled={download.isPending}
+                onClick={() => setHistory(order)}
+              >
+                <History size={15} />
+                {t('invoice.records')}
+              </Button>
+            </div>
+          </article>
+        ))}
+      </div>
+      {historical.isError ? (
+        <div role='alert'>
+          {t('invoice.recordsFailed')}{' '}
+          <Button variant='outline' onClick={() => void historical.refetch()}>
+            {t('Retry')}
+          </Button>
+        </div>
+      ) : null}
+      {historical.data?.items.length ? (
+        <section className='space-y-3'>
+          <h3 className='font-semibold'>{t('invoice.legacyRecords')}</h3>
+          <InvoiceRequestsTable requests={historical.data.items} />
+        </section>
+      ) : null}
+      <InvoiceBuyerDialog
+        key={`${draft?.order.trade_no}:${draft?.previous?.number}`}
+        draft={draft}
+        pending={download.isPending}
+        onClose={() => setDraft(null)}
+        onIssue={(body, reason) => {
+          if (!draft) return
+          download.mutate({
+            order: draft.order,
+            action: draft.previous ? 'corrections' : 'document',
+            body: {
+              ...body,
+              ...(draft.previous
+                ? {
+                    previous_number: draft.previous.number,
+                    reason,
+                    request_id: draft.requestId,
+                  }
+                : {}),
+            },
+          })
+        }}
       />
-    </>
+      <Dialog
+        open={Boolean(history)}
+        onOpenChange={(open) => {
+          if (!open) setHistory(null)
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className='commerce-dialog commerce-workspace max-h-[85dvh] overflow-y-auto sm:max-w-xl'
+        >
+          <DialogHeader>
+            <DialogTitle>{t('invoice.records')}</DialogTitle>
+          </DialogHeader>
+          <Button
+            className='absolute top-2 right-2'
+            variant='ghost'
+            size='icon'
+            aria-label={t('Close')}
+            onClick={() => setHistory(null)}
+          >
+            <X size={16} />
+          </Button>
+          {documents.isLoading ? <div>{t('Loading')}</div> : null}
+          {documents.isError ? (
+            <div role='alert'>
+              {t('invoice.recordsFailed')}{' '}
+              <Button
+                variant='outline'
+                onClick={() => void documents.refetch()}
+              >
+                {t('Retry')}
+              </Button>
+            </div>
+          ) : null}
+          {documents.data?.length === 0 ? (
+            <div>{t('invoice.noRecords')}</div>
+          ) : null}
+          {documents.data?.map((document) => (
+            <article
+              key={document.number}
+              className='commerce-document space-y-3'
+            >
+              <div className='flex flex-wrap justify-between gap-2'>
+                <code>{document.number}</code>
+                <span>
+                  {t(
+                    document.document_type === 'credit_note'
+                      ? 'invoice.creditNote'
+                      : 'invoice.commercial'
+                  )}
+                </span>
+              </div>
+              <div className='text-muted-foreground text-sm'>
+                {formatTimestamp(document.issued_at)}
+              </div>
+              <div className='flex flex-wrap gap-2'>
+                <Button
+                  variant='outline'
+                  disabled={download.isPending}
+                  onClick={() =>
+                    history &&
+                    download.mutate({ order: history, number: document.number })
+                  }
+                >
+                  {t('invoice.downloadPdf')}
+                </Button>
+                {(!history?.refund_status ||
+                  history.refund_status === 'failed') &&
+                document ===
+                  documents.data
+                    ?.filter((item) => item.document_type === 'invoice')
+                    .at(-1) ? (
+                  <Button
+                    variant='outline'
+                    disabled={download.isPending}
+                    onClick={() => {
+                      if (history) {
+                        setDraft({
+                          order: history,
+                          previous: document,
+                          requestId: crypto.randomUUID(),
+                        })
+                        setHistory(null)
+                      }
+                    }}
+                  >
+                    {t('invoice.correctBuyer')}
+                  </Button>
+                ) : null}
+              </div>
+            </article>
+          ))}
+          {history?.refund_status === 'success' && documents.data?.length ? (
+            <Button
+              variant='outline'
+              disabled={download.isPending}
+              onClick={() =>
+                download.mutate({ order: history, action: 'credit-note' })
+              }
+            >
+              {t('invoice.refundDocument')}
+            </Button>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </section>
+  )
+}
+
+function InvoiceBuyerDialog(props: {
+  draft: BuyerDraft | null
+  pending: boolean
+  onClose: () => void
+  onIssue: (buyer: InvoiceBuyer, reason?: string) => void
+}) {
+  const { t } = useTranslation()
+  const buyer = props.draft?.previous?.buyer
+  return (
+    <Dialog
+      open={Boolean(props.draft)}
+      onOpenChange={(open) => {
+        if (!open && !props.pending) props.onClose()
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className='commerce-dialog commerce-workspace max-h-[85dvh] overflow-y-auto sm:max-w-[720px]'
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {t(
+              props.draft?.previous ? 'invoice.correctBuyer' : 'invoice.issue'
+            )}
+          </DialogTitle>
+        </DialogHeader>
+        <form
+          className='commerce-invoice-form'
+          onSubmit={(event) => {
+            event.preventDefault()
+            const data = new FormData(event.currentTarget)
+            props.onIssue(
+              {
+                buyer_name: String(data.get('buyer_name')).trim(),
+                buyer_address: String(data.get('buyer_address')).trim(),
+                buyer_country: String(data.get('buyer_country')).trim(),
+                buyer_tax_id: String(data.get('buyer_tax_id')).trim(),
+              },
+              String(data.get('reason') ?? '').trim()
+            )
+          }}
+        >
+          <div className='space-y-2'>
+            <Label htmlFor='invoice-buyer-name'>{t('invoice.buyerName')}</Label>
+            <Input
+              id='invoice-buyer-name'
+              name='buyer_name'
+              required
+              maxLength={200}
+              defaultValue={buyer?.buyer_name}
+              disabled={props.pending}
+              autoComplete='organization'
+            />
+          </div>
+          <div className='space-y-2'>
+            <Label htmlFor='invoice-buyer-address'>
+              {t('invoice.buyerAddress')}
+            </Label>
+            <Textarea
+              id='invoice-buyer-address'
+              name='buyer_address'
+              required
+              maxLength={600}
+              rows={4}
+              defaultValue={buyer?.buyer_address}
+              disabled={props.pending}
+              autoComplete='street-address'
+            />
+          </div>
+          <div className='space-y-2'>
+            <Label htmlFor='invoice-buyer-country'>
+              {t('invoice.buyerCountry')}
+            </Label>
+            <Input
+              id='invoice-buyer-country'
+              name='buyer_country'
+              maxLength={100}
+              defaultValue={buyer?.buyer_country}
+              disabled={props.pending}
+              autoComplete='country-name'
+            />
+          </div>
+          <div className='space-y-2'>
+            <Label htmlFor='invoice-buyer-tax'>{t('invoice.buyerTax')}</Label>
+            <Input
+              id='invoice-buyer-tax'
+              name='buyer_tax_id'
+              maxLength={64}
+              defaultValue={buyer?.buyer_tax_id}
+              disabled={props.pending}
+            />
+          </div>
+          {props.draft?.previous ? (
+            <div className='space-y-2'>
+              <Label htmlFor='invoice-reason'>{t('invoice.reason')}</Label>
+              <Textarea
+                id='invoice-reason'
+                name='reason'
+                required
+                maxLength={300}
+                disabled={props.pending}
+              />
+            </div>
+          ) : null}
+          <div className='commerce-invoice-form-actions'>
+            <Button
+              type='button'
+              variant='outline'
+              disabled={props.pending}
+              onClick={props.onClose}
+            >
+              {t('Cancel')}
+            </Button>
+            <Button type='submit' disabled={props.pending}>
+              {t(props.pending ? 'invoice.issuing' : 'invoice.issueDownload')}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -424,6 +424,7 @@ func TestCreatePendingSubscriptionOrderWithDiscounts_ReleasesReservedPropOnExpir
 		PaymentProvider: "test",
 		CreateTime:      time.Now().Unix(),
 	}
+	require.NoError(t, db.FirstOrCreate(&commerceschema.SubscriptionPlan{Id: order.PlanId, Title: "Legacy checkout", DurationUnit: "month", DurationValue: 1}).Error)
 	appliedRate, err := CreatePendingSubscriptionOrderWithDiscounts(order, 100)
 	require.NoError(t, err)
 	assert.InDelta(t, 0.10, appliedRate, 0.0001)

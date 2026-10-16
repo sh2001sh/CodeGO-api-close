@@ -319,7 +319,7 @@ export function UserBindingDialog(props: Props) {
   return (
     <>
       <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-        <DialogContent className='sm:max-w-lg'>
+        <DialogContent className='solaris-admin-dialog sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle className='flex items-center gap-2'>
               <Link2 className='h-5 w-5' />
@@ -436,6 +436,7 @@ export function UserBindingDialog(props: Props) {
       </Dialog>
 
       <ConfirmDialog
+        className='solaris-admin-dialog'
         open={!!unbindTarget}
         onOpenChange={(open) => !open && setUnbindTarget(null)}
         title={t('Confirm Unbind')}

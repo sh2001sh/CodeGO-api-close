@@ -84,3 +84,19 @@ node_modules/
 /cf_r2.txt
 /pro-test.txt
 /qwen3guard-api.txt
+
+# Keep environment overrides local; only example templates are publishable.
+**/.env*
+!**/.env.example
+!**/.env.*.example
+
+# Public releases include source and concise reports, not local QA evidence.
+**/.impeccable/
+/docs/reports/**/raw/
+/docs/reports/**/testdata/
+/docs/reports/**/*.txt
+/docs/reports/**/*.csv
+/docs/reports/**/*.json
+/docs/reports/**/*.json.gz
+/docs/reports/**/*.pprof
+/docs/reports/**/*.prof

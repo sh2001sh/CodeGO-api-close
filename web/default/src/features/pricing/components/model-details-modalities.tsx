@@ -111,17 +111,13 @@ export function ModalitiesMatrix(props: {
             key={modality}
             className={cn(
               'border-l px-3 py-2 text-center',
-              enabled
-                ? 'bg-success/10'
-                : 'bg-background'
+              enabled ? 'bg-success/10' : 'bg-background'
             )}
           >
             <span
               className={cn(
                 'inline-flex items-center justify-center',
-                enabled
-                  ? 'text-success'
-                  : 'text-muted-foreground/40'
+                enabled ? 'text-success' : 'text-muted-foreground/40'
               )}
               aria-label={
                 enabled

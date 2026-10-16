@@ -10,6 +10,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"math"
 	"strings"
 	"time"
@@ -124,6 +125,9 @@ func applyManagedSubscriptionPreview(tx *gorm.DB, userID int, targetPlan *commer
 }
 
 func applySubscriptionPreviewDiscounts(tx *gorm.DB, userID int, plan *commerceschema.SubscriptionPlan, preview *commercedomain.SubscriptionPurchasePreview) error {
+	if plan.PlanType == commerceschema.SubscriptionPlanTypeCreditPack {
+		return nil
+	}
 	if preview.Action == commerceschema.SubscriptionPurchaseActionDisabled || preview.AmountDue <= 0 {
 		return nil
 	}
@@ -152,6 +156,9 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userID int, plan *commercesch
 	}
 	if plan == nil || plan.Id == 0 {
 		return nil, errors.New("invalid plan")
+	}
+	if plan.PlanType == commerceschema.SubscriptionPlanTypeCreditPack {
+		return nil, errors.New("credit packs require a paid order and a separate permanent ledger")
 	}
 	if userID <= 0 {
 		return nil, errors.New("invalid user id")
@@ -219,9 +226,6 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userID int, plan *commercesch
 	if err := tx.Create(sub).Error; err != nil {
 		return nil, err
 	}
-	if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
-		return nil, err
-	}
 	return sub, nil
 }
 
@@ -255,6 +259,14 @@ func renewUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubscr
 	if tx == nil || sub == nil || plan == nil {
 		return nil, errors.New("invalid renewal args")
 	}
+	var current commerceschema.UserSubscription
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ?", sub.Id, sub.UserId).First(&current).Error; err != nil {
+		return nil, err
+	}
+	if current.Status == "refund_pending" || current.Status == commerceschema.SubscriptionStatusSettledCancelled {
+		return nil, errors.New("套餐退款处理中或已结算取消，无法续费")
+	}
+	*sub = current
 	nowUnix := commercestore.GetDBTimestamp()
 	now := time.Unix(nowUnix, 0)
 	newEndTime, err := calcSubscriptionPlanEndTime(now, plan)
@@ -289,13 +301,6 @@ func renewUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubscr
 	if err := tx.Save(sub).Error; err != nil {
 		return nil, err
 	}
-	sub.LuckyBenefitCycle = ""
-	if err := tx.Model(sub).Update("lucky_benefit_cycle", "").Error; err != nil {
-		return nil, err
-	}
-	if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
-		return nil, err
-	}
 	if err := replenishSubscriptionLedgerForCycleTx(tx, sub, "renewal"); err != nil {
 		return nil, err
 	}
@@ -306,6 +311,14 @@ func upgradeUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubs
 	if tx == nil || sub == nil || plan == nil {
 		return nil, errors.New("invalid upgrade args")
 	}
+	var current commerceschema.UserSubscription
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ?", sub.Id, sub.UserId).First(&current).Error; err != nil {
+		return nil, err
+	}
+	if current.Status == "refund_pending" || current.Status == commerceschema.SubscriptionStatusSettledCancelled {
+		return nil, errors.New("套餐退款处理中或已结算取消，无法升级")
+	}
+	*sub = current
 	remainingQuota := int64(0)
 	if preserveRemainingQuota {
 		remainingQuota = max(sub.AmountTotal-sub.AmountUsed, 0)
@@ -342,13 +355,6 @@ func upgradeUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubs
 		}
 	}
 	if err := tx.Save(sub).Error; err != nil {
-		return nil, err
-	}
-	sub.LuckyBenefitCycle = ""
-	if err := tx.Model(sub).Update("lucky_benefit_cycle", "").Error; err != nil {
-		return nil, err
-	}
-	if _, err := ensureSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
 		return nil, err
 	}
 	if err := replenishSubscriptionLedgerForCycleTx(tx, sub, "upgrade"); err != nil {

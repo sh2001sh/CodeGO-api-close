@@ -7,7 +7,41 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
+
+func TestRoutePoolBindingMultipliersAreBatchedAndStorageErrorsPropagate(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.RankingSnapshot{}))
+	selected := make(map[string]int)
+	for id := 1; id <= 64; id++ {
+		name := fmt.Sprintf("binding-%d", id)
+		channel := marketplaceschema.Channel{ID: name, OwnerUserID: 99, Status: marketplacedomain.LifecycleActive,
+			InternalChannelID: &id, DeclaredModels: `["gpt-5"]`}
+		group := autoRouteTestGroup(name, channel.ID, 99, 1)
+		require.NoError(t, db.Create(&channel).Error)
+		require.NoError(t, db.Create(&group).Error)
+		selected[group.ID] = id
+	}
+	require.NoError(t, db.Create(&marketplaceschema.UserMultiplier{ChannelID: "binding-1", UserID: 7, Multiplier: 0.5}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.UserMultiplier{ChannelID: "binding-2", UserID: 8, Multiplier: 0.1}).Error)
+	queries := 0
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("count_binding_multiplier_queries", func(tx *gorm.DB) {
+		if tx.Statement.Table == (marketplaceschema.UserMultiplier{}).TableName() {
+			queries++
+		}
+	}))
+	bindings, err := resolveRoutePoolBindings(7, selected, normalizeAutoRoutePoolConfig(&AutoRoutePoolConfig{Strategy: "priority"}), "gpt-5", 0)
+	require.NoError(t, err)
+	require.Len(t, bindings, 64)
+	require.Equal(t, 1, queries)
+	require.Equal(t, 0.5, bindings[0].Multiplier)
+	require.Equal(t, 1.0, bindings[1].Multiplier)
+	require.NoError(t, db.Migrator().DropTable(&marketplaceschema.UserMultiplier{}))
+	_, err = resolveRoutePoolBindings(7, selected, normalizeAutoRoutePoolConfig(nil), "gpt-5", 0)
+	require.Error(t, err, "must not silently bill at the listed price when override storage is unavailable")
+	t.Log("64 members: 1 multiplier query; viewer isolation and database failure verified")
+}
 
 func TestAutoRoutePoolHonorsUserPriority(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)

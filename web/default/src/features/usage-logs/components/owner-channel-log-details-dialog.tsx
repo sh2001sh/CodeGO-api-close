@@ -1,3 +1,4 @@
+import { getIntlLocale } from '@/i18n/format'
 import { AlertTriangle, Clock3, Copy, Route } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
@@ -22,7 +23,7 @@ export function OwnerChannelLogDetailsDialog(props: {
   const { copyToClipboard } = useCopyToClipboard({ notify: true })
   return (
     <Dialog open={Boolean(item)} onOpenChange={props.onOpenChange}>
-      <DialogContent className='sm:max-w-2xl'>
+      <DialogContent className='solaris-log-details sm:max-w-2xl'>
         <DialogHeader>
           <DialogTitle>{t('渠道调用详情')}</DialogTitle>
           <DialogDescription>
@@ -85,19 +86,23 @@ export function OwnerChannelLogDetailsDialog(props: {
               <DetailSection icon={<Route />} title={t('Token 与缓存')}>
                 <DetailRow
                   label={t('输入 Token')}
-                  value={item.prompt_tokens.toLocaleString()}
+                  value={item.prompt_tokens.toLocaleString(getIntlLocale())}
                 />
                 <DetailRow
                   label={t('缓存命中 Token')}
-                  value={(item.cache_read_tokens ?? 0).toLocaleString()}
+                  value={(item.cache_read_tokens ?? 0).toLocaleString(
+                    getIntlLocale()
+                  )}
                 />
                 <DetailRow
                   label={t('缓存写入 Token')}
-                  value={(item.cache_write_tokens ?? 0).toLocaleString()}
+                  value={(item.cache_write_tokens ?? 0).toLocaleString(
+                    getIntlLocale()
+                  )}
                 />
                 <DetailRow
                   label={t('输出 Token')}
-                  value={item.completion_tokens.toLocaleString()}
+                  value={item.completion_tokens.toLocaleString(getIntlLocale())}
                 />
               </DetailSection>
               <DetailSection icon={<Clock3 />} title={t('耗时')}>
@@ -173,7 +178,7 @@ function DetailSection(props: {
   children: React.ReactNode
 }) {
   return (
-    <section>
+    <section className='solaris-log-detail-section'>
       <h3
         className={
           props.danger

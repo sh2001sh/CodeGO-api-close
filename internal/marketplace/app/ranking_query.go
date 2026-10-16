@@ -15,6 +15,8 @@ import (
 var loadActiveChannelRequestLeases = gatewayruntime.ActiveChannelRequestLeasesForChannels
 
 func normalizeGroupQuery(query GroupQuery) GroupQuery {
+	query.CreditPack = strings.ToLower(strings.TrimSpace(query.CreditPack))
+	query.MultiplierCard = strings.ToLower(strings.TrimSpace(query.MultiplierCard))
 	if query.WindowHours != 24 && query.WindowHours != 24*7 && query.WindowHours != 24*30 {
 		query.WindowHours = 24
 	}
@@ -30,7 +32,7 @@ func normalizeGroupQuery(query GroupQuery) GroupQuery {
 	return query
 }
 
-func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, recentSeries map[int][]RecentRequestBucket, query GroupQuery) ([]GroupListItem, error) {
+func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]marketplaceschema.Channel, snapshots map[string]marketplaceschema.RankingSnapshot, recentSeries map[int][]RecentRequestBucket, query GroupQuery, prepared ...map[string]GroupListItem) ([]GroupListItem, error) {
 	items := make([]GroupListItem, 0, len(groups))
 	overrides := make(map[string]float64)
 	if query.ViewerUserID > 0 && len(channels) > 0 {
@@ -47,10 +49,26 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 		}
 	}
 	currentConcurrency := activeMarketplaceChannelRequests(channels)
+	shops, err := attachShopPresentation(groups)
+	if err != nil {
+		return nil, err
+	}
 	for _, group := range groups {
 		channel := channels[group.ChannelID]
-		models := decodeModels(channel.DeclaredModels)
-		if !matchesGroupQuery(group, channel, models, query) {
+		var item GroupListItem
+		ready := false
+		if len(prepared) > 0 {
+			item, ready = prepared[0][group.ID]
+		}
+		models := item.Models
+		if !ready {
+			models = decodeModels(channel.DeclaredModels)
+		}
+		matchQuery := query
+		if query.Search != "" && strings.Contains(strings.ToLower(shops[group.OwnerUserID].Name), strings.ToLower(strings.TrimSpace(query.Search))) {
+			matchQuery.Search = ""
+		}
+		if !matchesGroupQuery(group, channel, models, matchQuery) {
 			continue
 		}
 		snapshot := snapshots[group.ID]
@@ -58,7 +76,9 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 		if channel.InternalChannelID != nil {
 			channelID = *channel.InternalChannelID
 		}
-		item := groupListItem(group, channel, models, snapshot, recentSeries[channelID])
+		if !ready {
+			item = groupListItem(group, channel, models, snapshot, recentSeries[channelID])
+		}
 		if query.ViewerUserID > 0 && query.ViewerUserID != group.OwnerUserID {
 			if override := overrides[channel.ID]; override > 0 {
 				item.Multiplier = marketplacedomain.NormalizeMultiplier(override)
@@ -66,6 +86,11 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 			}
 		}
 		item.CurrentConcurrency = currentConcurrency[channelID]
+		item.CustomName = safePublicText(group.CustomName, 40, true)
+		item.Description = safePublicText(group.Description, 300, false)
+		item.Tags = decodeModels(group.Tags)
+		item.ShopID = group.OwnerUserID
+		item.ShopName = shops[group.OwnerUserID].Name
 		items = append(items, item)
 	}
 	modelFilters := query.Models
@@ -77,6 +102,9 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 }
 
 func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, query GroupQuery) bool {
+	if (query.ShopID > 0 && group.OwnerUserID != query.ShopID) || !hasGroupTag(group, query.Tag) {
+		return false
+	}
 	search := strings.ToLower(strings.TrimSpace(query.Search))
 	if search != "" {
 		if isNumericChannelID(search) {
@@ -98,6 +126,10 @@ func matchesGroupQuery(group marketplaceschema.Group, channel marketplaceschema.
 		return false
 	}
 	if query.Provider != "" && !strings.EqualFold(channel.ProviderType, query.Provider) {
+		return false
+	}
+	if (query.CreditPack == "supported" && !channel.CreditPackSupported) ||
+		(query.CreditPack == "unsupported" && channel.CreditPackSupported) {
 		return false
 	}
 	switch query.MultiplierCard {
@@ -135,7 +167,7 @@ func isNumericChannelID(search string) bool {
 }
 
 func matchesMarketplaceKeyword(group marketplaceschema.Group, channel marketplaceschema.Channel, models []string, search string) bool {
-	haystack := strings.ToLower(group.ID + " " + group.SystemDisplayName + " " + channel.ID + " " + marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID) + " " + group.PublicSlug + " " + channel.ProviderType + " " + publicSourceLabel(channel) + " " + strings.Join(models, " "))
+	haystack := strings.ToLower(group.ID + " " + group.SystemDisplayName + " " + group.CustomName + " " + group.Description + " " + strings.Join(decodeModels(group.Tags), " ") + " " + channel.ID + " " + marketplaceDisplayName(publicSourceLabel(channel), group.Multiplier, channel.ID) + " " + group.PublicSlug + " " + channel.ProviderType + " " + publicSourceLabel(channel) + " " + strings.Join(models, " "))
 	return strings.Contains(haystack, search)
 }
 
@@ -145,6 +177,8 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 	}
 	groupMultiplier := marketplacedomain.NormalizeMultiplier(group.Multiplier)
 	return GroupListItem{
+		CustomName: safePublicText(group.CustomName, 40, true), Description: safePublicText(group.Description, 300, false),
+		Tags: decodeModels(group.Tags), ShopID: group.OwnerUserID, ShopName: defaultShopView(group.OwnerUserID).Name,
 		ModelPrices: decodeChannelModelPrices(channel.ModelPrices),
 		ID:          group.ID, ChannelID: channel.ID, PublicSlug: group.PublicSlug,
 		SystemDisplayName: marketplaceDisplayName(publicSourceLabel(channel), groupMultiplier, channel.ID),
@@ -156,6 +190,7 @@ func groupListItem(group marketplaceschema.Group, channel marketplaceschema.Chan
 		SubscriptionEnabled:    group.CreditPoolPolicy == marketplacedomain.CreditPolicySubscriptionAndUniversal,
 		SubscriptionMultiplier: marketplacedomain.SubscriptionMultiplier(groupMultiplier), Models: models,
 		MultiplierCardSupported:   channel.MultiplierCardSupported,
+		CreditPackSupported:       channel.CreditPackSupported,
 		MultiplierCardUserEnabled: channel.MultiplierCardUserEnabled,
 		VerificationCompletedAt:   latestModelVerificationAt(channel.ModelVerificationResults),
 		ModelVerificationResults:  publicModelVerificationResults(channel.ModelVerificationResults),

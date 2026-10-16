@@ -31,8 +31,6 @@ func TestIsAuthenticatedAPIRoute(t *testing.T) {
 		{path: "/api/desktop/account/summary", want: true},
 		{path: "/api/desktop/release/latest", want: false},
 		{path: "/api/packages/public", want: true},
-		{path: "/api/daily-lucky-number/self", want: true},
-		{path: "/api/daily-lucky-number/admin/backfill", want: true},
 		{path: "/api/user/login", want: false},
 		{path: "/api/user/self", want: true},
 	}

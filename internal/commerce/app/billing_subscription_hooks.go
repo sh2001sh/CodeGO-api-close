@@ -1,6 +1,9 @@
 package app
 
-import billingapp "github.com/sh2001sh/new-api/internal/billing/app"
+import (
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
+	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
+)
 
 func init() {
 	billingapp.RegisterSubscriptionFundingHooks(billingapp.SubscriptionFundingHooks{
@@ -13,15 +16,25 @@ func init() {
 				return nil, nil
 			}
 			return &billingapp.SubscriptionFundingPreConsumeResult{
-				UserSubscriptionID: result.UserSubscriptionId,
-				PreConsumed:        result.PreConsumed,
-				AmountTotal:        result.AmountTotal,
-				AmountUsedAfter:    result.AmountUsedAfter,
-				ReservationID:      result.ReservationID,
-				AccountID:          result.AccountID,
-				PlanID:             result.PlanID,
-				PlanTitle:          result.PlanTitle,
+				UserSubscriptionID:        result.UserSubscriptionId,
+				PreConsumed:               result.PreConsumed,
+				AmountTotal:               result.AmountTotal,
+				AmountUsedAfter:           result.AmountUsedAfter,
+				ReservationID:             result.ReservationID,
+				AccountID:                 result.AccountID,
+				PlanID:                    result.PlanID,
+				PlanTitle:                 result.PlanTitle,
+				CreditPackGrantedQuota:    result.CreditPackGrantedQuota,
+				CreditPackPaidQuota:       result.CreditPackPaidQuota,
+				CreditPackChannelShareBPS: result.CreditPackChannelShareBPS,
 			}, nil
+		},
+		PreConsumeCreditPack: func(requestID string, userID int, modelName string, amount int64) (*billingapp.SubscriptionFundingPreConsumeResult, error) {
+			result, err := PreConsumeCreditPack(requestID, userID, modelName, amount)
+			if err != nil || result == nil {
+				return nil, err
+			}
+			return creditPackFundingResult(result), nil
 		},
 		ReserveAdditional: func(requestID string, subscriptionID int, modelName string, amount int64) error {
 			return ReserveAdditionalSubscriptionQuota(requestID, subscriptionID, modelName, amount)
@@ -48,6 +61,7 @@ func init() {
 		SettleReservation: func(requestID string, subscriptionID int, modelName string, actualAmount int64) error {
 			return SettleSubscriptionReservation(requestID, subscriptionID, modelName, actualAmount)
 		},
+		SettleReservationTx: SettleSubscriptionReservationTx,
 		GetMonthlyPassEntitlement: func(userID int) (*billingapp.MonthlyPassEntitlement, error) {
 			entitlement, err := ActiveMonthlyPassEntitlement(userID)
 			if err != nil || entitlement == nil {
@@ -64,4 +78,16 @@ func init() {
 		},
 		ApplyBlindBoxConsumptionDiscount: ApplyBlindBoxConsumptionDiscount,
 	})
+}
+
+func creditPackFundingResult(result *commercedomain.SubscriptionPreConsumeResult) *billingapp.SubscriptionFundingPreConsumeResult {
+	return &billingapp.SubscriptionFundingPreConsumeResult{
+		UserSubscriptionID: result.UserSubscriptionId, PreConsumed: result.PreConsumed,
+		AmountTotal: result.AmountTotal, AmountUsedAfter: result.AmountUsedAfter,
+		ReservationID: result.ReservationID, AccountID: result.AccountID,
+		PlanID: result.PlanID, PlanTitle: result.PlanTitle,
+		CreditPackGrantedQuota:    result.CreditPackGrantedQuota,
+		CreditPackPaidQuota:       result.CreditPackPaidQuota,
+		CreditPackChannelShareBPS: result.CreditPackChannelShareBPS,
+	}
 }

@@ -20,7 +20,7 @@ import { useState } from 'react'
 import type { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowRight, Loader2 } from 'lucide-react'
+import { ArrowRight, Loader2, Mail } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -90,6 +90,7 @@ export function ForgotPasswordForm({
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
+        aria-busy={isLoading}
         className={cn('grid gap-2', className)}
         {...props}
       >
@@ -98,24 +99,39 @@ export function ForgotPasswordForm({
           name='email'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t('Email')}</FormLabel>
+              <FormLabel className='text-foreground/80 text-xs font-semibold'>
+                {t('Email')}
+              </FormLabel>
               <FormControl>
-                <Input
-                  type='email'
-                  placeholder={t('name@example.com')}
-                  {...field}
-                />
+                <div className='relative'>
+                  <Mail className='text-muted-foreground/60 pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2' />
+                  <Input
+                    type='email'
+                    autoComplete='email'
+                    placeholder={t('name@example.com')}
+                    className='border-border/80 focus:border-foreground/50 h-12 rounded-2xl bg-white pl-10 text-[15px] transition-all dark:bg-white/[0.05]'
+                    {...field}
+                  />
+                </div>
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <Button type='submit' className='mt-2' disabled={isLoading || isActive}>
+        <Button
+          type='submit'
+          className='market-auth-submit-btn mt-3 flex w-full items-center justify-center gap-2 text-[15px]'
+          disabled={isLoading || isActive}
+        >
           {isActive
             ? t('Resend ({{seconds}}s)', { seconds: secondsLeft })
             : t('Send reset email')}
-          {isLoading ? <Loader2 className='animate-spin' /> : <ArrowRight />}
+          {isLoading ? (
+            <Loader2 className='size-4 animate-spin' />
+          ) : (
+            <ArrowRight className='size-4 transition-transform group-hover:translate-x-0.5' />
+          )}
         </Button>
 
         {isTurnstileEnabled && (

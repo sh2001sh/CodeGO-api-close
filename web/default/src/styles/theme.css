@@ -19,16 +19,23 @@ For commercial licensing, please contact support@quantumnous.com
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: 'Public Sans', sans-serif;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter Variable', 'Inter',
+    'Segoe UI', system-ui, 'PingFang SC', 'Hiragino Sans GB',
+    'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --font-mono:
-    ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', 'Roboto Mono',
-    monospace;
+    'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono',
+    'Cascadia Code', 'Consolas', 'Menlo', monospace;
+  --font-display:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter Variable',
+    'Inter', 'Segoe UI', system-ui, 'PingFang SC', 'Hiragino Sans GB',
+    'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei', sans-serif;
   --font-inter:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
-    'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
   --font-manrope:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
-    'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -70,111 +77,182 @@ For commercial licensing, please contact support@quantumnous.com
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-canvas: var(--bg-canvas);
+  --color-subtle: var(--bg-subtle);
+  --color-brand: var(--brand-orange);
+  --color-brand-hover: var(--brand-orange-hover);
+  --color-brand-active: var(--brand-orange-active);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-orange-ink);
+  --color-obsidian: var(--surface-obsidian);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+  --color-surface-card: var(--surface-card);
+  --color-surface-glass: var(--surface-glass);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-hairline: var(--hairline-light);
+  --color-hairline-strong: var(--hairline-strong);
 
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --radius-sm: calc(var(--radius) * 0.666667);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) * 1.666667);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.333333);
+  --radius-4xl: calc(var(--radius) * 2.666667);
 }
 
 :root {
-  --radius: 0.5rem;
+  color-scheme: light;
+  --radius: 0.75rem;
+  --radius-panel: 20px;
+  --radius-control: 12px;
+  --radius-compact: 8px;
+  --radius-pill: 9999px;
   --app-header-height: 3rem;
   --font-mono:
-    ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', 'Roboto Mono',
-    monospace;
-  --background: #faf7f3;
-  --foreground: #221f1c;
-  --card: #fdfcfb;
-  --card-foreground: #221f1c;
-  --popover: #fdfcfb;
-  --popover-foreground: #221f1c;
-  --primary: #b8562e;
-  --primary-foreground: #fff8f3;
-  --secondary: #f1ece3;
-  --secondary-foreground: #4a3428;
-  --muted: #f3eee6;
-  --muted-foreground: #6f665e;
-  --accent: #f4e2d0;
-  --accent-foreground: #6b4326;
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.487 0.075 155);
-  --success-foreground: oklch(0.985 0 0);
-  --warning: #c68a2e;
-  --warning-foreground: oklch(0.145 0 0);
-  --info: #5b7ca0;
-  --info-foreground: oklch(0.985 0 0);
-  --neutral: oklch(0.708 0 0);
-  --neutral-foreground: oklch(0.145 0 0);
-  --border: rgb(150 138 122 / 18%);
-  --input: rgb(150 138 122 / 12%);
-  --ring: #b8562e;
-  --chart-1: #b8562e;
-  --chart-2: #d9985a;
-  --chart-3: #8a6a4a;
-  --chart-4: #c9a227;
-  --chart-5: #6b4a35;
-  --sidebar: #f4efe9;
-  --sidebar-foreground: #221f1c;
-  --sidebar-primary: #b8562e;
-  --sidebar-primary-foreground: #fff8f3;
-  --sidebar-accent: #f4e2d0;
-  --sidebar-accent-foreground: #4a3428;
-  --sidebar-border: rgb(150 138 122 / 14%);
-  --sidebar-ring: #b8562e;
-  --skeleton-base: #ece5db;
-  --skeleton-highlight: #fbf8f4;
-  --night-surface: #181210;
-  --night-foreground: #f3ede3;
+    'JetBrains Mono Variable', ui-monospace, 'SF Mono', 'Cascadia Code',
+    'Consolas', 'Menlo', 'Roboto Mono', monospace;
+  /* Solaris White (Apple × OpenAI): refined Cupertino warm sunset orange & obsidian primary */
+  --bg-canvas: #faf8f5;
+  --bg-subtle: #f0f2f5;
+  --surface-card: #ffffff;
+  --surface-glass: rgb(255 255 255 / 85%);
+  --surface-sunken: #edf0f4;
+  --surface-obsidian: #0d0d10;
+  --surface-obsidian-ink: #f8f9fb;
+  --brand-orange: #ea580c;
+  --brand-orange-deep: #c2410c;
+  --brand-orange-ink: #9a3412;
+  --brand-orange-hover: #f97316;
+  --brand-orange-active: #c2410c;
+  --brand-orange-foreground: #ffffff;
+  --brand-soft: #fff7ed;
+  --gradient-solaris: linear-gradient(
+    135deg,
+    #f97316 0%,
+    #ea580c 54%,
+    #c2410c 100%
+  );
+  --ink-primary: #0d0d10;
+  --ink-inverse: #faf8f5;
+  --ink-secondary: #55555e;
+  --ink-muted: #8c8c96;
+  --hairline-light: rgb(13 13 16 / 6.5%);
+  --hairline-strong: rgb(13 13 16 / 14%);
+  --telemetry-emerald: #087f5b;
+  --telemetry-emerald-bg: #e8f7ef;
+  --telemetry-amber: #946000;
+  --telemetry-amber-bg: #fff4d6;
+  --telemetry-rose: #be234b;
+  --telemetry-rose-bg: #ffedf1;
+  --telemetry-indigo: #5146c8;
+  --telemetry-indigo-bg: #efedff;
+  --telemetry-success: var(--telemetry-emerald);
+  --telemetry-success-bg: var(--telemetry-emerald-bg);
+  --telemetry-warning: var(--telemetry-amber);
+  --telemetry-warning-bg: var(--telemetry-amber-bg);
+  --telemetry-error: var(--telemetry-rose);
+  --telemetry-error-bg: var(--telemetry-rose-bg);
+  --telemetry-info: var(--telemetry-indigo);
+  --telemetry-info-bg: var(--telemetry-indigo-bg);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-optical: cubic-bezier(0.22, 1, 0.36, 1);
+  --glass-blur: 24px;
+  --shadow-card:
+    0 1px 2px rgb(13 13 16 / 2%), 0 8px 24px -4px rgb(13 13 16 / 4%);
+  --shadow-floating:
+    0 4px 12px rgb(13 13 16 / 4%), 0 20px 48px -10px rgb(13 13 16 / 8%);
+  --shadow-orange:
+    0 4px 16px rgb(234 88 12 / 24%), 0 1px 2px rgb(234 88 12 / 12%);
+  --shadow-orange-glow: 0 0 0 3px rgb(234 88 12 / 18%);
+  --specular-highlight: inset 0 1px 0 rgb(255 255 255 / 85%);
+
+  --background: var(--bg-canvas);
+  --foreground: var(--ink-primary);
+  --card: var(--surface-card);
+  --card-foreground: var(--ink-primary);
+  --popover: var(--bg-canvas);
+  --popover-foreground: var(--ink-primary);
+  --primary: #0d0d10;
+  --primary-foreground: #ffffff;
+  --primary-hover: #202025;
+  --primary-active: #000000;
+  --secondary: #f0f2f5;
+  --secondary-foreground: #0d0d10;
+  --muted: #f0f2f5;
+  --muted-foreground: #64748b;
+  --accent: var(--brand-soft);
+  --accent-foreground: var(--brand-orange-ink);
+  --destructive: var(--telemetry-rose);
+  --destructive-foreground: #fff;
+  --success: var(--telemetry-emerald);
+  --success-foreground: #fff;
+  --warning: var(--telemetry-amber);
+  --warning-foreground: #fff;
+  --info: var(--telemetry-indigo);
+  --info-foreground: #fff;
+  --neutral: var(--ink-muted);
+  --neutral-foreground: #fff;
+  --border: var(--hairline-light);
+  --input: var(--hairline-strong);
+  --ring: var(--brand-orange-ink);
+  --chart-1: var(--brand-orange);
+  --chart-2: var(--telemetry-emerald);
+  --chart-3: var(--telemetry-indigo);
+  --chart-4: var(--telemetry-amber);
+  --chart-5: var(--telemetry-rose);
+  --sidebar: var(--surface-glass);
+  --sidebar-foreground: var(--ink-primary);
+  --sidebar-primary: var(--brand-orange);
+  --sidebar-primary-foreground: var(--brand-orange-foreground);
+  --sidebar-accent: var(--brand-soft);
+  --sidebar-accent-foreground: var(--brand-orange-ink);
+  --sidebar-border: var(--hairline-light);
+  --sidebar-ring: var(--brand-orange-ink);
+  --skeleton-base: #e9e6e0;
+  --skeleton-highlight: #fbfaf8;
+  --night-surface: var(--surface-obsidian);
+  --night-foreground: var(--surface-obsidian-ink);
 }
 
-.dark {
-  --background: #141210;
-  --foreground: #f3ede3;
-  --card: #25211e;
-  --card-foreground: #f3ede3;
-  --popover: #2b2622;
-  --popover-foreground: #f3ede3;
-  --primary: #e08a52;
-  --primary-foreground: #241209;
-  --secondary: #3a3028;
-  --secondary-foreground: #f3ede3;
-  --muted: #322b26;
-  --muted-foreground: #cabdae;
-  --accent: #423022;
-  --accent-foreground: #f0d9bd;
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.62 0.1 155);
-  --success-foreground: oklch(0.145 0 0);
-  --warning: #e0a94f;
-  --warning-foreground: oklch(0.145 0 0);
-  --info: #90a5bd;
-  --info-foreground: oklch(0.145 0 0);
-  --neutral: oklch(0.76 0 0);
-  --neutral-foreground: oklch(0.145 0 0);
-  --border: rgb(224 205 184 / 24%);
-  --input: rgb(224 205 184 / 19%);
-  --ring: #e08a52;
-  --chart-1: #e08a52;
-  --chart-2: #e8b183;
-  --chart-3: #b09274;
-  --chart-4: #d9bd6c;
-  --chart-5: #9c7c5c;
-  --sidebar: #1a1715;
-  --sidebar-foreground: #f3ede3;
-  --sidebar-primary: #e08a52;
-  --sidebar-primary-foreground: #241209;
-  --sidebar-accent: #3f2e21;
-  --sidebar-accent-foreground: #f0d9bd;
-  --sidebar-border: rgb(224 205 184 / 22%);
-  --sidebar-ring: #e08a52;
-  --skeleton-base: #2f2925;
-  --skeleton-highlight: #403832;
-  --night-surface: #181210;
-  --night-foreground: #f3ede3;
+.dark,
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-canvas: #0d0d10;
+  --bg-subtle: #141418;
+  --surface-card: rgb(22 22 26 / 85%);
+  --surface-glass: rgb(18 18 22 / 72%);
+  --surface-sunken: #111115;
+  --ink-primary: #faf8f5;
+  --ink-secondary: #a2a1ac;
+  --ink-muted: #6b6b76;
+  --hairline-light: rgb(250 248 245 / 8%);
+  --brand-orange-ink: #fdba74;
+  --brand-soft: rgb(234 88 12 / 16%);
+  --telemetry-emerald: #6cdbad;
+  --telemetry-emerald-bg: #163328;
+  --telemetry-amber: #f2c66b;
+  --telemetry-amber-bg: #352c18;
+  --telemetry-rose: #ff8da5;
+  --telemetry-rose-bg: #3a202c;
+  --telemetry-indigo: #b6a9ff;
+  --telemetry-indigo-bg: #29243e;
+  --primary: #ffffff;
+  --primary-foreground: #0d0d10;
+  --primary-hover: #f3f1ec;
+  --primary-active: #e6e3dd;
+  --secondary: #1f1f26;
+  --secondary-foreground: #faf8f5;
+  --destructive-foreground: #0d0d10;
+  --success-foreground: #0d0d10;
+  --warning-foreground: #0d0d10;
+  --info-foreground: #0d0d10;
+  --neutral-foreground: #0d0d10;
+  --popover: #1c1c22;
+  --shadow-card: 0 2px 4px rgb(0 0 0 / 20%), 0 12px 32px -4px rgb(0 0 0 / 30%);
+  --shadow-floating: 0 16px 48px rgb(0 0 0 / 40%), 0 2px 8px rgb(0 0 0 / 20%);
+  --specular-highlight: inset 0 1px 0 rgb(255 255 255 / 8%);
+  --skeleton-base: #25252d;
+  --skeleton-highlight: #35353e;
 }

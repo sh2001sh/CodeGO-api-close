@@ -154,7 +154,7 @@ function submitExternalPaymentForm(
 function SummaryItem(props: { label: string; value: ReactNode }) {
   return (
     <div className='app-subtle-panel px-3 py-3'>
-      <div className='text-muted-foreground text-[11px] font-medium tracking-wide'>
+      <div className='text-muted-foreground text-xs font-medium tracking-wide'>
         {props.label}
       </div>
       <div className='text-foreground mt-1 text-sm font-medium'>
@@ -167,7 +167,7 @@ function SummaryItem(props: { label: string; value: ReactNode }) {
 function StatusItem(props: { label: string; value: ReactNode }) {
   return (
     <div className='app-subtle-panel px-3 py-2.5'>
-      <div className='text-muted-foreground text-[11px] font-medium tracking-wide'>
+      <div className='text-muted-foreground text-xs font-medium tracking-wide'>
         {props.label}
       </div>
       <div className='text-foreground mt-1 text-sm font-medium'>
@@ -188,7 +188,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
 
   const planRecord = props.plan
   const plan = planRecord?.plan
-  const paymentMethods = props.epayMethods || []
+  const paymentMethods = useMemo(
+    () => props.epayMethods || [],
+    [props.epayMethods]
+  )
   const isSafari =
     typeof navigator !== 'undefined' &&
     /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
@@ -233,7 +236,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
             ...current,
             stage: 'success',
             orderStatus: order,
-            message: '支付成功，套餐权益已经发放。',
+            message: i18n.t('支付成功，套餐权益已经发放。'),
           }))
           if (!hasTriggeredSuccessRef.current) {
             hasTriggeredSuccessRef.current = true
@@ -248,7 +251,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
               ...current,
               stage: 'failed',
               orderStatus: order,
-              message: '支付已确认，但套餐权益发放失败，请联系管理员处理。',
+              message: i18n.t(
+                '支付已确认，但套餐权益发放失败，请联系管理员处理。'
+              ),
             }))
             return
           }
@@ -256,7 +261,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
             ...current,
             stage: 'pending',
             orderStatus: order,
-            message: '支付已确认，正在发放月卡编号并同步每日幸运号权益。',
+            message: i18n.t('支付已确认，额度入账中。'),
           }))
           return
         }
@@ -265,7 +270,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
           setPaymentTracker((current) => ({
             ...current,
             stage: 'failed',
-            message: '订单已过期或支付未完成，请重新发起支付。',
+            message: i18n.t('订单已过期或支付未完成，请重新发起支付。'),
           }))
         }
       } catch {
@@ -335,13 +340,11 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const groupBuyId = props.groupBuyId || 0
   const isCollectivePurchase =
     purchaseType === 'group_buy' || purchaseType === 'join_group'
-  const purchaseModeLabel =
-    purchaseType === 'group_buy'
-      ? t('开启集享计划')
-      : purchaseType === 'join_group'
-        ? t('参与集享计划')
-        : actionLabel
-  const detailText = `${t('Validity')} ${formatDuration(plan, t)} · ${t('Base quota ({{currency}})', { currency: 'USD' })} ${formatSubscriptionQuotaAmount(totalAmount)}`
+  let purchaseModeLabel = actionLabel
+  if (plan.plan_type === 'credit_pack') purchaseModeLabel = t('购买')
+  else if (purchaseType === 'group_buy') purchaseModeLabel = t('开启集享计划')
+  else if (purchaseType === 'join_group') purchaseModeLabel = t('参与集享计划')
+  const detailText = `${t('Validity')} ${formatDuration(plan, t)} · ${t('Base quota ({{currency}})', { currency: 'credits' })} ${formatSubscriptionQuotaAmount(totalAmount)}`
   const isMonthlyPlan = isMonthlyCardPlan(plan)
   const limitReached =
     (props.purchaseLimit || 0) > 0 &&
@@ -349,7 +352,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const blockedByRule = planRecord.action === 'disabled'
   const blockedMessage =
     getSubscriptionDisabledReasonText(planRecord.disabled_reason) ||
-    '当前已有更高等级的有效套餐，暂不支持降级订阅。'
+    i18n.t('当前已有更高等级的有效套餐，暂不支持降级订阅。')
   const disablePurchase =
     paying ||
     limitReached ||
@@ -357,11 +360,11 @@ export function SubscriptionPurchaseDialog(props: Props) {
     paymentTracker.stage === 'pending'
   const summaryItems = [
     {
-      label: isCollectivePurchase ? '参与方式' : '购买方式',
+      label: isCollectivePurchase ? i18n.t('参与方式') : i18n.t('购买方式'),
       value: purchaseModeLabel,
     },
     {
-      label: '有效期',
+      label: i18n.t('有效期'),
       value: (
         <span className='flex items-center gap-1.5'>
           <CalendarClock className='h-3.5 w-3.5' />
@@ -371,10 +374,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
     },
     {
       label: isMonthlyPlan
-        ? '本月可用额度'
+        ? i18n.t('本月可用额度')
         : periodAmount > 0
-          ? '周期额度'
-          : '总额度',
+          ? i18n.t('周期额度')
+          : i18n.t('总额度'),
       value: formatSubscriptionQuotaAmount(
         !isMonthlyPlan && periodAmount > 0 ? periodAmount : totalAmount
       ),
@@ -382,27 +385,27 @@ export function SubscriptionPurchaseDialog(props: Props) {
     ...(!isMonthlyPlan && periodAmount > 0
       ? [
           {
-            label: '总额度',
+            label: i18n.t('总额度'),
             value:
               totalAmount > 0
                 ? formatSubscriptionQuotaAmount(totalAmount)
-                : '不限',
+                : i18n.t('不限'),
           },
         ]
       : []),
-    ...(!isMonthlyPlan
+    ...(!isMonthlyPlan && plan.plan_type !== 'credit_pack'
       ? [
           {
-            label: '额度重置',
+            label: i18n.t('额度重置'),
             value:
               formatResetPeriod(plan, t) === t('No Reset')
-                ? '不重置'
+                ? i18n.t('不重置')
                 : formatResetPeriod(plan, t),
           },
         ]
       : []),
     {
-      label: '支付价格',
+      label: i18n.t('支付价格'),
       value: formatSubscriptionPlanPrice(effectiveAmount, plan.currency),
     },
   ]
@@ -423,10 +426,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
       methodLabel,
       actionLabel: purchaseModeLabel,
       message: qrCodeUrl
-        ? '请使用微信扫码完成支付，系统会自动等待支付结果回传。'
-        : '请在新窗口完成支付，系统会自动等待支付结果回传。',
+        ? i18n.t('请使用微信扫码完成支付，系统会自动等待支付结果回传。')
+        : i18n.t('请在新窗口完成支付，系统会自动等待支付结果回传。'),
     })
-    toast.success('支付请求已发起')
+    toast.success(i18n.t('支付请求已发起'))
   }
 
   const cancelPendingPayment = async () => {
@@ -442,18 +445,18 @@ export function SubscriptionPurchaseDialog(props: Props) {
     try {
       const response = await cancelSubscriptionOrder(paymentTracker.orderId)
       if (!response.success) {
-        toast.error(response.message || '取消支付失败，请稍后重试')
+        toast.error(response.message || i18n.t('取消支付失败，请稍后重试'))
         return
       }
       setPaymentTracker((current) => ({
         ...current,
         stage: 'cancelled',
-        message: '订单已取消，预留的套餐折扣卡已退回。',
+        message: i18n.t('订单已取消，预留的套餐折扣卡已退回。'),
       }))
-      toast.success('订单已取消，套餐折扣卡已退回')
+      toast.success(i18n.t('订单已取消，套餐折扣卡已退回'))
       props.onOpenChange(false)
     } catch {
-      toast.error('取消支付失败，请稍后重试')
+      toast.error(i18n.t('取消支付失败，请稍后重试'))
     } finally {
       setPaying(false)
     }
@@ -476,10 +479,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
         window.open(payLink, '_blank')
         startPendingPayment(response, 'Stripe', payLink)
       } else {
-        toast.error(response.message || '支付请求失败')
+        toast.error(response.message || i18n.t('支付请求失败'))
       }
     } catch {
-      toast.error('支付请求失败')
+      toast.error(i18n.t('支付请求失败'))
     } finally {
       setPaying(false)
     }
@@ -502,10 +505,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
         window.open(checkoutUrl, '_blank')
         startPendingPayment(response, 'Creem', checkoutUrl)
       } else {
-        toast.error(response.message || '支付请求失败')
+        toast.error(response.message || i18n.t('支付请求失败'))
       }
     } catch {
-      toast.error('支付请求失败')
+      toast.error(i18n.t('支付请求失败'))
     } finally {
       setPaying(false)
     }
@@ -513,7 +516,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
 
   const handlePayEpay = async () => {
     if (!selectedEpayMethod) {
-      toast.error('请选择支付方式')
+      toast.error(i18n.t('请选择支付方式'))
       return
     }
 
@@ -534,7 +537,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
           })
 
       if (response.message !== 'success') {
-        toast.error(response.message || '支付请求失败')
+        toast.error(response.message || i18n.t('支付请求失败'))
         return
       }
 
@@ -564,9 +567,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
         return
       }
 
-      toast.error('支付请求失败')
+      toast.error(i18n.t('支付请求失败'))
     } catch {
-      toast.error('支付请求失败')
+      toast.error(i18n.t('支付请求失败'))
     } finally {
       setPaying(false)
     }
@@ -578,22 +581,22 @@ export function SubscriptionPurchaseDialog(props: Props) {
     const statusConfig = {
       pending: {
         icon: <Loader2 className='h-5 w-5 animate-spin' />,
-        title: '等待支付结果',
+        title: i18n.t('等待支付结果'),
         tone: 'border-warning/20 bg-warning/5',
       },
       success: {
         icon: <CheckCircle2 className='text-success h-5 w-5' />,
-        title: '支付成功',
+        title: i18n.t('支付成功'),
         tone: 'border-success/20 bg-success/5',
       },
       failed: {
         icon: <XCircle className='text-destructive h-5 w-5' />,
-        title: '支付失败',
+        title: i18n.t('支付失败'),
         tone: 'border-destructive/20 bg-destructive/5',
       },
       cancelled: {
         icon: <XCircle className='text-muted-foreground h-5 w-5' />,
-        title: '已停止等待',
+        title: i18n.t('已停止等待'),
         tone: 'border-border/70 bg-muted/40',
       },
       idle: {
@@ -692,7 +695,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
 
   return (
     <Dialog open={props.open} onOpenChange={handleOpenChange}>
-      <DialogContent className='flex max-h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl'>
+      <DialogContent className='commerce-dialog flex max-h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl'>
         <DialogHeader className='border-border/70 border-b px-4 py-4 sm:px-5'>
           <DialogTitle className='flex items-center gap-2 text-lg'>
             <Crown className='h-5 w-5' />
@@ -706,29 +709,35 @@ export function SubscriptionPurchaseDialog(props: Props) {
               <div className='border-border/70 border-b px-4 py-4 sm:px-5'>
                 <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
                   <div className='min-w-0'>
-                    <div className='mb-2 flex flex-wrap items-center gap-2'>
-                      <span className='bg-foreground text-background rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em]'>
-                        <Trans i18nKey={'套餐'} />
-                      </span>
-                    </div>
-                    <p className='text-primary text-[11px] font-semibold tracking-[0.22em] uppercase'>
-                      {translatePlanSubtitle(plan, t)}
-                    </p>
+                    {plan.plan_type !== 'credit_pack' && (
+                      <div className='mb-2 flex flex-wrap items-center gap-2'>
+                        <span className='bg-foreground text-background rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.18em]'>
+                          <Trans i18nKey={'套餐'} />
+                        </span>
+                      </div>
+                    )}
                     <h3 className='text-foreground mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl'>
                       {translatePlanTitle(plan.title, t)}
                     </h3>
-                    <p className='text-muted-foreground mt-2 text-sm leading-6'>
-                      {detailText}
-                    </p>
+                    {plan.plan_type !== 'credit_pack' && (
+                      <p className='text-muted-foreground mt-2 text-sm'>
+                        {translatePlanSubtitle(plan, t)}
+                      </p>
+                    )}
+                    {plan.plan_type !== 'credit_pack' && (
+                      <p className='text-muted-foreground mt-2 text-sm leading-6'>
+                        {detailText}
+                      </p>
+                    )}
                   </div>
-                  <div className='shrink-0 text-left sm:text-right'>
+                  <div className='commerce-purchase-amount'>
                     {firstPurchaseDiscountApplied &&
                     baseAmount > effectiveAmount ? (
                       <div className='text-muted-foreground text-sm line-through'>
                         {formatSubscriptionPlanPrice(baseAmount, plan.currency)}
                       </div>
                     ) : null}
-                    <div className='text-primary text-2xl font-semibold tracking-tight sm:text-3xl'>
+                    <div className='commerce-purchase-price'>
                       {displayPrice}
                     </div>
                     <div className='text-muted-foreground mt-1 text-xs'>
@@ -739,17 +748,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
               </div>
 
               <div className='px-4 py-4 sm:px-5'>
-                <div className='border-primary/25 bg-primary/5 mb-4 rounded-lg border px-3 py-3 text-sm'>
-                  <p className='font-semibold'>
-                    {t('Package multiplier is 10× the wallet multiplier.')}
-                  </p>
-                  <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>
-                    {t(
-                      'For the same model and group, package quota is deducted at 10× the wallet rate. Package quota and wallet balance are not equivalent.'
-                    )}
-                  </p>
-                </div>
-                <PackageModelScopeNotice className='mb-4' />
+                {plan.plan_type !== 'credit_pack' && (
+                  <PackageModelScopeNotice className='mb-4' />
+                )}
                 {firstPurchaseDiscountApplied ? (
                   <div className='border-primary/25 bg-primary/5 mb-4 flex items-start gap-3 rounded-lg border px-4 py-3'>
                     <Percent

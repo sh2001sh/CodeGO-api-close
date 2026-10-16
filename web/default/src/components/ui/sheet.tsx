@@ -1,3 +1,13 @@
+'use client'
+
+import * as React from 'react'
+import interfaceI18n from '@/i18n/config'
+import { Dialog as SheetPrimitive } from '@base-ui/react/dialog'
+import { X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,14 +26,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-'use client'
-
-import * as React from 'react'
-import { Dialog as SheetPrimitive } from '@base-ui/react/dialog'
-import { Cancel01Icon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
   return <SheetPrimitive.Root data-slot='sheet' {...props} />
@@ -64,6 +66,8 @@ function SheetContent({
   side?: 'top' | 'right' | 'bottom' | 'left'
   showCloseButton?: boolean
 }) {
+  useTranslation()
+
   // Side-specific classes are emitted via JS conditionals (rather than
   // `data-[side=*]:` variants) so consumer-provided width overrides such as
   // `sm:max-w-2xl` can be correctly merged by `tailwind-merge` and the CSS
@@ -101,8 +105,8 @@ function SheetContent({
               />
             }
           >
-            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-            <span className='sr-only'>Close</span>
+            <X strokeWidth={2} />
+            <span className='sr-only'>{interfaceI18n.t('Close')}</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Popup>

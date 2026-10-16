@@ -168,7 +168,7 @@ func GetAllActiveUserSubscriptions(userID int) ([]commercedomain.SubscriptionSum
 
 	now := platformruntime.GetTimestamp()
 	var subs []commerceschema.UserSubscription
-	if err := platformdb.DB.Where("user_id = ? AND status = ? AND end_time > ?", userID, "active", now).
+	if err := platformdb.DB.Where("user_id = ? AND status = ? AND (end_time > ? OR (end_time = 0 AND credit_pack_granted_quota > 0))", userID, "active", now).
 		Order("end_time desc, id desc").
 		Find(&subs).Error; err != nil {
 		return nil, err
@@ -209,21 +209,6 @@ func buildSubscriptionSummaries(subs []commerceschema.UserSubscription) ([]comme
 		return []commercedomain.SubscriptionSummary{}, nil
 	}
 
-	numberMap := make(map[int]commerceschema.SubscriptionLuckyNumber)
-	if subscriptionLuckyNumberTableReady() {
-		ids := make([]int, 0, len(subs))
-		for _, sub := range subs {
-			ids = append(ids, sub.Id)
-		}
-		var numbers []commerceschema.SubscriptionLuckyNumber
-		if err := platformdb.DB.Where("user_subscription_id IN ?", ids).Find(&numbers).Error; err != nil {
-			return nil, err
-		}
-		for _, number := range numbers {
-			numberMap[number.UserSubscriptionId] = number
-		}
-	}
-
 	planIDs := make([]int, 0, len(subs))
 	seenPlanIDs := make(map[int]struct{}, len(subs))
 	for _, sub := range subs {
@@ -248,13 +233,11 @@ func buildSubscriptionSummaries(subs []commerceschema.UserSubscription) ([]comme
 		if plan, ok := planMap[sub.PlanId]; ok {
 			subCopy.MembershipTier = commercedomain.NormalizeSubscriptionMembershipTier(plan.MembershipTier)
 		}
-		if number, ok := numberMap[sub.Id]; ok {
-			numberCopy := number
-			subCopy.LuckyNumber = &numberCopy
+		summary := commercedomain.SubscriptionSummary{Subscription: &subCopy}
+		if plan, ok := planMap[sub.PlanId]; ok {
+			summary.Plan = creditPackSnapshotPlan(&plan, &subCopy)
 		}
-		result = append(result, commercedomain.SubscriptionSummary{
-			Subscription: &subCopy,
-		})
+		result = append(result, summary)
 	}
 	return result, nil
 }
@@ -335,7 +318,7 @@ func orderActiveUserSubscriptionsWithExplicitOrderTx(tx *gorm.DB, subs []commerc
 }
 
 func isManagedSubscriptionPlan(plan *commerceschema.SubscriptionPlan) bool {
-	return plan != nil && !commercedomain.IsSubscriptionDayPassPlan(plan)
+	return plan != nil && plan.PlanType != commerceschema.SubscriptionPlanTypeCreditPack && !commercedomain.IsSubscriptionDayPassPlan(plan)
 }
 
 func compareSubscriptionPlanTier(left *commerceschema.SubscriptionPlan, right *commerceschema.SubscriptionPlan) int {

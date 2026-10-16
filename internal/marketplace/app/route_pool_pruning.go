@@ -3,7 +3,6 @@ package app
 import (
 	"strings"
 
-	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
@@ -17,8 +16,8 @@ func removeGroupFromRoutePools(tx *gorm.DB, groupID string) error {
 	return tx.Where("group_id = ?", groupID).Delete(&marketplaceschema.RoutePoolMember{}).Error
 }
 
-// Prune groups that were taken offline before lifecycle cleanup was added.
-// Access restrictions and model availability must not delete a user's choice.
+// Only deleted groups lose membership. Paused or unverified groups remain
+// configured; the routing loader excludes them until they can accept traffic.
 func pruneInactiveRoutePoolGroups(selected map[string]int) error {
 	ids := make([]string, 0, len(selected))
 	for id := range selected {
@@ -31,7 +30,7 @@ func pruneInactiveRoutePoolGroups(selected map[string]int) error {
 	}
 	var active []string
 	if err := platformdb.DB.Model(&marketplaceschema.Group{}).
-		Where("id IN ? AND lifecycle_status IN ?", ids, []string{marketplacedomain.LifecycleActive, marketplacedomain.LifecycleDegraded}).
+		Where("id IN ?", ids).
 		Pluck("id", &active).Error; err != nil {
 		return err
 	}

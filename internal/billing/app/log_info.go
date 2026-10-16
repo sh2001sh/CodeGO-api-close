@@ -153,8 +153,12 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		other["credit_pool_policy"] = relayInfo.MarketplaceCreditPolicy
 		other["marketplace_multiplier"] = relayInfo.MarketplaceMultiplier
 		other["marketplace_platform_commission_rate"] = 0.05
-		other["marketplace_transaction_fee_rate"] = 0.0
-		other["marketplace_owner_net_rate"] = 0.95
+		feeRate := 0.0
+		if relayInfo.CreditPackGrantedQuota > 0 {
+			feeRate = float64(relayInfo.CreditPackGrantedQuota-relayInfo.CreditPackPaidQuota) / float64(relayInfo.CreditPackGrantedQuota) * float64(relayInfo.CreditPackChannelShareBPS) / 10000
+		}
+		other["marketplace_transaction_fee_rate"] = feeRate
+		other["marketplace_owner_net_rate"] = 0.95 - feeRate
 	}
 	billingQuotaCategory, billingQuotaLabel := billingQuotaSource(relayInfo)
 	if billingQuotaCategory != "" {
@@ -177,6 +181,12 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		other["billing_preference"] = relayInfo.UserSetting.BillingPreference
 	}
 	if relayInfo.BillingSource == BillingSourceSubscription {
+		if relayInfo.CreditPackGrantedQuota > 0 {
+			other["credit_pack_granted_quota"] = relayInfo.CreditPackGrantedQuota
+			other["credit_pack_paid_quota"] = relayInfo.CreditPackPaidQuota
+			other["credit_pack_channel_share_bps"] = relayInfo.CreditPackChannelShareBPS
+			other["subscription_billing_version"] = "credit_pack"
+		}
 		if relayInfo.SubscriptionGroupMultiplier > 0 {
 			other["subscription_group_multiplier"] = relayInfo.SubscriptionGroupMultiplier
 		}
@@ -257,6 +267,9 @@ func billingQuotaSource(relayInfo *relaycommon.RelayInfo) (category string, labe
 	case BillingSourceWallet:
 		return "universal", "通用额度"
 	case BillingSourceSubscription:
+		if relayInfo.CreditPackGrantedQuota > 0 {
+			return "credit_pack", "永久套餐额度"
+		}
 		return "subscription", "GPT 套餐额度"
 	default:
 		return "", ""

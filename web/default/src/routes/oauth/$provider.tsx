@@ -29,7 +29,10 @@ import { toast } from 'sonner'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 import { api, getSelf } from '@/lib/api'
 import { OAuthCallbackScreen } from '@/features/auth/components/oauth-callback-screen'
-import { OAUTH_BIND_STORAGE_KEY } from '@/features/auth/constants'
+import {
+  OAUTH_BIND_STORAGE_KEY,
+  OAUTH_BIND_PROVIDER_KEY,
+} from '@/features/auth/constants'
 import { normalizeAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { consumeAuthRedirect } from '@/features/auth/lib/storage'
 
@@ -45,18 +48,27 @@ function OAuthCallback() {
   const search = useSearch({ from: '/oauth/$provider' }) as {
     code?: string
     state?: string
+    error?: string
     redirect?: string
   }
   const [mode, setMode] = useState<'login' | 'bind'>(() => {
     if (typeof window === 'undefined') return 'login'
-    return window.opener ? 'bind' : 'login'
+    return window.opener ||
+      window.sessionStorage.getItem(OAUTH_BIND_PROVIDER_KEY) === provider
+      ? 'bind'
+      : 'login'
   })
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMode(window.opener ? 'bind' : 'login')
-  }, [])
+    setMode(
+      window.opener ||
+        window.sessionStorage.getItem(OAUTH_BIND_PROVIDER_KEY) === provider
+        ? 'bind'
+        : 'login'
+    )
+  }, [provider])
 
   useEffect(() => {
     ;(async () => {
@@ -82,20 +94,22 @@ function OAuthCallback() {
         }
       }
 
-      if (!search?.code) {
-        toast.error(i18next.t('Missing code'))
-        safeNavigate('/sign-in')
+      const isBindingFlow = mode === 'bind'
+      if (!search?.code || search.error) {
+        toast.error(
+          i18next.t(
+            search.error
+              ? 'OAuth authorization was cancelled or denied. Please try again.'
+              : 'Missing code'
+          )
+        )
+        window.sessionStorage.removeItem(OAUTH_BIND_PROVIDER_KEY)
+        safeNavigate(isBindingFlow ? '/profile/' : '/sign-in')
         return
-      }
-      const isBindingFlow =
-        typeof window !== 'undefined' ? Boolean(window.opener) : mode === 'bind'
-      if (isBindingFlow && mode !== 'bind') {
-        setMode('bind')
-      } else if (!isBindingFlow && mode !== 'login') {
-        setMode('login')
       }
       const notifyBindingResult = (status: 'success' | 'error') => {
         if (typeof window === 'undefined') return
+        window.sessionStorage.removeItem(OAUTH_BIND_PROVIDER_KEY)
         try {
           window.localStorage.setItem(
             OAUTH_BIND_STORAGE_KEY,
@@ -157,6 +171,7 @@ function OAuthCallback() {
       const handleBindingFailure = (message: string) => {
         notifyBindingResult('error')
         toast.error(message)
+        if (!window.opener) safeNavigate('/profile/')
       }
 
       const handleLoginFailure = async (message: string) => {
@@ -178,10 +193,10 @@ function OAuthCallback() {
           const { message } = res.data
           const loginUser = (res.data?.data ?? null) as AuthUser | null
           // Check if this is a bind operation
-          if (message === 'bind') {
+          if (message === 'bind' || res.data.data?.action === 'bind') {
             toast.success(i18next.t('Binding successful!'))
             notifyBindingResult('success')
-            if (isBindingFlow) {
+            if (window.opener) {
               // Close the callback window if we opened a new tab for binding
               closeBindingWindow()
             } else {

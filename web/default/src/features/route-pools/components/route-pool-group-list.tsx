@@ -1,15 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import i18n from '@/i18n/config'
 import { ChevronDown, ChevronRight, Save } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import type { RoutePoolGroup } from '../types'
@@ -48,7 +42,7 @@ export function RoutePoolGroupList({
     )
   }
   return (
-    <div className='space-y-3'>
+    <div className='route-pool-groups'>
       {groups.map((group) => (
         <RoutePoolGroupCard
           key={group.group}
@@ -76,7 +70,11 @@ function RoutePoolGroupCard({
   useTranslation()
   const [expanded, setExpanded] = useState(false)
   const [draft, setDraft] = useState(group)
-  useEffect(() => setDraft(group), [group])
+  const [previousGroup, setPreviousGroup] = useState(group)
+  if (previousGroup !== group) {
+    setPreviousGroup(group)
+    setDraft(group)
+  }
   const enabledCount = draft.channels.filter(
     (channel) => channel.enabled
   ).length
@@ -91,13 +89,14 @@ function RoutePoolGroupCard({
       ),
     }))
   return (
-    <Card onClick={() => onSelect(draft.group)}>
+    <Card className='route-pool-group' onClick={() => onSelect(draft.group)}>
       <CardHeader className='gap-3 py-4 sm:flex-row sm:items-center sm:justify-between'>
         <div className='min-w-0'>
-          <CardTitle className='flex items-center gap-2 text-base'>
+          <CardTitle className='route-group-title flex items-center gap-2 text-base'>
             <button
-              className='text-muted-foreground hover:text-foreground'
-              aria-label={expanded ? '收起分组' : '展开分组'}
+              className='route-group-toggle text-muted-foreground hover:text-foreground'
+              aria-expanded={expanded}
+              aria-label={expanded ? i18n.t('收起分组') : i18n.t('展开分组')}
               onClick={() => setExpanded((value) => !value)}
             >
               {expanded ? (
@@ -106,12 +105,12 @@ function RoutePoolGroupCard({
                 <ChevronRight className='size-4' />
               )}
             </button>
-            {draft.group}
+            <span className='route-group-name'>{draft.group}</span>
             <span
               className={
                 draft.algorithm_active
-                  ? 'text-xs font-medium text-emerald-600'
-                  : 'text-muted-foreground text-xs font-medium'
+                  ? 'route-algorithm-state is-active'
+                  : 'route-algorithm-state'
               }
             >
               {draft.algorithm_active
@@ -119,29 +118,57 @@ function RoutePoolGroupCard({
                 : i18n.t('旧优先级 / 权重')}
             </span>
           </CardTitle>
-          <CardDescription>
-            {draft.channels.length} <Trans i18nKey={'个渠道，'} />
-            {enabledCount} <Trans i18nKey={'个参与自动路由；'} />
-            {draft.auto_discover
-              ? i18n.t('渠道由当前分组自动同步。')
-              : i18n.t('当前为旧成员模式，保存后会自动同步分组渠道。')}
-          </CardDescription>
+          <dl className='mt-3 flex flex-wrap gap-6 text-sm'>
+            <div className='flex gap-2'>
+              <dt className='text-muted-foreground'>
+                <Trans i18nKey={'渠道'} />
+              </dt>
+              <dd>{draft.channels.length}</dd>
+            </div>
+            <div className='flex gap-2'>
+              <dt className='text-muted-foreground'>
+                <Trans i18nKey={'参与自动路由'} />
+              </dt>
+              <dd>{enabledCount}</dd>
+            </div>
+            <div className='flex gap-2'>
+              <dt className='text-muted-foreground'>
+                <Trans i18nKey={'成员来源'} />
+              </dt>
+              <dd>
+                {draft.auto_discover
+                  ? i18n.t('自动同步')
+                  : i18n.t('旧成员模式')}
+              </dd>
+            </div>
+          </dl>
         </div>
         <div className='flex items-center gap-3 self-end sm:self-auto'>
           <span className='text-sm'>
             {draft.enabled ? i18n.t('启用算法') : i18n.t('不接管')}
           </span>
           <Switch
+            aria-label={i18n.t('启用算法')}
             checked={draft.enabled}
             onCheckedChange={(enabled) =>
               setDraft((current) => ({
                 ...current,
                 enabled,
-                algorithm_active: enabled,
               }))
             }
           />
-          <Button size='sm' onClick={() => onSave(draft)} disabled={saving}>
+          <Button
+            size='sm'
+            onClick={() => onSave(draft)}
+            disabled={
+              saving ||
+              draft.channels.some(
+                (channel) =>
+                  !Number.isFinite(channel.cost_multiplier) ||
+                  channel.cost_multiplier <= 0
+              )
+            }
+          >
             <Save />
             <Trans i18nKey={'保存'} />
           </Button>
@@ -151,13 +178,11 @@ function RoutePoolGroupCard({
         <CardContent className='border-t pt-0'>
           <div className='divide-y'>
             {draft.channels.map((channel) => (
-              <div
-                key={channel.channel_id}
-                className='grid gap-3 py-3 md:grid-cols-[minmax(0,1fr)_116px_132px_160px_auto] md:items-center'
-              >
+              <div key={channel.channel_id} className='route-member-row'>
                 <div className='min-w-0'>
                   <p className='truncate font-medium'>
-                    #{channel.channel_id} {channel.channel_name}
+                    <span className='font-mono'>#{channel.channel_id}</span>{' '}
+                    {channel.channel_name}
                   </p>
                   <p className='text-muted-foreground truncate text-xs'>
                     {channel.models || i18n.t('未同步模型')}{' '}
@@ -213,6 +238,7 @@ function RoutePoolGroupCard({
                 </div>
                 <div className='flex items-center gap-2'>
                   <Switch
+                    aria-label={`${i18n.t('参与自动路由')} ${channel.channel_name}`}
                     checked={channel.enabled}
                     onCheckedChange={(enabled) =>
                       updateChannel(channel.channel_id, { enabled })

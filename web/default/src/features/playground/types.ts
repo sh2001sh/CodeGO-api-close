@@ -19,7 +19,25 @@ For commercial licensing, please contact support@quantumnous.com
 // Message types
 export type MessageRole = 'user' | 'assistant' | 'system'
 
-export type MessageStatus = 'loading' | 'streaming' | 'complete' | 'error'
+export type MessageStatus =
+  | 'loading'
+  | 'streaming'
+  | 'complete'
+  | 'error'
+  | 'cancelled'
+
+export interface RequestUsage {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+}
+
+export interface ToolCall {
+  index?: number
+  id?: string
+  type?: string
+  function?: { name?: string; arguments?: string }
+}
 
 export interface MessageVersion {
   id: string
@@ -40,6 +58,13 @@ export interface Message {
   isContentComplete?: boolean
   status?: MessageStatus
   errorCode?: string | null
+  model?: string
+  group?: string
+  requestId?: string
+  usage?: RequestUsage
+  toolCalls?: ToolCall[]
+  attempts?: Message[]
+  errorMessage?: string
 }
 
 // API payload types
@@ -61,6 +86,7 @@ export interface ChatCompletionRequest {
   group?: string
   messages: ChatCompletionMessage[]
   stream: boolean
+  stream_options?: { include_usage: boolean }
   temperature?: number
   top_p?: number
   max_tokens?: number
@@ -80,9 +106,11 @@ export interface ChatCompletionChunk {
       role?: MessageRole
       content?: string
       reasoning_content?: string
+      tool_calls?: ToolCall[]
     }
     finish_reason: string | null
   }>
+  usage?: RequestUsage
 }
 
 export interface ChatCompletionResponse {
@@ -96,6 +124,7 @@ export interface ChatCompletionResponse {
       role: MessageRole
       content: string
       reasoning_content?: string
+      tool_calls?: ToolCall[]
     }
     finish_reason: string
   }>
@@ -117,6 +146,17 @@ export interface PlaygroundConfig {
   presence_penalty: number
   seed: number | null
   stream: boolean
+  systemPrompt?: string
+}
+
+export interface PlaygroundSession {
+  id: string
+  title: string
+  updatedAt: number
+  messages: Message[]
+  draft: string
+  config: PlaygroundConfig
+  parameterEnabled: ParameterEnabled
 }
 
 export interface ParameterEnabled {

@@ -84,6 +84,7 @@ type ChannelMeta struct {
 	SupportStreamOptions      bool // 是否支持流式选项
 	ResponsesCapabilities     gatewayschema.ResponsesCapabilities
 	MultiplierCardSupported   bool
+	CreditPackSupported       bool
 	MultiplierCardUserEnabled bool
 }
 
@@ -132,6 +133,7 @@ type RelayInfo struct {
 	IsFirstRequest         bool
 	AudioUsage             bool
 	ReasoningEffort        string
+	ServiceTier            string
 	UserSetting            dto.UserSetting
 	UserEmail              string
 	UserQuota              int
@@ -179,6 +181,9 @@ type RelayInfo struct {
 	SubscriptionPackageMultiplier float64
 	SubscriptionQuotaScale        float64
 	SubscriptionGroupRatio        float64
+	CreditPackGrantedQuota        int64
+	CreditPackPaidQuota           int64
+	CreditPackChannelShareBPS     int64
 	BlindBoxRequestId             string
 	IsClaudeBetaQuery             bool // /v1/messages?beta=true
 	IsChannelTest                 bool // channel test request
@@ -246,6 +251,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 		IsModelMapped:             false,
 		SupportStreamOptions:      false,
 		MultiplierCardSupported:   httpctx.GetContextKeyBool(c, constant.ContextKeyMultiplierCardSupported),
+		CreditPackSupported:       httpctx.GetContextKeyBool(c, constant.ContextKeyCreditPackSupported),
 		MultiplierCardUserEnabled: httpctx.GetContextKeyBool(c, constant.ContextKeyMultiplierCardUserEnabled),
 	}
 	if capabilities, ok := httpctx.GetContextKeyType[gatewayschema.ResponsesCapabilities](c, constant.ContextKeyChannelResponsesCapabilities); ok {
@@ -561,6 +567,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 	if info.RelayMode == gatewaycontract.RelayModeUnknown {
 		info.RelayMode = c.GetInt("relay_mode")
 	}
+	info.ServiceTier = requestServiceTier(request)
 
 	if strings.HasPrefix(c.Request.URL.Path, "/pg") {
 		info.IsPlayground = true
@@ -894,9 +901,10 @@ func RemoveDisabledFields(jsonData []byte, channelOtherSettings dto.ChannelOther
 		return jsonData, nil
 	}
 
-	// 默认移除 service_tier，除非明确允许（避免额外计费风险）
+	// Codex speed tiers have explicit local billing; preserve them by default.
 	if !channelOtherSettings.AllowServiceTier {
-		if _, exists := data["service_tier"]; exists {
+		tier, _ := data["service_tier"].(string)
+		if ServiceTierMultiplier(tier) == 1 {
 			delete(data, "service_tier")
 		}
 	}

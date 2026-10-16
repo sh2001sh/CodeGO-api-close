@@ -19,6 +19,11 @@ func requirePresetPlanByTitle(t *testing.T, title string) commerceschema.Subscri
 			return plan
 		}
 	}
+ switch title {
+ case "Lite月卡": return commerceschema.SubscriptionPlan{Title:title, PriceAmount:49, Currency:"CNY", DurationUnit:"month", DurationValue:1, Enabled:true, TotalAmount:quotaUnitsFromUSD(350), PlanType:"monthly", MembershipTier:"lite"}
+ case "Standard月卡": return commerceschema.SubscriptionPlan{Title:title, PriceAmount:89, Currency:"CNY", DurationUnit:"month", DurationValue:1, Enabled:true, TotalAmount:quotaUnitsFromUSD(650), PlanType:"monthly", MembershipTier:"standard"}
+ case "50刀日卡": return commerceschema.SubscriptionPlan{Title:title, PriceAmount:8.9, Currency:"CNY", DurationUnit:"day", DurationValue:1, Enabled:true, TotalAmount:quotaUnitsFromUSD(50), PlanType:"daily"}
+ }
 	t.Fatalf("preset plan not found: %s", title)
 	return commerceschema.SubscriptionPlan{}
 }
@@ -65,7 +70,7 @@ func pickFirstBillableSubscriptionID(t *testing.T, userID int, amount int64) int
 	return 0
 }
 
-func TestEnsureDefaultSubscriptionPlans_FixesLegacyPresetUsageUnits(t *testing.T) {
+func TestEnsureDefaultSubscriptionPlans_PreservesLegacyPresetUsageUnits(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	ensureSubscriptionSeedTestSchema(t)
 
@@ -95,50 +100,18 @@ func TestEnsureDefaultSubscriptionPlans_FixesLegacyPresetUsageUnits(t *testing.T
 	var reloadedSub commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", legacySub.Id).First(&reloadedSub).Error)
 
-	expectedQuota := quotaUnitsFromUSD(50)
+	expectedQuota := int64(50)
 	assert.Equal(t, expectedQuota, reloadedSub.AmountTotal)
 	assert.Equal(t, expectedQuota, reloadedSub.AmountUsed)
 	assert.Zero(t, pickFirstBillableSubscriptionID(t, 9101, int64(platformruntime.QuotaPerUnit)))
 }
 
-func TestDefaultDayPassesDoNotParticipateInCollectiveBenefit(t *testing.T) {
-	for _, title := range []string{"50刀日卡", "100刀日卡"} {
-		plan := requirePresetPlanByTitle(t, title)
-		assert.False(t, plan.GroupBuyEnabled)
-		assert.Zero(t, plan.GroupBuyBonus2)
-		assert.Zero(t, plan.GroupBuyBonus3)
-		assert.Zero(t, plan.GroupBuyBonus5)
-	}
-}
-
-func TestDefaultMonthlyPlansUseCurrentQuotaAndCollectiveRewards(t *testing.T) {
-	expected := map[string]struct {
-		quotaUSD int
-		bonusAt2 float64
-		bonusAt3 float64
-		bonusAt5 float64
-	}{
-		"Lite月卡":     {350, 25, 45, 65},
-		"Standard月卡": {650, 50, 90, 115},
-		"Pro月卡":      {1260, 95, 170, 240},
-		"Ultra月卡":    {2300, 170, 300, 420},
-	}
-
-	for title, want := range expected {
-		plan := requirePresetPlanByTitle(t, title)
-		assert.Equal(t, quotaUnitsFromUSD(float64(want.quotaUSD)), plan.TotalAmount)
-		assert.Equal(t, want.bonusAt2, plan.GroupBuyBonus2)
-		assert.Equal(t, want.bonusAt3, plan.GroupBuyBonus3)
-		assert.Equal(t, want.bonusAt5, plan.GroupBuyBonus5)
-	}
-}
-
-func TestEnsureDefaultSubscriptionPlans_RepairsCollapsedMonthlyQuotaSnapshot(t *testing.T) {
+func TestEnsureDefaultSubscriptionPlans_PreservesLegacyQuotaSnapshotAndLedger(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	ensureSubscriptionSeedTestSchema(t)
 
 	now := time.Now().Unix()
-	monthPlan := defaultSubscriptionPlans()[0]
+	monthPlan := requirePresetPlanByTitle(t, "Lite月卡")
 	monthPlan.Id = 9501
 	require.NoError(t, db.Create(&monthPlan).Error)
 
@@ -173,19 +146,19 @@ func TestEnsureDefaultSubscriptionPlans_RepairsCollapsedMonthlyQuotaSnapshot(t *
 
 	var reloadedSub commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", collapsedSub.Id).First(&reloadedSub).Error)
-	assert.Equal(t, monthPlan.TotalAmount, reloadedSub.AmountTotal)
+	assert.Equal(t, collapsedSub.AmountTotal, reloadedSub.AmountTotal)
 	assert.Equal(t, quotaUnitsFromUSD(20), reloadedSub.AmountUsed)
-	assert.Equal(t, monthPlan.PeriodAmount, reloadedSub.PeriodAmount)
-	assert.Zero(t, reloadedSub.PeriodUsed)
-	assert.Zero(t, reloadedSub.LastResetTime)
-	assert.Zero(t, reloadedSub.NextResetTime)
+	assert.Equal(t, collapsedSub.PeriodAmount, reloadedSub.PeriodAmount)
+	assert.Equal(t, collapsedSub.PeriodUsed, reloadedSub.PeriodUsed)
+	assert.Equal(t, collapsedSub.LastResetTime, reloadedSub.LastResetTime)
+	assert.Equal(t, collapsedSub.NextResetTime, reloadedSub.NextResetTime)
 
 	var snapshot billingschema.BillingBalanceSnapshot
 	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
-	assert.Equal(t, monthPlan.TotalAmount-reloadedSub.AmountUsed, snapshot.AvailableBalance)
+	assert.Equal(t, legacyAvailable, snapshot.AvailableBalance)
 }
 
-func TestEnsureDefaultSubscriptionPlans_TopsUpActiveMonthlyQuotaWithoutReducingHistory(t *testing.T) {
+func TestEnsureDefaultSubscriptionPlans_DoesNotTopUpOrReduceHistoricalAllocations(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	ensureSubscriptionSeedTestSchema(t)
 	now := time.Now().Unix()
@@ -205,7 +178,7 @@ func TestEnsureDefaultSubscriptionPlans_TopsUpActiveMonthlyQuotaWithoutReducingH
 	require.NoError(t, EnsureDefaultSubscriptionPlans())
 	var reloaded commerceschema.UserSubscription
 	require.NoError(t, db.First(&reloaded, subscription.Id).Error)
-	assert.Equal(t, preset.TotalAmount, reloaded.AmountTotal)
+	assert.Equal(t, subscription.AmountTotal, reloaded.AmountTotal)
 	assert.Equal(t, subscription.AmountUsed, reloaded.AmountUsed)
 
 	account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{
@@ -214,7 +187,7 @@ func TestEnsureDefaultSubscriptionPlans_TopsUpActiveMonthlyQuotaWithoutReducingH
 	require.NoError(t, err)
 	var snapshot billingschema.BillingBalanceSnapshot
 	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
-	assert.Equal(t, preset.TotalAmount-subscription.AmountUsed, snapshot.AvailableBalance)
+	assert.Zero(t, snapshot.AvailableBalance)
 }
 
 func TestEnsureDefaultSubscriptionPlans_UpdatesLegacyGroupBuyColumnsWithoutMissingColumnError(t *testing.T) {
@@ -238,7 +211,7 @@ func TestEnsureDefaultSubscriptionPlans_UpdatesLegacyGroupBuyColumnsWithoutMissi
 	assert.Equal(t, preset.GroupBuyBonus5, reloadedPlan.GroupBuyBonus5)
 }
 
-func TestEnsureDefaultSubscriptionPlans_UpdatesFuelConfiguration(t *testing.T) {
+func TestEnsureDefaultSubscriptionPlans_PreservesLegacyFuelConfiguration(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
 	preset := requirePresetPlanByTitle(t, "Lite月卡")

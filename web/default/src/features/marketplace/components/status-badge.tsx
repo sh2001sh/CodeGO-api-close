@@ -6,6 +6,7 @@ import {
   Search,
   XCircle,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { statusLabels } from '../lib/format'
@@ -25,6 +26,7 @@ const statusMeta = {
 >
 
 export function MarketplaceStatusBadge(props: { status: MarketplaceStatus }) {
+  const { t } = useTranslation()
   const meta = statusMeta[props.status]
   const Icon = meta.icon
   return (
@@ -33,7 +35,7 @@ export function MarketplaceStatusBadge(props: { status: MarketplaceStatus }) {
       className={cn('gap-1 font-medium', meta.className)}
     >
       <Icon className='size-3.5' aria-hidden='true' />
-      {statusLabels[props.status]}
+      {t(statusLabels[props.status])}
     </Badge>
   )
 }

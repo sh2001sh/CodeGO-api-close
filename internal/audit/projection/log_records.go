@@ -132,7 +132,9 @@ func RecordConsumeLog(c *gin.Context, userID int, params auditschema.RecordConsu
 	if !platformconfig.LogConsumeEnabled {
 		return
 	}
-	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userID, platformtext.GetJsonString(params)))
+	if platformconfig.DebugEnabled {
+		logger.LogDebug(c, "record consume log: userId=%d, params=%s", userID, platformtext.GetJsonString(params))
+	}
 	username := c.GetString("username")
 	requestID := c.GetString(constant.RequestIdKey)
 	upstreamRequestID := c.GetString(constant.UpstreamRequestIdKey)

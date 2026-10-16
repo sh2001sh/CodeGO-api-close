@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo } from 'react'
 import { Tag as TagIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useSystemConfigStore } from '@/stores/system-config-store'
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -160,20 +160,6 @@ export function DynamicPricingBreakdown({
 }: DynamicPricingBreakdownProps) {
   const { t } = useTranslation()
   const expr = billingExpr || ''
-  const currency = useSystemConfigStore((s) => s.config.currency)
-
-  const { symbol, rate } = useMemo(() => {
-    if (currency.quotaDisplayType === 'CNY') {
-      return { symbol: '¥', rate: currency.usdExchangeRate || 7 }
-    }
-    if (currency.quotaDisplayType === 'CUSTOM') {
-      return {
-        symbol: currency.customCurrencySymbol || '¤',
-        rate: currency.customCurrencyExchangeRate || 1,
-      }
-    }
-    return { symbol: '$', rate: 1 }
-  }, [currency])
 
   const { tiers, ruleGroups } = useMemo(() => {
     const split = splitBillingExprAndRequestRules(expr)
@@ -197,7 +183,7 @@ export function DynamicPricingBreakdown({
     return (
       <section className='min-w-0 py-4'>
         <div className='mb-3 flex items-center gap-2'>
-          <span className='inline-flex size-6 items-center justify-center rounded-lg bg-warning/15 text-warning shadow-sm'>
+          <span className='bg-warning/15 text-warning inline-flex size-6 items-center justify-center rounded-lg shadow-sm'>
             <TagIcon className='size-3.5' />
           </span>
           <div>
@@ -230,7 +216,7 @@ export function DynamicPricingBreakdown({
   return (
     <section className='min-w-0 py-3 sm:py-4'>
       <div className='mb-3 flex items-start gap-2 sm:mb-4'>
-        <span className='mt-0.5 inline-flex size-6 items-center justify-center rounded-lg bg-warning/15 text-warning shadow-sm'>
+        <span className='bg-warning/15 text-warning mt-0.5 inline-flex size-6 items-center justify-center rounded-lg shadow-sm'>
           <TagIcon className='size-3.5' />
         </span>
         <div>
@@ -264,10 +250,7 @@ export function DynamicPricingBreakdown({
                   )}
                 >
                   <div className='mb-1.5 flex flex-wrap items-center gap-1.5'>
-                    <Badge
-                      variant='secondary'
-                      className='bg-info/15 text-info'
-                    >
+                    <Badge variant='secondary' className='bg-info/15 text-info'>
                       {tier.label || t('Default')}
                     </Badge>
                     {isMatched && (
@@ -296,7 +279,11 @@ export function DynamicPricingBreakdown({
                           </div>
                           <div className='truncate font-mono text-sm font-semibold'>
                             {value > 0
-                              ? `${symbol}${(value * rate).toFixed(4)}`
+                              ? formatBillingCurrencyFromUSD(value, {
+                                  digitsLarge: 4,
+                                  digitsSmall: 4,
+                                  abbreviate: false,
+                                })
                               : '-'}
                           </div>
                         </div>
@@ -335,8 +322,7 @@ export function DynamicPricingBreakdown({
                     <TableRow
                       key={`tier-${i}`}
                       className={cn(
-                        isMatched &&
-                          'bg-success/10 hover:bg-success/10'
+                        isMatched && 'bg-success/10 hover:bg-success/10'
                       )}
                     >
                       <TableCell className='py-2.5 align-top'>
@@ -373,7 +359,11 @@ export function DynamicPricingBreakdown({
                           >
                             {value > 0 ? (
                               <span className='font-semibold'>
-                                {`${symbol}${(value * rate).toFixed(4)}`}
+                                {formatBillingCurrencyFromUSD(value, {
+                                  digitsLarge: 4,
+                                  digitsSmall: 4,
+                                  abbreviate: false,
+                                })}
                               </span>
                             ) : (
                               '-'
@@ -406,7 +396,7 @@ export function DynamicPricingBreakdown({
                 </span>
                 <Badge
                   variant='secondary'
-                  className='shrink-0 bg-warning/15 text-warning'
+                  className='bg-warning/15 text-warning shrink-0'
                 >
                   {group.multiplier}x
                 </Badge>

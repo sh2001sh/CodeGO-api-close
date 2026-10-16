@@ -17,50 +17,54 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com.
 */
 /* ══════════════════════════════════════════════════════════════════
-   DAWN — Code Go 日出视觉世界
-   作用域：.dawn 根类。所有颜色在此作用域内自持，由明暗主题共同控制。
+   DAWN — Solaris Optics compatibility layer
+   作用域：.dawn 根类。语义颜色继承 theme.css 中的 Solaris 明暗主题。
    ══════════════════════════════════════════════════════════════════ */
 
 .dawn {
   scrollbar-gutter: stable;
-  --dawn-paper: #faf7f3;
-  --dawn-card: #fffdfb;
-  --dawn-cream: #fdf6ef;
-  --dawn-cream2: #fbf1e7;
-  --dawn-ink: #251d19;
-  --dawn-ink2: #7a6a5c;
-  --dawn-copper: #b8562e;
-  --dawn-copper-deep: #a84f2d;
-  --dawn-flare: #ffe0be;
-  --dawn-night: #181210;
-  --dawn-night-ink: #f3e8df;
-  --dawn-night-ink2: #b39d8d;
-  --dawn-line: rgba(112, 75, 58, 0.18);
-  --dawn-ok: #3e7a4e;
-  --dawn-ok-bg: #e4efe6;
-  --dawn-warn: #b97a24;
-  --dawn-warn-bg: #f0ddbb;
-  --dawn-bad: #b03a2e;
-  --dawn-bad-bg: #ebc4ba;
-  --dawn-idle: #c9bbac;
+  --dawn-paper: var(--bg-canvas);
+  --dawn-card: var(--surface-card);
+  --dawn-cream: var(--bg-subtle);
+  --dawn-cream2: var(--brand-soft);
+  --dawn-ink: var(--ink-primary);
+  --dawn-ink2: var(--ink-secondary);
+  --dawn-copper: var(--brand-orange-ink);
+  --dawn-copper-deep: var(--brand-orange-ink);
+  --dawn-flare: var(--brand-soft);
+  --dawn-night: var(--surface-obsidian);
+  --dawn-night-ink: var(--surface-obsidian-ink);
+  --dawn-night-ink2: #b8b7c0;
+  --dawn-line: var(--hairline-light);
+  --dawn-ok: var(--telemetry-emerald);
+  --dawn-ok-bg: var(--telemetry-emerald-bg);
+  --dawn-warn: var(--telemetry-amber);
+  --dawn-warn-bg: var(--telemetry-amber-bg);
+  --dawn-bad: var(--telemetry-rose);
+  --dawn-bad-bg: var(--telemetry-rose-bg);
+  --dawn-idle: var(--ink-muted);
   --dawn-sans:
-    'Public Sans Variable', system-ui, -apple-system, 'Segoe UI', 'PingFang SC',
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter Variable', 'Inter',
+    'Segoe UI', system-ui, 'PingFang SC', 'Hiragino Sans GB',
     'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --dawn-disp:
-    'Space Grotesk Variable', system-ui, -apple-system, 'PingFang SC',
-    'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter Variable',
+    'Inter', 'Segoe UI', system-ui, 'PingFang SC', 'Hiragino Sans GB',
+    'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei', sans-serif;
   --dawn-mono:
-    'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', Consolas,
-    monospace;
+    'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono',
+    'Cascadia Code', Consolas, monospace;
 
-  color-scheme: light;
+  color-scheme: inherit;
   min-height: 100svh;
   background: var(--dawn-paper);
   color: var(--dawn-ink);
   font-family: var(--dawn-sans);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* DawnModal is portalled to body; keep the scope variables without adding a
@@ -117,12 +121,12 @@ For commercial licensing, please contact support@quantumnous.com.
 }
 
 .dawn ::-webkit-scrollbar-thumb {
-  background: rgba(112, 75, 58, 0.28);
+  background: color-mix(in srgb, var(--ink-muted) 35%, transparent);
   border-radius: 99px;
 }
 
 .dawn ::-webkit-scrollbar-thumb:hover {
-  background: rgba(184, 86, 46, 0.5);
+  background: color-mix(in srgb, var(--brand-orange) 55%, transparent);
 }
 
 .dawn ::-webkit-scrollbar-track {
@@ -261,31 +265,45 @@ For commercial licensing, please contact support@quantumnous.com.
   align-items: center;
   gap: 7px;
   padding: 9px 17px;
-  border-radius: 10px;
-  font-weight: 700;
-  font-size: 13px;
+  min-height: 44px;
+  justify-content: center;
+  border-radius: var(--radius-control);
+  font-weight: 600;
+  font-size: 14px;
   border: 1px solid var(--dawn-line);
   background: var(--dawn-card);
   color: var(--dawn-ink);
-  transition: 0.18s;
+  transition:
+    background 180ms var(--ease-optical),
+    box-shadow 180ms var(--ease-optical),
+    transform 220ms var(--ease-spring);
   text-decoration: none;
   white-space: nowrap;
 }
 
 .dawn .btn:hover {
-  border-color: var(--dawn-copper);
-  color: var(--dawn-copper);
+  border-color: var(--hairline-strong);
+  color: var(--dawn-ink);
 }
 
 .dawn .btn.primary {
-  background: var(--dawn-copper);
-  border-color: var(--dawn-copper);
-  color: #fff7f0;
+  background: var(--primary);
+  border-color: transparent;
+  color: var(--primary-foreground);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 15%),
+    0 2px 5px rgb(13 13 16 / 12%);
 }
 
-.dawn .btn.primary:hover {
-  background: var(--dawn-copper-deep);
-  color: #fff;
+.dawn .btn.primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  color: var(--primary-foreground);
+  transform: translateY(-1px);
+}
+
+.dawn .btn.primary:active:not(:disabled) {
+  background: var(--primary-active);
+  transform: translateY(0);
 }
 
 .dawn .btn.mini {
@@ -295,9 +313,18 @@ For commercial licensing, please contact support@quantumnous.com.
 }
 
 .dawn .btn.night {
-  background: var(--dawn-night);
-  border-color: var(--dawn-night);
-  color: var(--dawn-flare);
+  background: var(--primary);
+  border-color: transparent;
+  color: var(--primary-foreground);
+}
+
+.dawn .btn.night:hover:not(:disabled) {
+  background: var(--primary-hover);
+  color: var(--primary-foreground);
+}
+
+.dawn .btn.night:active:not(:disabled) {
+  background: var(--primary-active);
 }
 
 .dawn .btn:disabled {
@@ -796,26 +823,6 @@ For commercial licensing, please contact support@quantumnous.com.
    dark text with poor contrast against the global dark shell. */
 .dark .dawn,
 [data-theme='dark'] .dawn {
-  --dawn-paper: #171311;
-  --dawn-card: #211b18;
-  --dawn-cream: #2a211c;
-  --dawn-cream2: #33261f;
-  --dawn-ink: #f5e9df;
-  --dawn-ink2: #c4aea0;
-  --dawn-copper: #e08155;
-  --dawn-copper-deep: #ef986d;
-  --dawn-flare: #573322;
-  --dawn-night: #0f0c0b;
-  --dawn-night-ink: #f8eee8;
-  --dawn-night-ink2: #cdb7a8;
-  --dawn-line: rgba(245, 220, 205, 0.2);
-  --dawn-ok: #79c486;
-  --dawn-ok-bg: #203c28;
-  --dawn-warn: #e8b45d;
-  --dawn-warn-bg: #4a351a;
-  --dawn-bad: #ef8477;
-  --dawn-bad-bg: #4b2521;
-  --dawn-idle: #806f63;
   color-scheme: dark;
 }
 
@@ -1285,13 +1292,14 @@ For commercial licensing, please contact support@quantumnous.com.
 
 .dawn .toolbar {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 9px;
   margin-bottom: 13px;
 }
 
 .dawn .toolbar .row {
   display: flex;
+  min-width: 0;
   gap: 8px;
 }
 
@@ -1318,7 +1326,7 @@ For commercial licensing, please contact support@quantumnous.com.
 /* 对比块 */
 .dawn .compare {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   border: 1px solid rgba(184, 86, 46, 0.25);
   border-radius: 12px;
   overflow: hidden;
@@ -1356,6 +1364,7 @@ For commercial licensing, please contact support@quantumnous.com.
 
 .dawn .compare .crow {
   display: flex;
+  gap: 8px;
   justify-content: space-between;
   font-size: 11.5px;
   padding: 3px 0;
@@ -1363,6 +1372,9 @@ For commercial licensing, please contact support@quantumnous.com.
 }
 
 .dawn .compare .crow b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
   font-family: var(--dawn-mono);
   color: var(--dawn-ink);
   font-weight: 600;
@@ -2448,8 +2460,12 @@ For commercial licensing, please contact support@quantumnous.com.
 }
 
 .dawn .s-hero .btn.primary {
-  background: var(--dawn-copper);
-  color: #fff7f0;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.dawn .s-hero .btn.primary:hover {
+  background: var(--primary-hover);
 }
 
 .dawn .s-hero .community-cta {
@@ -2736,10 +2752,7 @@ For commercial licensing, please contact support@quantumnous.com.
   font-size: clamp(84px, 15vw, 200px);
   margin: 4vh 0 0;
   font-variant-numeric: tabular-nums;
-  background: linear-gradient(180deg, #ffe8cc 8%, #e08a52 60%, #8a4526 105%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--dawn-night-ink);
 }
 
 .dawn .s-night .row {
@@ -3430,7 +3443,7 @@ For commercial licensing, please contact support@quantumnous.com.
 
 @media (max-width: 1020px) {
   .dawn .cols {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .dawn .poolpanel {
@@ -3503,12 +3516,23 @@ For commercial licensing, please contact support@quantumnous.com.
   }
   .dawn .filters {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     overflow: visible;
   }
-  .dawn .filters input {
+  .dawn .filters > * {
     min-width: 0;
+    width: 100%;
+  }
+  .dawn .filters .seg {
+    justify-content: center;
+  }
+  .dawn .toolbar .row:nth-child(2) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 40px;
+  }
+  .dawn .toolbar .row:nth-child(2) .iname {
+    grid-column: 1 / -1;
   }
   .dawn .market-actions {
     grid-column: 1 / -1;
@@ -3688,8 +3712,6 @@ For commercial licensing, please contact support@quantumnous.com.
     overflow-x: auto;
   }
 }
-
-
 
 .dawn-overview .pgw {
   display: flex;
@@ -3954,7 +3976,6 @@ For commercial licensing, please contact support@quantumnous.com.
   width: 100%;
   background: linear-gradient(180deg, var(--dawn-copper) 0%, #c9673f 100%);
   border-radius: 4px 4px 0 0;
-  transition: height 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
   position: relative;
   box-shadow: 0 -2px 8px rgba(184, 86, 46, 0.15);
 }
@@ -3962,13 +3983,19 @@ For commercial licensing, please contact support@quantumnous.com.
 .dawn .dawn-owner-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  width: min(100%, 660px);
+  width: 100%;
   height: auto;
   padding: 5px;
   gap: 5px;
   border: 1px solid var(--dawn-line);
   border-radius: 12px;
   background: var(--dawn-cream2);
+}
+
+@media (min-width: 768px) {
+  .dawn .dawn-owner-tabs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 .dawn .dawn-owner-tabs [data-slot='tabs-trigger'] {
@@ -4031,8 +4058,8 @@ For commercial licensing, please contact support@quantumnous.com.
   );
   position: relative;
   transition:
-    --swp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1),
-    --swp2 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    --swp 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+    --swp2 0.8s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 4px 16px rgba(37, 29, 25, 0.1);
 }
 
@@ -4131,12 +4158,11 @@ For commercial licensing, please contact support@quantumnous.com.
   width: 0;
   background: linear-gradient(90deg, var(--dawn-copper) 0%, #c9673f 100%);
   border-radius: 4px;
-  transition: width 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
   box-shadow: 0 0 8px rgba(184, 86, 46, 0.3);
 }
 
 .dawn-overview .rise {
-  animation: riseIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: riseIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes riseIn {
@@ -4214,537 +4240,269 @@ For commercial licensing, please contact support@quantumnous.com.
    DAWN CONSOLE LAYOUT
    ══════════════════════════════════════════════════════════════════ */
 
-/* Top Navigation */
+/* One viewport and one scroll owner per workspace. */
+.dawn-console-layout {
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--background);
+}
 .dawn-console-topnav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 40;
-  height: 56px;
+  height: 72px;
   display: flex;
   align-items: center;
-  padding: 0 20px;
-  background: var(--dawn-card);
-  border-bottom: 1px solid var(--dawn-line);
+  gap: 32px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  position: relative;
+  z-index: 20;
 }
-
 .dawn-console-topnav .logo {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 800;
-  font-size: 14.5px;
-  color: var(--dawn-ink);
-  text-decoration: none;
-  transition: opacity 0.2s;
-  white-space: nowrap;
-}
-
-.dawn-console-topnav .logo:hover {
-  opacity: 0.8;
-}
-
-.dawn-console-topnav .logo-icon {
+  gap: 10px;
   flex-shrink: 0;
+  color: var(--foreground);
+  text-decoration: none;
+  font-family: var(--dawn-disp);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
 }
-
-.dawn-console-topnav .crumb {
-  font-family: var(--dawn-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-  color: var(--dawn-ink2);
-  margin-left: 18px;
-}
-
-.dawn-console-topnav .sp {
-  flex: 1;
-}
-
 .dawn-console-topnav .pill {
   display: flex;
-  gap: 2px;
-  background: var(--dawn-card);
-  border: 1px solid var(--dawn-line);
-  border-radius: 99px;
-  padding: 3px;
-}
-
-.dawn-console-topnav .pill .nav-link {
-  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 99px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--dawn-ink2);
+  gap: 4px;
+}
+.dawn-console-topnav .nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  color: var(--muted-foreground);
+  border-radius: 4px;
   text-decoration: none;
-  transition: all 0.2s;
+  font-size: 14px;
+  transition:
+    color 180ms,
+    background-color 180ms;
 }
-
-.dawn-console-topnav .pill .nav-link:hover {
-  background: var(--dawn-cream);
-  color: var(--dawn-ink);
+.dawn-console-topnav .nav-link:hover,
+.dawn-console-topnav .nav-link.active {
+  color: var(--primary);
+  background: var(--muted);
 }
-
-.dawn-console-topnav .pill .nav-link.active {
-  background: var(--dawn-ink);
-  color: var(--dawn-paper);
-}
-
 .dawn-console-topnav .right-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: 20px;
-  flex: 0 0 auto;
-}
-
-/* The shared Search button is fluid in page headers. In the fixed console
-   toolbar it must keep a stable footprint so the icon does not drift when
-   the available width changes. */
-.dawn-console-topnav .console-search {
-  flex: 0 0 208px;
-  width: 208px;
-}
-
-.dawn-console-topnav .icon-btn {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--dawn-line);
-  border-radius: 10px;
-  background: var(--dawn-card);
-  color: var(--dawn-ink2);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.dawn-console-topnav .icon-btn:hover {
-  background: var(--dawn-cream);
-  color: var(--dawn-ink);
-  border-color: var(--dawn-copper);
-}
-
-.dawn-console-topnav .user-menu {
-  position: relative;
-}
-
-.dawn-console-topnav .user-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border: 1px solid var(--dawn-line);
-  border-radius: 10px;
-  background: var(--dawn-card);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--dawn-ink);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.dawn-console-topnav .user-btn:hover {
-  background: var(--dawn-cream);
-  border-color: var(--dawn-copper);
-}
-
-.dawn-console-topnav .user-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 180px;
-  background: var(--dawn-card);
-  border: 1px solid var(--dawn-line);
-  border-radius: 12px;
-  padding: 6px;
-  box-shadow: 0 4px 20px rgba(37, 29, 25, 0.12);
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-10px);
-  transition: all 0.2s;
-}
-
-.dawn-console-topnav .user-menu:hover .user-dropdown {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-}
-
-.dawn-console-topnav .user-menu.open .user-dropdown {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-}
-
-.dawn-console-topnav .dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--dawn-ink);
-  text-decoration: none;
-  cursor: pointer;
-  transition: background 0.15s;
-  background: transparent;
-  border: none;
-  text-align: left;
-}
-
-.dawn-console-topnav .dropdown-item:hover {
-  background: var(--dawn-cream);
-}
-
-/* Console Layout */
-/* Keep the shell and scroll areas on the same dynamic viewport. Mixing vh
-   with svh leaves a scrollable blank strip when mobile browser chrome moves. */
-.dawn-console-layout {
-  min-height: 100vh;
-  min-height: 100dvh;
-  background: var(--dawn-paper);
-}
-
-.dawn-console-body {
-  display: flex;
-  padding-top: 56px;
-  min-height: 100vh;
-  min-height: 100dvh;
-}
-
-.dawn-console-main {
-  flex: 1;
+  margin-left: auto;
   min-width: 0;
-  height: calc(100vh - 56px);
-  height: calc(100dvh - 56px);
-  overflow-y: auto;
 }
-
-/* Sidebar */
-.dawn-console-sidebar {
-  width: 220px;
-  background: var(--dawn-card);
-  border-right: 1px solid var(--dawn-line);
-  padding: 16px 12px;
-  overflow-y: auto;
-  height: calc(100vh - 56px);
-  height: calc(100dvh - 56px);
-  position: sticky;
-  top: 56px;
-  flex: 0 0 220px;
-  transition:
-    width 0.2s ease,
-    flex-basis 0.2s ease;
+.dawn-console-topnav .right-actions > button,
+.dawn-console-topnav .right-actions > a {
+  min-height: 44px;
 }
-
-.dawn-console-sidebar-toggle {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  margin: 0 0 10px auto;
-  border: 1px solid var(--dawn-line);
-  border-radius: 9px;
-  background: var(--dawn-cream2);
-  color: var(--dawn-ink2);
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s,
-    border-color 0.15s;
+.dawn-console-topnav .console-search {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
 }
-
-.dawn-console-sidebar-toggle:hover,
-.dawn-console-sidebar-toggle:focus-visible {
-  background: var(--dawn-cream);
-  border-color: var(--dawn-copper);
-  color: var(--dawn-copper);
-  outline: none;
+.dawn-console-topnav .console-search > span,
+.dawn-console-topnav .console-search > kbd {
+  display: none;
 }
-
-@media (min-width: 769px) {
-  .dawn-console-sidebar.collapsed {
-    width: 68px;
-    flex-basis: 68px;
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-
-  .dawn-console-sidebar.collapsed .dawn-console-sidebar-toggle {
-    margin-right: auto;
-    margin-left: auto;
-  }
-
-  .dawn-console-sidebar.collapsed .sgroup:not(.tog),
-  .dawn-console-sidebar.collapsed .moreitems {
-    display: none;
-  }
-
-  .dawn-console-sidebar.collapsed .sgroup.tog {
-    justify-content: center;
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-
-  .dawn-console-sidebar.collapsed .sgroup.tog > svg,
-  .dawn-console-sidebar.collapsed .sitem span,
-  .dawn-console-sidebar.collapsed .sitem .badge {
-    display: none;
-  }
-
-  .dawn-console-sidebar.collapsed .sitem {
-    justify-content: center;
-    padding-left: 8px;
-    padding-right: 8px;
-  }
-
-  .dawn-console-sidebar.collapsed .sgroup.tog > span {
-    font-size: 0;
-    gap: 0 !important;
-  }
+.dawn-console-topnav .console-search > svg {
+  position: static;
+  translate: none;
 }
-
 .dawn-console-topnav .menu-btn {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  color: var(--dawn-ink2);
+  min-width: 44px;
+  height: 44px;
+  color: var(--foreground);
 }
-
-.dawn-console-topnav .menu-btn:hover {
-  background: var(--dawn-cream2);
-  color: var(--dawn-ink);
+.dawn-console-body {
+  height: calc(100dvh - 72px);
+  min-height: 0;
+  display: flex;
 }
-
-.dawn-console-scrim {
-  display: none;
+.dawn-console-main {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+  background: var(--background);
 }
-
+.console-desktop-sidebar {
+  flex-shrink: 0;
+  height: 100%;
+}
+.dawn-console-sidebar {
+  width: 240px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 12px 28px;
+  border-right: 1px solid var(--border);
+  background: var(--background);
+}
+.dawn-console-sidebar-toggle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 0 16px auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted-foreground);
+}
+.dawn-console-sidebar-toggle:hover {
+  color: var(--primary);
+  background: var(--muted);
+}
 .dawn-console-sidebar .sgroup {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--dawn-ink2);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 12px 12px 8px;
-  margin-top: 12px;
+  display: block;
+  padding: 20px 12px 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
 }
-
-.dawn-console-sidebar .sgroup:first-child {
-  margin-top: 0;
-}
-
 .dawn-console-sidebar .sgroup.tog {
   display: flex;
+  width: 100%;
+  min-height: 44px;
   align-items: center;
   justify-content: space-between;
+  margin-top: 12px;
   padding: 10px 12px;
-  margin: 12px 0 0;
-  border-radius: 10px;
-  background: var(--dawn-cream2);
-  cursor: pointer;
-  transition: all 0.2s;
-  text-transform: none;
-  font-size: 12px;
+  border-radius: 4px;
+  text-align: left;
+  color: var(--foreground);
+  font-size: 14px;
 }
-
-.dawn-console-sidebar .sgroup.tog:hover {
-  background: var(--dawn-cream);
-}
-
 .dawn-console-sidebar .sitem {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  min-height: 44px;
+  margin: 4px 0;
   padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 13px;
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  font-size: 14px;
   font-weight: 500;
-  color: var(--dawn-ink);
   text-decoration: none;
-  cursor: pointer;
-  transition: all 0.15s;
-  margin-bottom: 2px;
-  position: relative;
+  transition:
+    background-color 180ms,
+    color 180ms;
 }
-
-.dawn-console-sidebar .sitem:hover {
-  background: var(--dawn-cream);
+.dawn-console-sidebar .sitem > svg {
+  flex-shrink: 0;
 }
-
+.dawn-console-sidebar .sitem:hover,
+.dawn-console-sidebar .sgroup.tog:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
 .dawn-console-sidebar .sitem.on {
-  background: var(--dawn-cream2);
-  color: var(--dawn-copper);
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(184, 86, 46, 0.1);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 9%, var(--background));
 }
-
-.dawn-console-sidebar .sitem .badge {
+.dawn-console-sidebar .badge {
   margin-left: auto;
-  font-family: var(--dawn-mono);
-  font-size: 10px;
-  font-weight: 600;
   padding: 2px 6px;
-  background: var(--dawn-copper);
-  color: #ffffff;
-  border-radius: 6px;
+  border-radius: 4px;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 12px;
 }
-
-.dawn-console-sidebar .moreitems {
-  animation: slideDown 0.2s ease-out;
+.dawn-console-sidebar.collapsed {
+  width: 72px;
 }
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.dawn-console-sidebar.collapsed .dawn-console-sidebar-toggle {
+  margin-inline: auto;
 }
-
-/* Responsive */
-@media (max-width: 1020px) {
-  .dawn-console-sidebar {
-    width: 200px;
-    flex-basis: 200px;
-  }
-
+.dawn-console-sidebar.collapsed .sgroup:not(.tog),
+.dawn-console-sidebar.collapsed .moreitems,
+.dawn-console-sidebar.collapsed .sitem span,
+.dawn-console-sidebar.collapsed .sitem .badge,
+.dawn-console-sidebar.collapsed .sgroup.tog > svg {
+  display: none;
+}
+.dawn-console-sidebar.collapsed .sitem,
+.dawn-console-sidebar.collapsed .sgroup.tog {
+  justify-content: center;
+  padding-inline: 0;
+}
+.dawn-console-sidebar.collapsed .sgroup.tog > span {
+  font-size: 0;
+  gap: 0 !important;
+}
+.dawn.console-mobile-sidebar {
+  min-height: 0;
+  background: var(--background);
+}
+.console-mobile-sidebar .dawn-console-sidebar {
+  position: static;
+  width: 100%;
+  height: auto;
+  flex: 1;
+  border: 0;
+}
+.console-mobile-sidebar .dawn-console-sidebar-toggle {
+  display: none;
+}
+@media (max-width: 1199px) {
   .dawn-console-topnav .pill {
     display: none;
   }
 }
-
-/* Once the full navigation pill is hidden, keep the action cluster compact
-   too. This prevents the search field from pushing language/theme/account
-   controls outside narrow desktop and tablet viewports. */
-@media (max-width: 900px) {
-  .dawn-console-topnav .right-actions {
-    margin-left: 0;
-    gap: 4px;
-  }
-
-  .dawn-console-topnav .console-search {
-    width: 34px;
-    min-width: 34px;
-    flex: 0 0 34px;
-    justify-content: center !important;
-    height: 34px;
-    padding: 0;
-  }
-
-  .dawn-console-topnav .console-search > span,
-  .dawn-console-topnav .console-search > kbd {
-    display: none;
-  }
-
-  .dawn-console-topnav .console-search > svg {
-    position: static;
-    transform: none;
-    translate: 0 0 !important;
-  }
-
-  .dawn-console-topnav .user-btn {
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    justify-content: center;
-  }
-
-  .dawn-console-topnav .user-btn span {
-    display: none;
-  }
-}
-
 @media (max-width: 768px) {
-  .dawn-console-sidebar-toggle {
+  .dawn-console-topnav {
+    height: 64px;
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  .dawn-console-body {
+    height: calc(100dvh - 64px);
+  }
+  .dawn-console-topnav .menu-btn {
+    display: inline-flex;
+  }
+  .console-desktop-sidebar {
     display: none;
   }
-
-  .dawn-console-topnav {
-    padding: 0 10px;
-    gap: 6px;
+  .dawn-console-topnav .logo {
+    font-size: 20px;
   }
-
   .dawn-console-topnav .logo span {
     display: none;
   }
-
   .dawn-console-topnav .right-actions {
-    margin-left: 0;
-    gap: 4px;
+    gap: 2px;
   }
-
-  .dawn-console-topnav .console-search {
-    width: 34px;
-    flex: 0 0 34px;
-    min-width: 34px;
-    justify-content: center !important;
-    height: 34px;
-    padding: 0;
-  }
-
-  .dawn-console-topnav .console-search > span,
-  .dawn-console-topnav .console-search > kbd {
+  .dawn-console-topnav .console-wallet-link,
+  .dawn-console-topnav .console-settings-link {
     display: none;
   }
-
-  .dawn-console-topnav .console-search > svg {
-    position: static;
-    transform: none;
-    translate: 0 0 !important;
-  }
-
-  .dawn-console-topnav .user-btn {
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    justify-content: center;
-  }
-
-  .dawn-console-topnav .user-btn span {
-    display: none;
-  }
-
-  .dawn-console-sidebar {
-    position: fixed;
-    left: -230px;
-    z-index: 90;
-    transition: left 0.3s;
-    box-shadow: 0 20px 50px -18px rgba(40, 20, 5, 0.35);
-    flex-basis: 200px;
-  }
-
-  .dawn-console-sidebar.open {
-    left: 0;
-  }
-
-  .dawn-console-topnav .crumb {
-    display: none;
-  }
-
-  .dawn-console-topnav .menu-btn {
-    display: flex;
-  }
-
-  .dawn-console-scrim.show {
-    display: block;
-    position: fixed;
-    inset: 0;
-    top: 56px;
-    z-index: 80;
-    background: rgba(40, 25, 15, 0.4);
-    animation: dawn-fade 0.2s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dawn-console-layout *,
+  .console-mobile-sidebar * {
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
   }
 }
 

@@ -1,3 +1,4 @@
+import interfaceI18n from '@/i18n/config'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -43,7 +44,10 @@ export function toApiKeyGroupOptions(
       option.category === 'marketplace'
         ? undefined
         : `${option.member_count ?? 0} ${t('Groups')} · ${option.models.length} ${t('Models')}`,
-    ratio: option.category === 'marketplace' ? option.multiplier : '动态',
+    ratio:
+      option.category === 'marketplace'
+        ? option.multiplier
+        : interfaceI18n.t('动态'),
     subscriptionEnabled: option.subscription_enabled,
     subscriptionRatio: option.subscription_multiplier,
     category: option.category,

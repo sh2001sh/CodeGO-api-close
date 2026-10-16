@@ -31,6 +31,7 @@ import {
   Link2,
   CreditCard,
   Gift,
+  RotateCcw,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -56,6 +57,7 @@ import { getUserActionMessage } from '../lib'
 import { type User, type ManageUserAction } from '../types'
 import { UserBindingDialog } from './dialogs/user-binding-dialog'
 import { UserBlindBoxDialog } from './dialogs/user-blind-box-dialog'
+import { UserRefundDialog } from './dialogs/user-refund-dialog'
 import { useUsers } from './users-provider'
 
 interface DataTableRowActionsProps {
@@ -71,6 +73,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [subscriptionsDialogOpen, setSubscriptionsDialogOpen] = useState(false)
   const [blindBoxDialogOpen, setBlindBoxDialogOpen] = useState(false)
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false)
 
   const handleEdit = () => {
     setCurrentRow(user)
@@ -237,6 +240,13 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
           <DropdownMenuSeparator />
 
+          <DropdownMenuItem onClick={() => setRefundDialogOpen(true)}>
+            {t('Refund management')}
+            <DropdownMenuShortcut>
+              <RotateCcw size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault()
@@ -279,6 +289,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       </DropdownMenu>
 
       <ConfirmDialog
+        className='solaris-admin-dialog'
         open={resetPasskeyOpen}
         onOpenChange={setResetPasskeyOpen}
         title={t('Reset Passkey')}
@@ -288,6 +299,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       />
 
       <ConfirmDialog
+        className='solaris-admin-dialog'
         open={resetTwoFAOpen}
         onOpenChange={setResetTwoFAOpen}
         title={t('Reset Two-Factor Authentication')}
@@ -319,6 +331,17 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           usedQuota: user.used_quota,
         }}
       />
+
+      {refundDialogOpen && (
+        <UserRefundDialog
+          open={refundDialogOpen}
+          onOpenChange={(open) => {
+            setRefundDialogOpen(open)
+            if (!open) triggerRefresh()
+          }}
+          user={user}
+        />
+      )}
     </>
   )
 }

@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react'
-import { CreditCard, Send, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { OrderInvoices } from '@/features/invoices'
+import {
+  isActiveUserSubscription,
+  isCreditPackSubscription,
+} from '@/features/subscriptions/lib'
+import { CreditPackPlans } from './components/credit-pack-plans'
 import { BillingHistoryDialog } from './components/dialogs/billing-history-dialog'
 import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
 import { NowPaymentsPaymentDialog } from './components/dialogs/nowpayments-payment-dialog'
 import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialog'
 import { RechargeFormCard } from './components/recharge-form-card'
+import { SubscriptionClaudeConversionCard } from './components/subscription-claude-conversion-card'
 import { WalletAccountOverview } from './components/wallet-account-overview'
 import { WalletPagePanels } from './components/wallet-page-panels'
 import { WalletTransferHistorySheet } from './components/wallet-transfer-history-sheet'
@@ -15,15 +22,18 @@ import { useWalletWorkspace } from './hooks/use-wallet-workspace'
 
 interface WalletProps {
   initialShowHistory?: boolean
+  initialSection?: 'funding' | 'transfer' | 'billing' | 'invoices'
+  onSectionChange: (
+    section: 'funding' | 'transfer' | 'billing' | 'invoices'
+  ) => void
 }
 
 export function Wallet(props: WalletProps) {
   const { t } = useTranslation()
   const workspace = useWalletWorkspace()
   const setBillingDialogOpen = workspace.setBillingDialogOpen
-  const [activeSection, setActiveSection] = useState<
-    'funding' | 'transfer' | 'billing'
-  >('funding')
+  const activeSection = props.initialSection ?? 'funding'
+  const setActiveSection = props.onSectionChange
   const [transferHistoryOpen, setTransferHistoryOpen] = useState(false)
 
   useEffect(() => {
@@ -39,95 +49,180 @@ export function Wallet(props: WalletProps) {
       <WalletWorkspaceShell
         title={t('Wallet')}
         canonicalPath='/wallet'
-        kicker='C·02 · WALLET'
         framedMain={false}
         main={
-          <div className='flex min-w-0 flex-col gap-4'>
+          <div className='commerce-wallet-content'>
+            {workspace.userError ||
+            workspace.subscriptionError ||
+            workspace.publicPlansError ||
+            workspace.topupError ? (
+              <div role='alert' className='commerce-error'>
+                <span>{t('加载失败')}</span>
+                <Button
+                  variant='outline'
+                  onClick={() =>
+                    void Promise.all([
+                      workspace.fetchUser(),
+                      workspace.fetchSubscriptionData(),
+                      workspace.fetchPublicPlans(),
+                      workspace.fetchTopupInfo(),
+                    ])
+                  }
+                >
+                  {t('重试')}
+                </Button>
+              </div>
+            ) : null}
             <WalletAccountOverview
-              user={workspace.user}
+              user={workspace.userError ? null : workspace.user}
               activeSubscriptionCount={
-                workspace.subscriptionData?.subscriptions?.length ?? 0
+                workspace.subscriptionError
+                  ? undefined
+                  : workspace.subscriptionData?.subscriptions?.length
               }
-              onSelectFunding={() => setActiveSection('funding')}
-              onSelectTransfer={() => setActiveSection('transfer')}
+              creditPackBalance={
+                workspace.subscriptionError
+                  ? undefined
+                  : workspace.subscriptionData?.subscriptions
+                      .filter(
+                        (record) =>
+                          isCreditPackSubscription(record.subscription) &&
+                          isActiveUserSubscription(record.subscription)
+                      )
+                      .reduce(
+                        (total, record) =>
+                          total +
+                          Math.max(
+                            0,
+                            record.subscription.amount_total -
+                              record.subscription.amount_used
+                          ),
+                        0
+                      )
+              }
               onOpenBillingHistory={() => workspace.setBillingDialogOpen(true)}
               onOpenTransferHistory={() => setTransferHistoryOpen(true)}
             />
 
             <Tabs
+              className='commerce-wallet-sections'
               value={activeSection}
               onValueChange={(value) =>
-                setActiveSection(value as 'funding' | 'transfer' | 'billing')
+                setActiveSection(
+                  value as 'funding' | 'transfer' | 'billing' | 'invoices'
+                )
               }
             >
-              <TabsList className='codego-wallet-tabs grid h-auto w-full grid-cols-3'>
+              <TabsList variant='line' className='commerce-wallet-nav'>
                 <TabsTrigger value='funding'>
-                  <CreditCard className='size-4' />
                   {t('Top up and redeem')}
                 </TabsTrigger>
+                <TabsTrigger value='invoices'>
+                  {t('invoice.commercial')}
+                </TabsTrigger>
                 <TabsTrigger value='transfer'>
-                  <Send className='size-4' />
                   {t('Quota transfer')}
                 </TabsTrigger>
                 <TabsTrigger value='billing'>
-                  <SlidersHorizontal className='size-4' />
                   {t('Billing settings')}
                 </TabsTrigger>
               </TabsList>
+
+              <TabsContent value='funding'>
+                <div className='commerce-wallet-funding'>
+                  <CreditPackPlans
+                    plans={
+                      workspace.publicPlansError ? [] : workspace.publicPlans
+                    }
+                    loading={workspace.publicPlansLoading}
+                    topupInfo={workspace.topupInfo}
+                    onRefresh={async () => {
+                      await Promise.all([
+                        workspace.fetchUser(),
+                        workspace.fetchSubscriptionData(),
+                      ])
+                    }}
+                  />
+                  <RechargeFormCard
+                    topupInfo={workspace.topupInfo}
+                    presetAmounts={workspace.presetAmounts}
+                    selectedPreset={workspace.selectedPreset}
+                    onSelectPreset={workspace.handleSelectPreset}
+                    topupAmount={workspace.topupAmount}
+                    onTopupAmountChange={workspace.handleTopupAmountChange}
+                    paymentAmount={workspace.paymentAmount}
+                    calculating={workspace.calculating}
+                    onPaymentMethodSelect={workspace.handlePaymentMethodSelect}
+                    selectedPaymentMethod={workspace.selectedPaymentMethod}
+                    paymentLoading={workspace.paymentLoading}
+                    redemptionCode={workspace.redemptionCode}
+                    onRedemptionCodeChange={workspace.setRedemptionCode}
+                    onRedeem={workspace.handleRedeem}
+                    redeeming={workspace.redeeming}
+                    topupLink={workspace.topupInfo?.topup_link}
+                    loading={workspace.topupLoading}
+                    showRedemptionSection={true}
+                    usdExchangeRate={workspace.effectiveUsdExchangeRate}
+                    creemProducts={workspace.topupInfo?.creem_products}
+                    enableCreemTopup={workspace.topupInfo?.enable_creem_topup}
+                    onCreemProductSelect={workspace.handleCreemProductSelect}
+                    enableWaffoTopup={workspace.topupInfo?.enable_waffo_topup}
+                    waffoPayMethods={workspace.topupInfo?.waffo_pay_methods}
+                    onWaffoMethodSelect={workspace.handleWaffoMethodSelect}
+                    enableWaffoPancakeTopup={
+                      workspace.topupInfo?.enable_waffo_pancake_topup
+                    }
+                  />
+
+                  {workspace.subscriptionData?.subscriptions?.some(
+                    (item) =>
+                      !isCreditPackSubscription(item.subscription) &&
+                      item.subscription.conversion_preview?.eligible === true
+                  ) && (
+                    <div className='app-page-shell p-4'>
+                      <SubscriptionClaudeConversionCard
+                        subscriptionData={workspace.subscriptionData}
+                        loading={workspace.subscriptionLoading}
+                        mode='wallet'
+                        onRefresh={async () => {
+                          await Promise.all([
+                            workspace.fetchSubscriptionData(),
+                            workspace.fetchUser(),
+                          ])
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value='invoices'>
+                <OrderInvoices />
+              </TabsContent>
+
+              {(['transfer', 'billing'] as const).map((section) => (
+                <TabsContent key={section} value={section}>
+                  <WalletPagePanels
+                    plans={
+                      workspace.publicPlansError ? [] : workspace.publicPlans
+                    }
+                    plansLoading={workspace.publicPlansLoading}
+                    loading={workspace.userLoading}
+                    topupLink={workspace.topupInfo?.topup_link}
+                    redemptionCode={workspace.redemptionCode}
+                    onRedemptionCodeChange={workspace.setRedemptionCode}
+                    onRedeem={workspace.handleRedeem}
+                    redeeming={workspace.redeeming}
+                    subscriptionData={workspace.subscriptionData}
+                    subscriptionLoading={workspace.subscriptionLoading}
+                    onSubscriptionRefresh={workspace.fetchSubscriptionData}
+                    onUserRefresh={workspace.fetchUser}
+                    section={section}
+                    onOpenTransferHistory={() => setTransferHistoryOpen(true)}
+                  />
+                </TabsContent>
+              ))}
             </Tabs>
-
-            {activeSection === 'funding' ? (
-              <>
-                <RechargeFormCard
-                  topupInfo={workspace.topupInfo}
-                  presetAmounts={workspace.presetAmounts}
-                  selectedPreset={workspace.selectedPreset}
-                  onSelectPreset={workspace.handleSelectPreset}
-                  topupAmount={workspace.topupAmount}
-                  onTopupAmountChange={workspace.handleTopupAmountChange}
-                  paymentAmount={workspace.paymentAmount}
-                  calculating={workspace.calculating}
-                  onPaymentMethodSelect={workspace.handlePaymentMethodSelect}
-                  selectedPaymentMethod={workspace.selectedPaymentMethod}
-                  paymentLoading={workspace.paymentLoading}
-                  redemptionCode={workspace.redemptionCode}
-                  onRedemptionCodeChange={workspace.setRedemptionCode}
-                  onRedeem={workspace.handleRedeem}
-                  redeeming={workspace.redeeming}
-                  topupLink={workspace.topupInfo?.topup_link}
-                  loading={workspace.topupLoading}
-                  showRedemptionSection={false}
-                  usdExchangeRate={workspace.effectiveUsdExchangeRate}
-                  creemProducts={workspace.topupInfo?.creem_products}
-                  enableCreemTopup={workspace.topupInfo?.enable_creem_topup}
-                  onCreemProductSelect={workspace.handleCreemProductSelect}
-                  enableWaffoTopup={workspace.topupInfo?.enable_waffo_topup}
-                  waffoPayMethods={workspace.topupInfo?.waffo_pay_methods}
-                  onWaffoMethodSelect={workspace.handleWaffoMethodSelect}
-                  enableWaffoPancakeTopup={
-                    workspace.topupInfo?.enable_waffo_pancake_topup
-                  }
-                  compact
-                />
-              </>
-            ) : null}
-
-            <WalletPagePanels
-              plans={workspace.publicPlans}
-              plansLoading={workspace.publicPlansLoading}
-              loading={workspace.userLoading}
-              topupLink={workspace.topupInfo?.topup_link}
-              redemptionCode={workspace.redemptionCode}
-              onRedemptionCodeChange={workspace.setRedemptionCode}
-              onRedeem={workspace.handleRedeem}
-              redeeming={workspace.redeeming}
-              subscriptionData={workspace.subscriptionData}
-              subscriptionLoading={workspace.subscriptionLoading}
-              onSubscriptionRefresh={workspace.fetchSubscriptionData}
-              onUserRefresh={workspace.fetchUser}
-              section={activeSection}
-              onOpenTransferHistory={() => setTransferHistoryOpen(true)}
-            />
           </div>
         }
       />
@@ -154,6 +249,10 @@ export function Wallet(props: WalletProps) {
       <BillingHistoryDialog
         open={workspace.billingDialogOpen}
         onOpenChange={workspace.setBillingDialogOpen}
+        onOpenInvoices={() => {
+          workspace.setBillingDialogOpen(false)
+          setActiveSection('invoices')
+        }}
       />
 
       <WalletTransferHistorySheet

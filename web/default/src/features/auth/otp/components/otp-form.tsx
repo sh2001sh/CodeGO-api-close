@@ -144,6 +144,7 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
+        aria-busy={isLoading}
         className={cn('grid gap-4', className)}
         {...props}
       >
@@ -191,11 +192,11 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
                   </InputOTP>
                 )}
               </FormControl>
-              <FormDescription className='text-muted-foreground text-xs'>
-                {useBackupCode
-                  ? t('Each backup code can only be used once.')
-                  : t('Verification code updates every 30 seconds.')}
-              </FormDescription>
+              {useBackupCode && (
+                <FormDescription>
+                  {t('Each backup code can only be used once.')}
+                </FormDescription>
+              )}
               <FormMessage />
             </FormItem>
           )}

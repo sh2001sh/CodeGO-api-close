@@ -39,6 +39,8 @@ type channelTestOptions struct {
 	CreditPoolPolicy       string
 	MarketplaceMultiplier  float64
 	MarketplaceModelPrices map[string]marketplacedomain.ChannelModelPrice
+	Prompt                 string
+	ValidateResponse       func([]byte) error
 }
 
 func testChannel(channel *gatewayschema.Channel, testModel string, endpointType string, isStream bool) channelTestResult {
@@ -151,6 +153,7 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 
 	relayFormat := resolveChannelTestRelayFormat(endpointType, ctx.Request.URL.Path)
 	request := buildTestRequest(testModel, endpointType, channel, isStream)
+	applyChannelTestPrompt(request, options.Prompt)
 	info, err := relaycommon.GenRelayInfo(ctx, relayFormat, request, nil)
 	if err != nil {
 		return channelTestResult{
@@ -390,6 +393,12 @@ func testChannelWithOptions(channel *gatewayschema.Channel, testModel string, en
 			Group:            info.UsingGroup,
 			Other:            other,
 		})
+	}
+	if options.ValidateResponse != nil {
+		if err := options.ValidateResponse(respBody); err != nil {
+			result.localErr = err
+			return result
+		}
 	}
 	platformobservability.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
 	return result

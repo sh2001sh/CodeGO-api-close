@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { FcGoogle } from 'react-icons/fc'
 import {
   IconDiscord,
   IconGithub,
@@ -41,7 +42,7 @@ type OAuthProvidersProps = {
 type ProviderButton = {
   key: string
   label: string
-  onClick: () => void
+  onClick?: () => void
   icon?: ReactNode
   disabled?: boolean
 }
@@ -63,7 +64,6 @@ export function OAuthProviders({
     handleDiscordLogin,
     handleOIDCLogin,
     handleLinuxDOLogin,
-    handleTelegramLogin,
     handleCustomOAuthLogin,
   } = useOAuthLogin(status, redirectTo)
 
@@ -118,8 +118,8 @@ export function OAuthProviders({
   if (status?.telegram_oauth) {
     providerButtons.push({
       key: 'telegram',
-      label: t('Continue with Telegram'),
-      onClick: handleTelegramLogin,
+      label: `Telegram · ${t('待接入')}`,
+      disabled: true,
     })
   }
 
@@ -131,6 +131,10 @@ export function OAuthProviders({
         key: `custom-${provider.slug}`,
         label: t('Continue with {{name}}', { name: provider.name }),
         onClick: () => handleCustomOAuthLogin(provider),
+        icon:
+          provider.slug === 'google' ? (
+            <FcGoogle className='h-4 w-4' aria-hidden='true' />
+          ) : undefined,
       })
     }
   }
@@ -139,12 +143,12 @@ export function OAuthProviders({
 
   return (
     <div className={cn('space-y-3', className)}>
-      <div className='relative'>
+      <div className='relative my-4'>
         <div className='absolute inset-0 flex items-center'>
-          <span className='w-full border-t' />
+          <span className='w-full border-t border-black/10 dark:border-white/10' />
         </div>
-        <div className='relative flex justify-center text-xs uppercase'>
-          <span className='bg-background text-muted-foreground px-2'>
+        <div className='relative flex justify-center text-xs'>
+          <span className='text-muted-foreground rounded-full border border-black/5 bg-white/80 px-3 py-0.5 text-[11px] font-medium tracking-wide backdrop-blur-md dark:border-white/10 dark:bg-[#18181f]/80'>
             {t('Or continue with')}
           </span>
         </div>
@@ -159,10 +163,10 @@ export function OAuthProviders({
               type='button'
               disabled={disabled || isLoading || extraDisabled}
               onClick={onClick}
-              className='h-11 w-full justify-center gap-2 rounded-lg'
+              className='border-border/80 hover:border-foreground/30 h-11 w-full justify-center gap-2.5 rounded-xl bg-white/80 text-sm font-medium shadow-xs transition-all hover:bg-white active:scale-[0.99] dark:bg-white/[0.04] dark:hover:bg-white/[0.08]'
             >
               {icon}
-              {label}
+              <span>{label}</span>
             </Button>
           )
         )}

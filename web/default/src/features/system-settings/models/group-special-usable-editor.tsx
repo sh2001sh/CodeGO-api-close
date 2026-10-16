@@ -20,13 +20,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Collapsible,
   CollapsibleContent,
@@ -403,17 +397,12 @@ export function GroupSpecialUsableRulesEditor(
     <Card className={sectionCardClassName}>
       <CardHeader className={sectionHeaderClassName}>
         <CardTitle>{t('Special usable group rules')}</CardTitle>
-        <CardDescription>
-          {t(
-            'Define per-group rules to add, remove, or append selectable groups for specific user groups.'
-          )}
-        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className='space-y-3'>
           {grouped.length === 0 ? (
-            <p className='text-muted-foreground py-4 text-center text-sm'>
-              {t('No rules yet. Add a group below to get started.')}
+            <p className='text-muted-foreground py-4 text-center text-base'>
+              {t('No rules')}
             </p>
           ) : (
             grouped.map((group) => (

@@ -3,10 +3,11 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { getFundingSourceLabel } from '@/features/subscriptions/billing'
 import {
-  getFundingSourceDescription,
-  getFundingSourceLabel,
-} from '@/features/subscriptions/billing'
+  formatSubscriptionQuotaAmount,
+  isCreditPackSubscription,
+} from '@/features/subscriptions/lib'
 import type {
   FundingSource,
   UserSubscriptionRecord,
@@ -41,17 +42,10 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
   const { t } = useTranslation()
 
   return (
-    <div className='app-page-shell p-4'>
-      <div className='flex flex-wrap items-start justify-between gap-3'>
+    <section className='commerce-billing-panel app-page-shell'>
+      <header className='commerce-panel-heading'>
         <div>
-          <div className='text-foreground text-sm font-semibold'>
-            {t('Billing priority')}
-          </div>
-          <div className='text-muted-foreground mt-1 text-xs leading-5'>
-            {t(
-              'Subscription quota and wallet balance share one priority order, which you can adjust below.'
-            )}
-          </div>
+          <h2>{t('Billing priority')}</h2>
         </div>
         <div className='flex gap-2'>
           <Button
@@ -59,6 +53,7 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
             size='icon'
             className='h-8 w-8'
             onClick={props.onRefresh}
+            aria-label={t('Refresh')}
             disabled={props.isLoading || props.saving}
           >
             <RefreshCw
@@ -73,7 +68,7 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
             {t('Save settings')}
           </Button>
         </div>
-      </div>
+      </header>
 
       <div className='mt-4 grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]'>
         <div className='space-y-3'>
@@ -84,9 +79,6 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                 <div className='min-w-0'>
                   <div className='text-foreground truncate text-sm font-semibold'>
                     {index + 1}. {getFundingSourceLabel(source, t)}
-                  </div>
-                  <div className='text-muted-foreground mt-1 text-xs'>
-                    {getFundingSourceDescription(source, t)}
                   </div>
                 </div>
                 <div className='flex shrink-0 items-center gap-1'>
@@ -103,6 +95,7 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                     size='icon'
                     className='h-8 w-8'
                     onClick={() => props.onMoveFundingSource(source, -1)}
+                    aria-label={`${getFundingSourceLabel(source, t)} · ${t('Move up')}`}
                     disabled={index === 0 || props.saving}
                   >
                     <ArrowUp className='h-4 w-4' />
@@ -112,6 +105,7 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                     size='icon'
                     className='h-8 w-8'
                     onClick={() => props.onMoveFundingSource(source, 1)}
+                    aria-label={`${getFundingSourceLabel(source, t)} · ${t('Move down')}`}
                     disabled={
                       index === props.draftFundingSourceOrder.length - 1 ||
                       props.saving
@@ -190,10 +184,11 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
             <div className='space-y-2'>
               {props.orderedSubscriptions.map((record, index) => {
                 const subscription = record.subscription
+                const creditPack = isCreditPackSubscription(subscription)
                 const meta = props.planMetaMap.get(subscription.plan_id)
                 const usageStatus = getSubscriptionUsageStatus(
                   record,
-                  meta?.plan,
+                  record.plan || meta?.plan,
                   t
                 )
 
@@ -206,21 +201,42 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                       <div className='min-w-0'>
                         <div className='text-foreground truncate text-sm font-semibold'>
                           {index + 1}.{' '}
-                          {meta?.title ||
+                          {record.plan?.title ||
+                            meta?.title ||
                             t('Plan #{{id}}', { id: subscription.id })}
                         </div>
                         <div className='text-muted-foreground mt-1 text-xs'>
-                          {meta?.subtitle || t('Subscription')} · ~{' '}
-                          {getWalletRemainingDays(subscription.end_time)}{' '}
-                          {t('days')}
+                          {creditPack ? (
+                            <>
+                              {t('长期有效')} · {t('钱包同价')}
+                            </>
+                          ) : (
+                            <>
+                              {meta?.subtitle || t('Subscription')} · ~{' '}
+                              {getWalletRemainingDays(subscription.end_time)}{' '}
+                              {t('days')}
+                            </>
+                          )}
                         </div>
                         <div className='text-warning mt-1 text-xs'>
                           {usageStatus.note || usageStatus.label}
                         </div>
                         <div className='text-muted-foreground mt-1 text-xs'>
-                          {t('Expires at: {{time}}', {
-                            time: formatWalletDateTime(subscription.end_time),
-                          })}
+                          {creditPack
+                            ? t('新套餐余额 {{amount}}', {
+                                amount: formatSubscriptionQuotaAmount(
+                                  Math.max(
+                                    0,
+                                    subscription.amount_total -
+                                      subscription.amount_used
+                                  )
+                                ),
+                              })
+                            : t('Expires at: {{time}}', {
+                                time: formatWalletDateTime(
+                                  subscription.end_time
+                                ),
+                              })}
                         </div>
                       </div>
                       <div className='flex shrink-0 items-center gap-1'>
@@ -231,6 +247,7 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                           onClick={() =>
                             props.onMoveSubscription(subscription.id, -1)
                           }
+                          aria-label={`${t('Subscription')} #${subscription.id} · ${t('Move up')}`}
                           disabled={index === 0 || props.saving}
                         >
                           <ArrowUp className='h-4 w-4' />
@@ -242,6 +259,7 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
                           onClick={() =>
                             props.onMoveSubscription(subscription.id, 1)
                           }
+                          aria-label={`${t('Subscription')} #${subscription.id} · ${t('Move down')}`}
                           disabled={
                             index === props.orderedSubscriptions.length - 1 ||
                             props.saving
@@ -258,6 +276,6 @@ export function WalletBillingOrderPanel(props: WalletBillingOrderPanelProps) {
           )}
         </div>
       </div>
-    </div>
+    </section>
   )
 }

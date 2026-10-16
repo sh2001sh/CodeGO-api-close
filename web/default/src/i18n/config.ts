@@ -19,43 +19,106 @@ For commercial licensing, please contact support@quantumnous.com
 import i18n from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
-import { normalizeInterfaceLanguage, toIntlLocale } from './languages'
-import en from './locales/en.json'
-import fr from './locales/fr.json'
-import ja from './locales/ja.json'
-import ru from './locales/ru.json'
-import vi from './locales/vi.json'
-import zhTW from './locales/zh-TW.json'
-import zh from './locales/zh.json'
+import {
+  INTERFACE_LANGUAGE_OPTIONS,
+  normalizeInterfaceLanguage,
+  toIntlLocale,
+  type InterfaceLanguageCode,
+} from './languages'
 
-export const resources = {
-  en,
-  zh,
-  'zh-TW': zhTW,
-  fr,
-  ru,
-  ja,
-  vi,
-} as const
+type Dictionary = { translation: Record<string, string> }
+const dictionaries: Record<
+  InterfaceLanguageCode,
+  () => Promise<{ default: Dictionary }>
+> = {
+  en: () => import('./locales/en.json'),
+  zh: () => import('./locales/zh.json'),
+  'zh-TW': () => import('./locales/zh-TW.json'),
+  fr: () => import('./locales/fr.json'),
+  ru: () => import('./locales/ru.json'),
+  ja: () => import('./locales/ja.json'),
+  vi: () => import('./locales/vi.json'),
+}
+const pendingDictionaries = new Map<string, Promise<void>>()
 
-i18n
+function loadDictionary(language: InterfaceLanguageCode): Promise<void> {
+  let pending = pendingDictionaries.get(language)
+  if (!pending) {
+    pending = dictionaries[language]()
+      .then(({ default: dictionary }) => {
+        i18n.addResourceBundle(language, 'translation', dictionary.translation)
+      })
+      .catch((error: unknown) => {
+        pendingDictionaries.delete(language)
+        const label = INTERFACE_LANGUAGE_OPTIONS.find(
+          (option) => option.code === language
+        )!.label
+        throw new Error(`${i18n.t('Failed to load')}: ${label}`, {
+          cause: error,
+        })
+      })
+    pendingDictionaries.set(language, pending)
+  }
+  return pending
+}
+
+const initialLanguage = normalizeInterfaceLanguage(
+  typeof window === 'undefined'
+    ? null
+    : window.localStorage.getItem('i18nextLng')
+) as InterfaceLanguageCode
+
+const initialized = i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    resources,
+    resources: {},
+    initAsync: false,
+    lng: initialLanguage,
     fallbackLng: 'en',
     supportedLngs: ['en', 'zh', 'zh-TW', 'fr', 'ru', 'ja', 'vi'],
     nsSeparator: false, // Allow literal colons in keys (e.g., URLs, labels)
-    debug: import.meta.env.DEV,
+    debug: import.meta.env?.DEV ?? false,
     interpolation: {
       escapeValue: false, // not needed for react as it escapes by default
     },
     detection: {
-      order: ['localStorage', 'navigator'],
+      order: ['localStorage'],
       caches: ['localStorage'],
       convertDetectedLanguage: normalizeInterfaceLanguage,
     },
   })
+
+const changeLanguage = i18n.changeLanguage.bind(i18n)
+
+// The app waits for both dictionaries before its first render. English remains
+// available for fallback keys without loading the other five interface languages.
+export const i18nReady = initialized.then(async () => {
+  await Promise.all([loadDictionary(initialLanguage), loadDictionary('en')])
+  await changeLanguage(initialLanguage)
+})
+
+let languageChange = 0
+i18n.changeLanguage = ((language, callback) => {
+  const requestedLanguage = normalizeInterfaceLanguage(
+    language ?? i18n.language
+  ) as InterfaceLanguageCode
+  const request = ++languageChange
+  return i18nReady
+    .then(() => loadDictionary(requestedLanguage))
+    .then(() => {
+      if (request === languageChange) {
+        return changeLanguage(requestedLanguage, callback)
+      }
+      const t = i18n.t.bind(i18n)
+      callback?.(null, t)
+      return t
+    })
+    .catch((error: unknown) => {
+      callback?.(error, i18n.t.bind(i18n))
+      throw error
+    })
+}) as typeof i18n.changeLanguage
 
 if (typeof document !== 'undefined') {
   const updateDocumentLanguage = (language: string) => {

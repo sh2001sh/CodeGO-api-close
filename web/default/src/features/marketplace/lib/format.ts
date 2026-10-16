@@ -1,3 +1,4 @@
+import { getIntlLocale } from '@/i18n/format'
 import type { MarketplaceStatus } from '../types'
 
 export const statusLabels: Record<MarketplaceStatus, string> = {
@@ -21,12 +22,12 @@ export function formatPercent(value: number) {
 }
 
 export function formatNumber(value: number) {
-  return new Intl.NumberFormat('zh-CN').format(value)
+  return new Intl.NumberFormat(getIntlLocale()).format(value)
 }
 
 export function formatMultiplier(value: number) {
   const maximumFractionDigits = value < 0.01 ? 6 : value < 1 ? 4 : 2
-  return new Intl.NumberFormat('zh-CN', {
+  return new Intl.NumberFormat(getIntlLocale(), {
     minimumFractionDigits: 0,
     maximumFractionDigits,
   }).format(value)

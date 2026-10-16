@@ -136,14 +136,12 @@ export function CacheStatsDialog(props: Props) {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='sm:max-w-lg'>
+      <DialogContent className='settings-dialog sm:max-w-lg'>
         <DialogHeader>
           <DialogTitle>{t('Channel Affinity: Upstream Cache Hit')}</DialogTitle>
         </DialogHeader>
-        <p className='text-muted-foreground text-xs'>
-          {t(
-            'Hit criteria: If cached tokens exist in usage, it counts as a hit.'
-          )}
+        <p className='text-muted-foreground text-base'>
+          {t('Cache hit: usage.cached_tokens > 0')}
         </p>
         {loading ? (
           <div className='text-muted-foreground py-8 text-center text-sm'>

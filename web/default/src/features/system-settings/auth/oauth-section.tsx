@@ -28,7 +28,6 @@ import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -41,6 +40,7 @@ import { FormDirtyIndicator } from '../components/form-dirty-indicator'
 import { FormNavigationGuard } from '../components/form-navigation-guard'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const oauthSchema = z.object({
   GitHubOAuthEnabled: z.boolean(),
@@ -255,7 +255,10 @@ export function OAuthSection({ defaultValues }: OAuthSectionProps) {
         description={t('Configure third-party authentication providers')}
       >
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+          <form
+            onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+            className='space-y-6'
+          >
             <FormDirtyIndicator isDirty={form.formState.isDirty} />
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -278,9 +281,6 @@ export function OAuthSection({ defaultValues }: OAuthSectionProps) {
                         <FormLabel className='text-base'>
                           {t('Enable GitHub OAuth')}
                         </FormLabel>
-                        <FormDescription>
-                          {t('Allow users to sign in with GitHub')}
-                        </FormDescription>
                       </div>
                       <FormControl>
                         <Switch
@@ -340,9 +340,6 @@ export function OAuthSection({ defaultValues }: OAuthSectionProps) {
                         <FormLabel className='text-base'>
                           {t('Enable Discord OAuth')}
                         </FormLabel>
-                        <FormDescription>
-                          {t('Allow users to sign in with Discord')}
-                        </FormDescription>
                       </div>
                       <FormControl>
                         <Switch
@@ -403,9 +400,6 @@ export function OAuthSection({ defaultValues }: OAuthSectionProps) {
                         <FormLabel className='text-base'>
                           {t('Enable OIDC')}
                         </FormLabel>
-                        <FormDescription>
-                          {t('Allow users to sign in with OpenID Connect')}
-                        </FormDescription>
                       </div>
                       <FormControl>
                         <Switch
@@ -470,9 +464,7 @@ export function OAuthSection({ defaultValues }: OAuthSectionProps) {
                           {...field}
                         />
                       </FormControl>
-                      <FormDescription>
-                        {t('Auto-discovers endpoints from the provider')}
-                      </FormDescription>
+
                       <FormMessage />
                     </FormItem>
                   )}
@@ -547,9 +539,6 @@ export function OAuthSection({ defaultValues }: OAuthSectionProps) {
                         <FormLabel className='text-base'>
                           {t('Enable Telegram OAuth')}
                         </FormLabel>
-                        <FormDescription>
-                          {t('Allow users to sign in with Telegram')}
-                        </FormDescription>
                       </div>
                       <FormControl>
                         <Switch
@@ -609,9 +598,6 @@ export function OAuthSection({ defaultValues }: OAuthSectionProps) {
                         <FormLabel className='text-base'>
                           {t('Enable LinuxDO OAuth')}
                         </FormLabel>
-                        <FormDescription>
-                          {t('Allow users to sign in with LinuxDO')}
-                        </FormDescription>
                       </div>
                       <FormControl>
                         <Switch
@@ -669,9 +655,7 @@ export function OAuthSection({ defaultValues }: OAuthSectionProps) {
                       <FormControl>
                         <Input placeholder='0' autoComplete='off' {...field} />
                       </FormControl>
-                      <FormDescription>
-                        {t('Minimum LinuxDO trust level required')}
-                      </FormDescription>
+
                       <FormMessage />
                     </FormItem>
                   )}
@@ -688,9 +672,6 @@ export function OAuthSection({ defaultValues }: OAuthSectionProps) {
                         <FormLabel className='text-base'>
                           {t('Enable WeChat Auth')}
                         </FormLabel>
-                        <FormDescription>
-                          {t('Allow users to sign in with WeChat')}
-                        </FormDescription>
                       </div>
                       <FormControl>
                         <Switch
@@ -759,7 +740,7 @@ export function OAuthSection({ defaultValues }: OAuthSectionProps) {
               </TabsContent>
             </Tabs>
 
-            <div className='flex gap-2'>
+            <div className='settings-save-bar flex gap-2'>
               <Button type='submit' disabled={updateOption.isPending}>
                 {updateOption.isPending ? t('Saving...') : t('Save Changes')}
               </Button>

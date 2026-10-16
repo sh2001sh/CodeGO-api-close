@@ -15,9 +15,14 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		walletRoute.PUT("/transfers/payment-password", middleware.CriticalRateLimit(), configureWalletTransferPassword)
 		walletRoute.POST("/transfers/payment-password/email-code", middleware.EmailVerificationRateLimit(), sendWalletTransferPasswordEmailCode)
 		walletRoute.POST("/transfers", middleware.CriticalRateLimit(), createWalletTransfer)
-		walletRoute.GET("/refunds/eligible", listRefundableOrders)
-		walletRoute.POST("/refunds", middleware.CriticalRateLimit(), createUserRefund)
-		walletRoute.POST("/refunds/:refund_no/sync", middleware.CriticalRateLimit(), syncUserRefund)
+	}
+
+	walletAdminRoute := apiRouter.Group("/wallet/admin")
+	walletAdminRoute.Use(middleware.AdminAuth())
+	{
+		walletAdminRoute.GET("/users/:id/refunds/eligible", listAdminRefundableOrders)
+		walletAdminRoute.POST("/users/:id/refunds", middleware.CriticalRateLimit(), createAdminRefund)
+		walletAdminRoute.POST("/users/:id/refunds/:refund_no/sync", middleware.CriticalRateLimit(), syncAdminRefund)
 	}
 
 	subscriptionRoute := apiRouter.Group("/subscription")
@@ -70,6 +75,11 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		invoiceRoute.GET("/eligible-orders", listInvoiceEligibleOrders)
 		invoiceRoute.GET("/requests", listSelfInvoiceRequests)
 		invoiceRoute.POST("/requests", middleware.CriticalRateLimit(), createInvoiceRequest)
+		invoiceRoute.GET("/orders/:source/:trade_no/document", commercialInvoiceHandler("download"))
+		invoiceRoute.POST("/orders/:source/:trade_no/document", middleware.CriticalRateLimit(), commercialInvoiceHandler("issue"))
+		invoiceRoute.GET("/orders/:source/:trade_no/documents", commercialInvoiceHandler("list"))
+		invoiceRoute.POST("/orders/:source/:trade_no/corrections", middleware.CriticalRateLimit(), commercialInvoiceHandler("correct"))
+		invoiceRoute.POST("/orders/:source/:trade_no/credit-note", middleware.CriticalRateLimit(), commercialInvoiceHandler("credit"))
 	}
 
 	invoiceAdminRoute := apiRouter.Group("/invoices/admin")
@@ -95,7 +105,6 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	{
 		groupBuyRoute.GET("/list", listGroupBuys)
 		groupBuyRoute.GET("/mine", listMyGroupBuys)
-		groupBuyRoute.POST("/join", middleware.CriticalRateLimit(), joinGroupBuy)
 		groupBuyRoute.GET("/:id", getGroupBuy)
 	}
 
@@ -117,27 +126,6 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		blindBoxRoute.POST("/inventory/open", middleware.BalanceBlindBoxOpenRateLimit(), openBalanceBlindBox)
 		blindBoxRoute.POST("/inventory/gift", middleware.CriticalRateLimit(), giftBalanceBlindBoxes)
 		blindBoxRoute.POST("/simulation/draw", middleware.BalanceBlindBoxOpenRateLimit(), simulateBalanceBlindBoxes)
-	}
-
-	dailyLuckyNumberRoute := apiRouter.Group("/daily-lucky-number")
-	dailyLuckyNumberRoute.Use(middleware.UserAuth())
-	{
-		dailyLuckyNumberRoute.GET("/self", getDailyLuckyNumberSelf)
-		dailyLuckyNumberRoute.GET("/history", getDailyLuckyNumberHistory)
-		dailyLuckyNumberRoute.GET("/public-wins", getDailyLuckyNumberPublicWins)
-		dailyLuckyNumberRoute.GET("/notifications", getDailyLuckyRewardNotifications)
-		dailyLuckyNumberRoute.POST("/notifications/read-all", middleware.CriticalRateLimit(), markAllDailyLuckyRewardNotificationsRead)
-		dailyLuckyNumberRoute.POST("/notifications/:id/read", middleware.CriticalRateLimit(), markDailyLuckyRewardNotificationRead)
-	}
-
-	dailyLuckyNumberAdminRoute := apiRouter.Group("/daily-lucky-number/admin")
-	dailyLuckyNumberAdminRoute.Use(middleware.AdminAuth())
-	{
-		dailyLuckyNumberAdminRoute.GET("/config", getAdminDailyLuckyNumberConfig)
-		dailyLuckyNumberAdminRoute.PUT("/config", updateAdminDailyLuckyNumberConfig)
-		dailyLuckyNumberAdminRoute.GET("/draws", listAdminDailyLuckyNumberDraws)
-		dailyLuckyNumberAdminRoute.POST("/draws/:id/retry", retryAdminDailyLuckyNumberDraw)
-		dailyLuckyNumberAdminRoute.POST("/backfill", backfillAdminDailyLuckyNumbers)
 	}
 
 	blindBoxAdminRoute := apiRouter.Group("/blind-box/admin")

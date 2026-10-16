@@ -1,11 +1,12 @@
+import interfaceI18n from '@/i18n/config'
 import { api } from '@/lib/api'
-import { MOCK_AUTO_ROUTE_POOL, MOCK_MARKETPLACE_GROUPS } from './lib/mock-data'
 import type {
   GroupModelRequestStatus,
   ChannelFormValues,
   ChannelUpdateValues,
   GroupFilters,
   MarketplaceChannel,
+  OwnerChannelIndexItem,
   MarketplaceAutoRoutePool,
   MarketplaceAutoRoutePoolConfig,
   MarketplaceRoutePool,
@@ -52,9 +53,18 @@ export async function createMarketplaceBargainRequest(input: {
   return requireData(response.data)
 }
 
-export async function getMyMarketplaceBargainRequests(status = '') {
+export async function getMyMarketplaceBargainRequests(
+  status = '',
+  page = 1,
+  pageSize = 20
+) {
+  const search = new URLSearchParams({
+    status,
+    page: String(page),
+    page_size: String(pageSize),
+  })
   const response = await api.get<ApiResponse<MarketplaceBargainRequestList>>(
-    `/api/marketplace/channels/mine/bargain-requests?status=${encodeURIComponent(status)}`
+    `/api/marketplace/channels/mine/bargain-requests?${search}`
   )
   return requireData(response.data)
 }
@@ -113,10 +123,10 @@ export async function setMarketplaceUserMultiplier(input: {
   return requireData(response.data)
 }
 
-export async function getOwnerMultipliers() {
+export async function getOwnerMultipliers(page = 1) {
   const response = await api.get<
     ApiResponse<{ items: MarketplaceOwnerMultiplierItem[]; total: number }>
-  >('/api/marketplace/channels/mine/user-multipliers')
+  >(`/api/marketplace/channels/mine/user-multipliers?page=${page}`)
   return requireData(response.data)
 }
 export async function batchSetMarketplaceUserMultipliers(input: {
@@ -215,7 +225,7 @@ export async function submitMarketplaceChannelFeedback(input: {
 
 function requireData<T>(response: ApiResponse<T>): T {
   if (!response.success || response.data == null) {
-    throw new Error(response.message || '请求失败')
+    throw new Error(response.message || interfaceI18n.t('请求失败'))
   }
   return response.data
 }
@@ -241,84 +251,14 @@ export async function getMarketplaceGroups(filters: GroupFilters) {
       value.forEach((item) =>
         params.append(key === 'models' ? 'model' : key, item)
       )
-    } else if (value !== '') {
+    } else if (value != null && value !== '') {
       params.set(key, String(value))
     }
   })
-  try {
-    const response = await api.get<ApiResponse<MarketplaceGroupList>>(
-      `/api/marketplace/groups?${params.toString()}`
-    )
-    return requireData(response.data)
-  } catch (error) {
-    if (!import.meta.env.DEV) throw error
-    const search = filters.search.trim().toLowerCase()
-    const filtered = MOCK_MARKETPLACE_GROUPS.filter((item) => {
-      const searchable = [
-        item.id,
-        item.channel_id,
-        item.public_slug,
-        item.system_display_name,
-        item.source_label,
-        item.provider_type,
-        ...item.models,
-      ]
-        .join(' ')
-        .toLowerCase()
-      if (search && !searchable.includes(search)) return false
-      if (filters.source && item.source_label !== filters.source) return false
-      if (
-        filters.provider &&
-        item.provider_type.toLowerCase() !== filters.provider.toLowerCase()
-      )
-        return false
-      if (
-        (filters.models?.length ?? 0) > 0 &&
-        !filters.models?.some((selectedModel) =>
-          item.models.some((model) =>
-            model.toLowerCase().includes(selectedModel.trim().toLowerCase())
-          )
-        )
-      )
-        return false
-      if (
-        filters.model &&
-        !item.models.some((model) =>
-          model.toLowerCase().includes(filters.model.trim().toLowerCase())
-        )
-      )
-        return false
-      return true
-    })
-    const start = (filters.page - 1) * filters.page_size
-    const items = filtered.slice(start, start + filters.page_size)
-    const cheapest = [...items].sort((a, b) => a.multiplier - b.multiplier)[0]
-    const fastest = [...items].sort((a, b) => a.avg_ttft_ms - b.avg_ttft_ms)[0]
-    const toHighlight = (item: (typeof items)[number] | undefined) =>
-      item
-        ? {
-            group_id: item.id,
-            system_display_name: item.system_display_name,
-            score: item.score,
-            multiplier: item.multiplier,
-            avg_ttft_ms: item.avg_ttft_ms,
-            attempt_ttft_p50_ms: item.attempt_ttft_p50_ms,
-          }
-        : undefined
-    return {
-      items,
-      highlights: {
-        best: toHighlight(items[0]),
-        cheapest: toHighlight(cheapest),
-        fastest: toHighlight(fastest),
-      },
-      total: filtered.length,
-      page: filters.page,
-      page_size: filters.page_size,
-      ranked_count: filtered.length,
-      window_hours: filters.window_hours,
-    }
-  }
+  const response = await api.get<ApiResponse<MarketplaceGroupList>>(
+    `/api/marketplace/groups?${params.toString()}`
+  )
+  return requireData(response.data)
 }
 
 export async function getMarketplaceModels() {
@@ -347,6 +287,33 @@ export async function getMyMarketplaceChannels() {
   return requireData(response.data)
 }
 
+export async function getMyMarketplaceChannelIndex(signal?: AbortSignal) {
+  const response = await api.get<ApiResponse<OwnerChannelIndexItem[]>>(
+    '/api/marketplace/channels/mine?view=index',
+    { signal }
+  )
+  return requireData(response.data)
+}
+
+export async function getMyMarketplaceChannelPage(
+  ids: readonly string[],
+  signal?: AbortSignal
+) {
+  if (ids.length === 0) return []
+  const params = new URLSearchParams()
+  for (const id of ids) params.append('ids', id)
+  const response = await api.get<ApiResponse<MarketplaceChannel[]>>(
+    `/api/marketplace/channels/mine?${params}`,
+    { signal }
+  )
+  const channels = requireData(response.data)
+  const byId = new Map(channels.map((channel) => [channel.id, channel]))
+  return ids.flatMap((id) => {
+    const channel = byId.get(id)
+    return channel ? [channel] : []
+  })
+}
+
 export async function getMarketplaceChannelUserBlocks(input: {
   channelId: string
   page?: number
@@ -370,65 +337,21 @@ export async function getAdminOwnerIncomeReclaim(operationId: string) {
 }
 
 export async function getMarketplaceAutoRoutePool() {
-  try {
-    const response = await api.get<ApiResponse<MarketplaceAutoRoutePool>>(
-      '/api/marketplace/auto-route-pool'
-    )
-    return requireData(response.data)
-  } catch (error) {
-    if (!import.meta.env.DEV) throw error
-    return MOCK_AUTO_ROUTE_POOL
-  }
+  const response = await api.get<ApiResponse<MarketplaceAutoRoutePool>>(
+    '/api/marketplace/auto-route-pool'
+  )
+  return requireData(response.data)
 }
 
 export async function updateMarketplaceAutoRoutePool(input: {
   groupIds: string[]
   config?: Partial<MarketplaceAutoRoutePoolConfig>
 }) {
-  try {
-    const response = await api.put<ApiResponse<MarketplaceAutoRoutePool>>(
-      '/api/marketplace/auto-route-pool',
-      { group_ids: input.groupIds, config: input.config }
-    )
-    return requireData(response.data)
-  } catch (error) {
-    if (!import.meta.env.DEV) throw error
-    const items = input.groupIds.map((id, index) => {
-      const source = MOCK_MARKETPLACE_GROUPS.find((group) => group.id === id)
-      return {
-        group_id: id,
-        source_type: source?.source_type ?? 'marketplace_user',
-        public_slug: source?.public_slug ?? id,
-        system_display_name: source?.system_display_name ?? id,
-        source_label: source?.source_label ?? '第三方市场',
-        lifecycle_status: 'active' as const,
-        multiplier: source?.multiplier ?? 1,
-        availability: 0.98,
-        success_rate: source?.success_rate ?? 0.96,
-        cache_hit_rate: source?.cache_hit_rate ?? 0.3,
-        avg_latency_ms: source?.avg_latency_ms ?? 800,
-        latest_request_status: 'healthy',
-        metrics_available: true,
-        route_score: source?.score ?? 80,
-        observing: false,
-        request_count: source?.request_count ?? 0,
-        models: source?.models ?? [],
-        selected: true,
-        priority: index + 1,
-      }
-    })
-    return {
-      token_group: 'auto' as const,
-      selected_count: items.length,
-      items,
-      config: input.config ?? {
-        strategy: 'priority' as const,
-        max_attempts: 3,
-        failure_cooldown_seconds: 30,
-        max_multiplier: 0,
-      },
-    }
-  }
+  const response = await api.put<ApiResponse<MarketplaceAutoRoutePool>>(
+    '/api/marketplace/auto-route-pool',
+    { group_ids: input.groupIds, config: input.config }
+  )
+  return requireData(response.data)
 }
 
 export async function getMarketplaceRoutePools() {
@@ -445,12 +368,18 @@ export async function createMarketplaceRoutePool(
         name: string
         groupIds?: string[]
         config?: Partial<MarketplaceAutoRoutePoolConfig>
+        autoBuild?: Partial<MarketplaceRoutePoolAutoBuild>
       }
 ) {
   const payload =
     typeof input === 'string'
       ? { name: input }
-      : { name: input.name, group_ids: input.groupIds, config: input.config }
+      : {
+          name: input.name,
+          group_ids: input.groupIds,
+          config: input.config,
+          auto_build: input.autoBuild,
+        }
   const response = await api.post<ApiResponse<MarketplaceRoutePool>>(
     '/api/marketplace/route-pools',
     payload
@@ -496,7 +425,7 @@ export async function deleteMarketplaceRoutePool(id: string) {
     `/api/marketplace/route-pools/${encodeURIComponent(id)}`
   )
   if (!response.data.success)
-    throw new Error(response.data.message || '删除路由池失败')
+    throw new Error(response.data.message || interfaceI18n.t('删除路由池失败'))
 }
 
 export async function bindMarketplaceRoutePoolToken(input: {
@@ -510,7 +439,7 @@ export async function bindMarketplaceRoutePoolToken(input: {
     { token_id: input.tokenId }
   )
   if (!response.data.success)
-    throw new Error(response.data.message || '绑定失败')
+    throw new Error(response.data.message || interfaceI18n.t('绑定失败'))
   return requireData(response.data)
 }
 
@@ -615,7 +544,7 @@ export async function exportMyMarketplaceUsageLogs(
     String(response.headers['content-type'] ?? '').includes('application/json')
   ) {
     const payload = JSON.parse(await response.data.text()) as ApiResponse
-    throw new Error(payload.message || '渠道日志导出失败')
+    throw new Error(payload.message || interfaceI18n.t('渠道日志导出失败'))
   }
   return response.data
 }
@@ -650,7 +579,7 @@ export async function deleteMarketplaceChannel(
     `${prefix}/channels/${channelId}`
   )
   if (!response.data.success) {
-    throw new Error(response.data.message || '删除渠道失败')
+    throw new Error(response.data.message || interfaceI18n.t('删除渠道失败'))
   }
 }
 
@@ -734,7 +663,7 @@ export async function setMarketplaceChannelPaused(
     `/api/marketplace/channels/${channelId}/${action}`
   )
   if (!response.data.success)
-    throw new Error(response.data.message || '请求失败')
+    throw new Error(response.data.message || interfaceI18n.t('请求失败'))
 }
 
 export async function setMarketplaceChannelUserBlock(input: {
@@ -752,7 +681,7 @@ export async function setMarketplaceChannelUserBlock(input: {
     }
   )
   if (!response.data.success)
-    throw new Error(response.data.message || '操作失败')
+    throw new Error(response.data.message || interfaceI18n.t('操作失败'))
 }
 
 export async function setAdminMarketplaceChannelPaused(
@@ -763,7 +692,7 @@ export async function setAdminMarketplaceChannelPaused(
     `/api/marketplace/admin/channels/${channelId}/${paused ? 'pause' : 'resume'}`
   )
   if (!response.data.success)
-    throw new Error(response.data.message || '请求失败')
+    throw new Error(response.data.message || interfaceI18n.t('请求失败'))
 }
 
 export async function bindMarketplaceToken(groupId: string, tokenId: number) {
@@ -773,7 +702,7 @@ export async function bindMarketplaceToken(groupId: string, tokenId: number) {
     token_id: tokenId,
   })
   if (!response.data.success)
-    throw new Error(response.data.message || '绑定失败')
+    throw new Error(response.data.message || interfaceI18n.t('绑定失败'))
   return requireData(response.data)
 }
 
@@ -800,17 +729,24 @@ export async function acceptMarketplaceGroupInvite(token: string) {
   return requireData(response.data)
 }
 
-export async function getTokenOptions(): Promise<TokenOption[]> {
-  const response = await api.get<ApiResponse<{ items: TokenOption[] }>>(
-    '/api/token/?p=1&size=50'
-  )
-  return requireData(response.data).items
+export async function getTokenOptions(page = 1) {
+  const response = await api.get<
+    ApiResponse<{
+      items: TokenOption[]
+      total: number
+      page: number
+      page_size: number
+    }>
+  >(`/api/token/?p=${page}&page_size=50`)
+  return requireData(response.data)
 }
 
 export async function getAdminMarketplaceChannels(
   filters: AdminMarketplaceChannelFilters
 ) {
   const search = new URLSearchParams()
+  search.set('page', String(filters.page ?? 1))
+  search.set('page_size', String(filters.pageSize ?? 50))
   if (filters.search) search.set('search', filters.search)
   if (filters.status) search.set('status', filters.status)
   if (filters.source) search.set('source', filters.source)
@@ -919,7 +855,7 @@ export async function exportSecurityAuditEvents(
   const contentType = String(response.headers['content-type'] ?? '')
   if (contentType.includes('application/json')) {
     const payload = JSON.parse(await response.data.text()) as ApiResponse
-    throw new Error(payload.message || '安全审计日志导出失败')
+    throw new Error(payload.message || interfaceI18n.t('安全审计日志导出失败'))
   }
   return response.data
 }

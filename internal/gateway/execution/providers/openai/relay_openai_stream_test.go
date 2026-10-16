@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
@@ -14,6 +16,62 @@ import (
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
+
+type notifiedStreamWriter struct {
+	*httptest.ResponseRecorder
+	flushed chan struct{}
+	once    sync.Once
+}
+
+func (w *notifiedStreamWriter) Flush() {
+	w.ResponseRecorder.Flush()
+	w.once.Do(func() { close(w.flushed) })
+}
+
+func TestOaiStreamHandlerFlushesOutputBeforeNextFrame(t *testing.T) {
+	for _, delta := range []string{
+		`{"content":"first-output"}`,
+		`{"reasoning_content":"first-output"}`,
+		`{"tool_calls":[{"index":0,"id":"first-output","type":"function","function":{"name":"lookup","arguments":"{}"}}]}`,
+	} {
+		t.Run(delta, func(t *testing.T) {
+			c, _ := newOpenAIStreamTestContext(t)
+			writer := &notifiedStreamWriter{ResponseRecorder: httptest.NewRecorder(), flushed: make(chan struct{})}
+			c, _ = gin.CreateTestContext(writer)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			reader, upstream := io.Pipe()
+			defer reader.Close()
+			defer upstream.Close()
+			info := &relaycommon.RelayInfo{
+				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4.1"},
+				OriginModelName: "gpt-4.1", RelayMode: gatewaycontract.RelayModeChatCompletions,
+				IsStream: true, RelayFormat: types.RelayFormatOpenAI,
+			}
+			finished := make(chan struct{})
+			var apiErr *types.NewAPIError
+			go func() {
+				defer close(finished)
+				_, apiErr = OaiStreamHandler(c, info, &http.Response{StatusCode: 200, Body: reader, Header: http.Header{"Content-Type": {"text/event-stream"}}})
+			}()
+			_, err := io.WriteString(upstream, `data: {"id":"test","choices":[{"index":0,"delta":`+delta+`}]}`+"\n\n")
+			require.NoError(t, err)
+			// No next event or EOF is available: an implementation that buffers the
+			// previous frame cannot flush until this assertion has already failed.
+			select {
+			case <-writer.flushed:
+			case <-time.After(time.Second):
+				t.Error("first output waited for the next upstream frame")
+			}
+			_, err = io.WriteString(upstream, "data: [DONE]\n\n")
+			require.NoError(t, err)
+			require.NoError(t, upstream.Close())
+			<-finished
+			require.Nil(t, apiErr)
+			require.Equal(t, 1, strings.Count(writer.Body.String(), "first-output"), "finalization must not resend the output")
+			require.Equal(t, 1, strings.Count(writer.Body.String(), "[DONE]"))
+		})
+	}
+}
 
 func newOpenAIStreamTestContext(t *testing.T) (*gin.Context, *httptest.ResponseRecorder) {
 	t.Helper()
@@ -113,4 +171,24 @@ func TestOaiStreamHandlerAllowsUpstreamInputOnlyUsage(t *testing.T) {
 	require.Equal(t, 10, usage.PromptTokens)
 	require.Zero(t, usage.CompletionTokens)
 	require.Equal(t, 10, usage.TotalTokens)
+}
+
+func TestOaiStreamHandlerTranslatedSingleOutputIsNotRepeatedAtEOF(t *testing.T) {
+	for _, format := range []types.RelayFormat{types.RelayFormatClaude, types.RelayFormatGemini} {
+		t.Run(string(format), func(t *testing.T) {
+			c, recorder := newOpenAIStreamTestContext(t)
+			info := &relaycommon.RelayInfo{
+				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4.1"},
+				OriginModelName: "gpt-4.1", RelayMode: gatewaycontract.RelayModeChatCompletions,
+				IsStream: true, RelayFormat: format, ClaudeConvertInfo: &relaycommon.ClaudeConvertInfo{},
+			}
+			body := "data: {\"id\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"unique-output\"}}]}\n\ndata: [DONE]\n\n"
+			_, apiErr := OaiStreamHandler(c, info, &http.Response{Body: io.NopCloser(strings.NewReader(body))})
+			require.Nil(t, apiErr)
+			require.Equal(t, 1, strings.Count(recorder.Body.String(), "unique-output"))
+			if format == types.RelayFormatClaude {
+				require.True(t, info.ClaudeConvertInfo.Done)
+			}
+		})
+	}
 }

@@ -111,7 +111,7 @@ func TestPostgresIncomeReclaimBatch(t *testing.T) {
 		require.Equal(t, statusReleased, item.Status)
 	})
 
-	t.Run("full reclaim continues after a complete batch", func(t *testing.T) {
+	t.Run("full reclaim transfers the total once beyond the old batch limit", func(t *testing.T) {
 		items := make([]marketplaceschema.Settlement, reclaimBatchSize+1)
 		reference := time.Now().UTC().Add(time.Hour)
 		for index := range items {
@@ -119,8 +119,10 @@ func TestPostgresIncomeReclaimBatch(t *testing.T) {
 		}
 		require.NoError(t, db.CreateInBatches(items, 500).Error)
 		transferred := int64(0)
+		transfers := 0
 		RegisterReclaimHook(func(_ *gorm.DB, owner, _ int, amount int64, _ string) error {
 			require.Equal(t, 13, owner)
+			transfers++
 			transferred += amount
 			return nil
 		})
@@ -128,13 +130,10 @@ func TestPostgresIncomeReclaimBatch(t *testing.T) {
 		require.NoError(t, err)
 		task, err = ProcessIncomeReclaimTask(task.ID)
 		require.NoError(t, err)
-		require.Equal(t, reclaimTaskRunning, task.Status)
-		require.Equal(t, reclaimBatchSize, task.Count)
-		task, err = ProcessIncomeReclaimTask(task.ID)
-		require.NoError(t, err)
 		require.Equal(t, reclaimTaskCompleted, task.Status)
 		require.Equal(t, reclaimBatchSize+1, task.Count)
 		require.Equal(t, int64(reclaimBatchSize+1), transferred)
+		require.Equal(t, 1, transfers)
 	})
 }
 

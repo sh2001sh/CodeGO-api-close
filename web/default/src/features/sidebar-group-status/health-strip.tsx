@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import i18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
@@ -20,11 +21,12 @@ const SEGMENT_CLASS = {
   unknown: 'bg-muted',
 } as const
 
-const TIME_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-})
+const timeFormatter = () =>
+  new Intl.DateTimeFormat(getIntlLocale(), {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
 
 export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
   useTranslation()
@@ -39,7 +41,7 @@ export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
 
   return (
     <div className='space-y-2'>
-      <div className='flex w-full gap-1'>
+      <div className='status-health-strip flex w-full gap-1'>
         {segments.map(({ bucket, tone }, index) => (
           <Tooltip key={`${props.item.model}-${bucket.ts}-${index}`}>
             <TooltipTrigger
@@ -47,9 +49,10 @@ export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
                 <button
                   type='button'
                   aria-label={buildBucketLabel(bucket, bucketSeconds)}
+                  data-tone={tone}
                   style={{ flex: '1 1 0%' }}
                   className={cn(
-                    'focus-visible:ring-ring h-6 min-w-0 rounded transition-all hover:scale-110 hover:shadow-md focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none',
+                    'status-health-segment focus-visible:ring-ring min-h-11 min-w-[6px] rounded-sm transition-colors hover:brightness-90 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none',
                     SEGMENT_CLASS[tone]
                   )}
                 />
@@ -60,7 +63,7 @@ export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
                 <div className='font-medium'>
                   {formatBucketRange(bucket.ts, bucketSeconds)}
                 </div>
-                <div className='text-background/80 text-xs'>
+                <div className='text-popover-foreground text-xs'>
                   {bucket.request_count > 0 && bucket.success_rate != null
                     ? i18n.t('成功率 {{param0}}%', {
                         param0: bucket.success_rate.toFixed(1),
@@ -73,7 +76,7 @@ export function HealthStrip(props: { item: SidebarGroupModelStatusItem }) {
         ))}
       </div>
 
-      <div className='text-muted-foreground flex items-center gap-x-3 text-[10px]'>
+      <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px]'>
         <LegendSwatch
           className={SEGMENT_CLASS.healthy}
           label={i18n.t('稳定')}
@@ -108,7 +111,7 @@ function formatBucketRange(ts: number, bucketSeconds: number) {
 }
 
 function formatTime(date: Date) {
-  return TIME_FORMATTER.format(date)
+  return timeFormatter().format(date)
 }
 
 function buildBucketLabel(

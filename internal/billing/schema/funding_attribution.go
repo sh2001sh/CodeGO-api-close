@@ -42,6 +42,7 @@ type FundingLot struct {
 	ReferenceID       string    `json:"reference_id" gorm:"column:reference_id;size:128"`
 	IdempotencyKey    string    `json:"-" gorm:"column:idempotency_key;size:255;uniqueIndex:uq_billing_funding_lots_idempotency"`
 	OriginalAmount    int64     `json:"original_amount" gorm:"column:original_amount"`
+	PaidQuota         int64     `json:"paid_quota" gorm:"column:paid_quota;not null;default:0"`
 	RemainingAmount   int64     `json:"remaining_amount" gorm:"column:remaining_amount;index"`
 	RevenueMultiplier float64   `json:"revenue_multiplier" gorm:"column:revenue_multiplier"`
 	CreatedAt         time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
@@ -69,6 +70,7 @@ type FundingAllocation struct {
 	AccountID         string    `json:"account_id" gorm:"column:account_id;size:64;index"`
 	Source            string    `json:"source" gorm:"column:source;size:32;index"`
 	Amount            int64     `json:"amount" gorm:"column:amount"`
+	PaidQuota         int64     `json:"paid_quota" gorm:"column:paid_quota;not null;default:0"`
 	RevenueMultiplier float64   `json:"revenue_multiplier" gorm:"column:revenue_multiplier"`
 	CreatedAt         time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 }

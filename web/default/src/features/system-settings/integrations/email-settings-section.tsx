@@ -35,6 +35,7 @@ import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const createEmailSchema = (t: (key: string) => string) =>
   z.object({
@@ -135,16 +136,17 @@ export function EmailSettingsSection({
     for (const update of updates) {
       await updateOption.mutateAsync(update)
     }
+    form.reset(sanitized)
   }
 
   return (
     <SettingsSection
       title={t('SMTP Email')}
-      description={t('Configure outgoing email server for notifications')}
+      description={t('Configure SMTP email settings')}
     >
       <Form {...form}>
         <form
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
           className='space-y-6'
           autoComplete='off'
         >
@@ -162,9 +164,7 @@ export function EmailSettingsSection({
                     onChange={(event) => field.onChange(event.target.value)}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('Hostname or IP of your SMTP provider')}
-                </FormDescription>
+
                 <FormMessage />
               </FormItem>
             )}
@@ -186,8 +186,8 @@ export function EmailSettingsSection({
                       onChange={(event) => field.onChange(event.target.value)}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('Common ports include 25, 465, and 587')}
+                  <FormDescription className='settings-field-fact'>
+                    {t('25 / 465 / 587')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -203,9 +203,6 @@ export function EmailSettingsSection({
                     <FormLabel className='text-base'>
                       {t('Enable SSL/TLS')}
                     </FormLabel>
-                    <FormDescription>
-                      {t('Use secure connection when sending emails')}
-                    </FormDescription>
                   </div>
                   <FormControl>
                     <Switch
@@ -226,8 +223,8 @@ export function EmailSettingsSection({
                     <FormLabel className='text-base'>
                       {t('Force AUTH LOGIN')}
                     </FormLabel>
-                    <FormDescription>
-                      {t('Force SMTP authentication using AUTH LOGIN method')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('AUTH LOGIN')}
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -255,9 +252,7 @@ export function EmailSettingsSection({
                     onChange={(event) => field.onChange(event.target.value)}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('Account used when authenticating with the SMTP server')}
-                </FormDescription>
+
                 <FormMessage />
               </FormItem>
             )}
@@ -277,9 +272,7 @@ export function EmailSettingsSection({
                     onChange={(event) => field.onChange(event.target.value)}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('Display name and email used in outgoing messages')}
-                </FormDescription>
+
                 <FormMessage />
               </FormItem>
             )}
@@ -295,22 +288,25 @@ export function EmailSettingsSection({
                   <Input
                     autoComplete='off'
                     type='password'
-                    placeholder={t('Enter new token to update')}
                     {...field}
                     onChange={(event) => field.onChange(event.target.value)}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('Leave blank to keep the existing credential')}
+                <FormDescription className='settings-field-fact'>
+                  {t('Empty: unchanged')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save SMTP settings')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending
+                ? t('Saving...')
+                : t('Save SMTP settings')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

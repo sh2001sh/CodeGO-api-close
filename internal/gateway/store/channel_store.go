@@ -1,12 +1,21 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"math/rand"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/go-redis/redis/v8"
 	"github.com/samber/lo"
 	"github.com/sh2001sh/new-api/constant"
 	gatewaydomain "github.com/sh2001sh/new-api/internal/gateway/domain"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
@@ -17,11 +26,6 @@ import (
 	"github.com/sh2001sh/new-api/types"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"math/rand"
-	"sort"
-	"strings"
-	"sync"
-	"time"
 )
 
 var group2model2channels map[string]map[string][]int
@@ -359,13 +363,19 @@ func InitChannelCache() {
 
 	newChannelIDToChannel := make(map[int]*gatewayschema.Channel)
 	var channels []*gatewayschema.Channel
-	platformdb.DB.Find(&channels)
+	if err := platformdb.DB.Find(&channels).Error; err != nil {
+		platformobservability.SysError("refresh gateway channel cache: " + err.Error())
+		return
+	}
 	for _, channel := range channels {
 		newChannelIDToChannel[channel.Id] = channel
 	}
 
 	var abilities []*gatewayschema.Ability
-	platformdb.DB.Find(&abilities)
+	if err := platformdb.DB.Find(&abilities).Error; err != nil {
+		platformobservability.SysError("refresh gateway ability cache: " + err.Error())
+		return
+	}
 	groups := make(map[string]bool)
 	for _, ability := range abilities {
 		groups[ability.Group] = true
@@ -419,8 +429,32 @@ func InitChannelCache() {
 
 // SyncChannelCache periodically refreshes the runtime cache.
 func SyncChannelCache(frequency int) {
+	syncChannelCache(context.Background(), frequency)
+}
+
+func syncChannelCache(ctx context.Context, frequency int) {
+	if frequency <= 0 {
+		frequency = 60
+	}
+	ticker := time.NewTicker(time.Duration(frequency) * time.Second)
+	defer ticker.Stop()
+	var changes <-chan *redis.Message
+	if platformcache.RedisReady() {
+		subscription := platformcache.RDB.Subscribe(ctx, channelCacheChangesTopic)
+		defer subscription.Close()
+		changes = subscription.Channel()
+	}
 	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		case _, ok := <-changes:
+			if !ok {
+				changes = nil
+				continue
+			}
+		}
 		platformobservability.SysLog("syncing gateway channels from database")
 		InitChannelCache()
 	}

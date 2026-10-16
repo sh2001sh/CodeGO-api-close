@@ -25,7 +25,6 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -33,7 +32,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -98,14 +96,11 @@ export function ChatDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-[500px]'>
+      <DialogContent className='settings-dialog sm:max-w-[500px]'>
         <DialogHeader>
           <DialogTitle>
             {isEditMode ? t('Edit chat preset') : t('Add chat preset')}
           </DialogTitle>
-          <DialogDescription>
-            {t('Configure a predefined chat link for end users.')}
-          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -120,14 +115,9 @@ export function ChatDialog({
                 <FormItem>
                   <FormLabel>{t('Chat Client Name')}</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder={t('Please enter chat client name')}
-                      {...field}
-                    />
+                    <Input {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t('Display name for this chat client.')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -140,11 +130,9 @@ export function ChatDialog({
                 <FormItem>
                   <FormLabel>{t('URL')}</FormLabel>
                   <FormControl>
-                    <Input placeholder={t('Please enter the URL')} {...field} />
+                    <Input {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t('The URL for this chat client.')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}

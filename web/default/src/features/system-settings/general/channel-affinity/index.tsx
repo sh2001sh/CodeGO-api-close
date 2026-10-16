@@ -20,7 +20,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { Edit, FileText, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -111,8 +110,27 @@ export function ChannelAffinitySection(props: Props) {
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false)
   const [clearRuleName, setClearRuleName] = useState<string | null>(null)
   const [fillTemplateDialogOpen, setFillTemplateDialogOpen] = useState(false)
+  const [savedValues, setSavedValues] = useState(props.defaultValues)
+  const savedRules = parseRules(savedValues['channel_affinity_setting.rules'])
+  const hasDraft =
+    enabled !== savedValues['channel_affinity_setting.enabled'] ||
+    switchOnSuccess !==
+      savedValues['channel_affinity_setting.switch_on_success'] ||
+    maxEntries !== savedValues['channel_affinity_setting.max_entries'] ||
+    defaultTtl !==
+      savedValues['channel_affinity_setting.default_ttl_seconds'] ||
+    (editMode === 'json'
+      ? jsonText !==
+        JSON.stringify(
+          savedRules.map(({ id: _, ...rule }) => rule),
+          null,
+          2
+        )
+      : serializeRules(rules) !== serializeRules(savedRules))
 
   useEffect(() => {
+    if (saving || hasDraft) return
+    setSavedValues(props.defaultValues)
     setEnabled(props.defaultValues['channel_affinity_setting.enabled'])
     setSwitchOnSuccess(
       props.defaultValues['channel_affinity_setting.switch_on_success']
@@ -132,7 +150,7 @@ export function ChannelAffinitySection(props: Props) {
         2
       )
     )
-  }, [props.defaultValues])
+  }, [props.defaultValues, saving, hasDraft])
 
   const refreshCache = useCallback(async () => {
     setCacheLoading(true)
@@ -252,6 +270,13 @@ export function ChannelAffinitySection(props: Props) {
       for (const u of updates) {
         await updateOption.mutateAsync(u)
       }
+      setSavedValues({
+        'channel_affinity_setting.enabled': enabled,
+        'channel_affinity_setting.switch_on_success': switchOnSuccess,
+        'channel_affinity_setting.max_entries': maxEntries,
+        'channel_affinity_setting.default_ttl_seconds': defaultTtl,
+        'channel_affinity_setting.rules': rulesJson,
+      })
       toast.success(t('Saved successfully'))
     } catch {
       toast.error(t('Failed to save'))
@@ -335,18 +360,8 @@ export function ChannelAffinitySection(props: Props) {
     <>
       <SettingsSection
         title={t('Channel Affinity')}
-        description={t(
-          'Prioritize reusing the last successful channel based on keys extracted from request context (sticky routing)'
-        )}
+        description={t('Configure channel affinity (sticky routing) rules')}
       >
-        <Alert>
-          <AlertDescription className='text-xs'>
-            {t(
-              'Channel affinity reuses the last successful channel based on keys extracted from the request context or JSON body.'
-            )}
-          </AlertDescription>
-        </Alert>
-
         {/* Basic Settings */}
         <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
           <div className='flex items-center gap-2'>
@@ -379,11 +394,6 @@ export function ChannelAffinitySection(props: Props) {
             onCheckedChange={setSwitchOnSuccess}
           />
           <Label>{t('Switch affinity on success')}</Label>
-          <span className='text-muted-foreground text-xs'>
-            {t(
-              'If the affinity channel fails and retry succeeds on another channel, update affinity to the successful channel.'
-            )}
-          </span>
         </div>
 
         <Separator />
@@ -679,6 +689,7 @@ export function ChannelAffinitySection(props: Props) {
       />
 
       <ConfirmDialog
+        className='settings-dialog'
         open={clearAllDialogOpen}
         onOpenChange={setClearAllDialogOpen}
         title={t('Confirm clearing all channel affinity cache')}
@@ -691,6 +702,7 @@ export function ChannelAffinitySection(props: Props) {
 
       {clearRuleName !== null && (
         <ConfirmDialog
+          className='settings-dialog'
           open
           onOpenChange={(v) => !v && setClearRuleName(null)}
           title={t('Confirm clearing cache for this rule')}
@@ -701,6 +713,7 @@ export function ChannelAffinitySection(props: Props) {
       )}
 
       <ConfirmDialog
+        className='settings-dialog'
         open={fillTemplateDialogOpen}
         onOpenChange={setFillTemplateDialogOpen}
         title={t('Fill Codex CLI / Claude CLI Templates')}

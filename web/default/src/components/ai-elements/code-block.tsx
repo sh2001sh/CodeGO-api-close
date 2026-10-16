@@ -100,14 +100,22 @@ export const CodeBlock = ({
   ...props
 }: CodeBlockProps) => {
   const [html, setHtml] = useState<string>('')
+  const [highlightedSource, setHighlightedSource] = useState('')
 
   useEffect(() => {
     let cancelled = false
-    highlightCode(code, language, showLineNumbers).then((next) => {
-      if (!cancelled) {
-        setHtml(next)
-      }
-    })
+    highlightCode(code, language, showLineNumbers)
+      .then((next) => {
+        if (!cancelled) {
+          setHtml(next)
+          setHighlightedSource(code)
+        }
+      })
+      .catch((error: unknown) => {
+        // Keep the readable source when syntax highlighting is unavailable.
+        // eslint-disable-next-line no-console
+        if (!cancelled) console.error('Code highlighting failed:', error)
+      })
     return () => {
       cancelled = true
     }
@@ -123,11 +131,17 @@ export const CodeBlock = ({
         {...props}
       >
         <div className='relative'>
-          <div
-            className='[&>pre]:bg-background! [&>pre]:text-foreground! overflow-hidden [&_code]:font-mono [&_code]:text-sm [&>pre]:m-0 [&>pre]:p-4 [&>pre]:text-sm'
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          {highlightedSource === code && html ? (
+            <div
+              className='[&>pre]:bg-background! [&>pre]:text-foreground! overflow-hidden [&_code]:font-mono [&_code]:text-sm [&>pre]:m-0 [&>pre]:p-4 [&>pre]:text-sm'
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          ) : (
+            <pre className='m-0 overflow-auto p-4 text-sm'>
+              <code>{code}</code>
+            </pre>
+          )}
           {children && (
             <div className='absolute top-2 right-2 flex items-center gap-2'>
               {children}

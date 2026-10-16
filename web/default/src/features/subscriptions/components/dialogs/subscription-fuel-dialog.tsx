@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import i18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
@@ -49,7 +50,7 @@ interface SubscriptionFuelDialogProps {
 }
 
 function formatDate(value: number): string {
-  return new Date(value * 1000).toLocaleString()
+  return new Date(value * 1000).toLocaleString(getIntlLocale())
 }
 
 function submitExternalPaymentForm(
@@ -130,7 +131,7 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
       }
 
       if (!orderId) {
-        toast.error('支付订单缺少订单号，请稍后重试')
+        toast.error(i18n.t('支付订单缺少订单号，请稍后重试'))
         return
       }
 
@@ -148,12 +149,12 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
         form: formUrl && form ? form : null,
         message:
           qrCodeUrl || payUrl
-            ? '请使用下方二维码完成支付，支付结果会自动同步。'
-            : '请在支付页面完成付款，支付结果会自动同步。',
+            ? i18n.t('请使用下方二维码完成支付，支付结果会自动同步。')
+            : i18n.t('请在支付页面完成付款，支付结果会自动同步。'),
       })
-      toast.success('加油订单已创建')
+      toast.success(i18n.t('加油订单已创建'))
     },
-    onError: () => toast.error('创建加油订单失败，请稍后重试'),
+    onError: () => toast.error(i18n.t('创建加油订单失败，请稍后重试')),
   })
 
   useEffect(() => {
@@ -173,7 +174,7 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
               ? {
                   ...current,
                   stage: 'success',
-                  message: '支付成功，加油额度已经到账。',
+                  message: i18n.t('支付成功，加油额度已经到账。'),
                 }
               : current
           )
@@ -187,7 +188,7 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
               ? {
                   ...current,
                   stage: 'failed',
-                  message: '订单已过期或支付未完成，请重新发起支付。',
+                  message: i18n.t('订单已过期或支付未完成，请重新发起支付。'),
                 }
               : current
           )
@@ -223,7 +224,7 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='commerce-dialog sm:max-w-md'>
         <DialogHeader>
           <DialogTitle>
             <Trans i18nKey={'为'} /> {props.title} <Trans i18nKey={'加油'} />
@@ -281,7 +282,7 @@ export function SubscriptionFuelDialog(props: SubscriptionFuelDialogProps) {
                     <Trans i18nKey={'加油单价'} />
                   </div>
                   <div className='mt-1 font-mono font-semibold'>
-                    ¥{quote?.unit_price.toFixed(3) ?? '--'} / $1
+                    ¥{quote?.unit_price.toFixed(3) ?? '--'} / 1 credit
                   </div>
                 </div>
                 <div className='rounded-lg border px-3 py-2.5'>

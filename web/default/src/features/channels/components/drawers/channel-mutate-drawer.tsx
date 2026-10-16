@@ -27,6 +27,8 @@ import {
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import interfaceI18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import {
   ArrowRight,
   HelpCircle,
@@ -86,7 +88,6 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
-  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -264,7 +265,7 @@ function parseSettingsRecord(
 function formatUnixTime(timestamp: unknown): string {
   const seconds = Number(timestamp)
   if (!Number.isFinite(seconds) || seconds <= 0) return '-'
-  return new Date(seconds * 1000).toLocaleString()
+  return new Date(seconds * 1000).toLocaleString(getIntlLocale())
 }
 
 function CardHeading({ title, icon }: { title: string; icon?: ReactNode }) {
@@ -1086,7 +1087,10 @@ export function ChannelMutateDrawer({
   return (
     <>
       <Sheet open={open} onOpenChange={handleOpenChange}>
-        <SheetContent className='flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl'>
+        <SheetContent
+          aria-describedby={undefined}
+          className='admin-editor channel-editor flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl'
+        >
           <SheetHeader className='border-b px-4 py-3 text-start sm:px-6 sm:py-4'>
             <SheetTitle className='flex items-center gap-3'>
               <span className='bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border'>
@@ -1099,15 +1103,6 @@ export function ChannelMutateDrawer({
                 </span>
               </span>
             </SheetTitle>
-            <SheetDescription>
-              {isEditing
-                ? t(
-                    "Update channel configuration and click save when you're done."
-                  )
-                : t(
-                    'Add a new channel by providing the necessary information.'
-                  )}
-            </SheetDescription>
           </SheetHeader>
 
           <Form {...form}>
@@ -2291,7 +2286,9 @@ export function ChannelMutateDrawer({
                                 variant='ghost'
                                 size='icon-sm'
                                 className='text-muted-foreground hover:text-foreground size-auto p-0'
-                                aria-label='How model mapping works'
+                                aria-label={interfaceI18n.t(
+                                  'How model mapping works'
+                                )}
                               />
                             }
                           >
@@ -2845,7 +2842,9 @@ export function ChannelMutateDrawer({
                                     {t('Allow service_tier passthrough')}
                                   </FormLabel>
                                   <FormDescription>
-                                    {t('Pass through the service_tier field')}
+                                    {t(
+                                      'Fast (priority) and UltraFast (ultrafast) always pass through and cost 2x/6x. This switch controls other service tiers.'
+                                    )}
                                   </FormDescription>
                                 </div>
                                 <FormControl>

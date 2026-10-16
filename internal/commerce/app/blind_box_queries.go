@@ -44,26 +44,34 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 		return nil, err
 	}
 
-	var orders []commerceschema.BlindBoxOrder
-	if err := platformdb.DB.Where("user_id = ? AND status = ?", userID, constant.TopUpStatusSuccess).
-		Order("id desc").
-		Find(&orders).Error; err != nil {
-		return nil, err
-	}
-
 	overview := &commercedomain.BlindBoxOverview{}
-	for _, order := range orders {
-		remaining := order.Quantity - order.OpenedCount
-		if remaining > 0 {
-			overview.AvailableBoxes += remaining
-		}
+	dayStart, dayEnd := getBlindBoxDayRange(now)
+	monthStart, monthEnd := getBlindBoxMonthRange(now)
+	cutoff := pendingBlindBoxOrderCutoff(now)
+	var totals struct {
+		Available int
+		Pending   int
+		Today     int
+		Month     int
 	}
+	// Keep inventory and paid-purchase windows in the database. A user may own
+	// years of orders; the overview needs four totals, not every payment payload.
 	if err := platformdb.DB.Model(&commerceschema.BlindBoxOrder{}).
-		Where("user_id = ? AND status = ? AND create_time > ?", userID, constant.TopUpStatusPending, pendingBlindBoxOrderCutoff(now)).
-		Select("COALESCE(SUM(quantity - opened_count), 0)").
-		Scan(&overview.PendingBoxes).Error; err != nil {
+		Where("user_id = ?", userID).
+		Select(`COALESCE(SUM(CASE WHEN status = ? AND quantity > opened_count THEN quantity - opened_count ELSE 0 END), 0) AS available,
+			COALESCE(SUM(CASE WHEN status = ? AND create_time > ? THEN quantity - opened_count ELSE 0 END), 0) AS pending,
+			COALESCE(SUM(CASE WHEN create_time >= ? AND create_time < ? AND money > 0 AND (status = ? OR (status = ? AND create_time > ?)) THEN quantity ELSE 0 END), 0) AS today,
+			COALESCE(SUM(CASE WHEN create_time >= ? AND create_time < ? AND money > 0 AND (status = ? OR (status = ? AND create_time > ?)) THEN quantity ELSE 0 END), 0) AS month`,
+			constant.TopUpStatusSuccess, constant.TopUpStatusPending, cutoff,
+			dayStart, dayEnd, constant.TopUpStatusSuccess, constant.TopUpStatusPending, cutoff,
+			monthStart, monthEnd, constant.TopUpStatusSuccess, constant.TopUpStatusPending, cutoff).
+		Scan(&totals).Error; err != nil {
 		return nil, err
 	}
+	overview.AvailableBoxes = totals.Available
+	overview.PendingBoxes = totals.Pending
+	overview.PurchasedToday = totals.Today
+	overview.PurchasedThisMonth = totals.Month
 
 	if recentLimit <= 0 {
 		recentLimit = 20
@@ -75,9 +83,6 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 		return nil, err
 	}
 	if err := attachBlindBoxPropStateTx(platformdb.DB, overview.RecentRecords); err != nil {
-		return nil, err
-	}
-	if err := attachBlindBoxLuckyNumbersTx(platformdb.DB, overview.RecentRecords); err != nil {
 		return nil, err
 	}
 	for index := range overview.RecentRecords {
@@ -94,15 +99,6 @@ func GetBlindBoxOverview(userID int, recentLimit int) (*commercedomain.BlindBoxO
 	setting := blindboxsettings.Get()
 	overview.PityThreshold = setting.PityThreshold
 	overview.EffectivePityThreshold = setting.PityThreshold
-
-	dayStart, dayEnd := getBlindBoxDayRange(now)
-	monthStart, monthEnd := getBlindBoxMonthRange(now)
-	if overview.PurchasedToday, err = sumBlindBoxOrderQuantity(userID, dayStart, dayEnd); err != nil {
-		return nil, err
-	}
-	if overview.PurchasedThisMonth, err = sumBlindBoxOrderQuantity(userID, monthStart, monthEnd); err != nil {
-		return nil, err
-	}
 
 	return overview, nil
 }
@@ -183,9 +179,6 @@ func ListBlindBoxHistory(userID int, page int, pageSize int) (*BlindBoxHistoryPa
 		return nil, err
 	}
 	if err := attachBlindBoxPropStateTx(platformdb.DB, result.Records); err != nil {
-		return nil, err
-	}
-	if err := attachBlindBoxLuckyNumbersTx(platformdb.DB, result.Records); err != nil {
 		return nil, err
 	}
 	for index := range result.Records {

@@ -26,7 +26,7 @@ func ReconcileActiveSubscriptionLedgerProjections(limit int) (int, error) {
 	if err := platformdb.DB.Model(&commerceschema.UserSubscription{}).
 		Select("user_subscriptions.id").
 		Joins("JOIN "+accountTable+" AS billing_account ON billing_account.owner_type = ? AND billing_account.owner_id = user_subscriptions.id AND billing_account.account_type = ? AND billing_account.quota_unit = ?", "user_subscription", "subscription", "quota").
-		Where("user_subscriptions.status = ? AND user_subscriptions.end_time > ?", "active", commercestore.GetDBTimestamp()).
+		Where("user_subscriptions.status = ? AND (user_subscriptions.end_time > ? OR (user_subscriptions.end_time = 0 AND user_subscriptions.credit_pack_granted_quota > 0))", "active", commercestore.GetDBTimestamp()).
 		Order("user_subscriptions.id asc").
 		Limit(limit).
 		Scan(&subscriptionIDs).Error; err != nil {

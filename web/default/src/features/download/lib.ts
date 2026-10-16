@@ -300,7 +300,9 @@ export function getRecommendedDownloadCard(
   cards: DownloadCard[],
   device: DesktopDevice
 ) {
-  const platformCards = cards.filter((card) => card.platform === device.platform)
+  const platformCards = cards.filter(
+    (card) => card.platform === device.platform
+  )
   if (platformCards.length === 0) return cards[0] ?? null
 
   const exactCard =

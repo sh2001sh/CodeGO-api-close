@@ -16,119 +16,117 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { STORAGE_KEYS } from '../constants'
-import type { PlaygroundConfig, ParameterEnabled, Message } from '../types'
+import { t } from 'i18next'
+import { toast } from 'sonner'
+import {
+  DEFAULT_CONFIG,
+  DEFAULT_PARAMETER_ENABLED,
+  STORAGE_KEYS,
+} from '../constants'
+import type { Message, PlaygroundSession } from '../types'
 import { sanitizeMessagesOnLoad } from './message-utils'
 
-/**
- * Load playground config from localStorage
- */
-export function loadConfig(): Partial<PlaygroundConfig> {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.CONFIG)
-    if (saved) {
-      return JSON.parse(saved)
-    }
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to load config:', error)
-  }
-  return {}
-}
-
-/**
- * Save playground config to localStorage
- */
-export function saveConfig(config: Partial<PlaygroundConfig>): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config))
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to save config:', error)
+export function createSession(): PlaygroundSession {
+  return {
+    id: crypto.randomUUID(),
+    title: '',
+    updatedAt: Date.now(),
+    messages: [],
+    draft: '',
+    config: { ...DEFAULT_CONFIG },
+    parameterEnabled: { ...DEFAULT_PARAMETER_ENABLED },
   }
 }
 
-/**
- * Load parameter enabled state from localStorage
- */
-export function loadParameterEnabled(): Partial<ParameterEnabled> {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.PARAMETER_ENABLED)
-    if (saved) {
-      return JSON.parse(saved)
-    }
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to load parameter enabled:', error)
-  }
-  return {}
+function sessionKey(accountId: number): string {
+  return `codego:playground:v2:${accountId}:sessions`
 }
 
-/**
- * Save parameter enabled state to localStorage
- */
-export function saveParameterEnabled(
-  parameterEnabled: Partial<ParameterEnabled>
-): void {
-  try {
-    localStorage.setItem(
-      STORAGE_KEYS.PARAMETER_ENABLED,
-      JSON.stringify(parameterEnabled)
+function isMessage(value: unknown): value is Message {
+  if (!value || typeof value !== 'object') return false
+  const message = value as Message
+  return (
+    typeof message.key === 'string' &&
+    ['user', 'assistant', 'system'].includes(message.from) &&
+    Array.isArray(message.versions) &&
+    message.versions.every(
+      (version) =>
+        version &&
+        typeof version.id === 'string' &&
+        typeof version.content === 'string'
     )
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to save parameter enabled:', error)
-  }
+  )
 }
 
-/**
- * Load messages from localStorage
- */
-export function loadMessages(): Message[] | null {
+export function loadSessions(accountId: number): PlaygroundSession[] {
   try {
-    const saved = localStorage.getItem(STORAGE_KEYS.MESSAGES)
-    if (saved) {
-      const parsed: unknown = JSON.parse(saved)
-      if (!Array.isArray(parsed)) {
-        localStorage.removeItem(STORAGE_KEYS.MESSAGES)
-        return null
+    const saved = localStorage.getItem(sessionKey(accountId))
+    if (!saved) return [createSession()]
+    const parsed: unknown = JSON.parse(saved)
+    if (!Array.isArray(parsed)) throw new Error('Invalid session storage')
+    const sessions = parsed.map((value: unknown) => {
+      if (!value || typeof value !== 'object')
+        throw new Error('Invalid session')
+      const session = value as PlaygroundSession
+      if (
+        typeof session.id !== 'string' ||
+        typeof session.title !== 'string' ||
+        !Array.isArray(session.messages) ||
+        !session.messages.every(isMessage) ||
+        typeof session.updatedAt !== 'number'
+      )
+        throw new Error('Invalid session')
+      return {
+        ...session,
+        draft: typeof session.draft === 'string' ? session.draft : '',
+        config: { ...DEFAULT_CONFIG, ...session.config },
+        parameterEnabled: {
+          ...DEFAULT_PARAMETER_ENABLED,
+          ...session.parameterEnabled,
+        },
+        messages: sanitizeMessagesOnLoad(session.messages),
       }
-      const sanitized = sanitizeMessagesOnLoad(parsed as Message[])
-      // Persist sanitized result to avoid re-sanitizing on subsequent loads
-      if (sanitized !== parsed) {
-        saveMessages(sanitized)
-      }
-      return sanitized
-    }
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to load messages:', error)
-  }
-  return null
-}
-
-/**
- * Save messages to localStorage
- */
-export function saveMessages(messages: Message[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages))
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to save messages:', error)
+    })
+    return sessions.length ? sessions : [createSession()]
+  } catch {
+    toast.error(t('会话读取失败'))
+    return [createSession()]
   }
 }
 
-/**
- * Clear all playground data
- */
-export function clearPlaygroundData(): void {
+export function saveSessions(
+  accountId: number,
+  sessions: PlaygroundSession[]
+): boolean {
   try {
-    localStorage.removeItem(STORAGE_KEYS.CONFIG)
-    localStorage.removeItem(STORAGE_KEYS.PARAMETER_ENABLED)
-    localStorage.removeItem(STORAGE_KEYS.MESSAGES)
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to clear playground data:', error)
+    localStorage.setItem(sessionKey(accountId), JSON.stringify(sessions))
+    return true
+  } catch {
+    toast.error(t('会话保存失败；请导出后清理本地记录'), {
+      id: 'playground-storage-error',
+    })
+    return false
   }
+}
+
+export function hasLegacyMessages(): boolean {
+  try {
+    return Boolean(localStorage.getItem(STORAGE_KEYS.MESSAGES))
+  } catch {
+    toast.error(t('会话读取失败'))
+    return false
+  }
+}
+
+export function readLegacyMessages(): Message[] {
+  const parsed: unknown = JSON.parse(
+    localStorage.getItem(STORAGE_KEYS.MESSAGES) || '[]'
+  )
+  if (!Array.isArray(parsed) || !parsed.every(isMessage))
+    throw new Error('Invalid legacy messages')
+  return sanitizeMessagesOnLoad(parsed)
+}
+
+export function removeLegacyMessages(): void {
+  localStorage.removeItem(STORAGE_KEYS.MESSAGES)
 }

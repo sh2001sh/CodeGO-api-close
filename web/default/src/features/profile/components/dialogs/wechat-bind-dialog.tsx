@@ -44,7 +44,7 @@ export function WeChatBindDialog({
   const { t } = useTranslation()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='profile-dialog sm:max-w-md'>
         <DialogHeader>
           <DialogTitle>{t('Bind WeChat Account')}</DialogTitle>
           <DialogDescription>

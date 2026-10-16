@@ -1,3 +1,4 @@
+import interfaceI18n from '@/i18n/config'
 import type { TFunction } from 'i18next'
 import { formatQuotaWithCurrency, getCurrencyDisplay } from '@/lib/currency'
 import type { SubscriptionPlan } from '../types'
@@ -96,9 +97,13 @@ export function getSubscriptionDisabledReasonText(
   switch (normalized) {
     case 'cannot subscribe to a lower-tier plan while your current package is active':
     case 'cannot subscribe to a lower-tier plan while your current package still has remaining quota':
-      return '当前还有更高档且未用完的生效套餐，暂不支持直接降级。'
+      return interfaceI18n.t(
+        '当前还有更高档且未用完的生效套餐，暂不支持直接降级。'
+      )
     case 'renewal requires at least 30% of the current package quota to be used':
-      return '当前套餐至少使用 30%（剩余额度不高于 70%）后才可续费。'
+      return interfaceI18n.t(
+        '当前套餐至少使用 30%（剩余额度不高于 70%）后才可续费。'
+      )
     default:
       return normalized
   }
@@ -134,7 +139,7 @@ export function getSubscriptionCurrencyLabel(currency?: string | null): string {
       return 'EUR '
     case 'USD':
     default:
-      return '$'
+      return 'credits '
   }
 }
 
@@ -143,7 +148,10 @@ export function formatSubscriptionPlanPrice(
   currency?: string | null
 ): string {
   const value = Number(amount || 0)
-  return `${getSubscriptionCurrencyLabel(currency)}${formatNumber(value)}`
+  const label = getSubscriptionCurrencyLabel(currency)
+  return label === 'credits '
+    ? `${formatNumber(value)} credits`
+    : `${label}${formatNumber(value)}`
 }
 
 export function formatSubscriptionQuotaAmount(amount?: number | null): string {
@@ -157,6 +165,7 @@ export function formatSubscriptionQuotaAmount(amount?: number | null): string {
 export function getSubscriptionPlanSubtitle(
   plan?: Partial<SubscriptionPlan> | null
 ): string {
+  if (plan?.plan_type === 'credit_pack') return '永久额度包'
   const subtitle = normalizeSubscriptionText(plan?.subtitle)
   if (subtitle) return subtitle
   if (plan?.plan_type === 'starter') return '新人专区'
@@ -178,13 +187,13 @@ export function getSubscriptionPlanActionLabel(
 ): string {
   switch (action) {
     case 'renew':
-      return '立即续费'
+      return interfaceI18n.t('立即续费')
     case 'upgrade':
-      return '立即升级'
+      return interfaceI18n.t('立即升级')
     case 'disabled':
-      return '当前不可订阅'
+      return interfaceI18n.t('当前不可订阅')
     case 'subscribe':
-      return '立即订阅'
+      return interfaceI18n.t('立即订阅')
     default:
       return t('Subscribe')
   }
@@ -198,27 +207,47 @@ export function getSubscriptionPlanDescription(
 ): string {
   if (isDayPassPlan(plan)) {
     const totalText =
-      totalAmount > 0 ? formatSubscriptionQuotaAmount(totalAmount) : '不限'
-    return `有效期 ${formatDuration(plan, t)}，总额度 ${totalText}，日卡额度独立结算，扣费时默认优先于月卡。`
+      totalAmount > 0
+        ? formatSubscriptionQuotaAmount(totalAmount)
+        : interfaceI18n.t('不限')
+    return interfaceI18n.t(
+      '有效期 {{param0}}，总额度 {{param1}}，日卡额度独立结算，扣费时默认优先于月卡。',
+      { param0: formatDuration(plan, t), param1: totalText }
+    )
   }
 
   if (isMonthlyCardPlan(plan)) {
     const totalText =
-      totalAmount > 0 ? formatSubscriptionQuotaAmount(totalAmount) : '不限'
-    return `有效期 ${formatDuration(plan, t)}，本月可用额度 ${totalText}，一个月内可自由使用，用完或到期后结束。`
+      totalAmount > 0
+        ? formatSubscriptionQuotaAmount(totalAmount)
+        : interfaceI18n.t('不限')
+    return interfaceI18n.t(
+      '有效期 {{param0}}，本月可用额度 {{param1}}，一个月内可自由使用，用完或到期后结束。',
+      { param0: formatDuration(plan, t), param1: totalText }
+    )
   }
 
   if (periodAmount > 0) {
     const totalText =
-      totalAmount > 0 ? formatSubscriptionQuotaAmount(totalAmount) : '不限'
-    return `额度按周期刷新，周期额度 ${formatSubscriptionQuotaAmount(periodAmount)}，总额度 ${totalText}。`
+      totalAmount > 0
+        ? formatSubscriptionQuotaAmount(totalAmount)
+        : interfaceI18n.t('不限')
+    return interfaceI18n.t(
+      '额度按周期刷新，周期额度 {{param0}}，总额度 {{param1}}。',
+      { param0: formatSubscriptionQuotaAmount(periodAmount), param1: totalText }
+    )
   }
 
   if (totalAmount > 0) {
-    return `有效期 ${formatDuration(plan, t)}，总额度 ${formatSubscriptionQuotaAmount(totalAmount)}。`
+    return interfaceI18n.t('有效期 {{param0}}，总额度 {{param1}}。', {
+      param0: formatDuration(plan, t),
+      param1: formatSubscriptionQuotaAmount(totalAmount),
+    })
   }
 
-  return `有效期 ${formatDuration(plan, t)}，总额度不限。`
+  return interfaceI18n.t('有效期 {{param0}}，总额度不限。', {
+    param0: formatDuration(plan, t),
+  })
 }
 
 export function getSubscriptionPlanDetailText(
@@ -227,45 +256,57 @@ export function getSubscriptionPlanDetailText(
   periodAmount: number,
   t: TFunction
 ): string {
-  const detailParts = [`有效期 ${formatDuration(plan, t)}`]
+  const detailParts = [
+    interfaceI18n.t('有效期 {{param0}}', { param0: formatDuration(plan, t) }),
+  ]
   const resetLabel = formatResetPeriod(plan, t)
 
   if (isDayPassPlan(plan)) {
     detailParts.push(
       totalAmount > 0
-        ? `总额度 ${formatSubscriptionQuotaAmount(totalAmount)}`
-        : '总额度不限'
+        ? interfaceI18n.t('总额度 {{param0}}', {
+            param0: formatSubscriptionQuotaAmount(totalAmount),
+          })
+        : interfaceI18n.t('总额度不限')
     )
-    detailParts.push('日卡额度独立结算，扣费时默认优先于月卡')
+    detailParts.push(interfaceI18n.t('日卡额度独立结算，扣费时默认优先于月卡'))
     return detailParts.join('；')
   }
 
   if (isMonthlyCardPlan(plan)) {
     if (totalAmount > 0) {
       detailParts.push(
-        `本月可用额度 ${formatSubscriptionQuotaAmount(totalAmount)}`
+        interfaceI18n.t('本月可用额度 {{param0}}', {
+          param0: formatSubscriptionQuotaAmount(totalAmount),
+        })
       )
     } else {
-      detailParts.push('本月可用额度不限')
+      detailParts.push(interfaceI18n.t('本月可用额度不限'))
     }
-    detailParts.push('月卡不设置周刷新或周期额度')
-    detailParts.push('适合持续使用 Code Go 与相关模型')
+    detailParts.push(interfaceI18n.t('月卡不设置周刷新或周期额度'))
+    detailParts.push(interfaceI18n.t('适合持续使用 Code Go 与相关模型'))
     return detailParts.join('；')
   }
 
   if (resetLabel !== t('No Reset')) {
-    detailParts.push(`额度重置 ${resetLabel}`)
+    detailParts.push(
+      interfaceI18n.t('额度重置 {{param0}}', { param0: resetLabel })
+    )
   }
   if (periodAmount > 0) {
     detailParts.push(
-      `${isMonthlyCardPlan(plan) ? '月度额度' : '周期额度'} ${formatSubscriptionQuotaAmount(periodAmount)}`
+      `${isMonthlyCardPlan(plan) ? interfaceI18n.t('月度额度') : interfaceI18n.t('周期额度')} ${formatSubscriptionQuotaAmount(periodAmount)}`
     )
   }
   if (totalAmount > 0) {
-    detailParts.push(`总额度 ${formatSubscriptionQuotaAmount(totalAmount)}`)
+    detailParts.push(
+      interfaceI18n.t('总额度 {{param0}}', {
+        param0: formatSubscriptionQuotaAmount(totalAmount),
+      })
+    )
   } else {
-    detailParts.push('总额度不限')
+    detailParts.push(interfaceI18n.t('总额度不限'))
   }
-  detailParts.push('适合持续使用 Code Go 与相关模型')
+  detailParts.push(interfaceI18n.t('适合持续使用 Code Go 与相关模型'))
   return detailParts.join('；')
 }

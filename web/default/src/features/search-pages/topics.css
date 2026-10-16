@@ -1,0 +1,230 @@
+.topic-reading {
+  --reading-ink: var(--ink-primary);
+  --reading-muted: var(--ink-secondary);
+  --reading-line: var(--hairline-light);
+  --reading-paper: var(--bg-canvas);
+  --reading-card: var(--surface-card);
+  --foreground: var(--ink-primary);
+  --muted-foreground: var(--ink-secondary);
+  --border: var(--hairline-light);
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: 48px 40px 96px;
+  background: var(--bg-canvas);
+  color: var(--ink-primary);
+}
+.topic-layout {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr) 208px;
+  gap: 28px;
+  align-items: start;
+}
+.topic-reading h1 {
+  margin: 0;
+  font-size: clamp(32px, 3.6vw, 48px);
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+.topic-reading h2 {
+  margin: 0 0 24px;
+}
+.topic-article {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.topic-heading {
+  padding: 28px;
+  border-radius: 20px;
+  background: var(--surface-obsidian);
+  color: var(--ink-inverse, white);
+}
+.topic-entry-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+.topic-entry-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 8px;
+}
+.topic-article > section {
+  margin-top: 20px;
+  padding: 28px;
+  border: 1px solid var(--hairline-light);
+  border-radius: 20px;
+  background: var(--surface-card);
+  scroll-margin-top: 104px;
+}
+.topic-article p,
+.topic-faq dd {
+  max-width: 72ch;
+  margin: 0 0 20px;
+  color: var(--foreground);
+}
+.topic-article p:last-child {
+  margin-bottom: 0;
+}
+.topic-link-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.topic-link-list a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.topic-link-list a:hover,
+.topic-entry-links a:hover {
+  color: var(--brand-orange-deep);
+  background: var(--bg-subtle);
+  text-decoration: none;
+}
+.topic-toc,
+.topic-related {
+  position: sticky;
+  top: 104px;
+  min-width: 0;
+  padding: 20px 12px;
+  border: 1px solid var(--hairline-light);
+  border-radius: 20px;
+  background: var(--surface-glass);
+  backdrop-filter: blur(20px);
+}
+.topic-toc h2,
+.topic-related h2 {
+  font-size: 16px;
+  line-height: 1.75;
+  margin: 0 12px 12px;
+}
+.topic-toc .topic-link-list {
+  max-height: calc(100svh - 170px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.topic-faq {
+  margin: 0;
+}
+.topic-faq > div + div {
+  margin-top: 32px;
+}
+.topic-faq dt {
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.topic-faq dd {
+  margin-left: 0;
+}
+.topic-not-found {
+  grid-column: 2;
+}
+@media (max-width: 1100px) {
+  .topic-layout {
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 32px;
+  }
+  .topic-related {
+    grid-column: 2;
+    position: static;
+  }
+}
+@media (max-width: 767px) {
+  .topic-reading {
+    padding: 40px 20px 64px;
+  }
+  .topic-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+  .topic-reading h1 {
+    font-size: 32px;
+  }
+  .topic-toc,
+  .topic-related {
+    position: static;
+  }
+  .topic-toc {
+    grid-row: 2;
+    padding: 16px 12px;
+  }
+  .topic-article {
+    display: contents;
+  }
+  .topic-heading {
+    grid-row: 1;
+    padding: 24px 20px;
+  }
+  .topic-article > section {
+    padding: 24px 20px;
+    margin: 0;
+  }
+  .topic-toc .topic-link-list {
+    max-height: none;
+    overflow: visible;
+  }
+  .topic-related,
+  .topic-not-found {
+    grid-column: 1;
+  }
+}
+
+.topic-reading .topic-heading h1 {
+  color: inherit;
+}
+.topic-heading .topic-entry-links a {
+  color: var(--ink-inverse, white);
+  font-size: 14px;
+}
+.topic-heading .topic-entry-links a:first-child {
+  border-color: transparent;
+  background: var(--gradient-solaris);
+  color: var(--surface-obsidian);
+}
+.topic-reading .topic-entry-links a:focus-visible,
+.topic-reading .topic-link-list a:focus-visible {
+  outline: 2px solid var(--brand-orange);
+  outline-offset: 4px;
+}
+.topic-article > section > .topic-link-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.topic-article > section > .topic-link-list a {
+  height: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--bg-subtle);
+  color: var(--ink-primary);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.topic-faq > div {
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--bg-subtle);
+}
+.topic-faq > div + div {
+  margin-top: 12px;
+}
+@media (max-width: 767px) {
+  .topic-article > section > .topic-link-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .topic-reading * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}

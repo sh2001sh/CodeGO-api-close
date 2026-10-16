@@ -59,9 +59,9 @@ function AutomaticProtocolStatus() {
           <p className='text-sm font-medium'>
             {t('Automatic protocol routing')}
           </p>
-          <p className='text-muted-foreground max-w-[72ch] text-sm'>
+          <p className='text-muted-foreground max-w-[72ch] text-base'>
             {t(
-              'Native endpoints are preferred. The gateway converts only for known protocol-only targets or when an upstream endpoint reports that it is unsupported.'
+              'Native endpoint → Protocol target → Unsupported endpoint fallback'
             )}
           </p>
         </div>
@@ -132,9 +132,6 @@ function AdvancedProtocolOverrides({ form }: ProtocolBridgeSettingsProps) {
           <Settings2 className='text-muted-foreground size-4 shrink-0' />
           <div className='min-w-0 flex-1'>
             <p className='text-sm font-medium'>{t('Advanced overrides')}</p>
-            <p className='text-muted-foreground mt-0.5 text-xs'>
-              {t('Force or disable conversion for exceptional channels')}
-            </p>
           </div>
           <ChevronDown
             className={cn(

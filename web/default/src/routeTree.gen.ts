@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UserAgreementRouteImport } from './routes/user-agreement'
+import { Route as RankingsRouteImport } from './routes/rankings'
 import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
 import { Route as FaqRouteImport } from './routes/faq'
 import { Route as BrandRouteImport } from './routes/brand'
@@ -66,6 +67,7 @@ import { Route as AuthenticatedGroupBuyIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDailyLuckyNumberIndexRouteImport } from './routes/_authenticated/daily-lucky-number/index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
+import { Route as AuthenticatedChannelWorkbenchIndexRouteImport } from './routes/_authenticated/channel-workbench/index'
 import { Route as AuthenticatedBlindBoxIndexRouteImport } from './routes/_authenticated/blind-box/index'
 import { Route as AuthenticatedUsageLogsSectionRouteImport } from './routes/_authenticated/usage-logs/$section'
 import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authenticated/models/$section'
@@ -91,6 +93,11 @@ import { Route as AuthenticatedSystemSettingsAuthSectionRouteImport } from './ro
 const UserAgreementRoute = UserAgreementRouteImport.update({
   id: '/user-agreement',
   path: '/user-agreement',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RankingsRoute = RankingsRouteImport.update({
+  id: '/rankings',
+  path: '/rankings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
@@ -391,6 +398,12 @@ const AuthenticatedChannelsIndexRoute =
     path: '/channels/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedChannelWorkbenchIndexRoute =
+  AuthenticatedChannelWorkbenchIndexRouteImport.update({
+    id: '/channel-workbench/',
+    path: '/channel-workbench/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedBlindBoxIndexRoute =
   AuthenticatedBlindBoxIndexRouteImport.update({
     id: '/blind-box/',
@@ -521,6 +534,7 @@ export interface FileRoutesByFullPath {
   '/brand': typeof BrandRoute
   '/faq': typeof FaqRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/rankings': typeof RankingsRoute
   '/user-agreement': typeof UserAgreementRoute
   '/system-settings': typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
@@ -557,6 +571,7 @@ export interface FileRoutesByFullPath {
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/blind-box/': typeof AuthenticatedBlindBoxIndexRoute
+  '/channel-workbench/': typeof AuthenticatedChannelWorkbenchIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/daily-lucky-number/': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
@@ -599,6 +614,7 @@ export interface FileRoutesByTo {
   '/brand': typeof BrandRoute
   '/faq': typeof FaqRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/rankings': typeof RankingsRoute
   '/user-agreement': typeof UserAgreementRoute
   '/forgot-password': typeof authForgotPasswordRoute
   '/oauth': typeof authOauthRoute
@@ -634,6 +650,7 @@ export interface FileRoutesByTo {
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/blind-box': typeof AuthenticatedBlindBoxIndexRoute
+  '/channel-workbench': typeof AuthenticatedChannelWorkbenchIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/daily-lucky-number': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
@@ -679,6 +696,7 @@ export interface FileRoutesById {
   '/brand': typeof BrandRoute
   '/faq': typeof FaqRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/rankings': typeof RankingsRoute
   '/user-agreement': typeof UserAgreementRoute
   '/_authenticated/system-settings': typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
@@ -715,6 +733,7 @@ export interface FileRoutesById {
   '/_authenticated/models/$section': typeof AuthenticatedModelsSectionRoute
   '/_authenticated/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/_authenticated/blind-box/': typeof AuthenticatedBlindBoxIndexRoute
+  '/_authenticated/channel-workbench/': typeof AuthenticatedChannelWorkbenchIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/daily-lucky-number/': typeof AuthenticatedDailyLuckyNumberIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
@@ -759,6 +778,7 @@ export interface FileRouteTypes {
     | '/brand'
     | '/faq'
     | '/privacy-policy'
+    | '/rankings'
     | '/user-agreement'
     | '/system-settings'
     | '/forgot-password'
@@ -795,6 +815,7 @@ export interface FileRouteTypes {
     | '/models/$section'
     | '/usage-logs/$section'
     | '/blind-box/'
+    | '/channel-workbench/'
     | '/channels/'
     | '/daily-lucky-number/'
     | '/dashboard/'
@@ -837,6 +858,7 @@ export interface FileRouteTypes {
     | '/brand'
     | '/faq'
     | '/privacy-policy'
+    | '/rankings'
     | '/user-agreement'
     | '/forgot-password'
     | '/oauth'
@@ -872,6 +894,7 @@ export interface FileRouteTypes {
     | '/models/$section'
     | '/usage-logs/$section'
     | '/blind-box'
+    | '/channel-workbench'
     | '/channels'
     | '/daily-lucky-number'
     | '/dashboard'
@@ -916,6 +939,7 @@ export interface FileRouteTypes {
     | '/brand'
     | '/faq'
     | '/privacy-policy'
+    | '/rankings'
     | '/user-agreement'
     | '/_authenticated/system-settings'
     | '/(auth)/forgot-password'
@@ -952,6 +976,7 @@ export interface FileRouteTypes {
     | '/_authenticated/models/$section'
     | '/_authenticated/usage-logs/$section'
     | '/_authenticated/blind-box/'
+    | '/_authenticated/channel-workbench/'
     | '/_authenticated/channels/'
     | '/_authenticated/daily-lucky-number/'
     | '/_authenticated/dashboard/'
@@ -997,6 +1022,7 @@ export interface RootRouteChildren {
   BrandRoute: typeof BrandRoute
   FaqRoute: typeof FaqRoute
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
+  RankingsRoute: typeof RankingsRoute
   UserAgreementRoute: typeof UserAgreementRoute
   errors401Route: typeof errors401Route
   errors403Route: typeof errors403Route
@@ -1028,6 +1054,13 @@ declare module '@tanstack/react-router' {
       path: '/user-agreement'
       fullPath: '/user-agreement'
       preLoaderRoute: typeof UserAgreementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rankings': {
+      id: '/rankings'
+      path: '/rankings'
+      fullPath: '/rankings'
+      preLoaderRoute: typeof RankingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy-policy': {
@@ -1422,6 +1455,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChannelsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/channel-workbench/': {
+      id: '/_authenticated/channel-workbench/'
+      path: '/channel-workbench'
+      fullPath: '/channel-workbench/'
+      preLoaderRoute: typeof AuthenticatedChannelWorkbenchIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/blind-box/': {
       id: '/_authenticated/blind-box/'
       path: '/blind-box'
@@ -1662,6 +1702,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedModelsSectionRoute: typeof AuthenticatedModelsSectionRoute
   AuthenticatedUsageLogsSectionRoute: typeof AuthenticatedUsageLogsSectionRoute
   AuthenticatedBlindBoxIndexRoute: typeof AuthenticatedBlindBoxIndexRoute
+  AuthenticatedChannelWorkbenchIndexRoute: typeof AuthenticatedChannelWorkbenchIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedDailyLuckyNumberIndexRoute: typeof AuthenticatedDailyLuckyNumberIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
@@ -1694,6 +1735,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedModelsSectionRoute: AuthenticatedModelsSectionRoute,
   AuthenticatedUsageLogsSectionRoute: AuthenticatedUsageLogsSectionRoute,
   AuthenticatedBlindBoxIndexRoute: AuthenticatedBlindBoxIndexRoute,
+  AuthenticatedChannelWorkbenchIndexRoute:
+    AuthenticatedChannelWorkbenchIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedDailyLuckyNumberIndexRoute:
     AuthenticatedDailyLuckyNumberIndexRoute,
@@ -1728,6 +1771,7 @@ const rootRouteChildren: RootRouteChildren = {
   BrandRoute: BrandRoute,
   FaqRoute: FaqRoute,
   PrivacyPolicyRoute: PrivacyPolicyRoute,
+  RankingsRoute: RankingsRoute,
   UserAgreementRoute: UserAgreementRoute,
   errors401Route: errors401Route,
   errors403Route: errors403Route,

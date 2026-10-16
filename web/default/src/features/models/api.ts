@@ -127,6 +127,28 @@ export async function getVendors(params?: {
   return res.data
 }
 
+// Selectors need every vendor. The server caps each page at 100 even when a
+// larger page_size is requested.
+export async function getAllVendors(): Promise<GetVendorsResponse> {
+  const items: Vendor[] = []
+  let page = 1
+  let total: number
+  do {
+    const result = await getVendors({ p: page, page_size: 100 })
+    if (!result.success || !result.data)
+      throw new Error(result.message || 'Failed to load vendors')
+    total = result.data.total
+    if (!result.data.items.length && items.length < total)
+      throw new Error('Incomplete vendor list')
+    items.push(...result.data.items)
+    page += 1
+  } while (items.length < total)
+  return {
+    success: true,
+    data: { items, total, page: 1, page_size: items.length },
+  }
+}
+
 /**
  * Search vendors
  */

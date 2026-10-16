@@ -87,11 +87,12 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         cell: ({ row }) => {
           const plan = row.original.plan
           const symbol =
-            plan.currency === 'CNY' ? '¥' : plan.currency === 'EUR' ? '€' : '$'
+            plan.currency === 'CNY' ? '¥' : plan.currency === 'EUR' ? '€' : ''
           return (
-            <span className='font-semibold text-success'>
+            <span className='text-success font-semibold'>
               {symbol}
               {Number(plan.price_amount || 0).toFixed(2)}
+              {!symbol && ' credits'}
             </span>
           )
         },
@@ -198,7 +199,9 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
           return (
             <div className='text-muted-foreground text-xs'>
               <div>
-                {total > 0 ? formatSubscriptionQuotaAmount(total) : t('Unlimited')}
+                {total > 0
+                  ? formatSubscriptionQuotaAmount(total)
+                  : t('Unlimited')}
               </div>
               {!isMonthlyPlan && period > 0 && (
                 <div>

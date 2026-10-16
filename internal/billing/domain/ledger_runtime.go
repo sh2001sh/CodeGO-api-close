@@ -664,10 +664,19 @@ func ensureBalanceSnapshot(tx *gorm.DB, accountID string) error {
 }
 
 func ensureAndLockBalanceSnapshot(tx *gorm.DB, accountID string) (*billingschema.BillingBalanceSnapshot, error) {
+	// Existing accounts need only the locked read. A preliminary unlocked
+	// existence check adds a database round trip to every wallet operation.
+	var snapshot billingschema.BillingBalanceSnapshot
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("account_id = ?", accountID).First(&snapshot).Error
+	if err == nil {
+		return &snapshot, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	if err := ensureBalanceSnapshot(tx, accountID); err != nil {
 		return nil, err
 	}
-	var snapshot billingschema.BillingBalanceSnapshot
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("account_id = ?", accountID).
 		First(&snapshot).Error; err != nil {

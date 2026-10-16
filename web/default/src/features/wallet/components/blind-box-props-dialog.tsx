@@ -21,7 +21,7 @@ export function BlindBoxPropsDialog(props: {
 }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='max-h-[calc(100dvh-2rem)] overflow-hidden sm:max-w-lg'>
+      <DialogContent className='commerce-dialog max-h-[calc(100dvh-2rem)] overflow-hidden sm:max-w-lg'>
         <DialogHeader>
           <DialogTitle>
             <Trans i18nKey={'我的道具'} />

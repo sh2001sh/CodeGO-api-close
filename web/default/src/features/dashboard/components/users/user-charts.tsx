@@ -20,6 +20,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
 import { Users, Loader2 } from 'lucide-react'
+import { useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
@@ -64,6 +65,7 @@ const TOP_USER_LIMIT_OPTIONS = [5, 10, 20, 50]
 
 export function UserCharts() {
   const { t } = useTranslation()
+  const reducedMotion = useReducedMotion()
   const { resolvedTheme } = useTheme()
   const { customization } = useThemeCustomization()
   const [themeReady, setThemeReady] = useState(false)
@@ -160,6 +162,7 @@ export function UserCharts() {
               key={preset.days}
               type='button'
               onClick={() => handleRangeChange(preset.days)}
+              aria-pressed={selectedRange === preset.days}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                 selectedRange === preset.days
                   ? 'bg-primary text-primary-foreground shadow-sm'
@@ -199,6 +202,7 @@ export function UserCharts() {
               key={limit}
               type='button'
               onClick={() => setTopUserLimit(limit)}
+              aria-pressed={topUserLimit === limit}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                 topUserLimit === limit
                   ? 'bg-primary text-primary-foreground shadow-sm'
@@ -215,14 +219,14 @@ export function UserCharts() {
         )}
       </div>
 
-      <div className='grid gap-3'>
+      <div className='grid gap-4 xl:grid-cols-2'>
         {USER_CHARTS.map((chart) => {
           const spec = chartData[chart.specKey]
 
           return (
             <div
               key={chart.value}
-              className='overflow-hidden rounded-lg border'
+              className='solaris-telemetry-panel overflow-hidden rounded-lg border'
             >
               <div className='flex w-full items-center gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
                 <Users className='text-muted-foreground/60 size-4' />
@@ -241,6 +245,7 @@ export function UserCharts() {
                         ...spec,
                         theme: resolvedTheme === 'dark' ? 'dark' : 'light',
                         background: 'transparent',
+                        animation: !reducedMotion,
                       }}
                       option={VCHART_OPTION}
                     />

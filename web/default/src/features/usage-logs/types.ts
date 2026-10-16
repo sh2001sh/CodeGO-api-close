@@ -93,6 +93,11 @@ export interface ChannelAffinityInfo {
 }
 
 export interface LogOtherData {
+  service_tier?: string
+  service_tier_multiplier?: number
+  quota_before_service_tier?: number
+  quota_after_service_tier?: number
+  billing_calculation?: string
   first_byte_trace?: {
     request_validation_ms?: number
     admission_ms?: number
@@ -241,6 +246,7 @@ export interface LogOtherData {
   quota_after_discount?: number
   usage_discount_rate?: number
   usage_discount_multiplier?: number
+  usage_discount_effective_multiplier?: number
   usage_discount_quota?: number
   usage_discount_source?: string
   usage_discount_title?: string

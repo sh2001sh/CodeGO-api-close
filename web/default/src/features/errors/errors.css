@@ -1,0 +1,96 @@
+.market-error {
+  min-height: calc(100svh - 76px);
+  height: auto;
+  color: var(--ink-primary, var(--foreground));
+  background: var(--bg-canvas, var(--background));
+  padding: clamp(32px, 7vw, 80px) 20px;
+  display: flex;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.market-error > div {
+  max-width: 680px;
+  min-height: 360px;
+  margin: auto;
+  align-items: flex-start;
+  text-align: left;
+  gap: 24px;
+  padding: 40px;
+  border: 1px solid var(--hairline-light, var(--border));
+  border-radius: 20px;
+  background: var(--surface-card, var(--card));
+}
+.market-error h1 {
+  font-family: var(--dawn-display, 'Space Grotesk Variable', sans-serif);
+  font-size: clamp(64px, 12vw, 96px);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--brand-orange, var(--primary));
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--hairline-light, var(--border));
+  width: 100%;
+}
+.market-error > div > span {
+  font-size: 24px;
+  line-height: 1.35;
+  font-weight: 600;
+}
+.market-error > div > div {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+.market-error button,
+.market-error a {
+  min-height: 48px;
+  font-size: 14px;
+  border-radius: 12px;
+}
+.market-error :focus-visible {
+  outline: 2px solid var(--brand-orange, var(--primary));
+  outline-offset: 4px;
+}
+.market-error pre {
+  max-width: 100%;
+  font-size: 13px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--bg-subtle, var(--muted));
+}
+.market-error ::selection {
+  color: var(--surface-obsidian, #0d0d10);
+  background: var(--brand-orange, var(--primary));
+}
+.market-error-minimal {
+  min-height: 0;
+  padding: 24px;
+}
+.market-error-minimal > div {
+  min-height: 0;
+  padding: 24px;
+}
+@media (max-width: 640px) {
+  .market-error {
+    min-height: calc(100svh - 64px);
+  }
+  .market-error > div {
+    padding: 28px 24px;
+  }
+  .market-error > div > span {
+    font-size: 22px;
+  }
+  .market-error-minimal {
+    min-height: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .market-error * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.market-error-embedded {
+  min-height: 100%;
+  padding: clamp(24px, 5vw, 64px) 20px;
+}

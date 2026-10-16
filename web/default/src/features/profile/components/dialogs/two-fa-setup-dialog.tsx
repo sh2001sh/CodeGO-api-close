@@ -137,7 +137,7 @@ export function TwoFASetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className='sm:max-w-lg'>
+      <DialogContent className='profile-dialog sm:max-w-lg'>
         <DialogHeader>
           <DialogTitle>{t('Setup Two-Factor Authentication')}</DialogTitle>
           <DialogDescription>

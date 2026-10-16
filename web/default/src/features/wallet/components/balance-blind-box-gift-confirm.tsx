@@ -26,7 +26,7 @@ export function BalanceBoxGiftConfirm(props: {
       open={props.confirmGift}
       onOpenChange={props.onConfirmGiftChange}
     >
-      <AlertDialogContent className='max-h-[calc(100dvh-2rem)] overflow-y-auto'>
+      <AlertDialogContent className='commerce-dialog max-h-[calc(100dvh-2rem)] overflow-y-auto'>
         <AlertDialogHeader>
           <AlertDialogTitle>
             <Trans i18nKey={'确认赠送'} /> {props.count}{' '}

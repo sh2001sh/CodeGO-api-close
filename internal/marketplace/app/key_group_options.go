@@ -1,17 +1,21 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"golang.org/x/sync/singleflight"
 )
 
-// KeyGroupOption contains selector metadata only; request logs, ranking and
-// channel verification evidence are deliberately not loaded by this endpoint.
+// KeyGroupOption contains selector metadata and existing ranking snapshots only;
+// this endpoint never rebuilds rankings or loads logs or verification evidence.
 type KeyGroupOption struct {
 	Value                  string   `json:"value"`
 	Label                  string   `json:"label"`
@@ -26,57 +30,41 @@ type KeyGroupOption struct {
 	RequestCount           int64    `json:"request_count,omitempty"`
 }
 
+var keyGroupOptionLoads singleflight.Group
+var keyGroupRankingLoads singleflight.Group
+
 func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 	if userID <= 0 {
 		return nil, errors.New("请先登录")
 	}
-	groups, err := loadKeyGroupOptionRows(userID)
+	value, err, _ := keyGroupOptionLoads.Do(fmt.Sprintf("%p:%d", platformdb.DB, userID), func() (any, error) {
+		return listKeyGroupOptions(userID)
+	})
 	if err != nil {
 		return nil, err
 	}
-	ids := make([]string, 0, len(groups))
-	for _, group := range groups {
-		ids = append(ids, group.ChannelID)
-	}
-	var channels []marketplaceschema.Channel
-	var overrides []marketplaceschema.UserMultiplier
-	if len(ids) > 0 {
-		if err := platformdb.DB.Select("id, approved_source_label, source_label_status, declared_models, internal_channel_id").Where("id IN ?", ids).Find(&channels).Error; err != nil {
-			return nil, err
-		}
-		// One query for all personal prices, rather than one query per option.
-		if err := platformdb.DB.Select("channel_id, multiplier").Where("user_id = ? AND channel_id IN ?", userID, ids).Find(&overrides).Error; err != nil {
-			return nil, err
-		}
-	}
-	channelsByID := make(map[string]marketplaceschema.Channel, len(channels))
-	for _, channel := range channels {
-		channelsByID[channel.ID] = channel
-	}
-	prices := make(map[string]float64, len(overrides))
-	for _, override := range overrides {
-		prices[override.ChannelID] = override.Multiplier
-	}
-	blocked, err := loadBlockedChannelIDs(userID, groups)
+	return value.([]KeyGroupOption), nil
+}
+
+func listKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
+	groups, err := loadKeyGroupOptionRows(userID)
 	if err != nil {
 		return nil, err
 	}
 	options := make([]KeyGroupOption, 0, len(groups))
 	// Statistics are optional selector metadata. A cold install may not have
 	// the snapshot table yet; group selection must still work without it.
-	snapshots, _ := rankingSnapshotsForList(groups, channelsByID, 24)
+	snapshots, snapshotErr := loadKeyGroupRankingSnapshots(groups)
+	if snapshotErr != nil && !strings.Contains(strings.ToLower(snapshotErr.Error()), "no such table") && !strings.Contains(strings.ToLower(snapshotErr.Error()), "does not exist") {
+		return nil, snapshotErr
+	}
 	modelsByGroup := make(map[string][]string, len(groups))
 	for _, group := range groups {
-		channel, exists := channelsByID[group.ChannelID]
-		_, isBlocked := blocked[group.ChannelID]
-		if !exists || isBlocked ||
-			(group.LifecycleStatus != marketplacedomain.LifecycleActive && group.LifecycleStatus != marketplacedomain.LifecycleDegraded) {
-			continue
-		}
+		channel := marketplaceschema.Channel{ID: group.ChannelID, ApprovedSourceLabel: group.ApprovedSourceLabel, SourceLabelStatus: group.SourceLabelStatus, DeclaredModels: group.DeclaredModels, InternalChannelID: group.InternalChannelID}
 		models := decodeModels(channel.DeclaredModels)
 		multiplier := marketplacedomain.NormalizeMultiplier(group.Multiplier)
 		label := marketplaceDisplayName(publicSourceLabel(channel), multiplier, channel.ID)
-		if price := prices[channel.ID]; userID != group.OwnerUserID && price > 0 {
+		if price := group.PersonalMultiplier; userID != group.OwnerUserID && price > 0 {
 			multiplier = marketplacedomain.NormalizeMultiplier(price)
 		}
 		option := KeyGroupOption{
@@ -116,18 +104,22 @@ func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 		return nil, err
 	}
 	membersByPool := make(map[string][]string, len(pools))
-	needsOfficial := false
+	officialIDs := make(map[string]int)
 	for _, member := range members {
 		membersByPool[member.PoolID] = append(membersByPool[member.PoolID], member.GroupID)
-		needsOfficial = needsOfficial || strings.HasPrefix(member.GroupID, officialAutoRoutePrefix)
+		if strings.HasPrefix(member.GroupID, officialAutoRoutePrefix) {
+			officialIDs[member.GroupID] = 0
+		}
 	}
 	autoIDs := make([]string, 0, len(selected))
 	for id := range selected {
 		autoIDs = append(autoIDs, id)
-		needsOfficial = needsOfficial || strings.HasPrefix(id, officialAutoRoutePrefix)
+		if strings.HasPrefix(id, officialAutoRoutePrefix) {
+			officialIDs[id] = 0
+		}
 	}
-	if needsOfficial {
-		for _, item := range loadOfficialAutoRouteItemsSummary(userID) {
+	if len(officialIDs) > 0 {
+		for _, item := range loadOfficialAutoRouteItemsFiltered(userID, officialIDs, true, false) {
 			modelsByGroup[item.GroupID] = item.Models
 		}
 	}
@@ -139,19 +131,82 @@ func ListKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 	return append(poolOptions, options...), nil
 }
 
-// loadKeyGroupOptionRows deliberately has no discovery-page limit. The API key
-// selector searches this complete result locally so existing keys keep their
-// display metadata and groups beyond the marketplace's 1000-row discovery cap
-// remain selectable.
-func loadKeyGroupOptionRows(userID int) ([]marketplaceschema.Group, error) {
-	var groups []marketplaceschema.Group
+type keyGroupRankingSnapshot struct {
+	GroupID        string
+	RawSuccessRate float64
+	AvgTTFTMs      float64
+	RequestCount   int64
+}
+
+func loadKeyGroupRankingSnapshots(groups []keyGroupOptionRow) (map[string]keyGroupRankingSnapshot, error) {
+	groupIDs := make([]string, 0, len(groups))
+	for _, group := range groups {
+		groupIDs = append(groupIDs, group.ID)
+	}
+	if len(groupIDs) == 0 {
+		return map[string]keyGroupRankingSnapshot{}, nil
+	}
+	// These four site-level statistics contain no viewer-specific values.
+	// Share only overlapping reads for the exact already-authorized ID set;
+	// invitations, blocks and personal prices are resolved separately above.
+	encodedIDs, _ := json.Marshal(groupIDs)
+	digest := sha256.Sum256(encodedIDs)
+	key := fmt.Sprintf("%p:%x", platformdb.DB, digest)
+	value, err, _ := keyGroupRankingLoads.Do(key, func() (any, error) {
+		var rows []keyGroupRankingSnapshot
+		if err := platformdb.DB.Model(&marketplaceschema.RankingSnapshot{}).
+			Select("group_id, raw_success_rate, avg_ttft_ms, request_count").
+			Where("group_id IN ? AND window_hours = ? AND ranking_version = ?", groupIDs, 24, rankingVersion).
+			Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		result := make(map[string]keyGroupRankingSnapshot, len(rows))
+		for _, row := range rows {
+			result[row.GroupID] = row
+		}
+		return result, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return value.(map[string]keyGroupRankingSnapshot), nil
+}
+
+type keyGroupOptionRow struct {
+	ID                  string
+	ChannelID           string
+	OwnerUserID         int
+	SourceType          string
+	CreditPoolPolicy    string
+	Multiplier          float64
+	ApprovedSourceLabel string
+	SourceLabelStatus   string
+	DeclaredModels      string
+	InternalChannelID   *int
+	PersonalMultiplier  float64
+}
+
+// The API key selector searches this complete, lightweight result locally.
+// Personal prices, invitations and blocks remain scoped to the current user.
+func loadKeyGroupOptionRows(userID int) ([]keyGroupOptionRow, error) {
+	var groups []keyGroupOptionRow
 	query := GroupQuery{
 		ViewerUserID:  userID,
 		IncludeAccess: true,
 		Verification:  marketplacedomain.VerificationPassed,
 	}
-	if err := publicGroupsQuery(query).
-		Order("updated_at DESC, id ASC").
+	channelTable := (marketplaceschema.Channel{}).TableName()
+	multiplierTable := (marketplaceschema.UserMultiplier{}).TableName()
+	blockTable := (marketplaceschema.ChannelUserBlock{}).TableName()
+	// Subqueries keep visibility/review conditions unambiguous while returning
+	// only selector fields. No 10,000-ID lists or per-option reads are needed.
+	visible := publicGroupsQuery(query).Select("id, channel_id, owner_user_id, source_type, credit_pool_policy, multiplier, lifecycle_status, updated_at")
+	if err := platformdb.DB.Unscoped().Table("(?) AS visible_groups", visible).
+		Select("visible_groups.id, visible_groups.channel_id, visible_groups.owner_user_id, visible_groups.source_type, visible_groups.credit_pool_policy, visible_groups.multiplier, c.approved_source_label, c.source_label_status, c.declared_models, c.internal_channel_id, COALESCE(um.multiplier, 0) AS personal_multiplier").
+		Joins("JOIN "+channelTable+" AS c ON c.id = visible_groups.channel_id AND c.deleted_at IS NULL").
+		Joins("LEFT JOIN "+multiplierTable+" AS um ON um.channel_id = c.id AND um.user_id = ?", userID).
+		Where(fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s b WHERE b.channel_id = c.id AND b.user_id = ?)", blockTable), userID).
+		Order("visible_groups.updated_at DESC, visible_groups.id ASC").
 		Find(&groups).Error; err != nil {
 		return nil, err
 	}

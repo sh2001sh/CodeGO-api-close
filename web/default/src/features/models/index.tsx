@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
+import '@/features/channels/admin-workspace.css'
 import { listDeployments } from './api'
 import { DeploymentAccessGuard } from './components/deployment-access-guard'
 import { DeploymentsTable } from './components/deployments-table'
@@ -34,6 +35,7 @@ import { ModelsProvider, useModels } from './components/models-provider'
 import { ModelsTable } from './components/models-table'
 import { useModelDeploymentSettings } from './hooks/use-model-deployment-settings'
 import { deploymentsQueryKeys } from './lib'
+import './models.css'
 import {
   type ModelsSectionId,
   MODELS_DEFAULT_SECTION,
@@ -42,17 +44,12 @@ import {
 
 const route = getRouteApi('/_authenticated/models/$section')
 
-const SECTION_META: Record<
-  ModelsSectionId,
-  { titleKey: string; descriptionKey: string }
-> = {
+const SECTION_META: Record<ModelsSectionId, { titleKey: string }> = {
   metadata: {
     titleKey: 'Metadata',
-    descriptionKey: 'Manage model metadata and configuration',
   },
   deployments: {
     titleKey: 'Deployments',
-    descriptionKey: 'Manage model deployments',
   },
 }
 
@@ -124,50 +121,52 @@ function ModelsContent() {
 
   return (
     <>
-      <SectionPageLayout>
-        <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
-        <SectionPageLayout.Description>
-          {t(meta.descriptionKey)}
-        </SectionPageLayout.Description>
-        <SectionPageLayout.Actions>
-          {activeSection === 'metadata' ? (
-            <ModelsPrimaryButtons />
-          ) : (
-            <Button onClick={() => setCreateDeploymentOpen(true)} size='sm'>
-              <Plus className='h-4 w-4' />
-              {t('Create deployment')}
-            </Button>
-          )}
-        </SectionPageLayout.Actions>
-        <SectionPageLayout.Content>
-          <div className='space-y-4'>
-            <Tabs value={activeSection} onValueChange={handleSectionChange}>
-              <TabsList className='h-auto max-w-full flex-wrap justify-start'>
-                {MODELS_SECTION_IDS.map((section) => (
-                  <TabsTrigger key={section} value={section}>
-                    {t(SECTION_META[section].titleKey)}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+      <div className='admin-workspace models-workspace'>
+        <SectionPageLayout kicker=''>
+          <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
+          <SectionPageLayout.Actions>
             {activeSection === 'metadata' ? (
-              <ModelsTable />
+              <ModelsPrimaryButtons />
             ) : (
-              <DeploymentAccessGuard
-                loading={deploymentLoading}
-                loadingPhase={loadingPhase}
-                isEnabled={isIoNetEnabled}
-                connectionLoading={connectionLoading}
-                connectionOk={connectionOk}
-                connectionError={connectionError}
-                onRetry={testConnection}
-              >
-                <DeploymentsTable />
-              </DeploymentAccessGuard>
+              <Button onClick={() => setCreateDeploymentOpen(true)} size='sm'>
+                <Plus className='h-4 w-4' />
+                {t('Create deployment')}
+              </Button>
             )}
-          </div>
-        </SectionPageLayout.Content>
-      </SectionPageLayout>
+          </SectionPageLayout.Actions>
+          <SectionPageLayout.Content>
+            <div className='model-resource-layout'>
+              <Tabs value={activeSection} onValueChange={handleSectionChange}>
+                <TabsList
+                  aria-label={t('Models')}
+                  className='h-auto max-w-full flex-wrap justify-start'
+                >
+                  {MODELS_SECTION_IDS.map((section) => (
+                    <TabsTrigger key={section} value={section}>
+                      {t(SECTION_META[section].titleKey)}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+              {activeSection === 'metadata' ? (
+                <ModelsTable />
+              ) : (
+                <DeploymentAccessGuard
+                  loading={deploymentLoading}
+                  loadingPhase={loadingPhase}
+                  isEnabled={isIoNetEnabled}
+                  connectionLoading={connectionLoading}
+                  connectionOk={connectionOk}
+                  connectionError={connectionError}
+                  onRetry={testConnection}
+                >
+                  <DeploymentsTable />
+                </DeploymentAccessGuard>
+              )}
+            </div>
+          </SectionPageLayout.Content>
+        </SectionPageLayout>
+      </div>
 
       <ModelsDialogs />
       <CreateDeploymentDrawer

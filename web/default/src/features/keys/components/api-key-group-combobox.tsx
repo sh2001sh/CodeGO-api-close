@@ -119,6 +119,8 @@ function GroupRatioBadges({
   option?: ApiKeyGroupOption
   className?: string
 }) {
+  useTranslation()
+
   if (!option) return null
   return (
     <span className={cn('flex min-w-0 flex-wrap gap-1', className)}>
@@ -253,7 +255,7 @@ export function ApiKeyGroupCombobox({
           </span>
           <GroupRatioBadges
             option={selectedOption}
-            className='basis-full sm:basis-auto sm:shrink-0 sm:justify-end'
+            className='basis-full sm:shrink-0 sm:basis-auto sm:justify-end'
           />
         </span>
         <ChevronsUpDown className='h-4 w-4 shrink-0 opacity-50' />
@@ -347,7 +349,7 @@ function GroupOptions(props: {
           </span>
           <GroupRatioBadges
             option={option}
-            className='basis-full pl-7 sm:basis-auto sm:shrink-0 sm:justify-end sm:pl-0'
+            className='basis-full pl-7 sm:shrink-0 sm:basis-auto sm:justify-end sm:pl-0'
           />
         </CommandItem>
       ))}

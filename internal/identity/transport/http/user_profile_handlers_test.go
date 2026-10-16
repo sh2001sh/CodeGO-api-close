@@ -352,6 +352,15 @@ func TestGetUserAffiliateRewardsOverviewReturnsInviteeStatuses(t *testing.T) {
 			t.Fatalf("failed to seed user: %v", err)
 		}
 	}
+	for _, receipt := range []billingschema.ReferralConsumptionRebate{
+		{SettlementID: "invitee-one-a", InviterID: inviter.Id, InviteeID: inviteeOne.Id, EligibleQuota: 10000000, RebateQuota: 300000, RateBPS: 300},
+		{SettlementID: "invitee-one-b", InviterID: inviter.Id, InviteeID: inviteeOne.Id, EligibleQuota: 2000000, RebateQuota: 60000, RateBPS: 300},
+		{SettlementID: "other-inviter", InviterID: 99, InviteeID: 100, EligibleQuota: 90000000, RebateQuota: 2700000, RateBPS: 300},
+	} {
+		if err := db.Create(&receipt).Error; err != nil {
+			t.Fatalf("failed to seed rebate receipt: %v", err)
+		}
+	}
 	if err := db.Create(&commerceschema.SubscriptionResetOpportunityAccount{
 		UserId:         inviter.Id,
 		EarnedTotal:    1,
@@ -394,6 +403,9 @@ func TestGetUserAffiliateRewardsOverviewReturnsInviteeStatuses(t *testing.T) {
 	if overview.ResetOpportunity.AvailableCount != 1 || overview.ResetOpportunity.EarnedTotal != 1 {
 		t.Fatalf("unexpected reset opportunity summary: %#v", overview.ResetOpportunity)
 	}
+	if overview.RebateRateBPS != 300 || overview.FirstWeekConsumedQuota != 12000000 || overview.RebateTotalQuota != 360000 {
+		t.Fatalf("unexpected rebate totals or inviter data isolation: %#v", overview)
+	}
 
 	statusByInvitee := make(map[int]identityapp.AffiliateInviteeRewardStatus, len(overview.Invitees))
 	for _, invitee := range overview.Invitees {
@@ -407,5 +419,21 @@ func TestGetUserAffiliateRewardsOverviewReturnsInviteeStatuses(t *testing.T) {
 	}
 	if inviteeStatus, ok := statusByInvitee[inviteeTwo.Id]; !ok || inviteeStatus.MonthCardPurchased || inviteeStatus.ResetOpportunityEarned {
 		t.Fatalf("expected second invitee to be unrewarded, got %#v", inviteeStatus)
+	}
+	if status := statusByInvitee[inviteeOne.Id]; status.FirstWeekConsumedQuota != 12000000 || status.RebateQuota != 360000 || status.RebateEndsAt != inviteeOne.CreatedAt+7*24*60*60 {
+		t.Fatalf("unexpected first-week rebate status: %#v", status)
+	}
+	if status := statusByInvitee[inviteeTwo.Id]; status.FirstWeekConsumedQuota != 0 || status.RebateQuota != 0 {
+		t.Fatalf("unconsumed invitee must not show a rebate: %#v", status)
+	}
+}
+
+func TestGetUserAffiliateRewardsOverviewReportsMissingProgram(t *testing.T) {
+	db := setupDesktopHTTPTestDB(t)
+	if err := db.Delete(&billingschema.ReferralRebateProgram{}, 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := identityapp.GetAffiliateRewardsOverview(1); err == nil {
+		t.Fatal("missing rebate program must report failure rather than zero rewards")
 	}
 }

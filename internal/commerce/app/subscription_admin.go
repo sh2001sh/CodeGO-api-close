@@ -114,7 +114,7 @@ func DeleteAdminSubscriptionPlan(planID int) (string, error) {
 	now := platformruntime.GetTimestamp()
 	var subscriptionCount int64
 	if err := platformdb.DB.Model(&commerceschema.UserSubscription{}).
-		Where("plan_id = ? AND status = ? AND end_time > ?", planID, "active", now).
+		Where("plan_id = ? AND status = ? AND (end_time > ? OR (end_time = 0 AND credit_pack_granted_quota > 0))", planID, "active", now).
 		Count(&subscriptionCount).Error; err != nil {
 		return "", err
 	}
@@ -215,6 +215,9 @@ func ResetSubscriptionPeriodProjection(subscriptionID int) (*commerceschema.User
 		plan, err := getSubscriptionPlanRecordTx(tx, sub.PlanId)
 		if err != nil {
 			return err
+		}
+		if sub.CreditPackGrantedQuota > 0 {
+			return errorsNew("permanent credit packs cannot be refreshed")
 		}
 		if commercedomain.NormalizeResetPeriod(plan.QuotaResetPeriod) == commerceschema.SubscriptionResetNever {
 			return errorsNew("subscription does not have a periodic quota")

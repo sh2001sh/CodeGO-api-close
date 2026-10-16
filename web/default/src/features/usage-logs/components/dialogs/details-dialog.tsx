@@ -1,3 +1,4 @@
+import { getIntlLocale } from '@/i18n/format'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -106,7 +107,7 @@ function DetailSection(props: {
 }) {
   const isDanger = props.variant === 'danger'
   return (
-    <div className='min-w-0 space-y-1.5'>
+    <section className='solaris-log-detail-section min-w-0 space-y-2'>
       <Label
         className={cn(
           'flex items-center gap-1.5 text-xs font-semibold',
@@ -124,7 +125,7 @@ function DetailSection(props: {
       >
         {props.children}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -399,44 +400,47 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
 
   const rows: Array<{ label: string; value: string }> = []
 
-  rows.push({ label: t('Input Tokens'), value: promptTokens.toLocaleString() })
+  rows.push({
+    label: t('Input Tokens'),
+    value: promptTokens.toLocaleString(getIntlLocale()),
+  })
   rows.push({
     label: t('Output Tokens'),
-    value: completionTokens.toLocaleString(),
+    value: completionTokens.toLocaleString(getIntlLocale()),
   })
 
   if (cacheRead > 0) {
     rows.push({
       label: t('Cache Read'),
-      value: cacheRead.toLocaleString(),
+      value: cacheRead.toLocaleString(getIntlLocale()),
     })
   }
 
   if (cacheWrite > 0 && cacheWrite5m === 0 && cacheWrite1h === 0) {
     rows.push({
       label: t('Cache Write'),
-      value: cacheWrite.toLocaleString(),
+      value: cacheWrite.toLocaleString(getIntlLocale()),
     })
   }
 
   if (cacheWrite5m > 0) {
     rows.push({
       label: t('Cache Write (5m)'),
-      value: cacheWrite5m.toLocaleString(),
+      value: cacheWrite5m.toLocaleString(getIntlLocale()),
     })
   }
 
   if (cacheWrite1h > 0) {
     rows.push({
       label: t('Cache Write (1h)'),
-      value: cacheWrite1h.toLocaleString(),
+      value: cacheWrite1h.toLocaleString(getIntlLocale()),
     })
   }
 
   if (other.image && other.image_output) {
     rows.push({
       label: t('Image Tokens'),
-      value: other.image_output.toLocaleString(),
+      value: other.image_output.toLocaleString(getIntlLocale()),
     })
   }
 
@@ -573,7 +577,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent
         className={cn(
-          'min-w-0 overflow-hidden',
+          'solaris-log-details min-w-0 overflow-hidden',
           'max-sm:max-h-[calc(100dvh-1.5rem)] max-sm:w-[calc(100vw-1.5rem)] max-sm:max-w-[calc(100vw-1.5rem)] max-sm:p-4',
           isTieredBilling ? 'sm:max-w-4xl lg:max-w-5xl' : 'sm:max-w-lg'
         )}
@@ -820,7 +824,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   <Button
                     variant='ghost'
                     size='sm'
-                    className='absolute top-0 right-0 h-5 w-5 p-0'
+                    className='absolute top-0 right-0 h-11 w-11 p-0'
                     onClick={() => copyToClipboard(conversionLabel)}
                     title={t('Copy to clipboard')}
                     aria-label={t('Copy to clipboard')}
@@ -831,7 +835,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                       <Copy className='size-3' />
                     )}
                   </Button>
-                  <div className='min-w-0 space-y-1 pr-6'>
+                  <div className='min-w-0 space-y-1 pr-12'>
                     {other?.request_path && (
                       <DetailRow
                         label={t('Path')}
@@ -1246,7 +1250,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   <Button
                     variant='ghost'
                     size='sm'
-                    className='absolute top-1.5 right-1.5 h-5 w-5 p-0'
+                    className='absolute top-1.5 right-1.5 h-11 w-11 p-0'
                     onClick={() => copyToClipboard(details)}
                     title={t('Copy to clipboard')}
                     aria-label={t('Copy to clipboard')}
@@ -1257,7 +1261,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                       <Copy className='size-3' />
                     )}
                   </Button>
-                  <p className='min-w-0 pr-6 text-xs leading-relaxed break-all whitespace-pre-wrap sm:break-words'>
+                  <p className='min-w-0 pr-12 text-xs leading-relaxed break-all whitespace-pre-wrap sm:break-words'>
                     {details}
                   </p>
                 </div>

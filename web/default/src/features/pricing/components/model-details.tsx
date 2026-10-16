@@ -16,10 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import { ArrowLeft, Code2, HeartPulse, Info, Timer } from 'lucide-react'
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Code2,
+  HeartPulse,
+  Info,
+  Timer,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
@@ -59,9 +66,11 @@ import {
   isDynamicPricingModel,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
+import { availablePricingModels } from '../lib/merge-pricing-models'
 import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
 import { inferModelMetadata } from '../lib/model-metadata'
 import { formatFixedPrice, formatGroupPrice } from '../lib/price'
+import '../model-details.css'
 import type {
   Modality,
   ModelCapability,
@@ -106,11 +115,7 @@ function CompactCapabilityList(props: { capabilities: ModelCapability[] }) {
   const { t } = useTranslation()
 
   if (props.capabilities.length === 0) {
-    return (
-      <span className='text-muted-foreground text-xs'>
-        {t('No capabilities reported for this model.')}
-      </span>
-    )
+    return <span className='text-muted-foreground text-xs'>{t('待核验')}</span>
   }
 
   return (
@@ -270,7 +275,6 @@ function ModelHeader(props: { model: PricingModel }) {
   const vendorIcon = model.vendor_icon
     ? getLobeIcon(model.vendor_icon, 20)
     : null
-  const description = model.description || model.vendor_description || null
   const tags = parseTags(model.tags)
   const isSpecialExpression =
     model.billing_mode === 'tiered_expr' &&
@@ -278,7 +282,7 @@ function ModelHeader(props: { model: PricingModel }) {
     getDynamicPricingTiers(model).length === 0
 
   return (
-    <header className='pb-4'>
+    <header className='model-identity pb-4'>
       <div className='flex items-center gap-2.5'>
         {vendorIcon}
         <h1 className='font-mono text-xl font-bold tracking-tight sm:text-2xl'>
@@ -306,7 +310,7 @@ function ModelHeader(props: { model: PricingModel }) {
         {model.billing_mode === 'tiered_expr' && model.billing_expr && (
           <>
             <span className='text-muted-foreground/30'>·</span>
-            <span className='rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning'>
+            <span className='bg-warning/15 text-warning rounded px-1.5 py-0.5 text-[10px] font-medium'>
               {isSpecialExpression
                 ? t('Special billing expression')
                 : t('Dynamic Pricing')}
@@ -314,11 +318,6 @@ function ModelHeader(props: { model: PricingModel }) {
           </>
         )}
       </div>
-      {description && (
-        <p className='text-muted-foreground mt-2 text-sm leading-relaxed'>
-          {description}
-        </p>
-      )}
       {tags.length > 0 && (
         <div className='mt-2.5 flex flex-wrap gap-1'>
           {tags.map((tag) => (
@@ -345,18 +344,23 @@ function PriceSection(props: {
   usdExchangeRate: number
   tokenUnit: TokenUnit
   showRechargePrice: boolean
+  selectedGroup?: string
+  groupRatio?: Record<string, number>
 }) {
   const { t } = useTranslation()
   const isTokenBased = isTokenBasedModel(props.model)
   const tokenUnitLabel = props.tokenUnit === 'K' ? '1K' : '1M'
-  const baseGroupKey = '_base'
-  const baseGroupRatioMap = { [baseGroupKey]: 1 }
+  const baseGroupKey = props.selectedGroup || '_base'
+  const selectedRatio = props.selectedGroup
+    ? (props.groupRatio?.[props.selectedGroup] ?? 1)
+    : 1
+  const baseGroupRatioMap = { [baseGroupKey]: selectedRatio }
   const dynamicSummary = getDynamicPricingSummary(props.model, {
     tokenUnit: props.tokenUnit,
     showRechargePrice: props.showRechargePrice,
     priceRate: props.priceRate,
     usdExchangeRate: props.usdExchangeRate,
-    groupRatioMultiplier: 1,
+    groupRatioMultiplier: selectedRatio,
   })
 
   const primaryPriceTypes: { label: string; type: PriceType }[] = [
@@ -402,8 +406,8 @@ function PriceSection(props: {
       return (
         <section>
           <SectionTitle>{t('Base Price')}</SectionTitle>
-          <div className='rounded-lg border border-warning/30 bg-warning/10 p-3'>
-            <div className='text-sm font-medium text-warning'>
+          <div className='border-warning/30 bg-warning/10 rounded-lg border p-3'>
+            <div className='text-warning text-sm font-medium'>
               {t('Special billing expression')}
             </div>
             <p className='text-muted-foreground mt-1 text-xs'>
@@ -652,8 +656,8 @@ function GroupPricingSection(props: {
         <section>
           <SectionTitle>{t('Pricing by Group')}</SectionTitle>
           <AutoGroupChain model={props.model} autoGroups={props.autoGroups} />
-          <div className='rounded-lg border border-warning/30 bg-warning/10 p-3'>
-            <div className='text-sm font-medium text-warning'>
+          <div className='border-warning/30 bg-warning/10 rounded-lg border p-3'>
+            <div className='text-warning text-sm font-medium'>
               {t('Special billing expression')}
             </div>
             <p className='text-muted-foreground mt-1 text-xs'>
@@ -759,7 +763,7 @@ function GroupPricingSection(props: {
             )
           })}
           <p className='text-muted-foreground/40 mt-1.5 text-[10px]'>
-            {t('Prices shown per')} {tokenUnitLabel} tokens
+            {t('Prices shown per')} {tokenUnitLabel} {t('tokens')}
           </p>
         </div>
       </section>
@@ -874,7 +878,7 @@ function GroupPricingSection(props: {
         </Table>
         {isTokenBased && (
           <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
-            {t('Prices shown per')} {tokenUnitLabel} tokens
+            {t('Prices shown per')} {tokenUnitLabel} {t('tokens')}
           </p>
         )}
       </div>
@@ -904,20 +908,66 @@ export interface ModelDetailsContentProps {
   usdExchangeRate: number
   tokenUnit: TokenUnit
   showRechargePrice?: boolean
+  initialGroup?: string
 }
 
 export function ModelDetailsContent(props: ModelDetailsContentProps) {
   const { t } = useTranslation()
   const showRechargePrice = props.showRechargePrice ?? false
   const metadata = useMemo(() => inferModelMetadata(props.model), [props.model])
+  const availableGroups = useMemo(
+    () => getAvailableGroups(props.model, props.usableGroup),
+    [props.model, props.usableGroup]
+  )
+  const [selectedGroup, setSelectedGroup] = useState(() =>
+    availableGroups.includes(props.initialGroup ?? '')
+      ? props.initialGroup!
+      : ''
+  )
 
   const isDynamic =
     props.model.billing_mode === 'tiered_expr' &&
     Boolean(props.model.billing_expr)
 
   return (
-    <div className='@container/details space-y-4'>
+    <div className='exchange-model-details @container/details space-y-4'>
       <ModelHeader model={props.model} />
+
+      <div className='model-access-rail'>
+        <label>
+          <span>{t('Group')}</span>
+          <select
+            value={selectedGroup}
+            onChange={(event) => setSelectedGroup(event.target.value)}
+          >
+            <option value=''>{t('Base Price')}</option>
+            {availableGroups.map((group) => (
+              <option key={group} value={group}>
+                {group} · {props.groupRatio[group] ?? 1}×
+              </option>
+            ))}
+          </select>
+        </label>
+        <div>
+          <Button
+            render={
+              <Link
+                to='/playground'
+                search={{
+                  model: props.model.model_name,
+                  group: selectedGroup || undefined,
+                }}
+              />
+            }
+          >
+            {t('gateway.playground')}
+            <ArrowUpRight />
+          </Button>
+          <Button variant='outline' render={<Link to='/keys' />}>
+            {t('gateway.apiKeys')}
+          </Button>
+        </div>
+      </div>
 
       <Tabs defaultValue='overview' className='gap-4'>
         <TabsList className='bg-muted/60 h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg p-1'>
@@ -947,6 +997,8 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
               usdExchangeRate={props.usdExchangeRate}
               tokenUnit={props.tokenUnit}
               showRechargePrice={showRechargePrice}
+              selectedGroup={selectedGroup}
+              groupRatio={props.groupRatio}
             />
             {isDynamic && (
               <DynamicPricingBreakdown billingExpr={props.model.billing_expr} />
@@ -1028,6 +1080,8 @@ export function ModelDetails() {
 
   const {
     models,
+    pricedModelDetails,
+    availableModels,
     groupRatio,
     usableGroup,
     endpointMap,
@@ -1035,6 +1089,8 @@ export function ModelDetails() {
     isLoading,
     priceRate,
     usdExchangeRate,
+    error,
+    refetch,
   } = usePricingData()
 
   const tokenUnit: TokenUnit =
@@ -1042,8 +1098,12 @@ export function ModelDetails() {
 
   const model = useMemo(() => {
     if (!models || !modelId) return null
-    return models.find((m) => m.model_name === modelId) || null
-  }, [models, modelId])
+    return (
+      availablePricingModels(models, pricedModelDetails, availableModels).find(
+        (m) => m.model_name === modelId
+      ) || null
+    )
+  }, [models, pricedModelDetails, availableModels, modelId])
 
   const handleBack = () => {
     navigate({ to: '/pricing', search })
@@ -1052,7 +1112,11 @@ export function ModelDetails() {
   if (isLoading) {
     return (
       <PublicLayout>
-        <div className='mx-auto max-w-5xl px-4 sm:px-6'>
+        <div
+          className='model-page-shell'
+          aria-busy='true'
+          aria-label={t('Loading')}
+        >
           <Skeleton className='mb-4 h-5 w-16' />
           <div className='space-y-2'>
             <Skeleton className='h-7 w-64' />
@@ -1074,16 +1138,27 @@ export function ModelDetails() {
     )
   }
 
+  if (error) {
+    return (
+      <PublicLayout>
+        <div className='model-page-error' role='alert'>
+          <h1>{t('模型价格加载失败')}</h1>
+          <Button onClick={() => void refetch()}>{t('重试')}</Button>
+          <Button variant='outline' onClick={handleBack}>
+            {t('Back to Models')}
+          </Button>
+        </div>
+      </PublicLayout>
+    )
+  }
+
   if (!model) {
     return (
       <PublicLayout>
-        <div className='mx-auto max-w-2xl px-4 text-center sm:px-6'>
-          <h2 className='mb-1 text-base font-semibold'>
+        <div className='model-page-error model-page-not-found'>
+          <h1 className='mb-4 text-2xl font-semibold'>
             {t('Model not found')}
-          </h2>
-          <p className='text-muted-foreground mb-4 text-sm'>
-            {t("The model you're looking for doesn't exist.")}
-          </p>
+          </h1>
           <Button onClick={handleBack} variant='outline' size='sm'>
             {t('Back to Models')}
           </Button>
@@ -1094,18 +1169,19 @@ export function ModelDetails() {
 
   return (
     <PublicLayout>
-      <div className='mx-auto max-w-5xl px-4 sm:px-6'>
+      <div className='model-page-shell'>
         <Button
           variant='ghost'
           size='sm'
           onClick={handleBack}
-          className='text-muted-foreground hover:text-foreground mb-4 h-auto gap-1 px-0 py-1 text-xs'
+          className='text-muted-foreground hover:text-foreground mb-4 min-h-11 gap-2 px-3 text-sm'
         >
           <ArrowLeft className='size-3.5' />
           {t('Back')}
         </Button>
 
         <ModelDetailsContent
+          key={model.model_name}
           model={model}
           groupRatio={groupRatio || {}}
           usableGroup={usableGroup || {}}
@@ -1113,6 +1189,7 @@ export function ModelDetails() {
           priceRate={priceRate ?? 1}
           usdExchangeRate={usdExchangeRate ?? 1}
           tokenUnit={tokenUnit}
+          initialGroup={search.group}
           showRechargePrice={search.rechargePrice ?? false}
           endpointMap={
             (endpointMap as Record<

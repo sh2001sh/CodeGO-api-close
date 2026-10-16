@@ -1,0 +1,367 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+header.codego-public-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--hairline-light);
+  background: var(--surface-glass, rgba(255, 255, 255, 0.75));
+  color: var(--ink-primary);
+  box-shadow:
+    0 1px 0 var(--hairline-light),
+    0 8px 32px -4px rgba(13, 13, 16, 0.04);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.dark header.codego-public-header {
+  background: rgba(13, 13, 16, 0.75);
+  box-shadow:
+    0 1px 0 var(--hairline-light),
+    0 8px 32px -4px rgba(0, 0, 0, 0.3);
+}
+
+.codego-public-header .codego-public-header-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  width: min(1680px, 100%);
+  min-height: 76px;
+  margin-inline: auto;
+  padding-inline: 28px;
+}
+
+.codego-public-header .codego-public-brand-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.codego-public-header .codego-public-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: var(--ink-primary);
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 180ms ease;
+}
+
+.codego-public-header .codego-public-brand:hover {
+  opacity: 0.85;
+}
+
+.codego-public-header .codego-public-brand > span {
+  overflow: hidden;
+  max-width: 160px;
+  text-overflow: ellipsis;
+}
+
+.codego-public-header .codego-public-desktop-nav,
+nav.codego-public-desktop-nav {
+  display: flex;
+  justify-content: center;
+}
+
+.codego-public-segments {
+  position: relative;
+  display: grid;
+  align-items: center;
+  width: max-content;
+  padding: 4px;
+  border-radius: 9999px;
+  background: var(--surface-sunken, #f4f2ed);
+  border: 1px solid var(--hairline-light);
+  box-shadow: inset 0 1px 2px rgba(13, 13, 16, 0.04);
+  isolation: isolate;
+}
+
+.dark .codego-public-segments {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--hairline-light);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.codego-public-segment-indicator {
+  position: absolute;
+  z-index: -1;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  border-radius: 9999px;
+  background: var(--surface-obsidian, #0d0d10);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 4px 12px rgba(13, 13, 16, 0.18);
+  pointer-events: none;
+}
+
+.dark .codego-public-segment-indicator {
+  background: var(--surface-card, #222228);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.codego-public-segments .codego-public-segment {
+  display: flex;
+  justify-content: center;
+  min-width: 54px;
+  min-height: 36px;
+  padding: 8px 13px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.4;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color 180ms var(--ease-optical),
+    background-color 180ms var(--ease-optical);
+}
+
+.codego-public-segments .codego-public-segment:hover {
+  background: color-mix(in srgb, var(--surface-card) 64%, transparent);
+  color: var(--ink-primary);
+}
+
+.codego-public-segments .codego-public-segment.active,
+.codego-public-segments .codego-public-segment.active:hover {
+  background: transparent;
+  color: var(--surface-obsidian-ink);
+}
+
+.codego-public-link[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.codego-public-link:focus-visible,
+.codego-public-brand:focus-visible,
+.dawn-console-sidebar a:focus-visible,
+.dawn-console-sidebar button:focus-visible {
+  outline: 2px solid var(--brand-orange);
+  outline-offset: 3px;
+}
+
+.codego-public-header .codego-public-actions {
+  display: flex;
+  grid-column: 3;
+  justify-self: end;
+  align-items: center;
+  gap: 3px;
+  margin-left: 0;
+}
+
+.codego-public-header .codego-public-actions button,
+.codego-public-header .codego-public-actions [data-slot='button'] {
+  border-radius: 999px;
+}
+
+.codego-public-header .codego-public-preferences {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.codego-public-header .codego-public-more {
+  color: var(--ink-secondary);
+}
+
+.codego-public-header .codego-public-signin {
+  min-height: 36px;
+  padding-inline: 18px;
+  border-radius: 9999px;
+  border: 1px solid rgba(13, 13, 16, 0.12);
+  background: var(--surface-obsidian, #0d0d10);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow:
+    0 1px 3px rgba(13, 13, 16, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition: all 180ms var(--ease-spring);
+}
+
+.dark .codego-public-header .codego-public-signin {
+  background: #ffffff;
+  color: #0d0d10;
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.codego-public-header .codego-public-signin:hover {
+  background: #242429;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(13, 13, 16, 0.2);
+}
+
+.dark .codego-public-header .codego-public-signin:hover {
+  background: #f0f0f3;
+}
+
+.codego-public-header .codego-global-search {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  flex: none;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.codego-public-header .codego-public-menu,
+.codego-public-menu {
+  display: none;
+}
+
+.codego-public-mobile-sheet,
+.codego-public-utility-menu {
+  background: var(--surface-glass);
+  color: var(--ink-primary);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+}
+
+.codego-public-mobile-sheet {
+  overflow-y: auto;
+  border-color: var(--hairline-light);
+}
+
+.codego-public-mobile-nav {
+  display: block;
+  padding: 0 16px;
+}
+
+.codego-public-mobile-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.codego-public-mobile-sheet .codego-public-link {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 11px 16px;
+  border-radius: 14px;
+  color: var(--ink-secondary);
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.codego-public-mobile-sheet .codego-public-link:hover {
+  background: var(--bg-subtle);
+  color: var(--ink-primary);
+}
+
+.codego-public-mobile-sheet .codego-public-link.active {
+  background: var(--surface-obsidian);
+  color: var(--surface-obsidian-ink);
+}
+
+.codego-public-mobile-preferences {
+  display: flex;
+  gap: 8px;
+  padding-inline: 16px;
+}
+
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .codego-public-header .codego-public-header-inner {
+    gap: 12px;
+    padding-inline: 20px;
+  }
+
+  .codego-public-segments .codego-public-segment {
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 1199px) {
+  .codego-public-header .codego-public-header-inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    min-height: 64px;
+    padding-inline: 20px;
+  }
+
+  .codego-public-header .codego-public-desktop-nav,
+  nav.codego-public-desktop-nav,
+  .codego-public-header .codego-public-more {
+    display: none;
+  }
+
+  .codego-public-header .codego-public-menu,
+  .codego-public-menu {
+    display: inline-flex;
+  }
+
+  .codego-public-header .codego-public-actions {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 479px) {
+  .codego-public-header .codego-public-header-inner {
+    gap: 4px;
+    padding-inline: 12px;
+  }
+
+  .codego-public-header .codego-public-brand-group {
+    gap: 4px;
+  }
+
+  .codego-public-header .codego-public-brand {
+    gap: 6px;
+    font-size: 19px;
+  }
+
+  .codego-public-header .codego-public-brand > span {
+    max-width: 112px;
+  }
+
+  .codego-public-header .codego-public-preferences {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codego-public-header *,
+  .codego-public-mobile-sheet * {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}

@@ -22,7 +22,12 @@ import { getSystemOptions } from '../api'
 export function useSystemOptions() {
   return useQuery({
     queryKey: ['system-options'],
-    queryFn: getSystemOptions,
+    queryFn: async () => {
+      const response = await getSystemOptions()
+      if (!response.success)
+        throw new Error(response.message || 'Failed to load settings')
+      return response
+    },
     staleTime: 5 * 60 * 1000,
   })
 }

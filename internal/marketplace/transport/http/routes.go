@@ -15,6 +15,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 	publicMarketplaceRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))
 	{
 		publicMarketplaceRoute.GET("/groups", ListGroups)
+		publicMarketplaceRoute.GET("/shops", ListShops)
 		publicMarketplaceRoute.GET("/models", ListModels)
 		publicMarketplaceRoute.GET("/group-status", ListGroupStatus)
 		publicMarketplaceRoute.GET("/multiplier-trends", ListMultiplierTrends)
@@ -26,6 +27,10 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 	marketplaceRoute.Use(middleware.UserAuth())
 	{
 		marketplaceRoute.GET("/key-group-options", ListKeyGroupOptions)
+		marketplaceRoute.GET("/shop/mine", GetMyShop)
+		marketplaceRoute.PUT("/shop/mine", middleware.CriticalRateLimit(), UpdateMyShop)
+		marketplaceRoute.PUT("/shops/:id/rating", middleware.CriticalRateLimit(), RateShop)
+		marketplaceRoute.POST("/reports", middleware.CriticalRateLimit(), SubmitReport)
 		marketplaceRoute.POST("/groups/:id/bind-token", middleware.CriticalRateLimit(), BindToken)
 		marketplaceRoute.POST("/groups/:id/invite", middleware.CriticalRateLimit(), CreateGroupInvite)
 		marketplaceRoute.POST("/invites/accept", middleware.CriticalRateLimit(), AcceptGroupInvite)
@@ -81,6 +86,8 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 	adminRoute.Use(middleware.AdminAuth())
 	{
 		adminRoute.GET("/channels", ListAdminChannels)
+		adminRoute.GET("/reports", ListReports)
+		adminRoute.POST("/reports/:id/resolve", middleware.CriticalRateLimit(), ResolveReport)
 		adminRoute.GET("/owner-income", ListAdminOwnerIncome)
 		adminRoute.GET("/security-audit/events", ListAdminSecurityAuditEvents)
 		adminRoute.PATCH("/security-audit/events/:id", UpdateAdminSecurityAuditEvent)

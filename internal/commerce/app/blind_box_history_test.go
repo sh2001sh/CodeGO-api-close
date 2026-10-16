@@ -4,10 +4,51 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sh2001sh/new-api/constant"
+
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBlindBoxOverviewAggregatesOrderStatesWithoutLoadingPaymentPayloads(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	user := createBalanceBlindBoxTestUser(t, db, 9041, "BQ9041", 10)
+	now := platformruntime.GetTimestamp()
+	dayStart, _ := getBlindBoxDayRange(now)
+	monthStart, _ := getBlindBoxMonthRange(now)
+	cutoff := pendingBlindBoxOrderCutoff(now)
+	orders := []commerceschema.BlindBoxOrder{
+		{UserId: user.Id, TradeNo: "overview-success", Quantity: 5, OpenedCount: 2, Money: 10, Status: constant.TopUpStatusSuccess, CreateTime: now},
+		{UserId: user.Id, TradeNo: "overview-exhausted", Quantity: 4, OpenedCount: 4, Money: 10, Status: constant.TopUpStatusSuccess, CreateTime: now},
+		{UserId: user.Id, TradeNo: "overview-overopened", Quantity: 1, OpenedCount: 3, Money: 10, Status: constant.TopUpStatusSuccess, CreateTime: now},
+		{UserId: user.Id, TradeNo: "overview-gift", Quantity: 7, Money: 0, Status: constant.TopUpStatusSuccess, CreateTime: monthStart - 1},
+		{UserId: user.Id, TradeNo: "overview-pending", Quantity: 3, OpenedCount: 1, Money: 10, Status: constant.TopUpStatusPending, CreateTime: now},
+		{UserId: user.Id, TradeNo: "overview-pending-free", Quantity: 9, Money: 0, Status: constant.TopUpStatusPending, CreateTime: now},
+		{UserId: user.Id, TradeNo: "overview-pending-expired", Quantity: 8, Money: 10, Status: constant.TopUpStatusPending, CreateTime: cutoff - 1},
+		{UserId: user.Id, TradeNo: "overview-old-paid", Quantity: 10, Money: 10, Status: constant.TopUpStatusSuccess, CreateTime: monthStart - 1},
+		{UserId: user.Id + 1, TradeNo: "overview-other", Quantity: 999, Money: 10, Status: constant.TopUpStatusSuccess, CreateTime: now},
+		{UserId: user.Id, TradeNo: "overview-day-start", Quantity: 2, OpenedCount: 2, Money: 10, Status: constant.TopUpStatusSuccess, CreateTime: dayStart},
+	}
+	require.NoError(t, db.Create(&orders).Error)
+	for _, order := range orders {
+		require.NoError(t, db.Model(&order).UpdateColumn("provider_payload", "malformed payload that the overview does not need").Error)
+	}
+	overview, err := GetBlindBoxOverview(user.Id, 20)
+	require.NoError(t, err)
+	require.Equal(t, 20, overview.AvailableBoxes)
+	require.Equal(t, 11, overview.PendingBoxes)
+	require.Equal(t, 15, overview.PurchasedToday)
+	require.Equal(t, 15, overview.PurchasedThisMonth)
+	require.Empty(t, overview.RecentRecords)
+
+	empty, err := GetBlindBoxOverview(user.Id+2, 20)
+	require.NoError(t, err)
+	require.Zero(t, empty.AvailableBoxes)
+	require.Zero(t, empty.PendingBoxes)
+	require.Zero(t, empty.PurchasedToday)
+	require.Zero(t, empty.PurchasedThisMonth)
+}
 
 func TestListBlindBoxHistoryFiltersThirtyDaysAndNamesProps(t *testing.T) {
 	db := setupRedemptionTestDB(t)

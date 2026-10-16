@@ -33,7 +33,9 @@ export async function getImageWorkspaceModels(
     params: group ? { group } : undefined,
   })
   const { data } = res
-  if (!data.success || !Array.isArray(data.data)) {
+  if (!data.success)
+    throw new Error(data.message || 'Failed to load image models')
+  if (!Array.isArray(data.data)) {
     return []
   }
   return data.data.map((model: string) => ({
@@ -45,7 +47,8 @@ export async function getImageWorkspaceModels(
 export async function getImageWorkspaceGroups(): Promise<GroupOption[]> {
   const res = await api.get('/api/user/self/groups')
   const { data } = res
-  if (!data.success || !data.data) {
+  if (!data.success) throw new Error(data.message || 'Failed to load groups')
+  if (!data.data) {
     return []
   }
 
@@ -71,6 +74,7 @@ export async function getImageWorkspaceItems(params?: {
     },
   })
   const data = res.data as ImageWorkspaceItemsResponse
+  if (!data.success) throw new Error(data.message || 'Failed to load images')
   return {
     items: data.success && Array.isArray(data.data) ? data.data : [],
     total: data.success ? Number(data.total ?? 0) : 0,

@@ -54,6 +54,8 @@ type MarketplaceChannelTestOptions struct {
 	CreditPoolPolicy   string
 	Multiplier         float64
 	ModelPrices        map[string]marketplacedomain.ChannelModelPrice
+	Prompt             string
+	ValidateResponse   func([]byte) error
 }
 
 // TestMarketplaceChannelByID executes a real upstream request as a user and
@@ -78,6 +80,7 @@ func TestMarketplaceChannelByID(channelID int, testModel string, endpointType st
 		CreditPoolPolicy:       options.CreditPoolPolicy,
 		MarketplaceMultiplier:  options.Multiplier,
 		MarketplaceModelPrices: options.ModelPrices,
+		Prompt:                 options.Prompt, ValidateResponse: options.ValidateResponse,
 	})
 	if result.localErr != nil {
 		return 0, result.report, result.newAPIError, result.localErr
@@ -126,7 +129,7 @@ func TestAllChannels(notify bool) error {
 				return
 			}
 			current, err := gatewaystore.LoadChannelByID(channel.Id, true)
-			if err != nil || !shouldAutomaticallyTestChannel(current) {
+			if err != nil || !shouldRunChannelTest(current, notify) {
 				continue
 			}
 			channel = current
@@ -187,6 +190,12 @@ func shouldContinueChannelTests(manual bool) bool {
 
 func shouldAutomaticallyTestChannel(channel *gatewayschema.Channel) bool {
 	return channel != nil && channel.Status != constant.ChannelStatusManuallyDisabled
+}
+
+func shouldRunChannelTest(channel *gatewayschema.Channel, manual bool) bool {
+	// Marketplace probes follow the owner's switch rather than the separate
+	// system-wide automatic test/disable job.
+	return shouldAutomaticallyTestChannel(channel) && (manual || channel.IsOfficial())
 }
 
 // StartAutomaticChannelTestTask starts the periodic automatic channel testing loop once.

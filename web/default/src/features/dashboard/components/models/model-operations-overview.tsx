@@ -97,7 +97,7 @@ export function ModelOperationsOverview({
 
   return (
     <div className='space-y-3'>
-      <div className='grid overflow-hidden rounded-lg border sm:grid-cols-3 sm:divide-x'>
+      <div className='solaris-insight-grid grid sm:grid-cols-3'>
         <div className='px-4 py-3'>
           <div className='text-muted-foreground flex items-center gap-2 text-xs'>
             <MousePointerClick className='size-3.5' />
@@ -148,12 +148,15 @@ export function ModelOperationsOverview({
 
       <div className='grid gap-3 xl:grid-cols-[minmax(19rem,0.8fr)_minmax(0,1.7fr)]'>
         <section
-          className='overflow-hidden rounded-lg border'
+          className='solaris-telemetry-panel overflow-hidden rounded-lg border'
           aria-labelledby='quota-ranking-title'
         >
           <header className='border-b px-4 py-3'>
             <div className='flex items-center gap-2.5'>
-              <span aria-hidden className='bg-primary block h-3 w-[3px]' />
+              <CircleDollarSign
+                aria-hidden='true'
+                className='text-primary size-4'
+              />
               <h2
                 id='quota-ranking-title'
                 className='text-foreground text-[13px] font-semibold'
@@ -179,10 +182,13 @@ export function ModelOperationsOverview({
                     {formatQuota(row.quota)}
                   </span>
                 </div>
-                <div className='bg-muted h-1.5 overflow-hidden rounded-full'>
+                <div className='bg-muted h-2 overflow-hidden rounded-sm'>
                   <div
-                    className='bg-primary h-full rounded-full'
-                    style={{ width: `${Math.max(row.quotaShare, 1)}%` }}
+                    className='bg-primary h-full rounded-sm'
+                    style={{
+                      width: `${row.quotaShare}%`,
+                      minWidth: row.quota > 0 ? 6 : 0,
+                    }}
                   />
                 </div>
               </div>
@@ -191,12 +197,19 @@ export function ModelOperationsOverview({
         </section>
 
         <section
-          className='overflow-hidden rounded-lg border'
+          className='solaris-telemetry-panel overflow-hidden rounded-lg border'
           aria-labelledby='model-details-title'
         >
           <header className='flex items-center justify-between gap-3 border-b px-4 py-3'>
             <div>
-              <h2 id='model-details-title' className='text-sm font-semibold'>
+              <h2
+                id='model-details-title'
+                className='flex items-center gap-2 text-sm font-semibold'
+              >
+                <MousePointerClick
+                  className='text-primary size-4'
+                  aria-hidden='true'
+                />
                 {t('Model usage details')}
               </h2>
               <p className='text-muted-foreground mt-0.5 text-xs'>

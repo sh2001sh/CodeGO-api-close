@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const OPTION_KEY = 'tool_price_setting.prices'
 
@@ -105,8 +106,10 @@ export const ToolPriceSettings = memo(function ToolPriceSettings({
   const [jsonText, setJsonText] = useState('')
   const [jsonError, setJsonError] = useState('')
   const [nextRowId, setNextRowId] = useState(1)
+  const [hasChanges, setHasChanges] = useState(false)
 
   useEffect(() => {
+    if (hasChanges) return
     const prices = parseInitialPrices(defaultValue)
     const initialRows = objectToRows(prices)
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -114,11 +117,12 @@ export const ToolPriceSettings = memo(function ToolPriceSettings({
     setJsonText(JSON.stringify(prices, null, 2))
     setJsonError('')
     setNextRowId(initialRows.length + 1)
-  }, [defaultValue])
+  }, [defaultValue, hasChanges])
 
   const currentPrices = useMemo(() => rowsToObject(rows), [rows])
 
   const syncFromRows = useCallback((nextRows: ToolPriceRow[]) => {
+    setHasChanges(true)
     setRows(nextRows)
     setJsonText(JSON.stringify(rowsToObject(nextRows), null, 2))
     setJsonError('')
@@ -126,6 +130,7 @@ export const ToolPriceSettings = memo(function ToolPriceSettings({
 
   const handleJsonChange = useCallback(
     (text: string) => {
+      setHasChanges(true)
       setJsonText(text)
       try {
         const parsed = JSON.parse(text) as unknown
@@ -167,6 +172,7 @@ export const ToolPriceSettings = memo(function ToolPriceSettings({
   )
 
   const resetToDefault = useCallback(() => {
+    setHasChanges(true)
     const initialRows = objectToRows(DEFAULT_PRICES)
     setRows(initialRows)
     setJsonText(JSON.stringify(DEFAULT_PRICES, null, 2))
@@ -192,6 +198,7 @@ export const ToolPriceSettings = memo(function ToolPriceSettings({
       key: OPTION_KEY,
       value: JSON.stringify(currentPrices),
     })
+    setHasChanges(false)
   }, [currentPrices, editMode, jsonError, t, updateOption])
 
   const toggleEditMode = useCallback(() => {
@@ -342,7 +349,7 @@ export const ToolPriceSettings = memo(function ToolPriceSettings({
 
       <div className='flex justify-end'>
         <Button
-          onClick={handleSave}
+          onClick={handleSettingsAction(handleSave)}
           disabled={
             updateOption.isPending || (editMode === 'json' && !!jsonError)
           }

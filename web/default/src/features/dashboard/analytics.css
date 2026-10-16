@@ -1,0 +1,170 @@
+.console-analytics {
+  min-width: 0;
+  color: var(--ink-primary, var(--foreground));
+  font-size: 14px;
+  line-height: 1.5;
+}
+.console-analytics [role='tab'] {
+  min-height: 44px;
+  padding-inline: 16px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+.console-analytics [role='tablist'] {
+  max-width: 100%;
+  height: auto;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--bg-subtle, var(--muted));
+}
+.console-analytics :is(button, input, [role='combobox']) {
+  min-height: 44px;
+}
+.console-analytics :is(button, input, [role='combobox']):focus-visible {
+  outline: 2px solid var(--brand-orange);
+  outline-offset: 3px;
+}
+.console-analytics .solaris-stat-grid > div,
+.console-analytics .solaris-insight-grid > div {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--hairline-light, var(--border));
+  border-radius: 20px;
+  background: var(--surface-card, var(--card));
+}
+.console-analytics .solaris-insight-grid {
+  gap: 12px;
+}
+.console-analytics .solaris-stat-grid .codego-stat-label {
+  color: var(--ink-secondary, var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 500;
+}
+.console-analytics .solaris-stat-value {
+  font-family: var(--font-mono, 'JetBrains Mono Variable', monospace);
+  font-size: clamp(20px, 1.8vw, 28px);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+  animation: solaris-value-settle 0.4s var(--ease-optical, ease) both;
+}
+@keyframes solaris-value-settle {
+  from {
+    transform: translateY(3px);
+    filter: blur(1px);
+  }
+  to {
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+.console-analytics .solaris-telemetry-panel {
+  min-width: 0;
+  border: 1px solid var(--hairline-light, var(--border));
+  border-radius: 20px;
+  background: var(--surface-card, var(--card));
+}
+.console-analytics
+  .solaris-telemetry-panel
+  > :is(header, div:first-child):not(:only-child) {
+  border-color: var(--hairline-light, var(--border));
+}
+.console-analytics .solaris-telemetry-panel > header {
+  min-height: 64px;
+  padding: 20px 24px;
+}
+.console-analytics .solaris-telemetry-panel > header h2 {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.console-analytics
+  .solaris-telemetry-panel
+  > header
+  + :is(ul, div:not(.overflow-x-auto):not(.overflow-auto)) {
+  padding: 20px 24px;
+}
+.console-analytics .solaris-telemetry-panel :is(td, th) {
+  border-color: var(--hairline-light, var(--border));
+}
+.console-analytics table {
+  font-size: 12px;
+}
+.console-analytics table :is(th, td) {
+  height: 52px;
+  padding: 12px 16px;
+  font-size: 12px;
+}
+.console-analytics table th {
+  height: 40px;
+  color: var(--ink-muted, var(--muted-foreground));
+  font-size: 11px;
+  background: var(--bg-subtle, var(--muted));
+}
+.console-analytics table td:not(:first-child) {
+  font-family: var(--font-mono, 'JetBrains Mono Variable', monospace);
+  font-variant-numeric: tabular-nums;
+}
+.console-analytics .overflow-x-auto,
+.console-analytics .overflow-auto {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-light, var(--border)) transparent;
+}
+@media (max-width: 639px) {
+  .console-analytics .solaris-stat-grid > div,
+  .console-analytics .solaris-insight-grid > div {
+    padding: 20px;
+  }
+  .console-analytics .solaris-telemetry-panel > header {
+    padding: 20px;
+  }
+  .console-analytics [role='tablist'] {
+    display: flex;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+  }
+  .console-analytics [role='tab'] {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-analytics * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.console-analytics .solaris-performance > .solaris-performance-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  padding: 24px;
+}
+.solaris-performance-metric {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 8px;
+}
+.solaris-performance-metric > span:last-child {
+  grid-column: 1/-1;
+  font-size: 24px;
+}
+.solaris-performance .solaris-performance-models {
+  padding: 0 24px 24px;
+}
+@media (max-width: 479px) {
+  .console-analytics .solaris-performance > .solaris-performance-metrics {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .solaris-performance-metric {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+  }
+  .solaris-performance-metric > span:last-child {
+    grid-column: auto;
+    font-size: 20px;
+  }
+}

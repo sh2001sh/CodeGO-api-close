@@ -58,8 +58,6 @@ import type {
   WalletTransferEmailCodeResponse,
   UnifiedCreditMigrationDetailResponse,
   BalanceBlindBoxSimulationResult,
-  RefundableOrder,
-  RefundResult,
 } from './types'
 
 // ============================================================================
@@ -125,30 +123,6 @@ export async function createWalletTransfer(
   request: CreateWalletTransferRequest
 ): Promise<WalletTransferResponse> {
   const res = await api.post('/api/wallet/transfers', request)
-  return res.data
-}
-
-export async function getRefundableOrders(): Promise<
-  ApiResponse<{ items: RefundableOrder[] }>
-> {
-  const res = await api.get('/api/wallet/refunds/eligible')
-  return res.data
-}
-
-export async function createUserRefund(request: {
-  order_type: string
-  trade_no: string
-}): Promise<ApiResponse<RefundResult>> {
-  const res = await api.post('/api/wallet/refunds', request)
-  return res.data
-}
-
-export async function syncUserRefund(
-  refundNo: string
-): Promise<ApiResponse<RefundResult>> {
-  const res = await api.post(
-    `/api/wallet/refunds/${encodeURIComponent(refundNo)}/sync`
-  )
   return res.data
 }
 
@@ -360,10 +334,15 @@ export async function getBlindBoxHistory(
 }
 
 export async function calculateBlindBoxAmount(
-  request: BlindBoxAmountRequest
+  request: BlindBoxAmountRequest,
+  signal?: AbortSignal
 ): Promise<AmountResponse> {
   const res = await api.post('/api/blind-box/amount', request, {
     skipBusinessError: true,
+    // The quote panel renders failures and retry; cancellation on quantity
+    // changes or navigation must not produce a global "canceled" toast.
+    skipErrorHandler: true,
+    signal,
   } as Record<string, unknown>)
   return res.data
 }

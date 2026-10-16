@@ -369,6 +369,9 @@ func CreateCreemTopUp(ctx context.Context, userID int, req CreemPayRequest) (*Cr
 	if selectedProduct == nil {
 		return nil, errors.New("产品不存在")
 	}
+	if selectedProduct.Price <= 0 || math.IsNaN(selectedProduct.Price) || math.IsInf(selectedProduct.Price, 0) || selectedProduct.Quota <= 0 {
+		return nil, errors.New("产品配置错误")
+	}
 
 	user, err := loadCommerceUserByID(userID, false)
 	if err != nil || user == nil {
@@ -385,6 +388,12 @@ func CreateCreemTopUp(ctx context.Context, userID int, req CreemPayRequest) (*Cr
 		PaymentProvider: commerceschema.PaymentProviderCreem,
 		CreateTime:      time.Now().Unix(),
 		Status:          constant.TopUpStatusPending,
+	}
+	// Other currencies lack an immutable conversion to wallet credits. Their
+	// payments still credit the product quota, but cannot trigger paid rebates.
+	if strings.EqualFold(strings.TrimSpace(selectedProduct.Currency), "CNY") {
+		topUp.PaidQuota = decimal.NewFromFloat(selectedProduct.Price).
+			Mul(decimal.NewFromFloat(platformruntime.QuotaPerUnit)).IntPart()
 	}
 	if _, err := CreatePendingTopUpOrderWithBlindBoxDiscount(topUp); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("Creem 创建充值订单失败 user_id=%d trade_no=%s product_id=%s error=%q", userID, referenceID, selectedProduct.ProductID, err.Error()))

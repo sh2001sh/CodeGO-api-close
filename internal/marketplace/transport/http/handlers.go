@@ -20,10 +20,12 @@ import (
 
 func ListGroups(c *gin.Context) {
 	query := marketplaceapp.GroupQuery{
+		ShopID: queryInt(c, "shop_id", 0), Tag: c.Query("tag"),
 		SeparateOfficial: c.Query("separate_official") == "true",
 		ViewerUserID:     c.GetInt("id"),
 		Search:           c.Query("search"), Model: c.Query("model"), Models: c.QueryArray("model"), Source: c.Query("source"),
 		Provider: c.Query("provider"), MultiplierCard: strings.TrimSpace(c.Query("multiplier_card")), Status: c.Query("status"),
+		CreditPack:    strings.TrimSpace(c.Query("credit_pack")),
 		IncludeAccess: c.Query("include_access") == "true",
 		Verification:  c.Query("verification"), Sort: c.Query("sort"), Direction: c.Query("direction"),
 		WindowHours: queryInt(c, "window_hours", 24), Page: queryInt(c, "page", 1),
@@ -167,6 +169,16 @@ func FetchModels(c *gin.Context) {
 }
 
 func ListMyChannels(c *gin.Context) {
+	if c.Query("view") == "index" {
+		result, err := marketplaceapp.ListOwnerChannelIndex(c.GetInt("id"))
+		respond(c, result, err)
+		return
+	}
+	if ids, ok := c.GetQueryArray("ids"); ok {
+		result, err := marketplaceapp.ListOwnerChannelsByIDs(c.GetInt("id"), ids)
+		respond(c, result, err)
+		return
+	}
 	result, err := marketplaceapp.ListOwnerChannels(c.GetInt("id"))
 	respond(c, result, err)
 }
@@ -414,7 +426,7 @@ func PauseChannelVerification(c *gin.Context) {
 }
 
 func queueOwnedChannelAction(c *gin.Context, queue func(string) error) {
-	channels, err := marketplaceapp.ListOwnerChannels(c.GetInt("id"))
+	channels, err := marketplaceapp.ListOwnerChannelsByIDs(c.GetInt("id"), []string{c.Param("id")})
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return

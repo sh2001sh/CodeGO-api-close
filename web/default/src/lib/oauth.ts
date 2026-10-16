@@ -16,8 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from './api'
 import { resolveAffiliateCode } from '@/features/auth/lib/storage'
+import type { CustomOAuthProviderInfo } from '@/features/auth/types'
+import { api } from './api'
 
 // ============================================================================
 // OAuth URL Builders
@@ -73,6 +74,22 @@ export function buildLinuxDOOAuthUrl(clientId: string, state: string): string {
 // ============================================================================
 // OAuth Helper Functions
 // ============================================================================
+
+export function buildCustomOAuthUrl(
+  provider: CustomOAuthProviderInfo,
+  state: string
+): string {
+  const url = new URL(provider.authorization_endpoint)
+  url.searchParams.set('client_id', provider.client_id)
+  url.searchParams.set(
+    'redirect_uri',
+    `${window.location.origin}/oauth/${provider.slug}`
+  )
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('state', state)
+  if (provider.scopes) url.searchParams.set('scope', provider.scopes)
+  return url.toString()
+}
 
 /**
  * Get OAuth state token

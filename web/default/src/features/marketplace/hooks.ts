@@ -1,4 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   bindMarketplaceToken,
   createMarketplaceGroupInvite,
@@ -20,7 +26,8 @@ import {
   updateMarketplaceRoutePool,
   runMarketplaceRoutePoolAutoBuild,
   deleteMarketplaceRoutePool,
-  getMyMarketplaceChannels,
+  getMyMarketplaceChannelIndex,
+  getMyMarketplaceChannelPage,
   getMyMarketplaceUsageLogs,
   getTokenOptions,
   pauseMarketplaceVerification,
@@ -193,15 +200,13 @@ export function useMarketplaceRoutePoolCreate() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: createMarketplaceRoutePool,
-    onSuccess: () => {
+    onSuccess: (pool) => {
+      cacheUpdatedRoutePool(queryClient, pool)
       // Creation is complete when the write succeeds; background list refreshes
       // must not keep the form pending or reload the previously selected pool.
       void queryClient.invalidateQueries({
         queryKey: ['marketplace-route-pools'],
         exact: true,
-      })
-      void queryClient.invalidateQueries({
-        queryKey: ['api-key-group-options'],
       })
     },
   })
@@ -214,23 +219,24 @@ function cacheUpdatedRoutePool(
   queryClient.setQueryData(['marketplace-route-pools', pool.id], pool)
   queryClient.setQueryData<MarketplaceRoutePoolSummary[]>(
     ['marketplace-route-pools'],
-    (current) =>
-      current?.map((item) =>
-        item.id === pool.id
-          ? {
-              ...item,
-              name: pool.name,
-              member_count: pool.selected_count,
-              models: [
-                ...new Set(
-                  pool.items
-                    .filter((member) => member.selected)
-                    .flatMap((member) => member.models)
-                ),
-              ],
-            }
-          : item
-      )
+    (current) => {
+      const summary: MarketplaceRoutePoolSummary = {
+        id: pool.id,
+        name: pool.name,
+        token_group: pool.token_group,
+        member_count: pool.selected_count,
+        models: [
+          ...new Set(
+            pool.items
+              .filter((member) => member.selected)
+              .flatMap((member) => member.models)
+          ),
+        ],
+      }
+      return current?.some((item) => item.id === pool.id)
+        ? current.map((item) => (item.id === pool.id ? summary : item))
+        : [...(current ?? []), summary]
+    }
   )
   void queryClient.invalidateQueries({ queryKey: ['api-key-group-options'] })
 }
@@ -272,7 +278,7 @@ export function useMarketplaceRoutePoolDelete() {
 export function useOwnerMultipliers() {
   return useQuery({
     queryKey: ['marketplace-owner-multipliers'],
-    queryFn: getOwnerMultipliers,
+    queryFn: () => getOwnerMultipliers(),
     staleTime: 15_000,
   })
 }
@@ -326,10 +332,26 @@ export function useMarketplaceBatchTestQuery(id: string, enabled = true) {
 }
 
 export function useMyMarketplaceChannels() {
+  const userId = useAuthStore((state) => state.auth.user?.id ?? 0)
   return useQuery({
-    queryKey: ['marketplace-channels', 'mine'],
-    queryFn: getMyMarketplaceChannels,
+    queryKey: ['marketplace-channels', 'mine', 'index', userId],
+    queryFn: ({ signal }) => getMyMarketplaceChannelIndex(signal),
+    enabled: userId > 0,
     staleTime: 15_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) =>
+      verificationRefetchInterval(query.state.data ?? []) ? 15_000 : false,
+  })
+}
+
+export function useMyMarketplaceChannelPage(ids: readonly string[]) {
+  const userId = useAuthStore((state) => state.auth.user?.id ?? 0)
+  return useQuery({
+    queryKey: ['marketplace-channels', 'mine', 'page', userId, ids],
+    queryFn: ({ signal }) => getMyMarketplaceChannelPage(ids, signal),
+    enabled: userId > 0 && ids.length > 0,
+    staleTime: 15_000,
+    gcTime: 60_000,
     refetchOnWindowFocus: false,
     refetchInterval: (query) =>
       verificationRefetchInterval(query.state.data ?? []),
@@ -364,9 +386,15 @@ export function useMyMarketplaceUsageLogs(
 }
 
 export function useMarketplaceTokens() {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['marketplace-token-options'],
-    queryFn: getTokenOptions,
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => getTokenOptions(pageParam),
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.page_size < lastPage.total
+        ? lastPage.page + 1
+        : undefined,
+    select: (data) => data.pages.flatMap((page) => page.items),
   })
 }
 

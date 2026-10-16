@@ -115,12 +115,9 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
     [handleApply]
   )
 
-  const handleFilterChange = useCallback(
-    (value: string) => {
-      setFilters((prev) => ({ ...prev, taskId: value }))
-    },
-    []
-  )
+  const handleFilterChange = useCallback((value: string) => {
+    setFilters((prev) => ({ ...prev, taskId: value }))
+  }, [])
 
   const filterValue = filters.taskId || ''
   const placeholder = t('Filter by task ID')

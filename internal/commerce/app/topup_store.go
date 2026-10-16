@@ -10,6 +10,8 @@ import (
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"github.com/shopspring/decimal"
+	"math"
 
 	"gorm.io/gorm"
 	"strings"
@@ -36,6 +38,20 @@ func CreatePendingTopUpOrderWithBlindBoxDiscount(topUp *commerceschema.TopUp) (f
 	if topUp.UserId <= 0 || strings.TrimSpace(topUp.TradeNo) == "" {
 		return 0, errors.New("invalid topup order")
 	}
+	if topUp.Amount <= 0 || topUp.Money <= 0 || math.IsNaN(topUp.Money) || math.IsInf(topUp.Money, 0) {
+		return 0, errors.New("invalid topup amount")
+	}
+	baseMoney := decimal.NewFromFloat(topUp.Money)
+	grantedQuota := int64(calculateTopUpQuotaToAdd(topUp))
+	basePaidQuota := grantedQuota
+	if topUp.PaymentProvider == commerceschema.PaymentProviderCreem {
+		// Creem prices can use another currency or include a product bonus.
+		// Only its checkout creator can supply a verified paid quota basis.
+		basePaidQuota = topUp.PaidQuota
+	}
+	if basePaidQuota < 0 || grantedQuota <= 0 {
+		return 0, errors.New("invalid paid topup quota")
+	}
 
 	appliedRate := 0.0
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
@@ -47,6 +63,11 @@ func CreatePendingTopUpOrderWithBlindBoxDiscount(topUp *commerceschema.TopUp) (f
 			appliedRate = prop.DiscountRate
 			topUp.Money = commercedomain.ApplyDiscountRateToMoney(topUp.Money, prop.DiscountRate)
 		}
+		// Freeze the same-currency checkout discount before mutable provider
+		// prices or card settings can change. Zero means no verifiable basis.
+		discountedPaidQuota := decimal.NewFromInt(basePaidQuota).
+			Mul(decimal.NewFromFloat(topUp.Money)).Div(baseMoney)
+		topUp.PaidQuota = decimal.Min(discountedPaidQuota, decimal.NewFromInt(grantedQuota)).IntPart()
 		return tx.Create(topUp).Error
 	})
 	return appliedRate, err

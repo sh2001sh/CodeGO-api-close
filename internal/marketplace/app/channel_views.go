@@ -21,6 +21,8 @@ func channelViewWithLatestVerification(
 	latest *marketplaceschema.VerificationRun,
 ) *ChannelView {
 	view := &ChannelView{
+		CustomName: group.CustomName, Description: group.Description, Tags: decodeModels(group.Tags),
+		ModerationStatus: group.ModerationStatus, ModerationReason: group.ModerationReason,
 		ID: channel.ID, OwnerUserID: channel.OwnerUserID, GroupID: group.ID, PublicSlug: group.PublicSlug,
 		SystemDisplayName:    marketplaceDisplayName(channel.SubmittedSourceLabel, group.Multiplier, channel.ID),
 		ProviderType:         channel.ProviderType,
@@ -44,6 +46,7 @@ func channelViewWithLatestVerification(
 		MaintenanceWindow: channel.MaintenanceWindow, InternalChannelID: channel.InternalChannelID,
 		SensitiveWordInterceptionEnabled: marketplaceSensitiveWordInterceptionEnabled(channel),
 		MultiplierCardSupported:          channel.MultiplierCardSupported,
+		CreditPackSupported:              channel.CreditPackSupported,
 		MultiplierCardUserEnabled:        channel.MultiplierCardUserEnabled,
 		LastReviewReason:                 channel.LastReviewReason, VerificationDueAt: group.VerificationDueAt,
 		CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt,

@@ -13,19 +13,19 @@ import (
 )
 
 const (
-	subscriptionMaintenanceTickInterval     = 1 * time.Minute
-	subscriptionMaintenanceBatchSize        = 300
-	subscriptionCleanupInterval             = 30 * time.Minute
-	subscriptionProjectionReconcileInterval = 15 * time.Minute
-	subscriptionLuckyBackfillInterval       = 10 * time.Minute
+	subscriptionMaintenanceTickInterval      = 1 * time.Minute
+	subscriptionMaintenanceBatchSize         = 300
+	subscriptionCleanupInterval              = 30 * time.Minute
+	subscriptionProjectionReconcileInterval  = 15 * time.Minute
+	subscriptionMonthlyPassReconcileInterval = 10 * time.Minute
 )
 
 var (
-	subscriptionMaintenanceOnce         sync.Once
-	subscriptionMaintenanceRunning      atomic.Bool
-	subscriptionCleanupLast             atomic.Int64
-	subscriptionProjectionReconcileLast atomic.Int64
-	subscriptionLuckyBackfillLast       atomic.Int64
+	subscriptionMaintenanceOnce          sync.Once
+	subscriptionMaintenanceRunning       atomic.Bool
+	subscriptionCleanupLast              atomic.Int64
+	subscriptionProjectionReconcileLast  atomic.Int64
+	subscriptionMonthlyPassReconcileLast atomic.Int64
 )
 
 // StartSubscriptionMaintenanceTask owns non-workflow subscription maintenance.
@@ -123,17 +123,10 @@ func runSubscriptionMaintenanceOnce() {
 			logger.LogWarn(ctx, fmt.Sprintf("subscription projection reconciliation failed: %v", err))
 		}
 	}
-	lastLuckyBackfill := time.Unix(subscriptionLuckyBackfillLast.Load(), 0)
-	if time.Since(lastLuckyBackfill) >= subscriptionLuckyBackfillInterval {
-		if result, err := BackfillDailyLuckyNumbers(); err == nil {
-			subscriptionLuckyBackfillLast.Store(time.Now().Unix())
-			if platformconfig.DebugEnabled && result.Created > 0 {
-				logger.LogDebug(ctx, fmt.Sprintf("daily lucky number backfill: created=%d scanned=%d", result.Created, result.Scanned))
-			}
-		} else {
-			logger.LogWarn(ctx, fmt.Sprintf("daily lucky number backfill failed: %v", err))
-		}
+	lastMonthlyPassReconcile := time.Unix(subscriptionMonthlyPassReconcileLast.Load(), 0)
+	if time.Since(lastMonthlyPassReconcile) >= subscriptionMonthlyPassReconcileInterval {
 		if merged, err := ReconcileMonthlyPassProps(); err == nil {
+			subscriptionMonthlyPassReconcileLast.Store(time.Now().Unix())
 			if platformconfig.DebugEnabled && merged > 0 {
 				logger.LogDebug(ctx, fmt.Sprintf("monthly pass prop reconciliation: merged=%d", merged))
 			}

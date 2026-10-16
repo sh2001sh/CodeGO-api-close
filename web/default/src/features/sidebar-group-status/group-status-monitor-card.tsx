@@ -42,12 +42,12 @@ export const GroupStatusMonitorCard = memo(
     return (
       <Card
         size='sm'
-        className='group bg-card hover:border-primary/30 overflow-hidden border py-0 transition-colors'
+        className='status-model-row group bg-card overflow-hidden border py-0 transition-colors'
       >
         <CardContent className='px-4 py-3.5'>
-          <div className='space-y-3'>
+          <div className='status-model-row-body'>
             {/* Header: Model name and status badge */}
-            <div className='flex items-start justify-between gap-2'>
+            <div className='status-model-identity flex items-start justify-between gap-2'>
               <div className='flex min-w-0 flex-1 items-center gap-2'>
                 <div
                   className={cn('size-1.5 shrink-0 rounded-full', meta.dot)}
@@ -70,7 +70,7 @@ export const GroupStatusMonitorCard = memo(
               </div>
             </div>
 
-            <div className='divide-border/60 grid grid-cols-3 divide-x py-0.5'>
+            <div className='status-model-metrics grid grid-cols-3 py-0.5'>
               <Metric label={t('成功率')} value={props.item.success_rate} />
               <Metric
                 label={t('缓存命中率')}
@@ -83,12 +83,12 @@ export const GroupStatusMonitorCard = memo(
             </div>
 
             {/* Time range label */}
-            <div className='text-muted-foreground text-[11px]'>
+            <div className='status-window text-muted-foreground text-[11px]'>
               {seriesWindowLabel}
             </div>
 
             {/* Health strip */}
-            <div className='pt-1'>
+            <div className='status-history pt-1'>
               <HealthStrip item={props.item} />
             </div>
           </div>

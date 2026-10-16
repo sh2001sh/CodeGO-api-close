@@ -20,36 +20,7 @@ func ValidateGroupBuyPurchase(userID int, planID int, purchaseType string, group
 		return nil
 	}
 
-	plan, err := GetSubscriptionPlanByID(planID)
-	if err != nil {
-		return err
-	}
-	if !supportsGroupBuyPlan(plan) {
-		return ErrGroupBuyPlanNotEnabled
-	}
-
-	if purchaseType == commerceschema.SubscriptionPurchaseTypeGroupBuy {
-		order, err := findJoinableGroupBuyByPlanTx(nil, planID)
-		if err != nil || order == nil {
-			return err
-		}
-		return ensureUserCanJoinGroupBuyTx(nil, order.Id, userID)
-	}
-
-	if groupBuyID <= 0 {
-		return ErrGroupBuyNotFound
-	}
-	order, err := getJoinableGroupBuyTx(nil, groupBuyID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrGroupBuyNotFound
-		}
-		return err
-	}
-	if order.PlanId != planID {
-		return ErrGroupBuyNotJoinable
-	}
-	return ensureUserCanJoinGroupBuyTx(nil, groupBuyID, userID)
+	return ErrGroupBuyPlanNotEnabled
 }
 
 // ApplyGroupBuyPurchaseAfterPaymentTx applies group-buy enrollment after a paid subscription order is granted.
@@ -61,9 +32,6 @@ func ApplyGroupBuyPurchaseAfterPaymentTx(tx *gorm.DB, order *commerceschema.Subs
 	purchaseType := commercedomain.NormalizeSubscriptionPurchaseType(order.PurchaseType)
 	if purchaseType == commerceschema.SubscriptionPurchaseTypeNormal {
 		return nil
-	}
-	if !supportsGroupBuyPlan(plan) {
-		return ErrGroupBuyPlanNotEnabled
 	}
 
 	if purchaseType == commerceschema.SubscriptionPurchaseTypeGroupBuy {

@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -32,7 +31,9 @@ import {
 } from '@/components/ui/form'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
+import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const noticeSchema = z.object({
   Notice: z.string().optional(),
@@ -54,9 +55,7 @@ export function NoticeSection({ defaultValue }: NoticeSectionProps) {
     },
   })
 
-  useEffect(() => {
-    form.reset({ Notice: defaultValue ?? '' })
-  }, [defaultValue, form])
+  useResetForm(form, { Notice: defaultValue ?? '' })
 
   const onSubmit = async (values: NoticeFormValues) => {
     const normalized = values.Notice ?? ''
@@ -67,17 +66,19 @@ export function NoticeSection({ defaultValue }: NoticeSectionProps) {
       key: 'Notice',
       value: normalized,
     })
+    form.reset(values)
   }
 
   return (
     <SettingsSection
       title={t('System Notice')}
-      description={t(
-        'Broadcast a global banner to users. Markdown is supported.'
-      )}
+      description={t('Configure system maintenance notice')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <FormField
             control={form.control}
             name='Notice'
@@ -98,9 +99,11 @@ export function NoticeSection({ defaultValue }: NoticeSectionProps) {
             )}
           />
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save notice')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save notice')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,10 +14,13 @@ import (
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	"github.com/sh2001sh/new-api/types"
 )
+
+var ErrCreditPackChannelUnsupported = errors.New("channel does not accept credit packs")
 
 func isExternalBillingChannel(relayInfo *relaycommon.RelayInfo) bool {
 	return relayInfo != nil && relayInfo.ChannelMeta != nil &&
@@ -92,9 +96,22 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	}
 
 	if relayInfo.MarketplaceCreditPolicy == marketplacedomain.CreditPolicyUniversalOnly {
-		session, apiErr := tryWallet()
+		// This market policy has always allowed the ordinary wallet even for
+		// legacy subscription-only preferences. Keep that fallback intact.
+		universalOrder := append([]string(nil), fundingSourceOrder...)
+		walletIncluded := false
+		for _, source := range universalOrder {
+			walletIncluded = walletIncluded || source == BillingSourceWallet
+		}
+		if !walletIncluded {
+			universalOrder = append(universalOrder, BillingSourceWallet)
+		}
+		tryPack := func() (*BillingSession, *types.NewAPIError) {
+			return newCreditPackBillingSession(c, relayInfo, preConsumedQuota)
+		}
+		session, apiErr := selectBillingSessionByFundingOrder(universalOrder, tryPack, tryWallet)
 		if apiErr != nil && apiErr.GetErrorCode() == types.ErrorCodeInsufficientUserQuota {
-			return nil, types.NewErrorWithStatusCode(
+			apiErr = types.NewErrorWithStatusCode(
 				fmt.Errorf("通用额度不足，市场渠道不会回退到月卡"),
 				types.ErrorCodeInsufficientUserQuota,
 				http.StatusForbidden,
@@ -102,14 +119,30 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 				types.ErrOptionWithNoRecordErrorLog(),
 			)
 		}
-		return session, apiErr
+		return creditPackChannelSelectionResult(relayInfo, fundingSourceOrder, session, apiErr)
 	}
 
 	trySubscription := func() (*BillingSession, *types.NewAPIError) {
 		return newSubscriptionBillingSession(c, relayInfo, preConsumedQuota)
 	}
 
-	return selectBillingSessionByFundingOrder(fundingSourceOrder, trySubscription, tryWallet)
+	session, apiErr := selectBillingSessionByFundingOrder(fundingSourceOrder, trySubscription, tryWallet)
+	return creditPackChannelSelectionResult(relayInfo, fundingSourceOrder, session, apiErr)
+}
+
+func creditPackChannelSelectionResult(info *relaycommon.RelayInfo, order []string, session *BillingSession, apiErr *types.NewAPIError) (*BillingSession, *types.NewAPIError) {
+	insufficient := apiErr != nil && (apiErr.GetErrorCode() == types.ErrorCodeInsufficientUserQuota ||
+		(apiErr.GetErrorCode() == types.ErrorCodePreConsumeTokenQuotaFailed && errors.Is(apiErr, identitystore.ErrTokenQuotaInsufficient)))
+	if !insufficient ||
+		info.MarketplaceGroupID == "" || creditPackChannelAllowed(info) || subscriptionFundingHooks.PreConsumeCreditPack == nil {
+		return session, apiErr
+	}
+	for _, source := range order {
+		if source == BillingSourceSubscription {
+			return nil, types.NewErrorWithStatusCode(errors.Join(ErrCreditPackChannelUnsupported, apiErr), types.ErrorCodeInsufficientUserQuota, http.StatusForbidden)
+		}
+	}
+	return session, apiErr
 }
 
 func newWalletBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
@@ -156,6 +189,52 @@ func newWalletBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, p
 }
 
 func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
+	legacy, legacyErr := newLegacySubscriptionBillingSession(c, relayInfo, preConsumedQuota)
+	canTryPack := legacyErr == nil || legacyErr.GetErrorCode() == types.ErrorCodeInsufficientUserQuota ||
+		(legacyErr.GetErrorCode() == types.ErrorCodePreConsumeTokenQuotaFailed && errors.Is(legacyErr, identitystore.ErrTokenQuotaInsufficient))
+	if legacy != nil || !canTryPack {
+		return legacy, legacyErr
+	}
+	pack, packErr := newCreditPackBillingSession(c, relayInfo, preConsumedQuota)
+	if pack != nil || packErr != nil {
+		return pack, packErr
+	}
+	return nil, legacyErr
+}
+
+func creditPackChannelAllowed(info *relaycommon.RelayInfo) bool {
+	if info == nil || info.ChannelMeta == nil {
+		return false
+	}
+	if isExternalBillingChannel(info) {
+		return info.MarketplaceGroupID != "" && info.ChannelMeta.CreditPackSupported
+	}
+	return true
+}
+
+func newCreditPackBillingSession(c *gin.Context, info *relaycommon.RelayInfo, quota int) (*BillingSession, *types.NewAPIError) {
+	if !creditPackChannelAllowed(info) || subscriptionFundingHooks.PreConsumeCreditPack == nil {
+		return nil, nil
+	}
+	// Pack credits carry the normal wallet/group price, with no legacy or card multiplier.
+	// A refunded legacy attempt must not occupy the pack's idempotency record.
+	digest := sha256.Sum256([]byte("credit-pack:" + info.RequestId))
+	packRequestID := fmt.Sprintf("cp:%x", digest[:30])
+	session := &BillingSession{relayInfo: info, quotaScale: 1, reservationQuotaScale: 1,
+		funding: &SubscriptionFunding{requestID: packRequestID, userID: info.UserId,
+			modelName: info.OriginModelName, creditPack: true},
+	}
+	info.SubscriptionGroupMultiplier = subscriptionBillingGroupRatio(info)
+	info.SubscriptionPackageMultiplier = 1
+	info.SubscriptionQuotaScale = 1
+	info.SubscriptionGroupRatio = subscriptionBillingGroupRatio(info)
+	if apiErr := session.preConsume(c, quota); apiErr != nil {
+		return nil, apiErr
+	}
+	return session, nil
+}
+
+func newLegacySubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
 	if isExternalBillingChannel(relayInfo) && relayInfo.MarketplaceGroupID == "" {
 		return nil, nil
 	}

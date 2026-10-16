@@ -94,7 +94,7 @@ func ReserveAdditionalSubscriptionQuota(requestID string, subscriptionID int, mo
 		if err != nil {
 			return err
 		}
-		if sub.Status != "active" || sub.EndTime <= now {
+		if sub.Status != "active" || (sub.EndTime <= now && !(sub.CreditPackGrantedQuota > 0 && sub.EndTime == 0)) {
 			return errors.New("subscription is no longer active")
 		}
 		plan, err := getSubscriptionPlanRecordTx(tx, sub.PlanId)

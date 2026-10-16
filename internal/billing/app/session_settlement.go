@@ -33,7 +33,11 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	fundingDelta := chargedQuota - s.preConsumedQuota
 	tokenDelta := chargedQuota - originalPreConsumed
 	if !s.fundingSettled {
-		if err := s.funding.Settle(fundingDelta); err != nil {
+		settle := func() error { return s.funding.Settle(fundingDelta) }
+		if funding, ok := s.funding.(*SubscriptionFunding); ok && funding.CreditPackGrantedQuota > 0 {
+			settle = func() error { return funding.settleCreditPackWithReferral(s.relayInfo, chargedQuota) }
+		}
+		if err := settle(); err != nil {
 			return err
 		}
 		s.fundingSettled = true

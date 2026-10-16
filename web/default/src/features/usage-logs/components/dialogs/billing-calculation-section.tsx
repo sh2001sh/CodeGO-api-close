@@ -46,9 +46,18 @@ export function BillingCalculationSection(
           label={t('Base charge')}
           formula={calculation.baseFormula}
         />
-        {hasUsageDiscount ? (
+        {calculation.serviceTierMultiplier > 1 ? (
           <CalculationRow
             index={2}
+            label={
+              props.other.service_tier === 'ultrafast' ? 'UltraFast' : 'Fast'
+            }
+            formula={`${formatLogQuota(calculation.beforeServiceTier)} × ${calculation.serviceTierMultiplier} = ${formatLogQuota(calculation.afterServiceTier)}`}
+          />
+        ) : null}
+        {hasUsageDiscount ? (
+          <CalculationRow
+            index={2 + calculation.speedSteps}
             label={props.other.usage_discount_title || t('Multiplier discount')}
             formula={`${formatLogQuota(calculation.beforeDiscount)} × ${formatRatio(calculation.usageDiscountMultiplier)} = ${formatLogQuota(calculation.afterDiscount)}`}
             meta={t('Saved {{quota}}', {
@@ -59,14 +68,19 @@ export function BillingCalculationSection(
         ) : null}
         {calculation.subscriptionFormula ? (
           <CalculationRow
-            index={hasUsageDiscount ? 3 : 2}
+            index={2 + calculation.speedSteps + Number(hasUsageDiscount)}
             label={t('Plan group conversion')}
             formula={calculation.subscriptionFormula}
           />
         ) : null}
         {hasPackageDiscount ? (
           <CalculationRow
-            index={hasUsageDiscount ? 4 : 3}
+            index={
+              2 +
+              calculation.speedSteps +
+              Number(hasUsageDiscount) +
+              Number(Boolean(calculation.subscriptionFormula))
+            }
             label={t('Plan multiplier card')}
             formula={`${formatLogQuota(calculation.beforePackageDiscount)} × ${formatRatio(calculation.packageMultiplier)} = ${formatLogQuota(calculation.finalCharge)}`}
             meta={t('Saved {{quota}}', {
@@ -144,9 +158,14 @@ function buildCalculation(log: UsageLog, other: LogOtherData, t: TFunction) {
     other.quota_after_discount != null &&
     other.usage_discount_multiplier != null
   const beforeDiscount = other.quota_before_discount ?? log.quota
+  const serviceTierMultiplier =
+    validPositiveRatio(other.service_tier_multiplier) || 1
+  const beforeServiceTier = other.quota_before_service_tier ?? beforeDiscount
+  const afterServiceTier = other.quota_after_service_tier ?? beforeDiscount
+  const speedSteps = serviceTierMultiplier > 1 ? 1 : 0
   const afterDiscount = other.quota_after_discount ?? log.quota
   const usageDiscountMultiplier = validDiscountMultiplier(
-    other.usage_discount_multiplier
+    other.usage_discount_effective_multiplier ?? other.usage_discount_multiplier
   )
   const usageSavedQuota =
     other.usage_discount_quota ?? Math.max(0, beforeDiscount - afterDiscount)
@@ -169,12 +188,17 @@ function buildCalculation(log: UsageLog, other: LogOtherData, t: TFunction) {
     : null
   const stepCount =
     2 +
+    speedSteps +
     (usageDiscountMultiplier < 1 ? 1 : 0) +
     (subscriptionFormula ? 1 : 0) +
     (packageMultiplier < 1 ? 1 : 0)
 
   return {
     hasDiscountAudit,
+    serviceTierMultiplier,
+    beforeServiceTier,
+    afterServiceTier,
+    speedSteps,
     beforeDiscount,
     afterDiscount,
     usageDiscountMultiplier,
@@ -185,7 +209,7 @@ function buildCalculation(log: UsageLog, other: LogOtherData, t: TFunction) {
     finalCharge,
     subscriptionFormula,
     finalStepIndex: stepCount,
-    baseFormula: buildBaseFormula(other, beforeDiscount, t),
+    baseFormula: buildBaseFormula(other, beforeServiceTier, t),
   }
 }
 

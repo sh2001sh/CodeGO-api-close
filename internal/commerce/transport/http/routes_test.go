@@ -24,7 +24,10 @@ func TestRegisterCommerceRoutesKeepsUnifiedWalletAndMonthlyPassWrites(t *testing
 	require.Contains(t, routes, http.MethodPut+" /api/subscription/self/preference")
 	require.Contains(t, routes, http.MethodPost+" /api/subscription/self/reset-opportunity/use")
 	require.Contains(t, routes, http.MethodPost+" /api/packages/purchase")
-	require.Contains(t, routes, http.MethodPost+" /api/group-buy/join")
+	require.NotContains(t, routes, http.MethodPost+" /api/group-buy/join")
+	for route := range routes {
+		require.NotContains(t, route, "/api/daily-lucky-number")
+	}
 	require.Contains(t, routes, http.MethodPost+" /api/blind-box/inventory/open")
 	require.Contains(t, routes, http.MethodPost+" /api/blind-box/orders/:trade_no/cancel")
 	require.Contains(t, routes, http.MethodPost+" /api/blind-box/simulation/draw")

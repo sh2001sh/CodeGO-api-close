@@ -8,7 +8,7 @@ WORKDIR /build
 ARG FRONTEND_REVISION=unknown
 COPY web/default/package.json .
 COPY web/default/bun.lock .
-RUN bun install
+RUN bun install --frozen-lockfile
 COPY ./web/default .
 COPY ./VERSION .
 RUN test -n "$FRONTEND_REVISION" \

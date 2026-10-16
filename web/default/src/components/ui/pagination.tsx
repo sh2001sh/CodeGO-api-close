@@ -18,21 +18,18 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import * as React from 'react'
 import i18n from '@/i18n/config'
-import {
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
-  MoreHorizontalCircle01Icon,
-} from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
+import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
 function Pagination({ className, ...props }: React.ComponentProps<'nav'>) {
+  useTranslation()
+
   return (
     <nav
       role='navigation'
-      aria-label='pagination'
+      aria-label={i18n.t('pagination')}
       data-slot='pagination'
       className={cn('mx-auto flex w-full justify-center', className)}
       {...props}
@@ -99,12 +96,8 @@ function PaginationPrevious({
       className={cn('pl-1.5!', className)}
       {...props}
     >
-      <HugeiconsIcon
-        icon={ArrowLeft01Icon}
-        strokeWidth={2}
-        data-icon='inline-start'
-      />
-      <span className='hidden sm:block'>{text}</span>
+      <ChevronLeft strokeWidth={2} data-icon='inline-start' />
+      <span className='hidden sm:block'>{i18n.t(text)}</span>
     </PaginationLink>
   )
 }
@@ -122,12 +115,8 @@ function PaginationNext({
       className={cn('pr-1.5!', className)}
       {...props}
     >
-      <span className='hidden sm:block'>{text}</span>
-      <HugeiconsIcon
-        icon={ArrowRight01Icon}
-        strokeWidth={2}
-        data-icon='inline-end'
-      />
+      <span className='hidden sm:block'>{i18n.t(text)}</span>
+      <ChevronRight strokeWidth={2} data-icon='inline-end' />
     </PaginationLink>
   )
 }
@@ -146,7 +135,7 @@ function PaginationEllipsis({
       )}
       {...props}
     >
-      <HugeiconsIcon icon={MoreHorizontalCircle01Icon} strokeWidth={2} />
+      <Ellipsis strokeWidth={2} />
       <span className='sr-only'>
         <Trans i18nKey={'更多页'} />
       </span>

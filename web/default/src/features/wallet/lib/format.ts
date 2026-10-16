@@ -1,3 +1,4 @@
+import { getIntlLocale } from '@/i18n/format'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18n from 'i18next'
 import { DEFAULT_DISCOUNT_RATE } from '../constants'
 
 // ============================================================================
@@ -29,8 +31,9 @@ export function formatCreemPrice(
   price: number,
   currency: 'USD' | 'EUR'
 ): string {
-  const symbol = currency === 'EUR' ? '€' : '$'
-  return `${symbol}${price.toFixed(2)}`
+  return currency === 'EUR'
+    ? `€${price.toFixed(2)}`
+    : `${price.toFixed(2)} credits`
 }
 
 /**
@@ -55,7 +58,7 @@ export function formatCurrency(amount: number | string): string {
     typeof amount === 'number' ? amount : Number.parseFloat(String(amount))
   if (!Number.isFinite(numeric)) return '-'
 
-  return new Intl.NumberFormat(undefined, {
+  return new Intl.NumberFormat(getIntlLocale(), {
     minimumFractionDigits: 0,
     maximumFractionDigits: Math.abs(numeric) >= 1 ? 2 : 4,
   }).format(numeric)
@@ -74,7 +77,8 @@ export function formatPaymentAmount(
     typeof amount === 'number' ? amount : Number.parseFloat(String(amount))
   if (!Number.isFinite(numeric)) return '-'
 
-  return new Intl.NumberFormat(undefined, {
+  if (currency === 'USD') return `${numeric.toFixed(2)} credits`
+  return new Intl.NumberFormat(getIntlLocale(), {
     style: 'currency',
     currency,
     currencyDisplay: 'narrowSymbol',
@@ -91,7 +95,7 @@ export function getDiscountLabel(discount: number): string {
     return ''
   }
   const off = Math.round((1 - discount) * 100)
-  return `${off}% OFF`
+  return i18n.t('{{percent}}% off', { percent: off })
 }
 
 /**

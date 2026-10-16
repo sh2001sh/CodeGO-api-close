@@ -72,17 +72,16 @@ export function ResetPasswordConfirm({
         setNewPassword(password)
         const copySuccess = await copyToClipboard(password)
         if (copySuccess) {
-          toast.success(
-            t('Password reset and copied to clipboard: {{password}}', {
-              password,
-            })
-          )
+          setCopied(true)
+          toast.success(t('Password has been copied to clipboard'))
         } else {
-          toast.success(t('Password reset: {{password}}', { password }))
+          toast.success(t('Password reset successfully'))
         }
+      } else {
+        toast.error(res?.data?.message || t('Failed to reset password'))
       }
     } catch {
-      // Errors handled by global interceptor
+      toast.error(t('Failed to reset password'))
     } finally {
       setLoading(false)
     }
@@ -94,12 +93,10 @@ export function ResetPasswordConfirm({
     const copySuccess = await copyToClipboard(newPassword)
     if (copySuccess) {
       setCopied(true)
-      toast.success(
-        t('Password copied to clipboard: {{password}}', {
-          password: newPassword,
-        })
-      )
+      toast.success(t('Password has been copied to clipboard'))
       setTimeout(() => setCopied(false), 2000)
+    } else {
+      toast.error(t('Failed to copy to clipboard'))
     }
   }
 
@@ -107,14 +104,9 @@ export function ResetPasswordConfirm({
     <AuthLayout>
       <div className='w-full space-y-8'>
         <div className='space-y-2'>
-          <h2 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
+          <h1 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
             {t('Reset password')}
-          </h2>
-          <p className='text-muted-foreground text-left text-sm sm:text-base'>
-            {newPassword
-              ? 'Your password has been reset successfully'
-              : 'Confirm the reset request to generate a new password.'}
-          </p>
+          </h1>
         </div>
 
         <div className='space-y-4'>
@@ -150,6 +142,7 @@ export function ResetPasswordConfirm({
                 <Button
                   type='button'
                   size='icon'
+                  aria-label={t('Copy password')}
                   variant='outline'
                   onClick={handleCopy}
                 >
@@ -160,9 +153,6 @@ export function ResetPasswordConfirm({
                   )}
                 </Button>
               </div>
-              <p className='text-muted-foreground text-xs'>
-                {t('Password has been copied to clipboard')}
-              </p>
             </div>
           )}
 
@@ -178,10 +168,10 @@ export function ResetPasswordConfirm({
             }
           >
             {newPassword
-              ? 'Return to login'
+              ? t('Return to login')
               : isActive
                 ? `Retry (${secondsLeft}s)`
-                : 'Confirm reset password'}
+                : t('Confirm reset password')}
           </Button>
 
           {!newPassword && (

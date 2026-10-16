@@ -152,9 +152,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                   <FormControl>
                     <Input placeholder={t('New API')} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t('The name displayed across the application')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -169,10 +167,8 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                   <FormControl>
                     <Input placeholder='https://yourdomain.com' {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'The public URL of your server, used for OAuth callbacks, webhooks, and other external integrations'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('OAuth / Webhook')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -191,9 +187,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('URL to your logo image (optional)')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -206,16 +200,9 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                 <FormItem>
                   <FormLabel>{t('Footer')}</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder={t(
-                        '© 2025 Your Company. All rights reserved.'
-                      )}
-                      {...field}
-                    />
+                    <Textarea {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t('Footer text displayed at the bottom of pages')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -228,18 +215,10 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                 <FormItem>
                   <FormLabel>{t('About')}</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder={t(
-                        'Enter HTML code (e.g., <p>About us...</p>) or a URL (e.g., https://example.com) to embed as iframe'
-                      )}
-                      rows={4}
-                      {...field}
-                    />
+                    <Textarea rows={4} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Supports HTML markup or iframe embedding. Enter HTML code directly, or provide a complete URL to automatically embed it as an iframe.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('HTML / URL → iframe')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -253,16 +232,10 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                 <FormItem>
                   <FormLabel>{t('Home Page Content')}</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder={t('Welcome to our New API...')}
-                      rows={6}
-                      {...field}
-                    />
+                    <Textarea rows={6} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Content displayed on the home page (supports Markdown)'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('Markdown')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -284,10 +257,8 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Content displayed above the package cards on the public home page (supports Markdown)'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('Markdown')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -301,18 +272,10 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                 <FormItem>
                   <FormLabel>{t('User Agreement')}</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder={t(
-                        'Provide Markdown, HTML, or an external URL for the user agreement'
-                      )}
-                      rows={6}
-                      {...field}
-                    />
+                    <Textarea rows={6} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Leave empty to disable the agreement requirement. Supports Markdown, HTML, or a full URL to redirect users.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('Markdown / HTML / URL · Empty: disabled')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -326,25 +289,17 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                 <FormItem>
                   <FormLabel>{t('Privacy Policy')}</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder={t(
-                        'Provide Markdown, HTML, or an external URL for the privacy policy'
-                      )}
-                      rows={6}
-                      {...field}
-                    />
+                    <Textarea rows={6} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Leave empty to disable the privacy policy requirement. Supports Markdown, HTML, or a full URL to redirect users.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('Markdown / HTML / URL · Empty: disabled')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            <div className='flex gap-2'>
+            <div className='settings-save-bar flex gap-2'>
               <Button
                 type='submit'
                 disabled={isSubmitting || updateOption.isPending}

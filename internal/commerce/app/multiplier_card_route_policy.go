@@ -4,7 +4,6 @@ import (
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
-	"gorm.io/gorm"
 )
 
 var officialMultiplierCardTypes = []string{
@@ -21,16 +20,13 @@ func ActiveMultiplierCardRoutePolicy(userID int) (requiresOfficial bool, monthly
 		return false, false
 	}
 	var props []commerceschema.BlindBoxProp
-	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		now := platformruntime.GetTimestamp()
-		if err := expireUserBlindBoxPropsTx(tx, userID, now); err != nil {
-			return err
-		}
-		return tx.Select("prop_type").
-			Where("user_id = ? AND status = ? AND prop_type IN ? AND (expires_at = 0 OR expires_at > ?)",
-				userID, commerceschema.BlindBoxPropStatusActive, officialMultiplierCardTypes, now).
-			Find(&props).Error
-	})
+	// Authentication only needs the live entitlement. Inventory expiration and
+	// legacy schema repair belong to the inventory path; doing either here adds
+	// writes, catalog queries and a transaction to every model request.
+	err := platformdb.DB.Select("prop_type").
+		Where("user_id = ? AND status = ? AND prop_type IN ? AND (expires_at = 0 OR expires_at > ?)",
+			userID, commerceschema.BlindBoxPropStatusActive, officialMultiplierCardTypes, platformruntime.GetTimestamp()).
+		Find(&props).Error
 	if err != nil {
 		return false, false
 	}

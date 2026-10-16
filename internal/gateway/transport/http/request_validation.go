@@ -159,6 +159,16 @@ func getAndValidateResponsesRequest(c *gin.Context) (*dto.OpenAIResponsesRequest
 	if err := platformhttpx.UnmarshalBodyReusable(c, request); err != nil {
 		return nil, err
 	}
+	// RawMessage fields own their bytes, but go-json's decoded strings share
+	// its full input buffer. Detach the small strings so a long response does
+	// not keep an additional copy of the entire input alive.
+	request.Model = strings.Clone(request.Model)
+	request.PreviousResponseID = strings.Clone(request.PreviousResponseID)
+	request.ServiceTier = strings.Clone(request.ServiceTier)
+	if request.Reasoning != nil {
+		request.Reasoning.Effort = strings.Clone(request.Reasoning.Effort)
+		request.Reasoning.Summary = strings.Clone(request.Reasoning.Summary)
+	}
 	if err := resolveLocalFileIDs(c, request); err != nil {
 		return nil, err
 	}

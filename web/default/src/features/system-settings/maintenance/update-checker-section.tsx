@@ -112,7 +112,7 @@ export function UpdateCheckerSection({
     <>
       <SettingsSection
         title={t('System maintenance')}
-        description={t('Review current version and fetch release notes.')}
+        description={t('Check for system updates')}
       >
         <div className='space-y-6'>
           <div className='grid gap-4 md:grid-cols-2'>
@@ -144,7 +144,7 @@ export function UpdateCheckerSection({
       </SettingsSection>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className='max-h-[80vh] overflow-y-auto'>
+        <DialogContent className='settings-dialog max-h-[80vh] overflow-y-auto'>
           <DialogHeader>
             <DialogTitle>
               {release?.tag_name

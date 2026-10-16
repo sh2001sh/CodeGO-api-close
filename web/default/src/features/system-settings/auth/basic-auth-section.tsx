@@ -36,6 +36,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const basicAuthSchema = z.object({
   PasswordLoginEnabled: z.boolean(),
@@ -97,6 +98,7 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
     for (const update of updates) {
       await updateOption.mutateAsync(update)
     }
+    form.reset(data)
   }
 
   return (
@@ -105,7 +107,10 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
       description={t('Configure password-based login and registration')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <FormField
             control={form.control}
             name='PasswordLoginEnabled'
@@ -115,9 +120,6 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
                   <FormLabel className='text-base'>
                     {t('Password Login')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Allow users to log in with password')}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -138,9 +140,6 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
                   <FormLabel className='text-base'>
                     {t('Registration Enabled')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Allow new users to register')}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -161,9 +160,6 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
                   <FormLabel className='text-base'>
                     {t('Password Registration')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Allow registration with password')}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -184,9 +180,6 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
                   <FormLabel className='text-base'>
                     {t('Email Verification')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Require email verification for new accounts')}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -207,9 +200,6 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
                   <FormLabel className='text-base'>
                     {t('Email Domain Restriction')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Only allow specific email domains')}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -230,8 +220,8 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
                   <FormLabel className='text-base'>
                     {t('Email Alias Restriction')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Block email aliases (e.g., user+alias@domain.com)')}
+                  <FormDescription className='settings-field-fact'>
+                    {t('user+alias@domain.com')}
                   </FormDescription>
                 </div>
                 <FormControl>
@@ -257,19 +247,19 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'One domain per line (only used when domain restriction is enabled)'
-                  )}
+                <FormDescription className='settings-field-fact'>
+                  {t('One domain per line')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save Changes')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save Changes')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

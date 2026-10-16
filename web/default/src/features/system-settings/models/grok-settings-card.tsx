@@ -34,6 +34,7 @@ import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const XAI_VIOLATION_FEE_DOC_URL =
   'https://docs.x.ai/docs/models#usage-guidelines-violation-fee'
@@ -74,6 +75,7 @@ export function GrokSettingsCard(props: Props) {
         value: value as string | number | boolean,
       })
     }
+    form.reset(data)
   }
 
   const enabled = form.watch('grok.violation_deduction_enabled')
@@ -81,10 +83,13 @@ export function GrokSettingsCard(props: Props) {
   return (
     <SettingsSection
       title={t('Grok Settings')}
-      description={t('Configure xAI Grok model specific settings')}
+      description={t('Configure xAI Grok model settings')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <FormField
             control={form.control}
             name='grok.violation_deduction_enabled'
@@ -98,10 +103,8 @@ export function GrokSettingsCard(props: Props) {
                 </FormControl>
                 <div>
                   <FormLabel>{t('Enable violation deduction')}</FormLabel>
-                  <FormDescription>
-                    {t(
-                      'When enabled, violation requests will incur additional charges.'
-                    )}{' '}
+                  <FormDescription className='settings-field-fact'>
+                    {t('Violation requests: additional charges')}{' '}
                     <a
                       href={XAI_VIOLATION_FEE_DOC_URL}
                       target='_blank'
@@ -131,18 +134,18 @@ export function GrokSettingsCard(props: Props) {
                     disabled={!enabled}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'Base amount. Actual deduction = base amount × system group rate.'
-                  )}
+                <FormDescription className='settings-field-fact'>
+                  {t('Deduction = base amount × group rate')}
                 </FormDescription>
               </FormItem>
             )}
           />
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save Changes')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save Changes')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

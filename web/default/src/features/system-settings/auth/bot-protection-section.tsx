@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -25,7 +24,6 @@ import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -34,7 +32,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
+import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const botProtectionSchema = z.object({
   TurnstileCheckEnabled: z.boolean(),
@@ -59,9 +59,7 @@ export function BotProtectionSection({
     defaultValues,
   })
 
-  useEffect(() => {
-    form.reset(defaultValues)
-  }, [defaultValues, form])
+  useResetForm(form, defaultValues)
 
   const onSubmit = async (data: BotProtectionFormValues) => {
     const updates = Object.entries(data).filter(
@@ -72,6 +70,7 @@ export function BotProtectionSection({
     for (const [key, value] of updates) {
       await updateOption.mutateAsync({ key, value: value ?? '' })
     }
+    form.reset(data)
   }
 
   return (
@@ -83,7 +82,7 @@ export function BotProtectionSection({
     >
       <Form {...form}>
         <form
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
           className='space-y-6'
           autoComplete='off'
         >
@@ -96,11 +95,6 @@ export function BotProtectionSection({
                   <FormLabel className='text-base'>
                     {t('Enable Turnstile')}
                   </FormLabel>
-                  <FormDescription>
-                    {t(
-                      'Protect login and registration with Cloudflare Turnstile'
-                    )}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -149,9 +143,11 @@ export function BotProtectionSection({
             )}
           />
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save Changes')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save Changes')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

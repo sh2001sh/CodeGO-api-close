@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState } from 'react'
+import interfaceI18n from '@/i18n/config'
 import {
   Copy,
   Check,
@@ -469,7 +470,7 @@ export function CodexUsageDialog({
             <div className='bg-muted/30 mt-3 rounded-md px-3 py-2'>
               <CopyableField
                 icon={<User className='h-3.5 w-3.5' />}
-                label='User ID'
+                label={interfaceI18n.t('User ID')}
                 value={payload?.user_id}
                 mono
               />
@@ -480,7 +481,7 @@ export function CodexUsageDialog({
               />
               <CopyableField
                 icon={<Hash className='h-3.5 w-3.5' />}
-                label='Account ID'
+                label={interfaceI18n.t('Account ID')}
                 value={payload?.account_id}
                 mono
               />

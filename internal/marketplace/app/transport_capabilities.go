@@ -35,7 +35,7 @@ var (
 func StartMarketplaceTransportCapabilityBackfill() {
 	go func() {
 		var channels []marketplaceschema.Channel
-		if err := platformdb.DB.Where("status NOT IN ?", []string{
+		if err := platformdb.DB.Where("auto_probe_enabled = ? AND status NOT IN ?", true, []string{
 			marketplacedomain.LifecycleSuspended,
 			marketplacedomain.LifecycleDisabled,
 		}).Find(&channels).Error; err != nil {
@@ -77,10 +77,27 @@ func probeAndPersistMarketplaceCapabilities(ctx context.Context, channelID strin
 	if err := platformdb.DB.First(&channel, "id = ?", channelID).Error; err != nil {
 		return err
 	}
-	if !marketplaceBackgroundProbeAllowed(channel.Status) {
+	if !marketplaceBackgroundProbeAllowed(&channel) {
 		return nil
 	}
+	// Share the owner-probe lease so replicas and probe kinds cannot send
+	// simultaneous background requests through the same credential.
+	release, acquired := claimMarketplaceAutoProbeLease(channelID)
+	if !acquired {
+		time.AfterFunc(marketplaceCapabilityRetryDelay, func() { scheduleMarketplaceCapabilityProbe(channelID) })
+		return nil
+	}
+	defer release()
+	ctx, finish, ok := beginMarketplaceBackgroundProbe(ctx, &channel, "capability")
+	if !ok {
+		time.AfterFunc(marketplaceCapabilityRetryDelay, func() { scheduleMarketplaceCapabilityProbe(channelID) })
+		return nil
+	}
+	defer finish()
 	result := probeMarketplaceCandidates(ctx, marketplaceProbeCandidates(&channel))
+	if ctx.Err() != nil {
+		return nil
+	}
 	capabilities := gatewayschema.ResponsesCapabilities{
 		WebSocket:          result.WebSocket,
 		NativeBackground:   result.NativeBackground,
@@ -95,8 +112,11 @@ func probeAndPersistMarketplaceCapabilities(ctx context.Context, channelID strin
 		return err
 	}
 	channel.TransportCapabilities = string(raw)
-	if err := platformdb.DB.Model(&channel).Update("transport_capabilities", channel.TransportCapabilities).Error; err != nil {
-		return err
+	updated := platformdb.DB.Model(&channel).
+		Where("updated_at = ? AND status = ? AND auto_probe_enabled = ?", channel.UpdatedAt, channel.Status, channel.AutoProbeEnabled).
+		Update("transport_capabilities", channel.TransportCapabilities)
+	if updated.Error != nil || updated.RowsAffected == 0 {
+		return updated.Error
 	}
 	if err := syncMarketplaceCapabilitiesToInternal(&channel, capabilities); err != nil {
 		return err
@@ -109,8 +129,9 @@ func probeAndPersistMarketplaceCapabilities(ctx context.Context, channelID strin
 	return nil
 }
 
-func marketplaceBackgroundProbeAllowed(status string) bool {
-	return status != marketplacedomain.LifecycleSuspended && status != marketplacedomain.LifecycleDisabled
+func marketplaceBackgroundProbeAllowed(channel *marketplaceschema.Channel) bool {
+	return channel != nil && channel.Status != marketplacedomain.LifecycleSuspended && channel.Status != marketplacedomain.LifecycleDisabled &&
+		(channel.AutoProbeEnabled || !marketplacedomain.AcceptsTraffic(channel.Status))
 }
 
 func marketplaceCapabilitiesHaveTransientFailure(capabilities gatewayschema.ResponsesCapabilities) bool {

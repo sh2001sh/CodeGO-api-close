@@ -32,18 +32,18 @@ export function GroupBuyRecords() {
       const response = await getMyGroupBuys()
       if (!response.success || !response.data)
         throw new Error(
-          response.message || t('Unable to load participation records.')
+          response.message || 'Unable to load participation records.'
         )
       return response
     },
   })
   return (
-    <section id='group-buy' className='min-w-0'>
-      <TitledCard title={t('我的参与')} description={t('结算记录')}>
+    <section id='group-buy' className='commerce-group-buy min-w-0'>
+      <TitledCard title={t('我的参与')}>
         {query.isLoading ? (
           <Skeleton className='h-24' />
         ) : query.isError ? (
-          <div role='alert'>
+          <div role='alert' className='commerce-error'>
             <p>{t('Unable to load participation records.')}</p>
             <Button variant='outline' onClick={() => void query.refetch()}>
               {t('Try again')}
@@ -52,26 +52,27 @@ export function GroupBuyRecords() {
         ) : query.data?.data?.data?.length ? (
           <div className='divide-y'>
             {query.data.data.data.map((item) => (
-              <div
-                key={item.id}
-                className='flex flex-wrap items-center justify-between gap-3 py-3 text-sm'
-              >
-                <span>{formatSubscriptionPlanTitle(item.plan_name)}</span>
-                <span>
+              <article key={item.id} className='commerce-group-record'>
+                <div>
+                  <span>{formatSubscriptionPlanTitle(item.plan_name)}</span>
+                  <code>#{item.id}</code>
+                </div>
+                <p className='commerce-group-count'>
                   {item.current_count} / {item.target_count}
-                </span>
-                <span>
+                </p>
+                <span
+                  className='commerce-status'
+                  data-status={
+                    item.status === 'pending' ? 'pending' : 'settled'
+                  }
+                >
                   {t(item.status === 'pending' ? '本期进行中' : '本期已结算')}
                 </span>
-              </div>
+              </article>
             ))}
           </div>
         ) : (
-          <p className='text-muted-foreground text-sm'>
-            {t(
-              '暂无参与记录。购买集享套餐后，本期进度和最终结算结果会显示在这里。'
-            )}
-          </p>
+          <p className='commerce-empty'>{t('暂无参与记录')}</p>
         )}
       </TitledCard>
     </section>

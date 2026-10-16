@@ -5,6 +5,8 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react'
+import interfaceI18n from '@/i18n/config'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
   cancelBlindBoxOrder,
@@ -33,13 +35,15 @@ interface UseBlindBoxPaymentOptions {
   setSelectedQuantity: Dispatch<SetStateAction<number>>
   selectedPaymentMethod: PaymentMethod | null
   setSelectedPaymentMethod: Dispatch<SetStateAction<PaymentMethod | null>>
-  amountDue: number
+  amountDue: number | null
   refreshAll: () => Promise<void>
   onSubscriptionRefresh: () => Promise<void>
   onUserRefresh: () => Promise<void>
 }
 
 export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
+  useTranslation()
+
   const [paying, setPaying] = useState(false)
   const [paymentState, setPaymentState] =
     useState<BlindBoxPaymentState>(EMPTY_PAYMENT_STATE)
@@ -48,11 +52,11 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
     if (!options.paymentResult) return
     const syncPaymentResult = async () => {
       if (options.paymentResult === 'success') {
-        toast.success('支付成功，系统正在同步盲盒结果。')
+        toast.success(interfaceI18n.t('支付成功，系统正在同步盲盒结果。'))
       } else if (options.paymentResult === 'pending') {
-        toast.message('支付处理中，结果稍后会同步回来。')
+        toast.message(interfaceI18n.t('支付处理中，结果稍后会同步回来。'))
       } else {
-        toast.error('支付未完成，请重新发起购买。')
+        toast.error(interfaceI18n.t('支付未完成，请重新发起购买。'))
       }
       await options.refreshAll()
       if (typeof window !== 'undefined') {
@@ -75,7 +79,10 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
           if (isApiSuccess(refreshed) && refreshed.data) {
             options.setData(refreshed.data)
             toast.success(
-              `${order.quantity || paymentState.quantity} 个盲盒已到账，请选择逐个开启或全部打开。`
+              interfaceI18n.t(
+                '{{param0}} 个盲盒已到账，请选择逐个开启或全部打开。',
+                { param0: order.quantity || paymentState.quantity }
+              )
             )
           }
           await Promise.all([
@@ -90,11 +97,13 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
             setPaymentState((current) => ({
               ...current,
               stage: 'failed',
-              message: '订单已过期或支付未完成，请重新发起购买。',
+              message: interfaceI18n.t(
+                '订单已过期或支付未完成，请重新发起购买。'
+              ),
             }))
           } else {
             setPaymentState(EMPTY_PAYMENT_STATE)
-            toast.message('未付款订单已过期，可以重新购买盲盒')
+            toast.message(interfaceI18n.t('未付款订单已过期，可以重新购买盲盒'))
             await options.refreshAll()
           }
         }
@@ -104,7 +113,7 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
           setPaymentState((current) => ({
             ...current,
             stage: 'failed',
-            message: '支付超时，请检查网络连接后重试',
+            message: interfaceI18n.t('支付超时，请检查网络连接后重试'),
           }))
         }
       }
@@ -123,9 +132,16 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
   ])
 
   const handlePay = useCallback(async () => {
+    const amountDue = options.amountDue
+    if (amountDue === null) {
+      toast.error(
+        `${interfaceI18n.t('Payment amount')}: ${interfaceI18n.t('加载失败')}`
+      )
+      return
+    }
     const method = options.selectedPaymentMethod
     if (!method) {
-      toast.error('请选择支付方式')
+      toast.error(interfaceI18n.t('请选择支付方式'))
       return
     }
     setPaying(true)
@@ -136,27 +152,29 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
       })
       if (!isApiSuccess(response))
         throw new Error(
-          friendlyPaymentError(response.message || '发起支付失败')
+          friendlyPaymentError(
+            response.message || interfaceI18n.t('发起支付失败')
+          )
         )
       const payload = isRecord(response.data) ? response.data : {}
       const formFields = isRecord(payload.form) ? payload.form : null
       const payUrl = String(payload.pay_url || '')
       const formUrl = formFields ? String(response.url || '') : ''
       if (!(formUrl && formFields) && !payUrl) {
-        throw new Error('支付网关未返回可打开的支付页面')
+        throw new Error(interfaceI18n.t('支付网关未返回可打开的支付页面'))
       }
       setPaymentState({
         open: false,
         stage: 'pending',
         orderId: String(payload.order_id || ''),
-        amountDue: Number(payload.amount_due || options.amountDue),
+        amountDue: Number(payload.amount_due || amountDue),
         methodLabel: getBlindBoxMethodLabel(method),
         payUrl,
         qrCodeUrl: String(payload.qrcode_url || ''),
         formUrl,
         formFields,
         quantity: Number(payload.quantity || options.selectedQuantity),
-        message: '支付页已打开，付款完成后结果会自动同步。',
+        message: interfaceI18n.t('支付页已打开，付款完成后结果会自动同步。'),
         pollingStartTime: Date.now(),
         retryPayload: {
           quantity: options.selectedQuantity,
@@ -168,15 +186,16 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
       } else {
         window.open(payUrl, '_blank', 'noopener,noreferrer')
       }
-      toast.success('正在跳转到支付页…')
+      toast.success(interfaceI18n.t('正在跳转到支付页…'))
     } catch (error) {
-      const message = error instanceof Error ? error.message : '发起支付失败'
+      const message =
+        error instanceof Error ? error.message : interfaceI18n.t('发起支付失败')
       toast.error(message)
       setPaymentState({
         ...EMPTY_PAYMENT_STATE,
         open: true,
         stage: 'failed',
-        amountDue: options.amountDue,
+        amountDue,
         methodLabel: getBlindBoxMethodLabel(method),
         quantity: options.selectedQuantity,
         message,
@@ -192,6 +211,7 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
     options.amountDue,
     options.selectedPaymentMethod,
     options.selectedQuantity,
+    interfaceI18n.language,
   ])
 
   const handleOpenExternal = useCallback(() => {
@@ -210,18 +230,24 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
     try {
       const response = await cancelBlindBoxOrder(paymentState.orderId)
       if (!isApiSuccess(response)) {
-        throw new Error(response.message || '取消订单失败')
+        throw new Error(response.message || interfaceI18n.t('取消订单失败'))
       }
       setPaymentState(EMPTY_PAYMENT_STATE)
       await options.refreshAll()
-      toast.success('订单已取消，可以重新购买盲盒')
+      toast.success(interfaceI18n.t('订单已取消，可以重新购买盲盒'))
       return true
     } catch (error) {
-      const message = error instanceof Error ? error.message : '取消订单失败'
+      const message =
+        error instanceof Error ? error.message : interfaceI18n.t('取消订单失败')
       toast.error(message)
       return false
     }
-  }, [options.refreshAll, paymentState.orderId, paymentState.stage])
+  }, [
+    options.refreshAll,
+    paymentState.orderId,
+    paymentState.stage,
+    interfaceI18n.language,
+  ])
 
   const handleContinuePaymentInBackground = useCallback(() => {
     setPaymentState((current) => ({ ...current, open: false }))
@@ -233,7 +259,7 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
       (item) => item.type === paymentState.retryPayload?.paymentMethod
     )
     if (!method) {
-      toast.error('支付方式不可用，请重新选择')
+      toast.error(interfaceI18n.t('支付方式不可用，请重新选择'))
       setPaymentState(EMPTY_PAYMENT_STATE)
       return
     }
@@ -247,6 +273,7 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
     options.setSelectedPaymentMethod,
     options.setSelectedQuantity,
     paymentState.retryPayload,
+    interfaceI18n.language,
   ])
 
   return {
@@ -263,11 +290,11 @@ export function useBlindBoxPayment(options: UseBlindBoxPaymentOptions) {
 
 function friendlyPaymentError(message: string) {
   if (message.includes('余额不足') || message.includes('insufficient'))
-    return '余额不足，请先充值'
+    return interfaceI18n.t('余额不足，请先充值')
   if (message.includes('超时') || message.includes('timeout'))
-    return '网络超时，请检查网络连接后重试'
+    return interfaceI18n.t('网络超时，请检查网络连接后重试')
   if (message.includes('限额') || message.includes('limit'))
-    return '已达到购买限额，请稍后再试'
+    return interfaceI18n.t('已达到购买限额，请稍后再试')
   return message
 }
 

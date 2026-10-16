@@ -26,6 +26,7 @@ type RefundableOrder struct {
 	FeeAmount         float64 `json:"fee_amount"`
 	RefundAmount      float64 `json:"refund_amount"`
 	RefundStatus      string  `json:"refund_status"`
+	RefundNo          string  `json:"refund_no,omitempty"`
 	Refundable        bool    `json:"refundable"`
 	UnavailableReason string  `json:"unavailable_reason,omitempty"`
 }

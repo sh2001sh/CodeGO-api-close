@@ -33,7 +33,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -55,7 +54,6 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
-  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -72,7 +70,7 @@ import { useUpdateOption } from '@/features/system-settings/hooks/use-update-opt
 import { normalizeJsonString } from '@/features/system-settings/models/utils'
 import type { ModelSettings } from '@/features/system-settings/types'
 import { safeJsonParse } from '@/features/system-settings/utils/json-parser'
-import { createModel, updateModel, getModel, getVendors } from '../../api'
+import { createModel, updateModel, getModel, getAllVendors } from '../../api'
 import { getNameRuleOptions, ENDPOINT_TEMPLATES } from '../../constants'
 import { modelsQueryKeys, vendorsQueryKeys, parseModelTags } from '../../lib'
 import type { Model } from '../../types'
@@ -128,7 +126,7 @@ export function ModelMutateDrawer({
   // Fetch vendors for dropdown
   const { data: vendorsData } = useQuery({
     queryKey: vendorsQueryKeys.list(),
-    queryFn: () => getVendors({ page_size: 1000 }),
+    queryFn: () => getAllVendors(),
     enabled: open,
   })
 
@@ -628,18 +626,14 @@ export function ModelMutateDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className='flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl'>
+      <SheetContent
+        aria-describedby={undefined}
+        className='admin-editor model-editor flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl'
+      >
         <SheetHeader className='border-b px-4 py-3 text-start sm:px-6 sm:py-4'>
           <SheetTitle>
             {isEditing ? t('Edit Model') : t('Create Model')}
           </SheetTitle>
-          <SheetDescription>
-            {isEditing
-              ? t("Update model configuration and click save when you're done.")
-              : t(
-                  'Add a new model to the system by providing the necessary information.'
-                )}
-          </SheetDescription>
         </SheetHeader>
 
         <Form {...form}>
@@ -668,9 +662,7 @@ export function ModelMutateDrawer({
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('The unique identifier for this model')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -706,9 +698,7 @@ export function ModelMutateDrawer({
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription className='text-xs'>
-                      {t('@lobehub/icons key')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -768,9 +758,7 @@ export function ModelMutateDrawer({
                         placeholder={t('Add tags...')}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Press Enter or comma to add tags')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -816,9 +804,7 @@ export function ModelMutateDrawer({
                         ))}
                       </RadioGroup>
                     </FormControl>
-                    <FormDescription>
-                      {t('How this model name should match requests')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -877,9 +863,7 @@ export function ModelMutateDrawer({
                         )}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Define API endpoints for this model (JSON format)')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -937,11 +921,7 @@ export function ModelMutateDrawer({
                           }}
                         />
                       </FormControl>
-                      <FormDescription>
-                        {t(
-                          'Cost in USD per request, regardless of tokens used.'
-                        )}
-                      </FormDescription>
+
                       <FormMessage />
                     </FormItem>
                   )}
@@ -999,11 +979,18 @@ export function ModelMutateDrawer({
                                 }}
                               />
                             </FormControl>
-                            <FormDescription>
+                            <output className='block text-base tabular-nums'>
                               {field.value && !isNaN(parseFloat(field.value))
-                                ? `Calculated price: $${(parseFloat(field.value) * 2).toFixed(4)} per 1M tokens`
-                                : t('Multiplier for prompt tokens.')}
-                            </FormDescription>
+                                ? t(
+                                    'Calculated price: {{amount}} credits per 1M tokens',
+                                    {
+                                      amount: (
+                                        parseFloat(field.value) * 2
+                                      ).toFixed(4),
+                                    }
+                                  )
+                                : '—'}
+                            </output>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1038,14 +1025,22 @@ export function ModelMutateDrawer({
                                 }}
                               />
                             </FormControl>
-                            <FormDescription>
+                            <output className='block text-base tabular-nums'>
                               {field.value &&
                               !isNaN(parseFloat(field.value)) &&
                               promptPrice &&
                               !isNaN(parseFloat(promptPrice))
-                                ? `Calculated price: $${(parseFloat(promptPrice) * parseFloat(field.value)).toFixed(4)} per 1M tokens`
-                                : t('Multiplier for completion tokens.')}
-                            </FormDescription>
+                                ? t(
+                                    'Calculated price: {{amount}} credits per 1M tokens',
+                                    {
+                                      amount: (
+                                        parseFloat(promptPrice) *
+                                        parseFloat(field.value)
+                                      ).toFixed(4),
+                                    }
+                                  )
+                                : '—'}
+                            </output>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1135,9 +1130,7 @@ export function ModelMutateDrawer({
                                 }}
                               />
                             </FormControl>
-                            <FormDescription>
-                              {t('Discount ratio for cache hits.')}
-                            </FormDescription>
+
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1162,9 +1155,7 @@ export function ModelMutateDrawer({
                                 }}
                               />
                             </FormControl>
-                            <FormDescription>
-                              {t('Multiplier for image processing.')}
-                            </FormDescription>
+
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1189,9 +1180,7 @@ export function ModelMutateDrawer({
                                 }}
                               />
                             </FormControl>
-                            <FormDescription>
-                              {t('Multiplier for audio inputs.')}
-                            </FormDescription>
+
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1216,9 +1205,7 @@ export function ModelMutateDrawer({
                                 }}
                               />
                             </FormControl>
-                            <FormDescription>
-                              {t('Multiplier for audio outputs.')}
-                            </FormDescription>
+
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1244,9 +1231,6 @@ export function ModelMutateDrawer({
                       <FormLabel className='text-base'>
                         {t('Enabled')}
                       </FormLabel>
-                      <FormDescription>
-                        {t('Enable or disable this model')}
-                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch
@@ -1267,9 +1251,6 @@ export function ModelMutateDrawer({
                       <FormLabel className='text-base'>
                         {t('Official Sync')}
                       </FormLabel>
-                      <FormDescription>
-                        {t('Sync this model with official upstream')}
-                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch

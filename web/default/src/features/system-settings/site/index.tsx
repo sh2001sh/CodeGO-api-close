@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { SettingsPage } from '../components/settings-page'
 import { DEFAULT_LOGO } from '@/lib/constants'
+import { SettingsPage } from '../components/settings-page'
 import type { SiteSettings } from '../types'
 import {
   SITE_DEFAULT_SECTION,

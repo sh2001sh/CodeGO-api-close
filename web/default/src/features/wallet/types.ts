@@ -357,15 +357,18 @@ export interface AffiliateInviteeRewardStatus {
   invitee_username: string
   invitee_display_name?: string
   created_at: number
-  month_card_purchased: boolean
-  reset_opportunity_earned: boolean
-  reset_opportunity_earned_at: number
+  first_week_consumed_quota: number
+  rebate_quota: number
+  rebate_ends_at: number
 }
 
 export interface AffiliateRewardsOverview {
   affiliate_code: string
   invited_count: number
-  successful_purchase_invites: number
+  rebate_rate_bps: number
+  rebate_effective_at: number
+  first_week_consumed_quota: number
+  rebate_total_quota: number
   reset_opportunity: SubscriptionResetOpportunitySummary
   invitees: AffiliateInviteeRewardStatus[]
 }
@@ -403,6 +406,7 @@ export type TopupStatus = 'success' | 'pending' | 'expired'
  * Topup billing record
  */
 export interface TopupRecord {
+  credited_quota?: number
   /** Record ID */
   id: number
   /** User ID */
@@ -429,32 +433,6 @@ export interface TopupRecord {
 export interface BillingHistoryResponse {
   items: TopupRecord[]
   total: number
-}
-
-export interface RefundableOrder {
-  order_type: 'balance' | 'subscription' | string
-  trade_no: string
-  payment_method: string
-  created_at: number
-  paid_amount: number
-  total_quota: number
-  used_quota: number
-  remaining_quota: number
-  gross_refund: number
-  fee_amount: number
-  refund_amount: number
-  refund_status: string
-  refundable: boolean
-  unavailable_reason?: string
-}
-
-export interface RefundResult {
-  order_type: string
-  trade_no: string
-  refund_no: string
-  refund_id?: string
-  refund_amount: number
-  status: string
 }
 
 /**
@@ -532,10 +510,6 @@ export interface BlindBoxRecord {
   prop_type?: string
   prop_status?: string
   prop_expires_at?: number
-  /** One-day lucky number issued with this opened box. */
-  lucky_number?: string
-  lucky_draw_date?: string
-  lucky_expires_at?: number
 }
 
 export interface BlindBoxHistoryPage {

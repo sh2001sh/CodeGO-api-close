@@ -1,4 +1,4 @@
-import i18n from '@/i18n/config'
+import { useId } from 'react'
 import { Gift, type LucideIcon } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -8,17 +8,19 @@ export function BalanceBoxQuantityControl(props: {
   count: number
   max: number
   disabled: boolean
+  label?: string
   onChange: (count: number) => void
 }) {
-  useTranslation()
+  const { t } = useTranslation()
+  const quantityId = useId()
   return (
     <div>
       <div className='flex flex-wrap items-baseline justify-between gap-2'>
         <label
           className='text-foreground text-sm font-semibold'
-          htmlFor='balance-box-count'
+          htmlFor={quantityId}
         >
-          <Trans i18nKey={'盲盒数量'} />
+          {props.label ?? t('盲盒数量')}
         </label>
         <span className='text-muted-foreground text-xs'>
           <Trans i18nKey={'单次最多'} /> {props.max}
@@ -31,27 +33,26 @@ export function BalanceBoxQuantityControl(props: {
             <button
               key={value}
               type='button'
+              aria-pressed={props.count === value}
               disabled={props.disabled}
               onClick={() => props.onChange(value)}
               className={cn(
-                'border px-3 py-1.5 font-mono text-xs font-semibold transition-colors disabled:opacity-50',
-                props.count === value
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-background/80 text-muted-foreground hover:border-primary/45 hover:text-foreground'
+                'blind-box-quantity-preset',
+                props.count === value ? 'is-selected' : ''
               )}
             >
               ×{value}
             </button>
           ))}
         <Input
-          id='balance-box-count'
+          id={quantityId}
           type='number'
           min={1}
           max={props.max}
           value={props.count}
           disabled={props.disabled}
-          aria-label={i18n.t('自定义盲盒数量')}
-          className='h-9 w-20 max-w-full'
+          aria-label={props.label ?? t('自定义盲盒数量')}
+          className='blind-box-quantity-input w-20 max-w-full'
           onChange={(event) =>
             props.onChange(
               Math.min(

@@ -1,11 +1,26 @@
 package dto
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"strings"
 )
+
+// An absent literal rules out a rewrite without decoding the full history.
+// Escaped JSON keys or values must still take the normal decoding path.
+func responsesInputMayContain(input json.RawMessage, markers ...string) bool {
+	if bytes.Contains(input, []byte(`\u`)) {
+		return true
+	}
+	for _, marker := range markers {
+		if bytes.Contains(input, []byte(marker)) {
+			return true
+		}
+	}
+	return false
+}
 
 // StripUnsupportedInputNamespaces removes non-standard namespace metadata from
 // top-level Responses input items. Some clients replay this internal metadata
@@ -55,7 +70,7 @@ func (r *OpenAIResponsesRequest) StripUnsupportedInputNamespaces() (bool, error)
 // result; forwarding it as function_call_output makes strict Responses
 // gateways reject the request because it has no matching call_id.
 func (r *OpenAIResponsesRequest) NormalizeCodexDelegationBootstrap() (bool, error) {
-	if r == nil || len(r.Input) == 0 {
+	if r == nil || len(r.Input) == 0 || !responsesInputMayContain(r.Input, `"function_call_output"`) {
 		return false, nil
 	}
 	var items []map[string]json.RawMessage
@@ -91,7 +106,7 @@ func (r *OpenAIResponsesRequest) NormalizeCodexDelegationBootstrap() (bool, erro
 // upstreams reject agent_message even though Codex emits it as conversation
 // input after a child agent replies.
 func (r *OpenAIResponsesRequest) NormalizeCodexAgentMessages() (bool, error) {
-	if r == nil || len(r.Input) == 0 {
+	if r == nil || len(r.Input) == 0 || !responsesInputMayContain(r.Input, `"agent_message"`) {
 		return false, nil
 	}
 	var items []map[string]json.RawMessage
@@ -145,6 +160,10 @@ func (r *OpenAIResponsesRequest) LiftCodexAdditionalTools() (bool, error) {
 	if r == nil || len(r.Input) == 0 {
 		return false, nil
 	}
+	// Keep the existing tools validation when declarations are present.
+	if (len(r.Tools) == 0 || string(r.Tools) == "null") && !responsesInputMayContain(r.Input, `"additional_tools"`) {
+		return false, nil
+	}
 	var items []json.RawMessage
 	if err := json.Unmarshal(r.Input, &items); err != nil {
 		return false, nil
@@ -194,7 +213,7 @@ func (r *OpenAIResponsesRequest) LiftCodexAdditionalTools() (bool, error) {
 // ordinary messages after Codex history has been converted for a portable
 // Responses provider.
 func (r *OpenAIResponsesRequest) StripCodexMessageMetadata() (bool, error) {
-	if r == nil || len(r.Input) == 0 {
+	if r == nil || len(r.Input) == 0 || !responsesInputMayContain(r.Input, `"author"`, `"recipient"`, `"phase"`) {
 		return false, nil
 	}
 	var items []map[string]json.RawMessage
@@ -294,6 +313,9 @@ func (r *OpenAIResponsesRequest) NormalizeCodexRemoteCompactionInput() (bool, er
 }
 
 func sanitizeCodexRemoteCompactionItems(input json.RawMessage) (json.RawMessage, bool, error) {
+	if !responsesInputMayContain(input, `"id"`) {
+		return input, false, nil
+	}
 	var items []json.RawMessage
 	if err := json.Unmarshal(input, &items); err != nil {
 		return input, false, nil

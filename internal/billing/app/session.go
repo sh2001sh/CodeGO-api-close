@@ -187,7 +187,7 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		// returning so both sources remain balanced on a failed request.
 		if fundingErr == nil {
 			if rollbackErr := s.funding.Refund(); rollbackErr != nil {
-				platformobservability.SysLog(fmt.Sprintf("error rolling back funding after token pre-consume failure: %s", rollbackErr.Error()))
+				return types.NewError(errors.Join(tokenErr, rollbackErr), types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 			}
 		}
 		return types.NewErrorWithStatusCode(
@@ -327,7 +327,17 @@ func (s *BillingSession) syncRelayInfo() {
 		info.SubscriptionAmountUsedAfterPreConsume = sub.AmountUsedAfter
 		info.SubscriptionPlanId = sub.PlanId
 		info.SubscriptionPlanTitle = sub.PlanTitle
+		info.CreditPackGrantedQuota = sub.CreditPackGrantedQuota
+		info.CreditPackPaidQuota = sub.CreditPackPaidQuota
+		info.CreditPackChannelShareBPS = sub.CreditPackChannelShareBPS
 	} else {
+		info.CreditPackGrantedQuota = 0
+		info.CreditPackPaidQuota = 0
+		info.CreditPackChannelShareBPS = 0
+		info.SubscriptionGroupMultiplier = 0
+		info.SubscriptionPackageMultiplier = 0
+		info.SubscriptionQuotaScale = 0
+		info.SubscriptionGroupRatio = 0
 		info.SubscriptionId = 0
 		info.SubscriptionPreConsumed = 0
 		info.SubscriptionPostDelta = 0

@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 */
 import i18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
+import { toIntlLocale } from '@/i18n/languages'
 import { FileCheck2, FileClock, FileX2 } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
@@ -45,12 +47,18 @@ const statusMeta: Record<
 }
 
 function formatMoney(request: InvoiceRequest) {
-  return request.currency + ' ' + request.order_amount.toFixed(2)
+  const amount = request.order_amount.toLocaleString(getIntlLocale(), {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return request.currency === 'USD'
+    ? `${amount} credits`
+    : `${request.currency} ${amount}`
 }
 
 function formatDateTime(timestamp: number) {
   return timestamp
-    ? new Intl.DateTimeFormat('zh-CN', {
+    ? new Intl.DateTimeFormat(toIntlLocale(i18n.language), {
         dateStyle: 'medium',
         timeStyle: 'short',
       }).format(timestamp * 1000)
@@ -58,12 +66,13 @@ function formatDateTime(timestamp: number) {
 }
 
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
+  const { t } = useTranslation()
   const meta = statusMeta[status]
   const Icon = meta.icon
   return (
     <Badge variant={meta.variant}>
       <Icon />
-      {meta.label}
+      {t(meta.label)}
     </Badge>
   )
 }
@@ -76,9 +85,6 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
         <FileClock className='text-muted-foreground size-5' />
         <p className='font-medium'>
           <Trans i18nKey={'暂无发票申请记录'} />
-        </p>
-        <p className='text-muted-foreground max-w-md text-sm'>
-          <Trans i18nKey={'提交申请后，处理结果和发票号码会显示在这里。'} />
         </p>
       </div>
     )
@@ -94,7 +100,7 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
           >
             <div className='flex flex-wrap items-start justify-between gap-2'>
               <div className='space-y-1'>
-                <div className='font-medium'>{request.order_title}</div>
+                <div className='font-medium'>{i18n.t(request.order_title)}</div>
                 <div className='text-muted-foreground text-sm'>
                   {formatMoney(request)}
                   {request.order_count > 1
@@ -138,7 +144,7 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                 </div>
               </div>
             </div>
-            {request.status === 'rejected' && request.admin_note ? (
+            {request.admin_note ? (
               <div className='bg-destructive/8 text-destructive rounded-xl px-3 py-2 text-xs leading-5'>
                 {request.admin_note}
               </div>
@@ -170,7 +176,9 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
               <TableRow key={request.id}>
                 <TableCell className='align-top whitespace-normal'>
                   <div className='space-y-1'>
-                    <div className='font-medium'>{request.order_title}</div>
+                    <div className='font-medium'>
+                      {i18n.t(request.order_title)}
+                    </div>
                     <div className='text-muted-foreground text-xs'>
                       {formatMoney(request)} ·{' '}
                       {request.order_count > 1
@@ -194,7 +202,7 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                       <Trans i18nKey={'待开具'} />
                     </span>
                   )}
-                  {request.status === 'rejected' && request.admin_note ? (
+                  {request.admin_note ? (
                     <div className='text-destructive mt-1 max-w-56 text-xs leading-5'>
                       {request.admin_note}
                     </div>

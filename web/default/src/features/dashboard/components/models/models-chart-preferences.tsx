@@ -82,7 +82,7 @@ export function ModelsChartPreferences(props: ModelsChartPreferencesProps) {
       <DialogContent className='sm:max-w-md'>
         <DialogHeader>
           <DialogTitle>{t('Dashboard Preferences')}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className='sr-only'>
             {t(
               'Choose the default charts, range, and time granularity for model analytics.'
             )}

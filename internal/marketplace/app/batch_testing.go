@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -12,6 +14,7 @@ import (
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 )
 
@@ -141,6 +144,7 @@ func StartBatchMarketplaceTest(userID int, req BatchTestRequest) (*BatchTestView
 			CreditPoolPolicy:  group.CreditPoolPolicy,
 			Multiplier:        group.Multiplier,
 			ModelPrices:       decodeChannelModelPrices(channel.ModelPrices),
+			ChannelID:         channel.ID,
 		}
 	}
 	if len(items) == 0 {
@@ -172,6 +176,7 @@ func GetBatchMarketplaceTest(userID int, id string) (*BatchTestView, error) {
 }
 
 type batchTestTarget struct {
+	ChannelID         string
 	InternalChannelID int
 	GroupID           string
 	InternalGroup     string
@@ -200,6 +205,12 @@ func executeBatchMarketplaceTest(id string, userID int, targets map[string]batch
 		started := time.Now().UTC()
 		updateBatchItem(id, itemIndex, func(target *BatchTestItem) { target.Status = "running"; target.StartedAt = &started })
 		start := time.Now()
+		prompt, validate, prepErr := batchPresentationProbe(target.ChannelID, model)
+		if prepErr != nil {
+			ended := time.Now().UTC()
+			updateBatchItem(id, itemIndex, func(item *BatchTestItem) { item.Status = "failed"; item.Error = prepErr.Error(); item.EndedAt = &ended })
+			continue
+		}
 		_, report, _, err := gatewayexecutionapp.TestMarketplaceChannelByID(
 			target.InternalChannelID, model, "", false,
 			gatewayexecutionapp.MarketplaceChannelTestOptions{
@@ -207,6 +218,7 @@ func executeBatchMarketplaceTest(id string, userID int, targets map[string]batch
 				InternalGroup: target.InternalGroup, MarketplaceOwnerID: target.OwnerUserID,
 				CreditPoolPolicy: target.CreditPoolPolicy, Multiplier: target.Multiplier,
 				ModelPrices: target.ModelPrices,
+				Prompt:      prompt, ValidateResponse: validate,
 			},
 		)
 		ended := time.Now().UTC()
@@ -240,6 +252,44 @@ func executeBatchMarketplaceTest(id string, userID int, targets map[string]batch
 			}
 		}
 	})
+}
+
+func batchPresentationProbe(channelID, model string) (string, func([]byte) error, error) {
+	if channelID == "" {
+		return "", nil, nil
+	}
+	var channel marketplaceschema.Channel
+	if err := platformdb.DB.First(&channel, "id = ?", channelID).Error; err != nil {
+		return "", nil, err
+	}
+	ctx, err := preparePresentationProbe(context.Background(), &channel)
+	if err != nil {
+		return "", nil, err
+	}
+	probe, _ := ctx.Value(presentationProbeKey{}).(*presentationProbe)
+	if probe == nil {
+		return "", nil, nil
+	}
+	prompt := probe.Prompt
+	if !presentationProbeSupportsText(model) {
+		prompt = ""
+	}
+	return prompt, func(body []byte) error {
+		// The gateway may normalize Anthropic/Gemini output into OpenAI format.
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return err
+		}
+		provider := "openai_compatible"
+		if payload["output"] != nil || payload["output_text"] != nil {
+			provider = "codex"
+		} else if payload["candidates"] != nil {
+			provider = "gemini"
+		} else if payload["content"] != nil {
+			provider = "anthropic"
+		}
+		return validatePresentationProbeResponse(ctx, provider, model, body)
+	}, nil
 }
 
 func getBatchModel(id string) string {

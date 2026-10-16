@@ -161,7 +161,8 @@ func listOfficialGroupStatus(viewerUserID int) ([]GroupListItem, error) {
 			RecentRequestSeries: recent, RecentRequestBucketSeconds: marketplaceRecentBucketSeconds,
 			LatestRequestStatus:     latestRequestStatus(recent),
 			MultiplierCardSupported: capability.MultiplierCard, MultiplierCardUserEnabled: capability.MultiplierCard,
-			CurrentConcurrency: currentConcurrency,
+			CreditPackSupported: true,
+			CurrentConcurrency:  currentConcurrency,
 		})
 	}
 	return items, nil

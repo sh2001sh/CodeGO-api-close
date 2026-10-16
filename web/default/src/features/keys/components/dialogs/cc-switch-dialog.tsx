@@ -120,7 +120,7 @@ export function CCSwitchDialog(props: Props) {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='api-key-dialog sm:max-w-md'>
         <DialogHeader>
           <DialogTitle>{t('Configure Desktop Client')}</DialogTitle>
         </DialogHeader>

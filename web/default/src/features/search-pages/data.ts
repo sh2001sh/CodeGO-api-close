@@ -61,11 +61,13 @@ export const searchPages: SearchPageContent[] = [
       },
       {
         question: 'Code Go 适合作为 Codex API 中转吗？',
-        answer: '适合，尤其适合希望长期使用、持续记录和统一管理多模型调用的开发者。',
+        answer:
+          '适合，尤其适合希望长期使用、持续记录和统一管理多模型调用的开发者。',
       },
       {
         question: 'Code Go 和普通 Codex API 中转有什么不同？',
-        answer: 'Code Go 更重视长期使用体验，不只关心一次调用是否成功，也关心整个 AI Coding 过程是否能持续积累。',
+        answer:
+          'Code Go 更重视长期使用体验，不只关心一次调用是否成功，也关心整个 AI Coding 过程是否能持续积累。',
       },
     ],
   },
@@ -106,7 +108,8 @@ export const searchPages: SearchPageContent[] = [
     faq: [
       {
         question: 'Codex API 教程里最重要的是什么？',
-        answer: '最重要的是把 Codex 放进一个可以持续使用的流程，而并非只完成一次调用。',
+        answer:
+          '最重要的是把 Codex 放进一个可以持续使用的流程，而并非只完成一次调用。',
       },
       {
         question: '这篇教程适合什么人？',
@@ -165,19 +168,23 @@ export const searchPages: SearchPageContent[] = [
     faq: [
       {
         question: 'Code Go 是 Codex中转站吗？',
-        answer: '是。Code Go 可以作为 Codex中转 入口使用，而且不只是单一模型入口，你还可以同时查看免费模型、GPT 和 Claude，先看清再决定怎么用。',
+        answer:
+          '是。Code Go 可以作为 Codex中转 入口使用，而且不只是单一模型入口，你还可以同时查看免费模型、GPT 和 Claude，先看清再决定怎么用。',
       },
       {
         question: 'Codex中转 适合什么样的人？',
-        answer: '适合已经把 AI Coding、代码修改、终端协作或多模型工作流放进日常开发流程，并且需要稳定统一入口的开发者。',
+        answer:
+          '适合已经把 AI Coding、代码修改、终端协作或多模型工作流放进日常开发流程，并且需要稳定统一入口的开发者。',
       },
       {
         question: '搜 Codex中转 时，为什么还要关注免费模型？',
-        answer: '因为很多任务并不需要一开始就使用最强模型。先用免费模型做第一轮处理，再把复杂任务交给 GPT 或 Claude，通常更贴近真实工作流。',
+        answer:
+          '因为很多任务并不需要一开始就使用最强模型。先用免费模型做第一轮处理，再把复杂任务交给 GPT 或 Claude，通常更贴近真实工作流。',
       },
       {
         question: 'Code Go 当前有哪些免费模型可以先试？',
-        answer: '当前可直接关注的免费模型包括 deepseek-v4-pro、deepseek-v4-flash、kimi-k2.6、glm-5.1、minimax-m3 和 qwen-3.5。',
+        answer:
+          '当前可直接关注的免费模型包括 deepseek-v4-pro、deepseek-v4-flash、kimi-k2.6、glm-5.1、minimax-m3 和 qwen-3.5。',
       },
     ],
   },
@@ -187,11 +194,9 @@ export const searchPages: SearchPageContent[] = [
     seoTitle: 'Codex 中转教程：长期入口与使用路径 | Code Go',
     description:
       'Code Go 的 Codex 中转教程，帮助你把 Codex 中转放入长期可用的 AI Coding 工作流。',
-    keywords:
-      'codex 中转教程, codex中转, codex api中转, codex 中转站, Code Go',
+    keywords: 'codex 中转教程, codex中转, codex api中转, codex 中转站, Code Go',
     hero: 'Codex 中转教程',
-    intro:
-      '这篇教程的重点并非“怎么临时连上”，而是“怎么长期用得顺手”。',
+    intro: '这篇教程的重点并非“怎么临时连上”，而是“怎么长期用得顺手”。',
     sections: [
       {
         heading: '先理解 Codex 中转的意义',
@@ -270,19 +275,23 @@ export const searchPages: SearchPageContent[] = [
     faq: [
       {
         question: 'Code Go 支持 Claude Code API 吗？',
-        answer: '支持。Code Go 可以承接 Claude Code API 的使用场景，并且支持你在免费模型、GPT 和 Claude 之间做任务级选择。',
+        answer:
+          '支持。Code Go 可以承接 Claude Code API 的使用场景，并且支持你在免费模型、GPT 和 Claude 之间做任务级选择。',
       },
       {
         question: 'Code Go 适合长期做 Claude Code 工作流吗？',
-        answer: '适合。它更强调持续使用、连续记录和长期工作流，而并非只完成一次性调用。',
+        answer:
+          '适合。它更强调持续使用、连续记录和长期工作流，而并非只完成一次性调用。',
       },
       {
         question: '什么任务更适合直接用 Claude Code API？',
-        answer: '复杂代码修改、长上下文理解、多轮问题推进、终端式协作和高稳定性开发任务，更适合直接交给 Claude。',
+        answer:
+          '复杂代码修改、长上下文理解、多轮问题推进、终端式协作和高稳定性开发任务，更适合直接交给 Claude。',
       },
       {
         question: 'Claude Code API 一定要所有任务都直接用 Claude 吗？',
-        answer: '不需要。更实际的做法是先用免费模型完成前置整理，再把关键复杂任务交给 Claude，这样更符合长期开发场景。',
+        answer:
+          '不需要。更实际的做法是先用免费模型完成前置整理，再把关键复杂任务交给 Claude，这样更符合长期开发场景。',
       },
     ],
   },
@@ -295,8 +304,7 @@ export const searchPages: SearchPageContent[] = [
     keywords:
       'claude code api 教程, claude code api中转, claude code 中转教程, Code Go',
     hero: 'Claude Code API 教程',
-    intro:
-      '这篇教程适合想把 Claude Code 变成长期工作流一部分的人。',
+    intro: '这篇教程适合想把 Claude Code 变成长期工作流一部分的人。',
     sections: [
       {
         heading: '把 Claude Code 放进固定习惯',
@@ -375,19 +383,23 @@ export const searchPages: SearchPageContent[] = [
     faq: [
       {
         question: 'Code Go 是 Claude中转平台吗？',
-        answer: '是。Code Go 可以作为 Claude中转 入口使用，而且支持你同时查看 Claude 模型、免费模型和价格结构，再决定怎么接入。',
+        answer:
+          '是。Code Go 可以作为 Claude中转 入口使用，而且支持你同时查看 Claude 模型、免费模型和价格结构，再决定怎么接入。',
       },
       {
         question: '什么任务更适合直接用 Claude？',
-        answer: '复杂推理、长上下文任务、复杂代码重构、多轮协作和高稳定性开发任务，更适合直接走 Claude 路线。',
+        answer:
+          '复杂推理、长上下文任务、复杂代码重构、多轮协作和高稳定性开发任务，更适合直接走 Claude 路线。',
       },
       {
         question: 'Claude中转 页面为什么还要写免费模型？',
-        answer: '因为并非所有任务都要直接用 Claude。先用免费模型做前置整理，再把复杂任务交给 Claude，是更贴近真实工作流的用法。',
+        answer:
+          '因为并非所有任务都要直接用 Claude。先用免费模型做前置整理，再把复杂任务交给 Claude，是更贴近真实工作流的用法。',
       },
       {
         question: 'Code Go 当前有哪些免费模型可以先试？',
-        answer: '当前可优先关注的免费模型包括 deepseek-v4-pro、deepseek-v4-flash、kimi-k2.6、glm-5.1、minimax-m3 和 qwen-3.5。',
+        answer:
+          '当前可优先关注的免费模型包括 deepseek-v4-pro、deepseek-v4-flash、kimi-k2.6、glm-5.1、minimax-m3 和 qwen-3.5。',
       },
     ],
   },
@@ -435,19 +447,23 @@ export const searchPages: SearchPageContent[] = [
     faq: [
       {
         question: 'Code Go 是 AI API 中转入口吗？',
-        answer: '是。Code Go 可以作为统一的 AI API 中转入口来使用，重点是让你同时看清免费模型、GPT 和 Claude，再做任务级选择。',
+        answer:
+          '是。Code Go 可以作为统一的 AI API 中转入口来使用，重点是让你同时看清免费模型、GPT 和 Claude，再做任务级选择。',
       },
       {
         question: '为什么 AI API 中转 页面要重点写免费模型？',
-        answer: '因为很多任务不需要一开始就使用高阶模型。先用免费模型完成前置工作，再把复杂任务交给 GPT 或 Claude，是更符合实际的策略。',
+        answer:
+          '因为很多任务不需要一开始就使用高阶模型。先用免费模型完成前置工作，再把复杂任务交给 GPT 或 Claude，是更符合实际的策略。',
       },
       {
         question: '什么时候更适合直接切 GPT 或 Claude？',
-        answer: '当任务进入复杂推理、复杂代码修改、长上下文协作或高稳定性输出阶段时，更适合直接切到 GPT 或 Claude。',
+        answer:
+          '当任务进入复杂推理、复杂代码修改、长上下文协作或高稳定性输出阶段时，更适合直接切到 GPT 或 Claude。',
       },
       {
         question: 'Code Go 当前可先试的免费模型有哪些？',
-        answer: '当前可优先关注 deepseek-v4-pro、deepseek-v4-flash、kimi-k2.6、glm-5.1、minimax-m3、qwen-3.5。',
+        answer:
+          '当前可优先关注 deepseek-v4-pro、deepseek-v4-flash、kimi-k2.6、glm-5.1、minimax-m3、qwen-3.5。',
       },
     ],
   },
@@ -495,11 +511,9 @@ export const searchPages: SearchPageContent[] = [
     seoTitle: 'Codex 接入教程：从入门到长期使用 | Code Go',
     description:
       'Code Go 的 Codex 接入教程，帮助你把 Codex 接入 AI Coding 工作流。',
-    keywords:
-      'codex 接入教程, codex api 接入, codex API 教程, Code Go',
+    keywords: 'codex 接入教程, codex api 接入, codex API 教程, Code Go',
     hero: 'Codex 接入教程',
-    intro:
-      '这是一篇更偏实操的 Codex 接入说明，适合想快速开始的人。',
+    intro: '这是一篇更偏实操的 Codex 接入说明，适合想快速开始的人。',
     sections: [
       {
         heading: '先把目标想清楚',
@@ -532,8 +546,7 @@ export const searchPages: SearchPageContent[] = [
     keywords:
       'claude code 接入教程, claude code api 教程, claude code 中转, Code Go',
     hero: 'Claude Code 接入教程',
-    intro:
-      '这篇内容会更直接地告诉你，怎么把 Claude Code 接入到长期工作流里。',
+    intro: '这篇内容会更直接地告诉你，怎么把 Claude Code 接入到长期工作流里。',
     sections: [
       {
         heading: '先找对入口',
@@ -601,8 +614,7 @@ export const searchPages: SearchPageContent[] = [
     seoTitle: 'Codex 中转使用教程：接入与长期使用 | Code Go',
     description:
       'Code Go 的 Codex 中转使用教程，帮助你把 Codex 中转接入长期稳定的使用方式。',
-    keywords:
-      'codex 中转使用教程, codex 中转教程, codex api中转教程, Code Go',
+    keywords: 'codex 中转使用教程, codex 中转教程, codex api中转教程, Code Go',
     hero: 'Codex 中转使用教程',
     intro:
       '如果你在找 Codex 中转使用教程，通常说明你已经不满足于临时可用，而是想要更稳定的入口。',
@@ -715,8 +727,7 @@ export const searchPages: SearchPageContent[] = [
     seoTitle: 'Codex API 进阶教程：进阶使用与工作流 | Code Go',
     description:
       'Code Go 的 Codex API 进阶教程，适合已经开始长期使用 Codex 的开发者。',
-    keywords:
-      'codex api 进阶教程, codex api 使用技巧, codex 中转进阶, Code Go',
+    keywords: 'codex api 进阶教程, codex api 使用技巧, codex 中转进阶, Code Go',
     hero: 'Codex API 进阶教程',
     intro:
       '这篇内容并非教你第一次连通，而是教你如何把 Codex 用得更稳定、更顺手。',
@@ -791,11 +802,9 @@ export const searchPages: SearchPageContent[] = [
     seoTitle: 'Codex API 怎么用：入门与长期使用 | Code Go',
     description:
       'Code Go 的 Codex API 怎么用页面，帮助你快速找到 Codex 的实际使用方式。',
-    keywords:
-      'codex api 怎么用, codex api 使用方法, codex api 教程, Code Go',
+    keywords: 'codex api 怎么用, codex api 使用方法, codex api 教程, Code Go',
     hero: 'Codex API 怎么用',
-    intro:
-      '如果你在搜 Codex API 怎么用，说明你更关心实际操作而并非概念解释。',
+    intro: '如果你在搜 Codex API 怎么用，说明你更关心实际操作而并非概念解释。',
     sections: [
       {
         heading: '先开始最简单的一步',
@@ -867,8 +876,7 @@ export const searchPages: SearchPageContent[] = [
     seoTitle: 'Codex API 配置说明：接入与使用路径 | Code Go',
     description:
       'Code Go 的 Codex API 配置说明，帮助你把 Codex 放进稳定的使用流程。',
-    keywords:
-      'codex api 配置, codex api 配置说明, codex api 教程, Code Go',
+    keywords: 'codex api 配置, codex api 配置说明, codex api 教程, Code Go',
     hero: 'Codex API 配置说明',
     intro:
       '如果你在找 Codex API 配置说明，说明你已经准备把它放进日常使用流程。',
@@ -981,8 +989,7 @@ export const searchPages: SearchPageContent[] = [
     seoTitle: 'Codex 中转怎么选：稳定性、价格与使用方式 | Code Go',
     description:
       'Code Go 的 Codex 中转怎么选页面，适合正在寻找长期稳定入口的开发者。',
-    keywords:
-      'codex 中转怎么选, codex 中转选择, codex api中转怎么选, Code Go',
+    keywords: 'codex 中转怎么选, codex 中转选择, codex api中转怎么选, Code Go',
     hero: 'Codex 中转怎么选',
     intro:
       '如果你在搜 Codex 中转怎么选，说明你已经从“能不能用”进入到了“值不值得长期用”的阶段。',
@@ -1019,8 +1026,7 @@ export const searchPages: SearchPageContent[] = [
     seoTitle: 'Claude 中转稳定吗：长期使用前先看这几点 | Code Go',
     description:
       'Code Go 的 Claude 中转稳定吗页面，帮助你判断 Claude 中转是否适合长期使用。',
-    keywords:
-      'claude 中转稳定吗, claude api中转稳定吗, claude 中转, Code Go',
+    keywords: 'claude 中转稳定吗, claude api中转稳定吗, claude 中转, Code Go',
     hero: 'Claude 中转稳定吗',
     intro:
       '如果你在搜 Claude 中转稳定吗，说明你已经在意长期使用体验，而不只是临时连通。',
@@ -1057,8 +1063,7 @@ export const searchPages: SearchPageContent[] = [
     seoTitle: 'Codex API 报错怎么办：快速排障与恢复 | Code Go',
     description:
       'Code Go 的 Codex API 报错怎么办页面，适合遇到调用问题后想快速恢复工作流的开发者。',
-    keywords:
-      'codex api 报错怎么办, codex api 报错, codex api 问题, Code Go',
+    keywords: 'codex api 报错怎么办, codex api 报错, codex api 问题, Code Go',
     hero: 'Codex API 报错怎么办',
     intro:
       '如果你在搜 Codex API 报错怎么办，多半并非想看一堆概念，而是想尽快恢复正常使用。',
@@ -1133,133 +1138,34 @@ export function getSearchPageBySlug(slug: string) {
   return searchPages.find((item) => item.slug === slug) || null
 }
 
-function classifySearchPage(page: SearchPageContent) {
-  if (/baocuo|wending-ma/.test(page.slug)) return 'troubleshooting'
-  if (/vs|zenme-xuan/.test(page.slug)) return 'comparison'
-  if (/jiaocheng|shangshou|jinjie|peizhi|zenme-yong|zenme-jie/.test(page.slug))
-    return 'tutorial'
-  return 'landing'
-}
-
-function getPrimaryKeyword(page: SearchPageContent) {
-  return page.title.replace(/\s+/g, '')
-}
-
-function getModelFocus(page: SearchPageContent) {
-  const source = `${page.title} ${page.keywords}`.toLowerCase()
-  if (source.includes('codex')) {
-    return 'Codex、GPT 系列以及适合作为前置工作的免费模型'
-  }
-  if (source.includes('claude')) {
-    return 'Claude、Claude Code 以及适合作为前置工作的免费模型'
-  }
-  return '免费模型、GPT、Claude 与统一 AI API 中转入口'
-}
-
-function buildLongFormSections(page: SearchPageContent): SearchPageSection[] {
-  const keyword = getPrimaryKeyword(page)
-  const modelFocus = getModelFocus(page)
-  const kind = classifySearchPage(page)
-
-  const commonSections: SearchPageSection[] = [
-    {
-      heading: `${keyword} 对应的真实搜索意图`,
-      paragraphs: [
-        `很多人搜索 ${keyword}，并非只想找一个能打开的页面，而是在找一个可以直接进入下一步动作的入口。有人是在比较模型与价格，有人是在看接入方法，有人已经进入了长期使用阶段，开始关心稳定性、工作流连续性和是否方便长期管理。`,
-        `对搜索引擎来说，页面如果只是重复标题词，价值并不高；但如果页面能够把“这个词为什么会被搜、进入之后应该先看什么、接下来要去哪个页面”讲清楚，搜索引擎更容易把它理解成真正解决问题的专题页，而并非单纯的关键词落地页。`,
-      ],
-    },
-    {
-      heading: `${keyword} 放到 Code Go 里，应该先看什么`,
-      paragraphs: [
-        `进入 Code Go 后，最值得先看的通常并非单一按钮，而是完整路径：先看当前公开模型和分组，再看是否有免费模型可以承担前置工作，最后根据任务复杂度决定是否切到更稳定的 GPT 或 Claude。对于大多数开发者来说，这种路径比“先充值再说”更符合真实习惯。`,
-        `当前更值得重点关注的方向是 ${modelFocus}。如果你的任务只是中文写作、需求整理、轻量代码解释、接口说明或第一轮思路扩展，免费模型通常已经足够；如果任务已经进入复杂推理、长上下文理解、终端协作或复杂代码修改，再切到更高阶模型会更稳。`,
-      ],
-    },
-    {
-      heading: `${keyword} 这类页面为什么更适合写成长文`,
-      paragraphs: [
-        `搜索 ${keyword} 的用户，常常不会在看到一句话后立刻做决定。他们需要的是上下文，需要判断这个词对应的是中转、接入、教程、价格比较，还是错误排查。长文的价值不在于凑字数，而在于让用户可以一次性完成“理解词义、判断场景、确认模型、进入下一步”的整段决策。`,
-        `因此，专题页写成长文通常更有利于搜索引擎理解页面主题，也更有利于用户停留和继续阅读。对 Code Go 来说，这类专题页最重要的目标并非堆叠营销语，而是把首页、模型页、教程页和具体专题页连接成一条顺畅的阅读路径。`,
-      ],
-    },
-  ]
-
-  if (kind === 'tutorial') {
-    return [
-      ...commonSections,
-      {
-        heading: `${keyword} 教程页里最应该补充的信息`,
-        paragraphs: [
-          `教程型专题页最容易出现的问题，是只有“怎么做”，却没有“为什么这样做”。但真正从搜索进入的用户，通常更在意这条教程是否适合自己的当前阶段：是第一次接入、准备长期使用，还是已经有旧工作流，正在考虑迁移。`,
-          `所以在 ${keyword} 这类页面里，除了基础步骤，更应该补充判断逻辑：什么时候该先看模型页，什么时候该先用免费模型做第一轮处理，什么时候再切到 Claude 或 GPT。只有把这些前置判断讲清楚，教程页才会真正有用。`,
-        ],
-      },
-    ]
-  }
-
-  if (kind === 'comparison') {
-    return [
-      ...commonSections,
-      {
-        heading: `${keyword} 比较页应该帮助用户做什么决定`,
-        paragraphs: [
-          `比较类专题页的价值，并非简单写谁更强，而是帮助用户根据任务类型做决策。有人更在意价格，有人更在意上下文长度，有人更在意长期使用的手感，还有人只是想先用免费模型把前置工作跑完。`,
-          `因此，${keyword} 这类比较页最有价值的写法，是把“任务复杂度、模型成本、长期工作流、是否需要高稳定性”放到同一张桌子上讲清楚，而并非只罗列参数。这样用户才能真的判断下一步应该选哪一条路。`,
-        ],
-      },
-    ]
-  }
-
-  if (kind === 'troubleshooting') {
-    return [
-      ...commonSections,
-      {
-        heading: `${keyword} 排障页真正要解决的，不只是一次报错`,
-        paragraphs: [
-          `用户搜索这类词时，往往已经在真实工作流里遇到了阻塞。页面如果只是给出一句“检查配置”或者“稍后重试”，很难真正帮到人。更有价值的内容，是帮助用户先恢复可继续使用的状态，再逐步判断问题来自模型、入口、额度、缓存还是配置方式。`,
-          `所以 ${keyword} 这类排障页需要承担两个职责：第一是尽快恢复工作流，第二是把这次问题沉淀成长期经验。对于长期使用 AI Coding 的开发者来说，后一件事同样重要，因为它决定了下次遇到问题时，恢复速度是否更快。`,
-        ],
-      },
-    ]
-  }
-
-  return [
-    ...commonSections,
-    {
-      heading: `${keyword} 更适合什么样的长期使用者`,
-      paragraphs: [
-        `如果你只是偶尔体验一下模型能力，那么很多入口都可以满足需求；但如果你已经进入高频使用阶段，希望把模型选择、价格判断、调用路径和长期使用习惯放到同一条线上，那么 ${keyword} 这类专题页就更有意义。`,
-        `Code Go 更适合这类长期使用者的原因，不只是提供一个入口，而是把免费模型、GPT、Claude、教程、专题和下一步动作串起来。这样用户在一次搜索进入后，就能顺着页面完成理解、比较和继续使用，而并非重新开始。`,
-      ],
-    },
-  ]
-}
-
-function buildLongFormFaq(page: SearchPageContent): SearchPageFaq[] {
-  const keyword = getPrimaryKeyword(page)
-  const existing = new Set(page.faq.map((item) => item.question))
-
-  const candidates: SearchPageFaq[] = [
-    {
-      question: `${keyword} 这类页面为什么需要写得更完整？`,
-      answer:
-        '因为搜索这个词的用户通常已经带着明确任务而来。页面越能解释词义、适用场景、模型选择和下一步动作，越容易同时被用户和搜索引擎理解。',
-    },
-    {
-      question: `看完 ${keyword} 这一页之后，下一步应该去哪里？`,
-      answer:
-        '通常建议先去模型页确认当前可用模型与免费分组，再根据任务复杂度决定是否继续查看教程页或更具体的专题页。',
-    },
-  ]
-
-  return [...page.faq, ...candidates.filter((item) => !existing.has(item.question))]
-}
+export const searchPageGroups = [
+  {
+    title: '核心入口',
+    match: (slug: string) =>
+      [
+        'codex-api',
+        'codex-zhongzhuan',
+        'claude-code-api',
+        'claude-zhongzhuan',
+        'ai-api-zhongzhuan',
+      ].includes(slug),
+  },
+  {
+    title: '接入教程',
+    match: (slug: string) =>
+      /jiaocheng|shangshou|jinjie|peizhi|zenme-yong|zenme-jie/.test(slug),
+  },
+  {
+    title: '比较与排障',
+    match: (slug: string) =>
+      /vs|zenme-xuan|wending-ma|baocuo-zenmeban/.test(slug),
+  },
+]
 
 export function getSearchPageSections(page: SearchPageContent) {
-  return [...page.sections, ...buildLongFormSections(page)]
+  return page.sections
 }
 
 export function getSearchPageFaq(page: SearchPageContent) {
-  return buildLongFormFaq(page)
+  return page.faq
 }

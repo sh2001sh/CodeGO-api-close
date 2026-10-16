@@ -108,14 +108,14 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
             <Button
               variant='ghost'
               size='sm'
-              className='text-muted-foreground h-7 font-mono text-xs'
+              className='api-key-mask text-muted-foreground h-7 font-mono text-xs'
             />
           }
         >
           {maskedKey}
         </PopoverTrigger>
         <PopoverContent
-          className='w-auto max-w-[min(90vw,28rem)]'
+          className='api-key-secret w-auto max-w-[min(90vw,28rem)]'
           align='start'
         >
           <div className='space-y-2'>
@@ -154,7 +154,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
           {isLoading ? (
             <Loader2 className='size-3.5 animate-spin' />
           ) : isCopied ? (
-            <Check className='size-3.5 text-success' />
+            <Check className='text-success size-3.5' />
           ) : (
             <Copy className='size-3.5' />
           )}

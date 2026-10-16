@@ -59,7 +59,6 @@ type ProtocolBridgePolicyEditorProps = {
 
 export function ProtocolBridgePolicyEditor({
   title,
-  description,
   value,
   onChange,
   onFormat,
@@ -80,10 +79,10 @@ export function ProtocolBridgePolicyEditor({
           placeholder={`${t('Force example:')}\n${specificChannelsExample}\n\n${t('Disable example:')}\n${disableExample}`}
         />
       </FormControl>
-      <FormDescription>
-        {description}{' '}
+
+      <FormDescription className='settings-field-fact'>
         {t(
-          'Use mode force or disabled with channel_ids, channel_types, and optional model_patterns. Empty value is saved as {} and keeps automatic routing.'
+          'JSON · mode: force / disabled · channel_ids / channel_types / model_patterns · Empty: automatic routing'
         )}
       </FormDescription>
       <div className='flex flex-wrap gap-2'>

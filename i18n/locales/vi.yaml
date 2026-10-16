@@ -1,0 +1,235 @@
+common.invalid_params: Thông số không hợp lệ
+common.database_error: Lỗi cơ sở dữ liệu, vui lòng liên hệ với quản trị viên
+common.retry_later: Vui lòng thử lại sau
+common.generate_failed: Thế hệ không thành công
+common.not_found: Không tìm thấy
+common.unauthorized: trái phép
+common.forbidden: Bị cấm
+common.invalid_id: ID không hợp lệ
+common.id_empty: ID trống!
+common.feature_disabled: Tính năng này chưa được kích hoạt
+common.operation_success: Hoạt động thành công
+common.operation_failed: Thao tác không thành công
+common.update_success: Cập nhật thành công
+common.update_failed: Cập nhật không thành công
+common.create_success: Tạo thành công
+common.create_failed: Tạo không thành công
+common.delete_success: Xóa thành công
+common.delete_failed: Xóa không thành công
+common.already_exists: Đã tồn tại
+common.name_cannot_be_empty: Tên không thể trống
+common.batch_too_many: Quá nhiều mục trong yêu cầu hàng loạt, tối đa là {{.Max}}
+auth.not_logged_in: Không được phép, không đăng nhập và không cung cấp quyền truy cập token
+auth.access_token_invalid: Truy cập trái phép, không hợp lệ token
+auth.user_info_invalid: Thông tin người dùng trái phép, không hợp lệ
+auth.user_id_not_provided: Không được phép, Tiêu đề người dùng New-Api không được cung cấp
+auth.user_id_format_error: Lỗi định dạng tiêu đề người dùng trái phép, New-Api-User
+auth.user_id_mismatch: Không được phép, Người dùng Api mới không khớp với người dùng đã đăng nhập
+auth.user_banned: Người dùng đã bị cấm
+auth.insufficient_privilege: Không được phép, không đủ đặc quyền
+token.name_too_long: Tên Token quá dài
+token.quota_negative: Giá trị hạn ngạch không thể âm
+token.quota_exceed_max: Giá trị hạn ngạch vượt quá phạm vi hợp lệ, tối đa là {{.Max}}
+token.generate_failed: Không tạo được token
+token.get_info_failed: Không lấy được thông tin token, vui lòng thử lại sau
+token.expired_cannot_enable: Token đã hết hạn và không thể kích hoạt được. Vui lòng sửa đổi thời gian hết hạn hoặc
+  đặt thành không bao giờ hết hạn
+token.exhausted_cannot_enable: Hạn ngạch Token đã hết và không thể bật được. Vui lòng sửa đổi hạn ngạch còn lại
+  hoặc đặt thành không giới hạn
+token.invalid: token không hợp lệ
+token.not_provided: Token không được cung cấp
+token.expired: token này đã hết hạn
+token.exhausted: Hạn ngạch token này đã hết TokenStatusExhausted[sk-{{.Prefix}}***{{.Suffix}}]
+token.status_unavailable: Trạng thái token này không khả dụng
+token.db_error: token không hợp lệ, lỗi truy vấn cơ sở dữ liệu, vui lòng liên hệ với quản trị viên
+redemption.name_length: Độ dài tên mã đổi quà phải nằm trong khoảng từ 1-20
+redemption.count_positive: Số mã đổi quà phải lớn hơn 0
+redemption.count_max: Có thể tạo tối đa 100 mã đổi thưởng cùng một lúc
+redemption.create_failed: Không tạo được mã đổi quà, vui lòng thử lại sau
+redemption.invalid: Mã đổi thưởng không hợp lệ
+redemption.used: Mã đổi quà này đã được sử dụng
+redemption.expired: Mã đổi thưởng này đã hết hạn
+redemption.busy: Hệ thống đang bận, vui lòng thử lại sau
+redemption.failed: Quy đổi không thành công, vui lòng thử lại sau
+redemption.not_provided: Mã đổi quà không được cung cấp
+redemption.expire_time_invalid: Thời gian hết hạn không được sớm hơn thời điểm hiện tại
+user.password_login_disabled: Đăng nhập bằng mật khẩu đã bị quản trị viên vô hiệu hóa
+user.register_disabled: Đăng ký người dùng mới đã bị quản trị viên vô hiệu hóa
+user.password_register_disabled: Đăng ký mật khẩu đã bị quản trị viên vô hiệu hóa, vui lòng sử dụng xác minh tài
+  khoản của bên thứ ba
+user.username_or_password_empty: Tên người dùng hoặc mật khẩu trống
+user.username_or_password_error: Tên người dùng hoặc mật khẩu không chính xác hoặc người dùng đã bị cấm
+user.email_or_password_empty: Email hoặc mật khẩu trống!
+user.exists: Tên người dùng đã tồn tại hoặc đã bị xóa
+user.not_exists: Người dùng không tồn tại
+user.disabled: Người dùng này đã bị vô hiệu hóa
+user.session_save_failed: Không lưu được phiên, vui lòng thử lại
+user.require_2fa: Vui lòng nhập mã xác thực hai yếu tố
+user.email_verification_required: Xác minh email đã được kích hoạt, vui lòng nhập địa chỉ email và mã xác minh
+user.verification_code_error: Mã xác minh không chính xác hoặc đã hết hạn
+user.input_invalid: Đầu vào không hợp lệ {{.Error}}
+user.no_permission_same_level: Không có quyền truy cập người dùng ở cấp độ tương tự hoặc cao hơn
+user.no_permission_higher_level: Không có quyền cập nhật người dùng có cùng cấp độ quyền hoặc cao hơn
+user.cannot_create_higher_level: Không thể tạo người dùng có cấp độ quyền bằng hoặc cao hơn mình
+user.cannot_delete_root_user: Không thể xóa tài khoản quản trị viên cấp cao
+user.cannot_disable_root_user: Không thể vô hiệu hóa người dùng quản trị viên cấp cao
+user.cannot_demote_root_user: Không thể hạ cấp người dùng quản trị viên cấp cao
+user.already_admin: Người dùng này đã là quản trị viên
+user.already_common: Người dùng này đã là người dùng thông thường
+user.admin_cannot_promote: Quản trị viên thông thường không thể thăng cấp người dùng khác lên quản trị viên
+user.original_password_error: Mật khẩu ban đầu không chính xác
+user.invite_quota_insufficient: Hạn ngạch lời mời không đủ!
+user.transfer_quota_minimum: Hạn ngạch chuyển tối thiểu là {{.Min}}!
+user.transfer_success: Chuyển thành công
+user.transfer_failed: Chuyển không thành công {{.Error}}
+user.topup_processing: Quá trình nạp tiền đang được xử lý, vui lòng thử lại sau
+user.register_failed: Đăng ký người dùng không thành công hoặc truy xuất ID người dùng không thành công
+user.default_token_failed: Không thể tạo token mặc định
+user.aff_code_empty: Mã liên kết trống!
+user.email_empty: Email trống!
+user.github_id_empty: ID GitHub trống!
+user.discord_id_empty: ID Discord trống!
+user.oidc_id_empty: ID OIDC trống!
+user.wechat_id_empty: ID WeChat trống!
+user.telegram_id_empty: ID Telegram trống!
+user.telegram_not_bound: Tài khoản Telegram này không bị ràng buộc
+user.linux_do_id_empty: ID DO Linux trống!
+user.quota_change_zero: Số lượng thay đổi hạn ngạch không thể bằng 0
+quota.negative: Hạn ngạch không thể âm!
+quota.exceed_max: Giá trị hạn ngạch vượt quá phạm vi hợp lệ
+quota.insufficient: Không đủ hạn ngạch
+quota.warning_invalid: Loại cảnh báo không hợp lệ
+quota.threshold_gt_zero: Ngưỡng cảnh báo phải lớn hơn 0
+subscription.not_enabled: Gói đăng ký chưa được kích hoạt
+subscription.title_empty: Tiêu đề gói đăng ký không được để trống
+subscription.price_negative: Giá không thể âm
+subscription.price_max: Giá không thể vượt quá 9999
+subscription.purchase_limit_negative: Giới hạn mua không thể âm
+subscription.quota_negative: Tổng hạn ngạch không thể âm
+subscription.group_not_exists: Nhóm nâng cấp không tồn tại
+subscription.reset_cycle_gt_zero: Chu kỳ đặt lại tùy chỉnh phải lớn hơn 0 giây
+subscription.purchase_max: Đã đạt đến giới hạn mua cho gói này
+subscription.invalid_id: ID đăng ký không hợp lệ
+subscription.invalid_user_id: ID người dùng không hợp lệ
+payment.not_configured: Thông tin thanh toán chưa được quản trị viên cấu hình
+payment.method_not_exists: Phương thức thanh toán không tồn tại
+payment.callback_error: Lỗi cấu hình URL gọi lại
+payment.create_failed: Không tạo được đơn hàng
+payment.start_failed: Không thể bắt đầu thanh toán
+payment.amount_too_low: Số tiền trong kế hoạch quá thấp
+payment.stripe_not_configured: Stripe không được định cấu hình hoặc khóa không hợp lệ
+payment.webhook_not_configured: Webhook chưa được định cấu hình
+payment.price_id_not_configured: StripePriceId không được định cấu hình cho gói này
+payment.creem_not_configured: CreemProductId không được định cấu hình cho gói này
+payment.compliance_required: Các tính năng thanh toán, đổi quà, đăng ký và phần thưởng cho lời mời bị tắt. Quản
+  trị viên phải xác nhận các điều khoản tuân thủ trước khi kích hoạt chúng.
+topup.not_provided: Số lệnh thanh toán không được cung cấp
+topup.order_not_exists: Đơn hàng nạp tiền không tồn tại
+topup.order_status: Lỗi trạng thái đơn hàng nạp tiền
+topup.failed: Nạp tiền không thành công, vui lòng thử lại sau
+topup.invalid_quota: Hạn ngạch nạp tiền không hợp lệ
+channel.not_exists: Kênh không tồn tại
+channel.id_format_error: Lỗi định dạng ID kênh
+channel.no_available_key: Không có khóa kênh nào
+channel.get_list_failed: Không lấy được danh sách kênh, vui lòng thử lại sau
+channel.get_tags_failed: Không lấy được thẻ, vui lòng thử lại sau
+channel.get_key_failed: Không lấy được khóa kênh
+channel.get_ollama_failed: Không tải được mô hình Ollama
+channel.query_failed: Không thể truy vấn kênh
+channel.no_valid_upstream: Không có kênh ngược dòng hợp lệ
+channel.upstream_saturated: Tải ngược tuyến của nhóm hiện tại đã bão hòa, vui lòng thử lại sau
+channel.get_available_failed: Không thể nhận được các kênh khả dụng cho mẫu {{.Model}} thuộc nhóm {{.Group}}
+model.name_empty: Tên mẫu không được để trống
+model.name_exists: Tên mẫu đã tồn tại
+model.id_missing: ID mẫu bị thiếu
+model.get_list_failed: Không lấy được danh sách model, vui lòng thử lại sau
+model.get_failed: Không thể tải được các mô hình ngược dòng
+model.reset_success: Đặt lại tỷ lệ mô hình thành công
+vendor.name_empty: Tên nhà cung cấp không được để trống
+vendor.name_exists: Tên nhà cung cấp đã tồn tại
+vendor.id_missing: ID nhà cung cấp bị thiếu
+group.name_type_empty: Tên và loại nhóm không được để trống
+group.name_exists: Tên nhóm đã tồn tại
+group.id_missing: ID nhóm bị thiếu
+checkin.disabled: Tính năng đăng ký chưa được kích hoạt
+checkin.already_today: Đã đăng ký hôm nay
+checkin.failed: Đăng ký không thành công, vui lòng thử lại sau
+checkin.quota_failed: 'Đăng ký không thành công: lỗi cập nhật hạn ngạch'
+passkey.create_failed: Không thể tạo thông tin xác thực Passkey
+passkey.login_abnormal: Trạng thái đăng nhập mật mã không bình thường
+passkey.update_failed: Cập nhật thông tin xác thực mật khẩu không thành công
+passkey.invalid_user_id: ID người dùng không hợp lệ
+passkey.verify_failed: Xác minh mật khẩu không thành công, vui lòng thử lại hoặc liên hệ với quản trị viên
+twofa.not_enabled: Người dùng chưa kích hoạt 2FA
+twofa.user_id_empty: ID người dùng không được để trống
+twofa.already_exists: Người dùng đã cấu hình 2FA
+twofa.record_id_empty: ID bản ghi 2FA không được để trống
+twofa.code_invalid: Mã xác minh hoặc mã dự phòng không chính xác
+rate_limit.reached: 'Bạn đã đạt đến giới hạn yêu cầu: số yêu cầu {{.Max}} tối đa trong số phút {{.Minutes}}'
+rate_limit.total_reached: 'Bạn đã đạt đến tổng giới hạn yêu cầu: số yêu cầu {{.Max}} tối đa trong số phút {{.Minutes}},
+  bao gồm cả những lần thử không thành công'
+setting.invalid_type: Loại cảnh báo không hợp lệ
+setting.webhook_empty: URL webhook không được để trống
+setting.webhook_invalid: URL Webhook không hợp lệ
+setting.email_invalid: Địa chỉ email không hợp lệ
+setting.bark_url_empty: URL đẩy vỏ cây không được để trống
+setting.bark_url_invalid: URL đẩy vỏ cây không hợp lệ
+setting.gotify_url_empty: URL máy chủ Gotify không được để trống
+setting.gotify_token_empty: Gotify token không được để trống
+setting.gotify_url_invalid: URL máy chủ Gotify không hợp lệ
+setting.url_must_http: URL phải bắt đầu bằng http:// hoặc https://
+setting.saved: Đã cập nhật cài đặt
+deployment.not_enabled: Triển khai mô hình io.net chưa được bật hoặc thiếu khóa API
+deployment.id_required: Cần có ID triển khai
+deployment.container_id_required: ID vùng chứa là bắt buộc
+deployment.name_empty: Tên triển khai không được để trống
+deployment.name_taken: Tên triển khai không có sẵn, vui lòng chọn một tên khác
+deployment.hardware_id_required: tham số hardware_id là bắt buộc
+deployment.hardware_invalid_id: Tham số hardware_id không hợp lệ
+deployment.api_key_required: api_key là bắt buộc
+deployment.invalid_payload: Tải trọng yêu cầu không hợp lệ
+deployment.not_found: Không tìm thấy chi tiết vùng chứa
+performance.disk_cache_cleared: Bộ đệm đĩa không hoạt động đã bị xóa
+performance.stats_reset: Thống kê đã được thiết lập lại
+performance.gc_executed: GC đã được thực thi
+ability.db_corrupted: Tính nhất quán của cơ sở dữ liệu đã bị xâm phạm
+ability.repair_running: Tác vụ sửa chữa đang chạy, vui lòng thử lại sau
+oauth.invalid_code: Mã ủy quyền không hợp lệ
+oauth.get_user_error: Không lấy được thông tin người dùng
+oauth.account_used: Tài khoản này đã bị ràng buộc với người dùng khác
+oauth.unknown_provider: Nhà cung cấp OAuth không xác định
+oauth.state_invalid: Tham số trạng thái trống hoặc không khớp
+oauth.not_enabled: Đăng nhập và đăng ký {{.Provider}} chưa được quản trị viên kích hoạt
+oauth.user_deleted: Người dùng đã bị xóa
+oauth.user_banned: Người dùng đã bị cấm
+oauth.bind_success: Ràng buộc thành công
+oauth.already_bound: Tài khoản {{.Provider}} này đã bị ràng buộc
+oauth.connect_failed: Không thể kết nối với máy chủ {{.Provider}}, vui lòng thử lại sau
+oauth.token_failed: Không tải được token từ {{.Provider}}, vui lòng kiểm tra cài đặt
+oauth.user_info_empty: '{{.Provider}} trả về thông tin người dùng trống, vui lòng kiểm tra cài đặt'
+oauth.trust_level_low: Mức độ tin cậy DO của Linux không đáp ứng mức tối thiểu mà quản trị viên yêu cầu
+redeem.failed: Quy đổi không thành công, vui lòng thử lại sau
+user.create_default_token_error: Không tạo được token mặc định
+common.uuid_duplicate: Vui lòng thử lại, hệ thống đã tạo UUID trùng lặp!
+common.invalid_input: Đầu vào không hợp lệ
+distributor.invalid_request: 'Yêu cầu không hợp lệ: {{.Error}}'
+distributor.invalid_channel_id: ID kênh không hợp lệ
+distributor.channel_disabled: Kênh này đã bị vô hiệu hóa
+distributor.affinity_channel_disabled: Kênh được chọn theo sở thích kênh đã bị vô hiệu hóa và việc thử lại đã bị
+  dừng theo quy tắc. Vui lòng liên hệ với quản trị viên
+distributor.token_no_model_access: token này không có quyền truy cập vào bất kỳ kiểu máy nào
+distributor.token_model_forbidden: token này không có quyền truy cập vào model {{.Model}}
+distributor.model_name_required: Tên mẫu máy không được chỉ định, tên mẫu máy không được để trống
+distributor.invalid_playground_request: 'Yêu cầu sân chơi không hợp lệ: {{.Error}}'
+distributor.group_access_denied: Không có quyền truy cập vào nhóm này
+distributor.get_channel_failed: 'Không tìm được kênh khả dụng cho mẫu {{.Model}} thuộc nhóm {{.Group}} (nhà phân
+  phối): {{.Error}}'
+distributor.no_available_channel: Không có kênh nào cho model {{.Model}} thuộc nhóm {{.Group}} (nhà phân phối)
+distributor.invalid_request_parse_model: Yêu cầu không hợp lệ, không thể phân tích mô hình
+custom_oauth.not_found: Không tìm thấy nhà cung cấp OAuth tùy chỉnh
+custom_oauth.slug_empty: Slug không được để trống
+custom_oauth.slug_exists: Slug đã tồn tại
+custom_oauth.name_empty: Tên nhà cung cấp không được để trống
+custom_oauth.has_bindings: Không thể xóa nhà cung cấp có ràng buộc người dùng hiện có
+custom_oauth.binding_not_found: Không tìm thấy liên kết OAuth
+custom_oauth.provider_id_field_invalid: Không thể trích xuất ID người dùng từ phản hồi của nhà cung cấp

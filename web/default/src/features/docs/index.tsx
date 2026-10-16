@@ -1,436 +1,455 @@
-import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import { normalizeInterfaceLanguage } from '@/i18n/languages'
-import { Check, Copy, KeyRound, List, Search } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useRouterState } from '@tanstack/react-router'
+import {
+  INTERFACE_LANGUAGE_OPTIONS,
+  normalizeInterfaceLanguage,
+  toIntlLocale,
+} from '@/i18n/languages'
+import { ArrowUpRight, Check, ChevronDown, Copy, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+import { PublicHeader } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
-import { DawnNav } from '@/features/dawn/components/dawn-nav'
+import { SiteFooter } from '@/components/site-footer'
+import { SkipToMain } from '@/components/skip-to-main'
+import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
+import {
+  docArticles,
+  docArticleNeedsModelCatalog,
+  resolveDocArticle,
+  searchDocArticles,
+  type ContentLanguage,
+  type DocBlock,
+} from './content'
+import { docsMessages } from './messages'
+import { docSample, type SampleLanguage } from './samples'
 import './styles.css'
-import { toolCopy, toolExamples } from './tool-content'
 
-type Copy = {
-  title: string
-  subtitle: string
-  search: string
-  contents: string
-  base: string
-  baseText: string
-  key: string
-  keyText: string
-  models: string
-  modelsText: string
-  chat: string
-  chatText: string
-  responses: string
-  responsesText: string
-  errors: string
-  errorsText: string
-  copy: string
-  copied: string
-  guide: string
-  pricing: string
-}
-
-const copy: Record<string, Copy> = {
-  en: {
-    title: 'API documentation',
-    subtitle: 'Connect your application to Code Go.',
-    search: 'Search sections',
-    contents: 'On this page',
-    base: 'Base URL',
-    baseText: 'Use this HTTPS address for every API request.',
-    key: 'Authentication',
-    keyText:
-      'Create an API key in the console. Send it in the Authorization header. Keep it on your server and never expose it in a browser.',
-    models: 'List models',
-    modelsText:
-      'Fetch the models available to your key. Choose a model ID from the response or the models page.',
-    chat: 'Chat completions',
-    chatText:
-      'Send a conversation as messages. The model ID must be available to your key.',
-    responses: 'Responses',
-    responsesText: 'Use the Responses API for compatible models and clients.',
-    errors: 'Errors and limits',
-    errorsText:
-      'A non-2xx response indicates a failed request. Check the status and error body. Rate limits and model access depend on your key and plan.',
-    copy: 'Copy code',
-    copied: 'Copied',
-    guide: 'Product guide',
-    pricing: 'Browse models',
-  },
-  zh: {
-    title: 'API 文档',
-    subtitle: '将应用接入 Code Go。',
-    search: '搜索章节',
-    contents: '本页目录',
-    base: '接口地址',
-    baseText: '所有 API 请求均使用以下 HTTPS 地址。',
-    key: '身份验证',
-    keyText:
-      '在控制台创建 API 密钥，并通过 Authorization 请求头传递。密钥应保存在服务端，不要暴露给浏览器。',
-    models: '查询模型',
-    modelsText: '查询当前密钥可用的模型。从响应或模型页面选择模型 ID。',
-    chat: '聊天补全',
-    chatText: '以 messages 形式发送对话。模型 ID 须对当前密钥开放。',
-    responses: 'Responses 接口',
-    responsesText: '兼容的模型和客户端可使用 Responses 接口。',
-    errors: '错误与限制',
-    errorsText:
-      '非 2xx 状态表示请求失败。请查看状态码与错误响应。速率限制和模型权限取决于密钥与套餐。',
-    copy: '复制代码',
-    copied: '已复制',
-    guide: '使用指南',
-    pricing: '查看模型',
-  },
-  'zh-TW': {
-    title: 'API 文件',
-    subtitle: '將應用程式接入 Code Go。',
-    search: '搜尋章節',
-    contents: '本頁目錄',
-    base: '介面位址',
-    baseText: '所有 API 請求均使用以下 HTTPS 位址。',
-    key: '身分驗證',
-    keyText:
-      '在主控台建立 API 金鑰，並透過 Authorization 請求標頭傳遞。金鑰應儲存在伺服器端，不要暴露於瀏覽器。',
-    models: '查詢模型',
-    modelsText: '查詢目前金鑰可用的模型。從回應或模型頁面選擇模型 ID。',
-    chat: '聊天補全',
-    chatText: '以 messages 形式傳送對話。模型 ID 須對目前金鑰開放。',
-    responses: 'Responses 介面',
-    responsesText: '相容的模型與用戶端可使用 Responses 介面。',
-    errors: '錯誤與限制',
-    errorsText:
-      '非 2xx 狀態表示請求失敗。請查看狀態碼與錯誤回應。速率限制與模型權限取決於金鑰及方案。',
-    copy: '複製程式碼',
-    copied: '已複製',
-    guide: '使用指南',
-    pricing: '查看模型',
-  },
-  fr: {
-    title: 'Documentation API',
-    subtitle: 'Connectez votre application à Code Go.',
-    search: 'Rechercher une section',
-    contents: 'Sur cette page',
-    base: 'URL de base',
-    baseText: 'Utilisez cette adresse HTTPS pour chaque requête API.',
-    key: 'Authentification',
-    keyText:
-      'Créez une clé API dans la console et transmettez-la dans l’en-tête Authorization. Conservez-la sur votre serveur.',
-    models: 'Lister les modèles',
-    modelsText:
-      'Récupérez les modèles accessibles avec votre clé. Choisissez un identifiant dans la réponse ou sur la page des modèles.',
-    chat: 'Complétions de chat',
-    chatText:
-      'Envoyez la conversation sous forme de messages avec un modèle accessible à votre clé.',
-    responses: 'API Responses',
-    responsesText:
-      'Utilisez cette API avec les modèles et clients compatibles.',
-    errors: 'Erreurs et limites',
-    errorsText:
-      'Une réponse hors 2xx indique un échec. Vérifiez le code et le corps de la réponse. Les limites dépendent de la clé et de votre offre.',
-    copy: 'Copier le code',
-    copied: 'Copié',
-    guide: 'Guide produit',
-    pricing: 'Voir les modèles',
-  },
-  ru: {
-    title: 'Документация API',
-    subtitle: 'Подключите приложение к Code Go.',
-    search: 'Поиск разделов',
-    contents: 'На этой странице',
-    base: 'Базовый URL',
-    baseText: 'Используйте этот HTTPS-адрес для всех запросов API.',
-    key: 'Аутентификация',
-    keyText:
-      'Создайте ключ API в панели управления и передавайте его в заголовке Authorization. Храните ключ на сервере.',
-    models: 'Список моделей',
-    modelsText:
-      'Получите модели, доступные вашему ключу. Выберите ID из ответа или на странице моделей.',
-    chat: 'Чат-запросы',
-    chatText:
-      'Передайте диалог в поле messages и укажите модель, доступную вашему ключу.',
-    responses: 'API Responses',
-    responsesText: 'Используйте этот API с совместимыми моделями и клиентами.',
-    errors: 'Ошибки и ограничения',
-    errorsText:
-      'Ответ вне диапазона 2xx означает ошибку. Проверьте код и тело ответа. Ограничения зависят от ключа и тарифа.',
-    copy: 'Копировать код',
-    copied: 'Скопировано',
-    guide: 'Руководство',
-    pricing: 'Модели',
-  },
-  ja: {
-    title: 'API ドキュメント',
-    subtitle: 'アプリケーションを Code Go に接続します。',
-    search: 'セクションを検索',
-    contents: 'このページの内容',
-    base: 'ベース URL',
-    baseText: 'すべての API リクエストにこの HTTPS アドレスを使用します。',
-    key: '認証',
-    keyText:
-      'コンソールで API キーを作成し、Authorization ヘッダーで送信します。キーはサーバーに保管してください。',
-    models: 'モデル一覧',
-    modelsText:
-      'キーで利用可能なモデルを取得します。レスポンスまたはモデルページから ID を選びます。',
-    chat: 'チャット補完',
-    chatText:
-      '会話を messages で送信します。キーで利用できるモデルを指定してください。',
-    responses: 'Responses API',
-    responsesText: '対応するモデルとクライアントでこの API を利用できます。',
-    errors: 'エラーと制限',
-    errorsText:
-      '2xx 以外は失敗です。ステータスとエラー本文を確認してください。制限はキーとプランによって異なります。',
-    copy: 'コードをコピー',
-    copied: 'コピーしました',
-    guide: '利用ガイド',
-    pricing: 'モデルを見る',
-  },
-  vi: {
-    title: 'Tài liệu API',
-    subtitle: 'Kết nối ứng dụng của bạn với Code Go.',
-    search: 'Tìm mục',
-    contents: 'Trong trang này',
-    base: 'URL cơ sở',
-    baseText: 'Dùng địa chỉ HTTPS này cho mọi yêu cầu API.',
-    key: 'Xác thực',
-    keyText:
-      'Tạo khóa API trong bảng điều khiển và gửi qua tiêu đề Authorization. Giữ khóa trên máy chủ của bạn.',
-    models: 'Danh sách mô hình',
-    modelsText:
-      'Lấy các mô hình mà khóa của bạn có thể sử dụng. Chọn ID từ phản hồi hoặc trang mô hình.',
-    chat: 'Hoàn thành hội thoại',
-    chatText:
-      'Gửi hội thoại qua messages với mô hình mà khóa của bạn có quyền dùng.',
-    responses: 'API Responses',
-    responsesText: 'Dùng API này với mô hình và ứng dụng khách tương thích.',
-    errors: 'Lỗi và giới hạn',
-    errorsText:
-      'Phản hồi ngoài 2xx cho biết yêu cầu thất bại. Kiểm tra mã trạng thái và nội dung lỗi. Giới hạn tùy thuộc vào khóa và gói.',
-    copy: 'Sao chép mã',
-    copied: 'Đã sao chép',
-    guide: 'Hướng dẫn',
-    pricing: 'Xem mô hình',
-  },
-}
-
-const examples = {
-  base: 'https://codegoai.com/v1',
-  key: 'Authorization: Bearer YOUR_API_KEY',
-  models:
-    'curl https://codegoai.com/v1/models -H "Authorization: Bearer YOUR_API_KEY"',
-  chat: `curl https://codegoai.com/v1/chat/completions -H "Authorization: Bearer YOUR_API_KEY" -H "Content-Type: application/json" -d '{"model":"MODEL_ID","messages":[{"role":"user","content":"Hello"}]}'`,
-  responses: `curl https://codegoai.com/v1/responses -H "Authorization: Bearer YOUR_API_KEY" -H "Content-Type: application/json" -d '{"model":"MODEL_ID","input":"Hello"}'`,
-}
-
-const sectionExamples = { ...examples, ...toolExamples }
-const exampleLabels: Record<keyof typeof sectionExamples, string> = {
-  base: 'HTTPS',
-  key: 'HTTP header',
-  models: 'cURL',
-  chat: 'cURL',
-  responses: 'cURL',
-  codex: '~/.codex/config.toml',
-  codexAuth: '~/.codex/auth.json',
-  claude: 'Claude Code settings.json',
-  gemini: 'Environment',
-  opencode: 'OpenCode provider',
-  openclaw: 'OpenClaw provider',
-  hermes: 'Hermes provider',
-}
-
-type SectionId =
-  | 'guide'
-  | 'scripts'
-  | 'codex'
-  | 'claude'
-  | 'gemini'
-  | 'opencode'
-  | 'openclaw'
-  | 'hermes'
-  | 'base'
-  | 'key'
-  | 'models'
-  | 'chat'
-  | 'responses'
-  | 'errors'
-const sectionIds: SectionId[] = [
-  'guide',
-  'scripts',
-  'codex',
-  'claude',
-  'gemini',
-  'opencode',
-  'openclaw',
-  'hermes',
-  'base',
-  'key',
-  'models',
-  'chat',
-  'responses',
-  'errors',
-]
-
-function CodeBlock({
-  value,
-  labels,
-  name,
-}: {
-  value: string
-  labels: Copy
-  name: string
-}) {
-  const [copied, setCopied] = useState(false)
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1800)
-    } catch {
-      setCopied(false)
-    }
-  }
-  return (
-    <div className='docs-code'>
-      <div className='docs-code-name'>{name}</div>
-      <button
-        type='button'
-        onClick={handleCopy}
-        aria-label={copied ? labels.copied : labels.copy}
-        title={copied ? labels.copied : labels.copy}
-      >
-        {copied ? <Check size={16} /> : <Copy size={16} />}
-      </button>
-      <pre>
-        <code>{value}</code>
-      </pre>
-    </div>
-  )
-}
+const groups = [
+  'start',
+  'users',
+  'market',
+  'suppliers',
+  'api',
+  'troubleshooting',
+  'updates',
+] as const
 
 export function ApiDocs() {
   const { i18n } = useTranslation()
-  const locale = normalizeInterfaceLanguage(i18n.language)
-  const labels = { ...copy[locale], ...toolCopy[locale] }
-  const [query, setQuery] = useState('')
-  const filtered = sectionIds.filter((id) =>
-    `${labels[id]} ${labels[`${id}Text` as keyof typeof labels]}`
-      .toLocaleLowerCase()
-      .includes(query.toLocaleLowerCase())
+  const normalized = normalizeInterfaceLanguage(i18n.language)
+  const locale =
+    ({ 'zh-TW': 'zh-HK', zh: 'zh-CN' } as Record<string, string>)[normalized] ??
+    normalized
+  return <DocsPage key={locale} locale={locale} />
+}
+
+function DocsPage(props: { locale: string }) {
+  const locale = props.locale
+  const ui = docsMessages(locale)
+  const location = useRouterState({ select: (state) => state.location })
+  const [overrideLanguage, setOverrideLanguage] = useState<ContentLanguage>()
+  const defaultLanguage = locale as ContentLanguage
+  const language = overrideLanguage ?? defaultLanguage
+  const [mobile, setMobile] = useState(
+    () => window.matchMedia('(max-width: 768px)').matches
   )
+  const [navigationOpen, setNavigationOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sampleLanguage, setSampleLanguage] = useState<SampleLanguage>('curl')
+  const [model, setModel] = useState<string>()
+  const slug =
+    new URLSearchParams(location.searchStr).get('article') ?? undefined
+  const article = resolveDocArticle(slug, location.hash)
+  const needsModelCatalog = docArticleNeedsModelCatalog(article)
+  const pricing = usePricingData(needsModelCatalog)
+  const catalog = useMemo(
+    () => ({
+      data: pricing.models.map((item) => ({ name: item.model_name })),
+      isError: Boolean(pricing.error),
+    }),
+    [pricing.models, pricing.error]
+  )
+  const selectedModel = model ?? catalog.data?.[0]?.name ?? ''
+  const results = useMemo(
+    () => searchDocArticles(searchQuery, language),
+    [searchQuery, language]
+  )
+  const index = article ? docArticles.indexOf(article) : -1
+  const heading = useRef<HTMLHeadingElement>(null)
+  const previousSlug = useRef(article?.slug)
+  const [activeSection, setActiveSection] = useState<string>()
+  const base = window.location.origin
+  const modelSuggestions = useMemo(() => {
+    const normalizedModel = selectedModel.trim().toLocaleLowerCase()
+    const matches = catalog.data.filter((item) =>
+      item.name.toLocaleLowerCase().includes(normalizedModel)
+    )
+    return matches.slice(0, 50)
+  }, [catalog.data, selectedModel])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearchQuery(query), 180)
+    return () => window.clearTimeout(timer)
+  }, [query])
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 768px)')
+    const update = () => setMobile(media.matches)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+  useEffect(() => {
+    if (previousSlug.current !== article?.slug)
+      heading.current?.focus({ preventScroll: true })
+    previousSlug.current = article?.slug
+  }, [article?.slug])
+  useEffect(() => {
+    if (!article) return
+    const elements = article.sections
+      .map((section) => document.getElementById(section.id))
+      .filter((element): element is HTMLElement => Boolean(element))
+    const update = () => {
+      let current = elements[0]?.id
+      for (const element of elements) {
+        if (element.getBoundingClientRect().top <= 180) current = element.id
+      }
+      setActiveSection(current)
+    }
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    return () => window.removeEventListener('scroll', update)
+  }, [article])
+
+  const renderBlock = (block: DocBlock, key: number) => {
+    if (block.kind === 'paragraph')
+      return <p key={key}>{block.text[language]}</p>
+    if (block.kind === 'note')
+      return (
+        <aside key={key} className='docs-reading-note'>
+          {block.text[language]}
+        </aside>
+      )
+    if (block.kind === 'list') {
+      const List = block.ordered ? 'ol' : 'ul'
+      return (
+        <List key={key}>
+          {block.items.map((item, i) => (
+            <li key={i}>{item[language]}</li>
+          ))}
+        </List>
+      )
+    }
+    if (block.kind === 'table')
+      return (
+        <div key={key} className='table-scroll'>
+          <table>
+            <thead>
+              <tr>
+                {block.headers.map((value, i) => (
+                  <th scope='col' key={i}>
+                    {value[language]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, i) => (
+                <tr key={i}>
+                  {row.map((value, j) => (
+                    <td key={j}>{value[language]}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    if (block.kind === 'links')
+      return (
+        <div key={key} className='docs-related-links'>
+          {block.items.map((item) => (
+            <a key={item.href} href={item.href}>
+              {item.label[language]}{' '}
+              <ArrowUpRight size={14} aria-hidden='true' />
+            </a>
+          ))}
+        </div>
+      )
+    const code = docSample(block.sample, sampleLanguage, base, selectedModel)
+    return (
+      <div key={key} className='docs-example'>
+        <div className='docs-example-settings'>
+          {block.sample !== 'models' && block.sample !== 'environment' && (
+            <>
+              <label>
+                {ui.model}
+                <input
+                  list='docs-models'
+                  value={selectedModel}
+                  onChange={(event) => setModel(event.target.value)}
+                  placeholder={ui.noModels}
+                  autoComplete='off'
+                  spellCheck={false}
+                  dir='ltr'
+                />
+              </label>
+              {catalog.isError && (
+                <p role='status' className='subtle'>
+                  {ui.catalogError}
+                </p>
+              )}
+            </>
+          )}
+          <div className='docs-code-tabs' role='group' aria-label='SDK'>
+            <button
+              type='button'
+              aria-pressed={sampleLanguage === 'curl'}
+              onClick={() => setSampleLanguage('curl')}
+            >
+              cURL
+            </button>
+            <button
+              type='button'
+              aria-pressed={sampleLanguage === 'python'}
+              onClick={() => setSampleLanguage('python')}
+            >
+              Python
+            </button>
+            <button
+              type='button'
+              aria-pressed={sampleLanguage === 'node'}
+              onClick={() => setSampleLanguage('node')}
+            >
+              Node.js
+            </button>
+          </div>
+        </div>
+        <div className='code-block' dir='ltr'>
+          <div className='docs-code-toolbar'>
+            <code>{codeResource(block.sample)}</code>
+            <CopyButton value={code} label={ui.copy} />
+          </div>
+          <pre>
+            <code>{code}</code>
+          </pre>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className='dawn docs-page'>
-      <SiteSeo
-        title={labels.title}
-        description={labels.subtitle}
-        canonicalPath='/docs'
-      />
-      <DawnNav />
-      <div className='docs-shell'>
-        <aside className='docs-sidebar' aria-label={labels.contents}>
-          <div className='docs-search'>
-            <Search size={16} />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={labels.search}
-              aria-label={labels.search}
-            />
+      <SkipToMain />
+      <PublicHeader />
+      <SiteSeo title={ui.title} description={ui.title} canonicalPath='/docs' />
+      <main id='content' tabIndex={-1} className='docs-center'>
+        <nav className='docs-navigation' aria-label={ui.sections}>
+          <button
+            className='docs-mobile-toggle'
+            type='button'
+            aria-expanded={navigationOpen}
+            aria-controls='docs-navigation-content'
+            onClick={() => setNavigationOpen(!navigationOpen)}
+          >
+            {ui.sections}
+            <ChevronDown size={16} aria-hidden />
+          </button>
+          <div id='docs-navigation-content' hidden={mobile && !navigationOpen}>
+            <Link to='/docs' className='docs-navigation-title'>
+              {ui.title}
+            </Link>
+            <label className='docs-search'>
+              <Search size={16} aria-hidden />
+              <span className='sr-only'>{ui.search}</span>
+              <input
+                type='search'
+                value={query}
+                placeholder={ui.search}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            {results.length === 0 ? (
+              <div className='docs-no-results' role='status'>
+                <p>{ui.noResults}</p>
+                <button type='button' onClick={() => setQuery('')}>
+                  {ui.clear}
+                </button>
+              </div>
+            ) : (
+              groups.map((group) => {
+                const members = results.filter((item) => item.group === group)
+                return (
+                  members.length > 0 && (
+                    <section className='docs-navigation-group' key={group}>
+                      <h2>{ui[group]}</h2>
+                      {members.map((item) => (
+                        <Link
+                          key={item.slug}
+                          to='/docs'
+                          search={{ article: item.slug }}
+                          aria-current={
+                            article?.slug === item.slug ? 'page' : undefined
+                          }
+                          onClick={() => setNavigationOpen(false)}
+                        >
+                          {item.title[language]}
+                        </Link>
+                      ))}
+                    </section>
+                  )
+                )
+              })
+            )}
           </div>
-          <nav>
-            {filtered.map((id) => (
-              <a key={id} href={`#${id}`}>
-                {labels[id]}
-              </a>
-            ))}
-          </nav>
-          <div className='docs-side-links'>
-            <Link to='/pricing'>{labels.pricing}</Link>
-          </div>
-        </aside>
-        <main className='docs-main'>
-          <div className='docs-mobile-nav'>
-            <List size={16} />
+        </nav>
+        <div className='docs-reading-column'>
+          <div className='docs-reading-controls'>
+            <label htmlFor='docs-content-language'>{ui.contentLanguage}</label>
             <select
-              aria-label={labels.contents}
+              id='docs-content-language'
+              value={language}
               onChange={(event) =>
-                document.getElementById(event.target.value)?.scrollIntoView()
+                setOverrideLanguage(event.target.value as ContentLanguage)
               }
-              defaultValue=''
             >
-              <option value='' disabled>
-                {labels.contents}
-              </option>
-              {sectionIds.map((id) => (
-                <option key={id} value={id}>
-                  {labels[id]}
+              {INTERFACE_LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.code} value={toIntlLocale(option.code)}>
+                  {option.label}
                 </option>
               ))}
             </select>
           </div>
-          <header className='docs-heading'>
-            <span>
-              <KeyRound size={17} /> Code Go API
-            </span>
-            <h1>{labels.title}</h1>
-            <p>{labels.subtitle}</p>
-          </header>
-          {sectionIds.map((id) => (
-            <section className='docs-section' id={id} key={id}>
-              <h2>{labels[id]}</h2>
-              <p>{labels[`${id}Text` as keyof typeof labels]}</p>
-              {(id === 'guide' || id === 'scripts') && (
-                <ol className='docs-steps'>
-                  {labels[`${id}Steps`].map((step) => (
-                    <li key={step}>{step}</li>
+          {article ? (
+            <article className='docs-article' lang={language} dir='ltr'>
+              <header>
+                <div className='docs-location'>
+                  <Link to='/docs'>{ui.title}</Link>
+                  <span aria-hidden='true'>/</span>
+                  <span>{ui[article.group]}</span>
+                </div>
+                <h1 ref={heading} tabIndex={-1}>
+                  {article.title[language]}
+                </h1>
+              </header>
+              <details className='docs-mobile-outline'>
+                <summary>{ui.onPage}</summary>
+                <nav aria-label={ui.onPage}>
+                  {article.sections.map((section) => (
+                    <a
+                      key={section.id}
+                      href={`#${section.id}`}
+                      aria-current={
+                        activeSection === section.id ? 'location' : undefined
+                      }
+                    >
+                      {section.title[language]}
+                    </a>
                   ))}
-                </ol>
-              )}
-              {id === 'guide' && (
-                <div className='docs-actions'>
-                  <Link to='/keys'>{labels.createKey}</Link>
-                  <Link to='/pricing'>{labels.chooseModel}</Link>
+                </nav>
+              </details>
+              {article.slug === 'quickstart' && (
+                <div className='docs-base-url'>
+                  <span>{ui.base}</span>
+                  <CopyField value={`${base}/v1`} label={ui.base} />
                 </div>
               )}
-              {id === 'scripts' && (
-                <div className='docs-actions'>
-                  <Link to='/keys'>{labels.downloadScript}</Link>
-                </div>
-              )}
-              {id === 'codex' && (
-                <div className='docs-actions'>
-                  <Link to='/keys'>{labels.createKey}</Link>
-                </div>
-              )}
-              {id in sectionExamples && (
-                <CodeBlock
-                  value={sectionExamples[id as keyof typeof sectionExamples]}
-                  labels={labels}
-                  name={exampleLabels[id as keyof typeof exampleLabels]}
-                />
-              )}
-              {id === 'codex' && (
-                <CodeBlock
-                  value={toolExamples.codexAuth}
-                  labels={labels}
-                  name={exampleLabels.codexAuth}
-                />
-              )}
-              {id in toolExamples && (
-                <p className='docs-note'>{labels.toolNote}</p>
-              )}
+              {article.sections.map((section) => (
+                <section className='docs-article-section' key={section.id}>
+                  <h2 id={section.id}>{section.title[language]}</h2>
+                  {section.blocks.map(renderBlock)}
+                </section>
+              ))}
+              <nav className='docs-pagination' aria-label={ui.title}>
+                {index > 0 ? (
+                  <Link
+                    to='/docs'
+                    search={{ article: docArticles[index - 1].slug }}
+                  >
+                    <small>{ui.previous}</small>
+                    {docArticles[index - 1].title[language]}
+                  </Link>
+                ) : (
+                  <span />
+                )}
+                {index < docArticles.length - 1 && (
+                  <Link
+                    to='/docs'
+                    search={{ article: docArticles[index + 1].slug }}
+                  >
+                    <small>{ui.next}</small>
+                    {docArticles[index + 1].title[language]}
+                  </Link>
+                )}
+              </nav>
+            </article>
+          ) : (
+            <section className='docs-missing'>
+              <h1>{ui.notFound}</h1>
+              <Link to='/docs'>{ui.start}</Link>
             </section>
-          ))}
-        </main>
-        <aside className='docs-toc' aria-label={labels.contents}>
-          <strong>{labels.contents}</strong>
-          {sectionIds.map((id) => (
-            <a key={id} href={`#${id}`}>
-              {labels[id]}
-            </a>
-          ))}
-        </aside>
-      </div>
+          )}
+        </div>
+        {article && (
+          <nav className='docs-outline' aria-label={ui.onPage}>
+            <h2>{ui.onPage}</h2>
+            {article.sections.map((section) => (
+              <a
+                key={section.id}
+                href={`#${section.id}`}
+                aria-current={
+                  activeSection === section.id ? 'location' : undefined
+                }
+              >
+                {section.title[language]}
+              </a>
+            ))}
+          </nav>
+        )}
+        {needsModelCatalog && (
+          <datalist id='docs-models'>
+            {modelSuggestions.map((item) => (
+              <option key={item.name} value={item.name} />
+            ))}
+          </datalist>
+        )}
+      </main>
+      <SiteFooter />
+    </div>
+  )
+}
+
+function codeResource(sample: import('./samples').DocSample) {
+  if (sample === 'environment') return 'CODEGO_API_KEY'
+  if (sample === 'models') return 'GET /v1/models'
+  if (sample.startsWith('responses')) return 'POST /v1/responses'
+  if (sample === 'embeddings') return 'POST /v1/embeddings'
+  return 'POST /v1/chat/completions'
+}
+
+function CopyButton(props: { value: string; label: string }) {
+  const { copiedText, copyToClipboard } = useCopyToClipboard()
+  return (
+    <button
+      type='button'
+      aria-label={props.label}
+      title={props.label}
+      onClick={() => void copyToClipboard(props.value)}
+    >
+      {copiedText === props.value ? (
+        <Check size={16} aria-hidden />
+      ) : (
+        <Copy size={16} aria-hidden />
+      )}
+    </button>
+  )
+}
+function CopyField(props: { value: string; label: string }) {
+  return (
+    <div className='docs-copy-field'>
+      <code>{props.value}</code>
+      <CopyButton {...props} />
     </div>
   )
 }

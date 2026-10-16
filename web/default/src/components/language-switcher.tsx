@@ -23,6 +23,7 @@ import {
 } from '@/i18n/languages'
 import { Languages, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -41,7 +42,15 @@ export function LanguageSwitcher() {
 
   const handleChangeLanguage = useCallback(
     async (code: string) => {
-      await i18n.changeLanguage(code)
+      try {
+        await i18n.changeLanguage(code)
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : t('Failed to load')
+        )
+        return
+      }
+      if (normalizeInterfaceLanguage(i18n.language) !== code) return
       if (user) {
         try {
           await api.put('/api/user/self', { language: code })
@@ -50,7 +59,7 @@ export function LanguageSwitcher() {
         }
       }
     },
-    [i18n, user]
+    [i18n, user, t]
   )
 
   return (
@@ -67,7 +76,14 @@ export function LanguageSwitcher() {
             key={lang.code}
             onClick={() => handleChangeLanguage(lang.code)}
           >
-            {lang.label}
+            <span lang={lang.code === 'zh' ? 'zh-Hans' : lang.code}>
+              {lang.label}
+            </span>
+            {lang.code === 'zh-TW' && (
+              <span className='text-muted-foreground ms-2'>
+                {t('marketHome.defaultLabel')}
+              </span>
+            )}
             <Check
               size={14}
               className={cn(

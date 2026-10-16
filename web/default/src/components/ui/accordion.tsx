@@ -17,8 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Accordion as AccordionPrimitive } from '@base-ui/react/accordion'
-import { ArrowDown01Icon, ArrowUp01Icon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 function Accordion({ className, ...props }: AccordionPrimitive.Root.Props) {
@@ -57,14 +56,12 @@ function AccordionTrigger({
         {...props}
       >
         {children}
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
+        <ChevronDown
           strokeWidth={2}
           data-slot='accordion-trigger-icon'
           className='pointer-events-none shrink-0 group-aria-expanded/accordion-trigger:hidden'
         />
-        <HugeiconsIcon
-          icon={ArrowUp01Icon}
+        <ChevronUp
           strokeWidth={2}
           data-slot='accordion-trigger-icon'
           className='pointer-events-none hidden shrink-0 group-aria-expanded/accordion-trigger:inline'

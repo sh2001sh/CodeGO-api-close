@@ -19,7 +19,10 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import { createSubscriptionClaudeConversion } from '@/features/subscriptions/api'
-import { formatSubscriptionQuotaAmount } from '@/features/subscriptions/lib'
+import {
+  formatSubscriptionQuotaAmount,
+  isCreditPackSubscription,
+} from '@/features/subscriptions/lib'
 import type { SelfSubscriptionData } from '@/features/subscriptions/types'
 
 interface SubscriptionClaudeConversionCardProps {
@@ -47,7 +50,9 @@ export function SubscriptionClaudeConversionCard(
   const eligibleSubscriptions = useMemo(
     () =>
       (props.subscriptionData?.subscriptions ?? []).filter(
-        (item) => item.subscription.conversion_preview?.eligible === true
+        (item) =>
+          !isCreditPackSubscription(item.subscription) &&
+          item.subscription.conversion_preview?.eligible === true
       ),
     [props.subscriptionData]
   )
@@ -56,6 +61,7 @@ export function SubscriptionClaudeConversionCard(
       Array.from(
         new Set(
           (props.subscriptionData?.subscriptions ?? [])
+            .filter((item) => !isCreditPackSubscription(item.subscription))
             .map(
               (item) => item.subscription.conversion_preview?.ineligible_reason
             )
@@ -119,17 +125,13 @@ export function SubscriptionClaudeConversionCard(
       }
       toast.success(
         result.data.subscription_ended
-          ? t(
-              'Converted all remaining monthly-pass quota into {{amount}} permanent universal credit.',
-              { amount: formatQuota(result.data.target_quota) }
-            )
-          : t(
-              'Converted {{percent}}% into {{amount}} permanent universal credit.',
-              {
-                percent: result.data.conversion_percent,
-                amount: formatQuota(result.data.target_quota),
-              }
-            )
+          ? t('已将剩余旧套餐转换为 {{amount}} 新套餐额度', {
+              amount: formatQuota(result.data.target_quota),
+            })
+          : t('已转换 {{percent}}%，获得 {{amount}} 新套餐额度', {
+              percent: result.data.conversion_percent,
+              amount: formatQuota(result.data.target_quota),
+            })
       )
       setConfirmOpen(false)
       await props.onRefresh?.()
@@ -155,9 +157,7 @@ export function SubscriptionClaudeConversionCard(
     <section className='space-y-4'>
       <div className='flex items-center gap-2'>
         <ArrowRightLeft className='text-primary size-4' aria-hidden='true' />
-        <h3 className='text-sm font-semibold'>
-          {t('Monthly pass conversion')}
-        </h3>
+        <h3 className='text-sm font-semibold'>{t('旧套餐转新套餐')}</h3>
       </div>
 
       {eligibleSubscriptions.length === 0 ? (
@@ -173,7 +173,9 @@ export function SubscriptionClaudeConversionCard(
         </div>
       ) : (
         <>
-          <div className='grid gap-2 sm:grid-cols-2'>            {eligibleSubscriptions.map((item) => {
+          <div className='grid gap-2 sm:grid-cols-2'>
+            {' '}
+            {eligibleSubscriptions.map((item) => {
               const itemPreview = item.subscription.conversion_preview
               const meta = props.planTitles?.[item.subscription.plan_id]
               const selectedItem = item.subscription.id === selectedId
@@ -208,7 +210,7 @@ export function SubscriptionClaudeConversionCard(
                     </span>
                   </div>
                   <div className='text-muted-foreground mt-1 text-xs'>
-                    {t('List price {{price}} · used {{used}}%', {
+                    {t('实付 {{price}} · 已用 {{used}}%', {
                       price: formatUsdAmount(
                         itemPreview?.plan_price_amount || 0
                       ),
@@ -299,7 +301,11 @@ export function SubscriptionClaudeConversionCard(
           disabled={!selected || submitting}
           onClick={() => setConfirmOpen(true)}
         >
-          {submitting ? <Loader2 className='animate-spin' /> : <ArrowRightLeft />}
+          {submitting ? (
+            <Loader2 className='animate-spin' />
+          ) : (
+            <ArrowRightLeft />
+          )}
           {convertsAllRemaining
             ? t('Convert all remaining, receive {{amount}}', {
                 amount: formatQuota(estimatedQuota),
@@ -312,14 +318,14 @@ export function SubscriptionClaudeConversionCard(
       )}
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className='commerce-dialog'>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {t('Confirm monthly pass conversion')}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t(
-                'Convert {{percent}}% of {{plan}} for approximately {{credit}} permanent universal credit. This consumes {{quota}} monthly-pass quota and leaves {{remaining}}%. After any conversion, this monthly pass cannot use an invitation quota refresh. {{ending}} This cannot be undone.',
+                '将 {{plan}} 的 {{percent}}% 转为 {{credit}} 永久新套餐额度，扣除旧套餐 {{quota}}，旧套餐剩余 {{remaining}}%。转换后旧套餐无法使用邀请刷新。{{ending}} 此操作无法撤销。',
                 {
                   percent: convertsAllRemaining
                     ? unusedPercent.toFixed(2)

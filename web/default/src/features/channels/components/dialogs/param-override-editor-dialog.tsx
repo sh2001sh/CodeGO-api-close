@@ -1702,7 +1702,7 @@ export function ParamOverrideEditorDialog(
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-5xl'>
+      <DialogContent className='admin-editor channel-tool-dialog channel-parameter-editor flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-5xl'>
         <DialogHeader className='border-b px-6 py-4'>
           <DialogTitle>{t('Parameter Override')}</DialogTitle>
           <DialogDescription>

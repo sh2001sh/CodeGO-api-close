@@ -19,10 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import i18n from '@/i18n/config'
 import { useTranslation, Trans } from 'react-i18next'
+import { COMPANY } from '@/lib/company'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 import { Markdown } from '@/components/ui/markdown'
+import { CompanyIdentity } from '@/components/company-identity'
 import { PublicLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
+import '@/features/docs/reading.css'
 import { getAboutContent } from './api'
 
 const aboutSeo = getPublicPageSeoEntry('/about')
@@ -30,11 +33,22 @@ const aboutSeo = getPublicPageSeoEntry('/about')
 function AboutHero() {
   const { t } = useTranslation()
   return (
-    <div className='space-y-4'>
+    <div className='solaris-about-header space-y-4'>
       <div className='space-y-3'>
         <h1 className='text-foreground text-4xl font-semibold tracking-tight md:text-5xl'>
           {t(aboutSeo.h1)}
         </h1>
+        <CompanyIdentity />
+        <dl className='border-border grid gap-6 border-y py-6 sm:grid-cols-[160px_minmax(0,1fr)]'>
+          <dt className='text-muted-foreground'>
+            {t('Business registration number')}
+          </dt>
+          <dd className='font-mono'>{COMPANY.registrationNumber}</dd>
+          <dt className='text-muted-foreground'>{t('Registered address')}</dt>
+          <dd>
+            <address className='not-italic'>{COMPANY.address}</address>
+          </dd>
+        </dl>
       </div>
     </div>
   )
@@ -43,12 +57,9 @@ function AboutHero() {
 function SupportGroupCard() {
   useTranslation()
   return (
-    <div className='border-border bg-card text-card-foreground overflow-hidden rounded-xl border'>
+    <div className='solaris-support-card border-border bg-card text-card-foreground overflow-hidden rounded-[20px] border'>
       <div className='grid gap-6 p-6 md:grid-cols-[minmax(0,1fr)_240px] md:items-center'>
         <div className='space-y-3'>
-          <div className='text-primary text-xs font-semibold tracking-[0.24em] uppercase'>
-            <Trans i18nKey={'售后支持'} />
-          </div>
           <h2 className='text-foreground text-2xl font-semibold tracking-tight'>
             <Trans i18nKey={'售后 QQ 群'} />
           </h2>
@@ -85,16 +96,14 @@ function isLikelyHtml(value: string) {
 }
 
 export function About() {
-  const { t, i18n: currentI18n } = useTranslation()
+  const { t } = useTranslation()
   const { data, isError, isLoading } = useQuery({
     queryKey: ['about-content'],
     queryFn: getAboutContent,
   })
 
   const rawContent = data?.data?.trim() ?? ''
-  const hasContent =
-    rawContent.length > 0 &&
-    (currentI18n.language === 'zh' || !/[\u3400-\u9fff]/u.test(rawContent))
+  const hasContent = rawContent.length > 0
   const isUrl = hasContent && isValidUrl(rawContent)
   const isHtml = hasContent && !isUrl && isLikelyHtml(rawContent)
 
@@ -107,7 +116,7 @@ export function About() {
           keywords={aboutSeo.keywords}
           canonicalPath={aboutSeo.path}
         />
-        <div className='mx-auto max-w-6xl space-y-6 px-4 py-8'>
+        <div className='market-reading market-reading-width space-y-8'>
           <AboutHero />
           <SupportGroupCard />
           <Markdown className='codego-public-prose prose-neutral dark:prose-invert max-w-none'>
@@ -127,8 +136,8 @@ export function About() {
           keywords={aboutSeo.keywords}
           canonicalPath={aboutSeo.path}
         />
-        <div className='space-y-4 px-4 py-6 md:px-6'>
-          <div className='mx-auto max-w-6xl space-y-6'>
+        <div className='market-reading space-y-4 px-5 py-12 md:px-8'>
+          <div className='market-reading market-reading-width space-y-8'>
             <AboutHero />
             <SupportGroupCard />
           </div>
@@ -150,7 +159,7 @@ export function About() {
         keywords={aboutSeo.keywords}
         canonicalPath={aboutSeo.path}
       />
-      <div className='mx-auto max-w-6xl space-y-6 px-4 py-8'>
+      <div className='market-reading market-reading-width space-y-8'>
         <AboutHero />
         <SupportGroupCard />
         {isHtml ? (

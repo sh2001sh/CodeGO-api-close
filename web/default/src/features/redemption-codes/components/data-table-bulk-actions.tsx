@@ -30,7 +30,11 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { CopyButton } from '@/components/copy-button'
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
-import { deleteInvalidRedemptions, getRedemptions, searchRedemptions } from '../api'
+import {
+  deleteInvalidRedemptions,
+  getRedemptions,
+  searchRedemptions,
+} from '../api'
 import { downloadRedemptionTextFile } from '../lib'
 import { type Redemption } from '../types'
 import { useRedemptions } from './redemptions-provider'
@@ -218,7 +222,7 @@ export function DataTableBulkActions<TData>({
         onOpenChange={setShowDeleteInvalidConfirm}
         handleConfirm={handleDeleteInvalid}
         isLoading={isDeleting}
-        className='max-w-md'
+        className='solaris-admin-dialog max-w-md'
         title={t('Delete Invalid Redemption Codes?')}
         desc={
           <>

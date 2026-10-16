@@ -78,8 +78,8 @@ func ListAdminChannelsPage(input AdminChannelQuery) (*AdminChannelListResult, er
 	if search := strings.TrimSpace(input.Search); search != "" {
 		pattern := ownerLogLike(search)
 		query = query.Where(
-			"(LOWER(c.id) LIKE ? ESCAPE '!' OR LOWER(g.system_display_name) LIKE ? ESCAPE '!' OR LOWER(c.provider_type) LIKE ? ESCAPE '!' OR LOWER(c.submitted_source_label) LIKE ? ESCAPE '!' OR LOWER(c.approved_source_label) LIKE ? ESCAPE '!' OR LOWER(c.declared_models) LIKE ? ESCAPE '!')",
-			pattern, pattern, pattern, pattern, pattern, pattern,
+			"(LOWER(c.id) LIKE ? ESCAPE '!' OR LOWER(g.system_display_name) LIKE ? ESCAPE '!' OR LOWER(c.provider_type) LIKE ? ESCAPE '!' OR LOWER(c.submitted_source_label) LIKE ? ESCAPE '!' OR LOWER(c.approved_source_label) LIKE ? ESCAPE '!' OR LOWER(c.declared_models) LIKE ? ESCAPE '!' OR LOWER(g.custom_name) LIKE ? ESCAPE '!' OR LOWER(g.description) LIKE ? ESCAPE '!' OR LOWER(g.tags) LIKE ? ESCAPE '!')",
+			pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern,
 		)
 	}
 
@@ -382,6 +382,7 @@ func createInternalChannel(channel *marketplaceschema.Channel, group *marketplac
 		MarketplaceUserMaxConcurrency:    channel.UserMaxConcurrency,
 		SensitiveWordInterceptionEnabled: channel.SensitiveWordInterceptionEnabled,
 		MultiplierCardSupported:          channel.MultiplierCardSupported,
+		CreditPackSupported:              channel.CreditPackSupported,
 		MultiplierCardUserEnabled:        channel.MultiplierCardUserEnabled,
 		CreatedTime:                      platformruntime.GetTimestamp(), BaseURL: &baseURL,
 		Models: strings.Join(decodeModels(channel.DeclaredModels), ","), Group: group.InternalGroupName,

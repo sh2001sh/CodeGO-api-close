@@ -17,8 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useParams } from '@tanstack/react-router'
+import { RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Button } from '@/components/ui/button'
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
+import '../settings.css'
 
 type SettingsPageProps<
   TSettings extends Record<string, string | number | boolean | unknown[]>,
@@ -50,14 +53,41 @@ export function SettingsPage<
   extraArgs = [],
 }: SettingsPageProps<TSettings, TSectionId>) {
   const { t } = useTranslation()
-  const { data, isLoading } = useSystemOptions()
+  const { data, isLoading, isError, refetch, isFetching } = useSystemOptions()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const params = useParams({ from: routePath as any })
 
   if (isLoading) {
     return (
-      <div className='flex items-center justify-center py-12'>
-        <div className='text-muted-foreground'>{t('Loading settings...')}</div>
+      <div
+        className='settings-workspace settings-loading'
+        role='status'
+        aria-busy='true'
+        aria-label={t('Loading settings...')}
+      >
+        <div className='settings-skeleton settings-skeleton-title' />
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className='settings-skeleton-row'>
+            <div className='settings-skeleton settings-skeleton-label' />
+            <div className='settings-skeleton settings-skeleton-input' />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if ((isError && !data) || data?.success === false) {
+    return (
+      <div className='settings-workspace settings-error' role='alert'>
+        <h1>{t('Failed to load settings')}</h1>
+        <Button
+          variant='outline'
+          onClick={() => void refetch()}
+          disabled={isFetching}
+        >
+          <RefreshCw aria-hidden='true' />
+          {t('Retry')}
+        </Button>
       </div>
     )
   }
@@ -71,13 +101,25 @@ export function SettingsPage<
   )
 
   return (
-    <div className='codego-settings-page flex h-full w-full flex-1 flex-col'>
-      <div className='faded-bottom h-full w-full overflow-y-auto scroll-smooth pe-4 pb-12'>
-        <div className='codego-settings-content space-y-4'>
-          <div className='codego-settings-orbit' aria-hidden='true' />
-          {sectionContent}
+    <div
+      className='settings-workspace'
+      data-settings-section={activeSection}
+      key={activeSection}
+    >
+      {isError && (
+        <div className='settings-error' role='alert'>
+          <span>{t('Failed to load settings')}</span>
+          <Button
+            variant='outline'
+            onClick={() => void refetch()}
+            disabled={isFetching}
+          >
+            <RefreshCw aria-hidden='true' />
+            {t('Retry')}
+          </Button>
         </div>
-      </div>
+      )}
+      <div className='settings-workspace-content'>{sectionContent}</div>
     </div>
   )
 }

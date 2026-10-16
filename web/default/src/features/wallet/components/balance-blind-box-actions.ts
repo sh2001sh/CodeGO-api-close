@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
+import interfaceI18n from '@/i18n/config'
 import { toast } from 'sonner'
 import {
   giftBalanceBlindBoxes,
@@ -38,11 +39,20 @@ export async function purchaseBalanceBoxInventory(
       newBalanceBoxRequestId(),
       context.count
     )
-    if (!isApiSuccess(response)) throw new Error(response.message || '购买失败')
-    toast.success(`${context.count} 个统一盲盒已购买并存入库存`)
+    if (!isApiSuccess(response))
+      throw new Error(response.message || interfaceI18n.t('购买失败'))
+    toast.success(
+      interfaceI18n.t('{{param0}} 个统一盲盒已购买并存入库存', {
+        param0: context.count,
+      })
+    )
     await context.onRefresh()
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : '统一盲盒购买失败')
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : interfaceI18n.t('统一盲盒购买失败')
+    )
   } finally {
     context.setBusy(false)
   }
@@ -59,7 +69,7 @@ export async function openBalanceBoxInventory(
       context.count
     )
     if (!isApiSuccess(response) || !response.data?.records?.length) {
-      throw new Error(response.message || '开启失败')
+      throw new Error(response.message || interfaceI18n.t('开启失败'))
     }
     window.dispatchEvent(
       new CustomEvent('blind-box:changed', {
@@ -71,7 +81,11 @@ export async function openBalanceBoxInventory(
     )
     // the prize dialog is the feedback; a toast here would spoil the reel
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : '统一盲盒开启失败')
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : interfaceI18n.t('统一盲盒开启失败')
+    )
   } finally {
     context.setBusy(false)
   }
@@ -83,19 +97,21 @@ export async function lookupBalanceBoxRecipient(
   const externalId = context.recipientId.trim().toUpperCase()
   context.setRecipient(null)
   if (!/^[A-Z0-9]{6}$/.test(externalId)) {
-    toast.error('请输入对方 6 位公开 ID')
+    toast.error(interfaceI18n.t('请输入对方 6 位公开 ID'))
     return
   }
   context.setBusy(true)
   try {
     const response = await lookupWalletTransferRecipient(externalId)
     if (!isApiSuccess(response) || !response.data) {
-      throw new Error(response.message || '未找到该用户')
+      throw new Error(response.message || interfaceI18n.t('未找到该用户'))
     }
     context.setRecipient(response.data)
     context.setRecipientId(response.data.external_id)
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : '未找到该用户')
+    toast.error(
+      error instanceof Error ? error.message : interfaceI18n.t('未找到该用户')
+    )
   } finally {
     context.setBusy(false)
   }
@@ -112,15 +128,23 @@ export async function giftBalanceBoxInventory(
       context.recipient.external_id,
       context.count
     )
-    if (!isApiSuccess(response)) throw new Error(response.message || '赠送失败')
+    if (!isApiSuccess(response))
+      throw new Error(response.message || interfaceI18n.t('赠送失败'))
     toast.success(
-      `已向 ${context.recipient.external_id} 赠送 ${context.count} 个统一盲盒`
+      interfaceI18n.t('已向 {{param0}} 赠送 {{param1}} 个统一盲盒', {
+        param0: context.recipient.external_id,
+        param1: context.count,
+      })
     )
     context.setRecipient(null)
     context.setRecipientId('')
     await context.onRefresh()
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : '统一盲盒赠送失败')
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : interfaceI18n.t('统一盲盒赠送失败')
+    )
   } finally {
     context.setBusy(false)
     context.setConfirmGift(false)

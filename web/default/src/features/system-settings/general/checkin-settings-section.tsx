@@ -25,7 +25,6 @@ import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -35,6 +34,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const schema = z.object({
   enabled: z.boolean(),
@@ -111,7 +111,7 @@ export function CheckinSettingsSection({
     >
       <Form {...form}>
         <form
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
           autoComplete='off'
           className='space-y-6'
         >
@@ -124,11 +124,6 @@ export function CheckinSettingsSection({
                   <FormLabel className='text-base'>
                     {t('Enable check-in feature')}
                   </FormLabel>
-                  <FormDescription>
-                    {t(
-                      'Allow users to check in daily for random quota rewards'
-                    )}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -157,9 +152,7 @@ export function CheckinSettingsSection({
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Minimum quota amount awarded for check-in')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -179,9 +172,7 @@ export function CheckinSettingsSection({
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Maximum quota amount awarded for check-in')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -189,14 +180,16 @@ export function CheckinSettingsSection({
             </div>
           )}
 
-          <Button
-            type='submit'
-            disabled={!isDirty || updateOption.isPending || isSubmitting}
-          >
-            {updateOption.isPending || isSubmitting
-              ? t('Saving...')
-              : t('Save check-in settings')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button
+              type='submit'
+              disabled={!isDirty || updateOption.isPending || isSubmitting}
+            >
+              {updateOption.isPending || isSubmitting
+                ? t('Saving...')
+                : t('Save check-in settings')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

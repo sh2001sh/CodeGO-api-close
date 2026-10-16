@@ -1,3 +1,4 @@
+import { getIntlLocale } from '@/i18n/format'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -189,7 +190,7 @@ function getDisplayMeta(config: CurrencyConfig): DisplayMeta {
     default:
       return {
         kind: 'currency',
-        symbol: '$',
+        symbol: 'credits ',
         currencyCode: 'USD',
         exchangeRate: 1,
       }
@@ -201,7 +202,7 @@ function getBillingDisplayMeta(config: CurrencyConfig): DisplayMeta {
   if (meta.kind === 'tokens') {
     return {
       kind: 'currency',
-      symbol: '$',
+      symbol: 'credits ',
       currencyCode: 'USD',
       exchangeRate: 1,
     }
@@ -277,7 +278,13 @@ function formatCurrencyValue(
   const adjustedValue = adjustForMinimum(value, digits, options.minimumNonZero)
 
   if (meta.kind === 'currency') {
-    const formatted = new Intl.NumberFormat(undefined, {
+    if (meta.currencyCode === 'USD') {
+      return `${new Intl.NumberFormat(getIntlLocale(), {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: digits,
+      }).format(adjustedValue)} credits`
+    }
+    const formatted = new Intl.NumberFormat(getIntlLocale(), {
       style: 'currency',
       currency: meta.currencyCode,
       currencyDisplay: 'narrowSymbol',
@@ -287,7 +294,7 @@ function formatCurrencyValue(
     return formatted
   }
 
-  const decimal = new Intl.NumberFormat(undefined, {
+  const decimal = new Intl.NumberFormat(getIntlLocale(), {
     minimumFractionDigits: 0,
     maximumFractionDigits: digits,
   }).format(adjustedValue)
@@ -322,7 +329,7 @@ export function getCurrencyDisplay() {
  *
  * @example
  * // With quotaDisplayType: 'USD'
- * formatCurrencyFromUSD(10) → "$10"
+ * formatCurrencyFromUSD(10) → "10 credits"
  *
  * @example
  * // With quotaDisplayType: 'CNY', usdExchangeRate: 7
@@ -387,7 +394,7 @@ export function formatCurrencyFromUSD(
  *
  * @example
  * // With quotaDisplayType: 'TOKENS' - still shows currency
- * formatBillingCurrencyFromUSD(10) → "$10"  (not "5,000,000 tokens")
+ * formatBillingCurrencyFromUSD(10) → "10 credits"  (not "5,000,000 tokens")
  *
  * @example
  * // With quotaDisplayType: 'CNY', usdExchangeRate: 7
@@ -426,7 +433,7 @@ export function formatBillingCurrencyFromUSD(
  *
  * Converts raw quota/token amounts to USD first, then formats according
  * to display settings. Use when you have quota in token units (e.g., 5000000)
- * and need to display it as currency (e.g., "$10").
+ * and need to display it as currency (e.g., "10 credits").
  *
  * @param quota - Raw quota amount in token units (e.g., 5000000)
  * @param options - Optional formatting configuration
@@ -434,7 +441,7 @@ export function formatBillingCurrencyFromUSD(
  *
  * @example
  * // With quotaPerUnit: 500000, quotaDisplayType: 'USD'
- * formatQuotaWithCurrency(5000000) → "$10"
+ * formatQuotaWithCurrency(5000000) → "10 credits"
  *
  * @example
  * // With quotaPerUnit: 500000, quotaDisplayType: 'CNY', usdExchangeRate: 7
@@ -493,7 +500,7 @@ export function getCurrencyLabel(): string {
       return meta.kind === 'custom' ? meta.symbol : 'Custom'
     case 'USD':
     default:
-      return 'USD'
+      return 'credits'
   }
 }
 
@@ -536,7 +543,7 @@ export function isCurrencyDisplayEnabled(): boolean {
  *
  * @example
  * // With quotaDisplayType: 'USD'
- * formatLocalCurrencyAmount(10) → "$10"
+ * formatLocalCurrencyAmount(10) → "10 credits"
  *
  * @remarks
  * Use this function for:

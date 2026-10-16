@@ -14,6 +14,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strconv"
 	"strings"
 	"time"
@@ -47,7 +48,7 @@ func getOrCreateSubscriptionResetOpportunityAccountTx(tx *gorm.DB, userID int) (
 	}
 
 	account := &commerceschema.SubscriptionResetOpportunityAccount{}
-	err := tx.Set("gorm:query_option", "FOR UPDATE").Where("user_id = ?", userID).First(account).Error
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", userID).First(account).Error
 	if err == nil {
 		return account, nil
 	}
@@ -102,57 +103,10 @@ func GetUserSubscriptionResetOpportunity(userID int) (*commerceschema.Subscripti
 	return nil, err
 }
 
-// AwardReferralSubscriptionResetOpportunityTx awards a reset opportunity for inviter when invitee first buys a month card.
+// AwardReferralSubscriptionResetOpportunityTx preserves the retired reward entry point without granting new refreshes.
 func AwardReferralSubscriptionResetOpportunityTx(tx *gorm.DB, inviteeID int, purchaseType string, orderSourceType string, orderSourceID string) error {
-	if tx == nil {
-		tx = platformdb.DB
-	}
-	if inviteeID <= 0 || strings.TrimSpace(purchaseType) != commercedomain.ReferralPurchaseTypeMonthCard {
-		return nil
-	}
-
-	inviterID, err := referralInviterIDTx(tx, inviteeID)
-	if err != nil || inviterID <= 0 {
-		return err
-	}
-	previousMonthCardCount, err := countSuccessfulPaidMonthCardPurchasesTx(tx, inviteeID, orderSourceID)
-	if err != nil {
-		return err
-	}
-	if previousMonthCardCount > 0 {
-		return nil
-	}
-
-	eventKey := fmt.Sprintf("referral-reset-opportunity:%d", inviteeID)
-	existing := &commerceschema.SubscriptionResetOpportunityLedger{}
-	if err := tx.Where("event_key = ?", eventKey).First(existing).Error; err == nil {
-		return nil
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-
-	account, err := getOrCreateSubscriptionResetOpportunityAccountTx(tx, inviterID)
-	if err != nil {
-		return err
-	}
-	account.EarnedTotal++
-	account.AvailableTotal++
-	if err := tx.Save(account).Error; err != nil {
-		return err
-	}
-
-	ledger := &commerceschema.SubscriptionResetOpportunityLedger{
-		UserId:        inviterID,
-		RelatedUserId: inviteeID,
-		ChangeType:    commerceschema.SubscriptionResetOpportunityChangeEarn,
-		Delta:         1,
-		BalanceAfter:  account.AvailableTotal,
-		SourceType:    strings.TrimSpace(orderSourceType),
-		SourceRef:     strings.TrimSpace(orderSourceID),
-		EventKey:      eventKey,
-		Note:          "邀请新用户首购月卡赠送额度重置机会",
-	}
-	return tx.Create(ledger).Error
+	// Invitation refresh rewards are retired; keep existing account balances intact.
+	return nil
 }
 
 func referralInviterIDTx(tx *gorm.DB, inviteeID int) (int, error) {
@@ -244,8 +198,8 @@ func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.Subscripti
 		}
 
 		var subs []commerceschema.UserSubscription
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").
-			Where("user_id = ? AND status = ? AND end_time > ?", userID, "active", now).
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ? AND status = ? AND end_time > ? AND credit_pack_granted_quota = 0 AND plan_id IN (SELECT id FROM subscription_plans WHERE plan_type <> ?)", userID, "active", now, commerceschema.SubscriptionPlanTypeCreditPack).
 			Order("end_time asc, id asc").
 			Find(&subs).Error; err != nil {
 			return err

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { getIntlLocale } from '@/i18n/format'
 import { Download, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -100,7 +101,7 @@ export function AdminOwnerIncomePanel(props: {
       toast.error(t('输入金额超过所选渠道主当前可回收额度'))
       return
     }
-    const scope = `${props.range.start?.toLocaleString() ?? t('不限开始时间')} — ${props.range.end?.toLocaleString() ?? t('不限结束时间')}`
+    const scope = `${props.range.start?.toLocaleString(getIntlLocale()) ?? t('不限开始时间')} — ${props.range.end?.toLocaleString(getIntlLocale()) ?? t('不限结束时间')}`
     if (
       !window.confirm(
         t(
@@ -176,18 +177,13 @@ export function AdminOwnerIncomePanel(props: {
   }
 
   return (
-    <section aria-label={t('渠道主收益管理')} className='my-5 space-y-4'>
+    <section
+      aria-label={t('渠道主收益管理')}
+      className='governance-income space-y-5'
+    >
       <div className='flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between'>
         <div>
-          <p className='text-muted-foreground text-xs font-semibold tracking-wider uppercase'>
-            {t('批量财务操作')}
-          </p>
-          <h2 className='mt-1 text-xl font-semibold'>
-            {t('批量回收渠道主收益')}
-          </h2>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            {t('按时间查找渠道主，加入回收批次后统一执行。')}
-          </p>
+          <h2 className='text-xl font-semibold'>{t('批量回收渠道主收益')}</h2>
         </div>
         <div className='text-muted-foreground text-sm tabular-nums'>
           {t('当前筛选已到账')}{' '}
@@ -212,7 +208,7 @@ export function AdminOwnerIncomePanel(props: {
         onClearSelected={() => setSelectedOwners([])}
       />
 
-      <section className='border-primary/25 bg-primary/[0.025] rounded-md border p-4'>
+      <section className='governance-reclaim-action'>
         <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem_auto] lg:items-end'>
           <div>
             <h3 className='font-semibold'>{t('执行批量回收')}</h3>

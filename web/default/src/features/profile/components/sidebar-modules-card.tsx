@@ -23,13 +23,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 
 type SidebarModuleConfig = {
@@ -210,9 +204,6 @@ export function SidebarModulesCard() {
             <CardTitle className='text-lg tracking-tight sm:text-xl'>
               {t('Sidebar Personal Settings')}
             </CardTitle>
-            <CardDescription className='text-xs sm:text-sm'>
-              {t('Customize sidebar display content')}
-            </CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -227,11 +218,9 @@ export function SidebarModulesCard() {
               <div className='flex items-start justify-between gap-3'>
                 <div className='min-w-0'>
                   <p className='text-sm font-medium'>{section.title}</p>
-                  <p className='text-muted-foreground text-xs'>
-                    {section.description}
-                  </p>
                 </div>
                 <Switch
+                  aria-label={section.title}
                   checked={sectionEnabled}
                   onCheckedChange={(v) => toggleSection(section.key, v)}
                 />
@@ -248,11 +237,9 @@ export function SidebarModulesCard() {
                       <p className='truncate text-sm font-medium'>
                         {mod.title}
                       </p>
-                      <p className='text-muted-foreground truncate text-xs'>
-                        {mod.description}
-                      </p>
                     </div>
                     <Switch
+                      aria-label={mod.title}
                       checked={config[section.key]?.[mod.key] !== false}
                       onCheckedChange={(v) =>
                         toggleModule(section.key, mod.key, v)

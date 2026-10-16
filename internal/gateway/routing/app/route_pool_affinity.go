@@ -46,6 +46,7 @@ func ShouldMigrateAutomaticPoolAffinity(c *gin.Context, group, modelName string,
 	}
 	now := time.Now()
 	requestType := gatewayruntime.RequestTypeFromContext(c)
+	prefetchRoutePoolHealth(c, candidates, modelName, requestType)
 	healthy := make([]scoredRoutePoolCandidate, 0, len(candidates))
 	var current *scoredRoutePoolCandidate
 	for _, candidate := range candidates {
@@ -58,10 +59,12 @@ func ShouldMigrateAutomaticPoolAffinity(c *gin.Context, group, modelName string,
 		if activeRoutePoolCircuit(domainHealth, domainFound, now) {
 			continue
 		}
+		cost := routePoolModelCost(candidate.Member, modelName)
 		scored := scoredRoutePoolCandidate{
+			health:  health,
 			channel: candidate.Channel, faultDomain: domain,
-			score: effectiveRoutePoolCostForPool(candidate.Member, modelName, health, &detail.Pool),
-			cost:  routePoolModelCost(candidate.Member, modelName),
+			score: effectiveRoutePoolCostValueForPool(cost, health, &detail.Pool),
+			cost:  cost,
 		}
 		healthy = append(healthy, scored)
 		if candidate.Channel.Id == channelID {

@@ -69,7 +69,6 @@ function QuotaAmountField(props: {
   currencyLabel: string
   tokensOnly: boolean
 }) {
-  const { t } = useTranslation()
   return (
     <FormField
       control={props.form.control}
@@ -88,13 +87,6 @@ function QuotaAmountField(props: {
               }
             />
           </FormControl>
-          <FormDescription>
-            {props.tokensOnly
-              ? t('Enter the quota amount in tokens')
-              : t('Enter the quota amount in {{currency}}', {
-                  currency: props.currencyLabel,
-                })}
-          </FormDescription>
           <FormMessage />
         </FormItem>
       )}
@@ -112,9 +104,6 @@ function UnlimitedQuotaField(props: { form: ApiKeyForm }) {
         <FormItem className='flex min-h-16 flex-row items-center justify-between gap-3 rounded-lg border px-3 py-2.5 sm:min-h-20 sm:gap-4 sm:px-4 sm:py-3'>
           <div className='space-y-0.5'>
             <FormLabel className='text-sm'>{t('Unlimited Quota')}</FormLabel>
-            <FormDescription className='text-xs'>
-              {t('Enable unlimited quota for this API key')}
-            </FormDescription>
           </div>
           <FormControl>
             <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -146,9 +135,6 @@ function AdvancedSection(props: { form: ApiKeyForm; models: string[] }) {
             <h3 className='text-sm leading-none font-medium'>
               {t('Advanced Settings')}
             </h3>
-            <p className='text-muted-foreground mt-1 text-xs'>
-              {t('Set API key access restrictions')}
-            </p>
           </div>
           <ChevronDown
             className={cn(
@@ -188,9 +174,6 @@ function ModelLimitsField(props: { form: ApiKeyForm; models: string[] }) {
               placeholder={t('Select models (empty for allow all)')}
             />
           </FormControl>
-          <FormDescription>
-            {t('Limit which models can be used with this key')}
-          </FormDescription>
           <FormMessage />
         </FormItem>
       )}

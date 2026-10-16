@@ -243,7 +243,7 @@ function SimulationPityProgress(props: {
       <div
         className='bg-muted h-1.5 overflow-hidden rounded-full'
         role='progressbar'
-        aria-label={`${props.label}进度`}
+        aria-label={i18n.t('{{param0}}进度', { param0: props.label })}
         aria-valuemin={0}
         aria-valuemax={target}
         aria-valuenow={progress}
@@ -300,9 +300,6 @@ function SimulationHistory(props: { history: SimulationHistoryItem[] }) {
         <p className='mt-2 text-sm font-medium'>
           <Trans i18nKey={'尚未开始抽取'} />
         </p>
-        <p className='text-muted-foreground mt-1 text-xs'>
-          <Trans i18nKey={'首批结果会在这里按最新顺序展示'} />
-        </p>
       </div>
     )
   }
@@ -346,11 +343,11 @@ function SimulationHistory(props: { history: SimulationHistoryItem[] }) {
 function guaranteeLabel(type: string) {
   switch (type) {
     case 'first':
-      return '首抽保底'
+      return i18n.t('首抽保底')
     case 'small':
-      return '小保底'
+      return i18n.t('小保底')
     case 'big':
-      return '大保底'
+      return i18n.t('大保底')
     default:
       return null
   }

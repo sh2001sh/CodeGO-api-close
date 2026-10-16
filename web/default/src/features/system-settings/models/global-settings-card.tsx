@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
@@ -24,7 +23,9 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import { SettingsSection } from '../components/settings-section'
+import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 import { GlobalSettingsFields } from './global-settings-fields'
 import {
   flattenGlobalValues,
@@ -50,9 +51,7 @@ export function GlobalSettingsCard({ defaultValues }: GlobalSettingsCardProps) {
     defaultValues: defaultValues as GlobalModelSettingsFormInput,
   })
 
-  useEffect(() => {
-    form.reset(defaultValues as GlobalModelSettingsFormInput)
-  }, [defaultValues, form])
+  useResetForm(form, defaultValues as GlobalModelSettingsFormInput)
 
   const onSubmit = async (values: GlobalModelSettingsFormValues) => {
     const defaults = flattenGlobalValues(defaultValues)
@@ -66,21 +65,25 @@ export function GlobalSettingsCard({ defaultValues }: GlobalSettingsCardProps) {
     for (const [key, value] of updates) {
       await updateOption.mutateAsync({ key, value })
     }
+    form.reset(values)
   }
 
   return (
     <SettingsSection
       title={t('Global Model Configuration')}
-      description={t(
-        'Control passthrough behavior and connection keep-alive settings'
-      )}
+      description={t('Configure global model settings')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <GlobalSettingsFields form={form} />
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save Changes')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save Changes')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

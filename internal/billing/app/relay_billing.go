@@ -15,7 +15,11 @@ import (
 )
 
 func PreConsumeRelayBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
+	preConsumedQuota = relayInfo.ServiceTierQuota(preConsumedQuota)
 	if relayInfo != nil && relayInfo.Billing != nil {
+		if relayInfo.CreditPackGrantedQuota > 0 && !creditPackChannelAllowed(relayInfo) {
+			return types.NewError(ErrCreditPackChannelUnsupported, types.ErrorCodeInsufficientUserQuota)
+		}
 		if err := relayInfo.Billing.Reserve(preConsumedQuota); err != nil {
 			if apiErr, ok := err.(*types.NewAPIError); ok {
 				return apiErr
@@ -129,17 +133,20 @@ func relayChannelID(relayInfo *relaycommon.RelayInfo) int {
 
 func marketplaceSettlementParams(relayInfo *relaycommon.RelayInfo, consumerDebit int) marketplacesettlement.RecordParams {
 	settlementGross := consumerDebit
-	if relayInfo.BillingSource == BillingSourceSubscription {
+	if relayInfo.BillingSource == BillingSourceSubscription && relayInfo.CreditPackGrantedQuota == 0 {
 		settlementGross = subscriptionSettlementGross(consumerDebit)
 	}
 	return marketplacesettlement.RecordParams{
 		RequestID: relayInfo.RequestId, GroupID: relayInfo.MarketplaceGroupID,
 		OwnerUserID: relayInfo.MarketplaceOwnerID, ConsumerUserID: relayInfo.UserId,
-		BillingSource:          relayInfo.BillingSource,
-		ConsumerDebitAmount:    int64(consumerDebit),
-		SettlementGrossAmount:  int64(settlementGross),
-		WalletMultiplier:       relayInfo.MarketplaceMultiplier,
-		SubscriptionMultiplier: relayInfo.SubscriptionGroupMultiplier,
+		BillingSource:             relayInfo.BillingSource,
+		ConsumerDebitAmount:       int64(consumerDebit),
+		SettlementGrossAmount:     int64(settlementGross),
+		WalletMultiplier:          relayInfo.MarketplaceMultiplier,
+		SubscriptionMultiplier:    relayInfo.SubscriptionGroupMultiplier,
+		CreditPackGrantedQuota:    relayInfo.CreditPackGrantedQuota,
+		CreditPackPaidQuota:       relayInfo.CreditPackPaidQuota,
+		CreditPackChannelShareBPS: relayInfo.CreditPackChannelShareBPS,
 	}
 }
 

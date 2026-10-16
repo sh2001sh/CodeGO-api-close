@@ -1,4 +1,5 @@
 import type { UseFormReturn } from 'react-hook-form'
+import interfaceI18n from '@/i18n/config'
 import { Gauge, Link2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
@@ -20,11 +21,7 @@ export function ChannelConnectionSection(props: {
   const { t } = useTranslation()
   const { form } = props
   return (
-    <FormSection
-      icon={Link2}
-      title={t('连接信息')}
-      description={t('用于安全检测和读取上游模型。')}
-    >
+    <FormSection icon={Link2} title={t('连接信息')}>
       {props.editing && (
         <div className='border-primary/25 bg-primary/[0.05] text-muted-foreground rounded-md border px-3 py-2 text-xs leading-5'>
           {t(
@@ -53,7 +50,9 @@ function ConnectionEndpointFields(props: {
           className='w-full'
           {...props.form.register('provider_type')}
         >
-          <option value='openai_compatible'>OpenAI Compatible</option>
+          <option value='openai_compatible'>
+            {interfaceI18n.t('OpenAI Compatible')}
+          </option>
           <option value='codex'>Codex</option>
           <option value='azure_openai'>Azure OpenAI</option>
           <option value='anthropic'>Anthropic / Claude</option>
@@ -99,9 +98,6 @@ function ConnectionCredentialFields(props: {
             </option>
           ))}
         </NativeSelect>
-        <p className='text-muted-foreground text-xs leading-5'>
-          {t('固定来源无需人工审核，检测通过后直接展示。')}
-        </p>
       </FormField>
       <FormField
         label={t('API Key')}
@@ -125,11 +121,7 @@ export function ChannelStrategySection(props: { form: ChannelForm }) {
   const { t } = useTranslation()
   const { form } = props
   return (
-    <FormSection
-      icon={Gauge}
-      title={t('服务策略')}
-      description={t('设置价格、容量和市场可见范围。')}
-    >
+    <FormSection icon={Gauge} title={t('服务策略')}>
       <StrategyMetrics form={form} />
       <FormField
         label={t('维护窗口')}
@@ -142,6 +134,7 @@ export function ChannelStrategySection(props: { form: ChannelForm }) {
       </FormField>
       <ChannelInterceptionPolicy form={form} />
       <ChannelMultiplierCardPolicy form={form} />
+      <ChannelCreditPackPolicy form={form} />
       <ChannelAutoProbePolicy form={form} />
     </FormSection>
   )
@@ -172,6 +165,49 @@ function ChannelMultiplierCardPolicy({ form }: { form: ChannelForm }) {
         }}
         aria-label={t('允许用户使用倍率卡')}
       />
+    </div>
+  )
+}
+
+function ChannelCreditPackPolicy(props: { form: ChannelForm }) {
+  const { t } = useTranslation()
+  const enabled = props.form.watch('credit_pack_supported')
+  return (
+    <div className='space-y-3 rounded-md border p-3'>
+      <div className='flex items-center justify-between gap-4'>
+        <label
+          htmlFor='channel-credit-pack-supported'
+          className='text-sm font-medium'
+        >
+          {t('接入新套餐')}
+        </label>
+        <Switch
+          id='channel-credit-pack-supported'
+          checked={enabled}
+          onCheckedChange={(checked) =>
+            props.form.setValue('credit_pack_supported', checked, {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+          }
+        />
+      </div>
+      <dl className='grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2'>
+        <div className='flex items-baseline justify-between gap-3'>
+          <dt className='text-muted-foreground'>{t('普通手续费')}</dt>
+          <dd className='font-medium tabular-nums'>5%</dd>
+        </div>
+        <div className='flex items-baseline justify-between gap-3'>
+          <dt className='text-muted-foreground'>{t('套餐最高费率')}</dt>
+          <dd className='font-medium tabular-nums'>10.45%</dd>
+        </div>
+        <div className='flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 sm:col-span-2'>
+          <dt className='text-muted-foreground'>{t('赠额成本分担')}</dt>
+          <dd className='font-medium tabular-nums'>
+            {t('渠道 60% / 官方 40%')}
+          </dd>
+        </div>
+      </dl>
     </div>
   )
 }
@@ -210,9 +246,6 @@ function ChannelAutoProbePolicy({ form }: { form: ChannelForm }) {
     <div className='border-border grid gap-3 rounded-md border p-3 sm:grid-cols-[minmax(0,1fr)_130px_180px_auto] sm:items-end'>
       <div>
         <p className='text-sm font-medium'>{t('自动探针')}</p>
-        <p className='text-muted-foreground mt-1 text-xs leading-5'>
-          {t('按间隔测试指定模型，并将最新结果同步到市场健康状态。')}
-        </p>
       </div>
       <FormField label={t('间隔（分钟）')}>
         <Input

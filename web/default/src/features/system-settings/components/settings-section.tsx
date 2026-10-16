@@ -16,10 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { createContext, useContext, useId } from 'react'
+
+const SettingsSectionContext = createContext(false)
+
 type SettingsSectionProps = {
   title: string
-  titleProps?: React.HTMLAttributes<HTMLHeadingElement>
   description?: string
+  titleProps?: React.HTMLAttributes<HTMLHeadingElement>
   children: React.ReactNode
   className?: string
 }
@@ -27,33 +31,35 @@ type SettingsSectionProps = {
 export function SettingsSection({
   title,
   titleProps,
-  description,
   children,
   className,
 }: SettingsSectionProps) {
-  const baseClassName = 'space-y-4'
+  const isNested = useContext(SettingsSectionContext)
+  const headingId = useId()
+  const Heading = isNested ? 'h2' : 'h1'
+  const baseClassName = 'settings-section'
   const sectionClassName = className
     ? `${baseClassName} ${className}`
     : baseClassName
 
   return (
-    <section className={sectionClassName}>
-      <div className='space-y-1'>
-        <h3
+    <section className={sectionClassName} aria-labelledby={headingId}>
+      <header className='settings-section-header'>
+        <Heading
+          id={headingId}
           {...titleProps}
           className={
             titleProps?.className
-              ? `text-base font-semibold ${titleProps.className}`
-              : 'text-base font-semibold'
+              ? `settings-section-title ${titleProps.className}`
+              : 'settings-section-title'
           }
         >
           {title}
-        </h3>
-        {description && (
-          <p className='text-muted-foreground text-sm'>{description}</p>
-        )}
-      </div>
-      {children}
+        </Heading>
+      </header>
+      <SettingsSectionContext.Provider value={true}>
+        <div className='settings-section-body'>{children}</div>
+      </SettingsSectionContext.Provider>
     </section>
   )
 }

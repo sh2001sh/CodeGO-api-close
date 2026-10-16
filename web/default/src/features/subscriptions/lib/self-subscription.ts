@@ -1,7 +1,25 @@
 import type {
   SelfSubscriptionData,
+  UserSubscription,
   UserSubscriptionRecord,
 } from '../types'
+
+export function isCreditPackSubscription(
+  subscription: UserSubscription
+): boolean {
+  return Number(subscription.credit_pack_granted_quota || 0) > 0
+}
+
+export function isActiveUserSubscription(
+  subscription: UserSubscription,
+  now = Date.now() / 1000
+): boolean {
+  return (
+    subscription.status === 'active' &&
+    (subscription.end_time > now ||
+      (isCreditPackSubscription(subscription) && subscription.end_time === 0))
+  )
+}
 
 export const EMPTY_SUBSCRIPTIONS: SelfSubscriptionData = {
   billing_preference: 'subscription_first',

@@ -17,101 +17,28 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect } from 'react'
+import interfaceI18n from '@/i18n/config'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { useNotifications } from '@/hooks/use-notifications'
+import { SidebarTrigger } from '@/components/ui/sidebar'
 import { ConfigDrawer } from '@/components/config-drawer'
-import { LanguageSwitcher } from '@/components/language-switcher'
-import { NotificationButton } from '@/components/notification-button'
-import { NotificationDialog } from '@/components/notification-dialog'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { LuckyRewardNotifier } from '@/features/daily-lucky-number/components/lucky-reward-notifier'
-import { defaultTopNavLinks } from '../config/top-nav.config'
-import { type TopNavLink } from '../types'
-import { Header } from './header'
-import { SystemBrand } from './system-brand'
-import { TopNav } from './top-nav'
+import type { TopNavLink } from '../types'
+import './console-shell.css'
+import { PublicHeader } from './public-header'
 
-/**
- * General application Header component
- * Integrates navigation bar, search, configuration and profile functions
- *
- * @example
- * // Basic usage
- * <AppHeader />
- *
- * @example
- * // Custom navigation links
- * <AppHeader navLinks={customLinks} />
- *
- * @example
- * // Hide navigation bar and search box
- * <AppHeader showTopNav={false} showSearch={false} />
- *
- * @example
- * // Fully customize left and right content
- * <AppHeader
- *   leftContent={<CustomLeft />}
- *   rightContent={<CustomRight />}
- * />
- */
 type AppHeaderProps = {
-  /**
-   * Custom navigation links, uses default global navigation or dynamically generated from backend if not provided
-   */
   navLinks?: TopNavLink[]
-  /**
-   * Whether to show top navigation bar
-   * @default true
-   */
   showTopNav?: boolean
-  /**
-   * Left content, overrides TopNav if provided
-   */
   leftContent?: React.ReactNode
-  /**
-   * Whether to show search box
-   * @default true
-   */
   showSearch?: boolean
-  /**
-   * Custom right content, overrides default right content if provided
-   */
   rightContent?: React.ReactNode
-  /**
-   * Whether to show notification button
-   * @default true
-   */
   showNotifications?: boolean
-  /**
-   * Whether to show config drawer
-   * @default true
-   */
   showConfigDrawer?: boolean
-  /**
-   * Whether to show profile dropdown
-   * @default true
-   */
   showProfileDropdown?: boolean
 }
 
-export function AppHeader({
-  navLinks = defaultTopNavLinks,
-  showTopNav = true,
-  leftContent,
-  showSearch = true,
-  rightContent,
-  showNotifications = true,
-  showConfigDrawer = true,
-  showProfileDropdown = true,
-}: AppHeaderProps) {
-  const links = navLinks
+export function AppHeader(props: AppHeaderProps) {
   const userId = useAuthStore((state) => state.auth.user?.id)
-
-  // Notifications hook
-  const notifications = useNotifications()
 
   useEffect(() => {
     if (!userId) return
@@ -120,54 +47,23 @@ export function AppHeader({
     const key = `workshop:welcome:${userId}:${token}`
     if (window.localStorage.getItem(key) === '1') return
     window.localStorage.setItem(key, '1')
-    toast.success('早安工匠，今天也是充满活力的一天')
+    toast.success(interfaceI18n.t('早安工匠，今天也是充满活力的一天'))
   }, [userId])
 
   return (
-    <>
-      <Header>
-        <SystemBrand variant='inline' />
-
-        {leftContent ? (
-          <div className='ms-2 flex items-center'>{leftContent}</div>
-        ) : null}
-
-        {rightContent ?? (
-          <div className='ms-auto flex min-w-0 items-center gap-1 sm:gap-2'>
-            {showTopNav && (
-              <div className='me-1 hidden lg:block'>
-                <TopNav links={links} />
-              </div>
-            )}
-            {showSearch && <Search />}
-            <LuckyRewardNotifier />
-            {showNotifications && (
-              <NotificationButton
-                unreadCount={notifications.unreadCount}
-                onClick={() => notifications.openDialog()}
-              />
-            )}
-            <ThemeSwitch />
-            <LanguageSwitcher />
-            {showConfigDrawer && <ConfigDrawer />}
-            {showProfileDropdown && <ProfileDropdown />}
-          </div>
-        )}
-      </Header>
-
-      {/* Notification Dialog */}
-      {showNotifications && (
-        <NotificationDialog
-          open={notifications.dialogOpen}
-          onOpenChange={notifications.setDialogOpen}
-          activeTab={notifications.activeTab}
-          onTabChange={notifications.setActiveTab}
-          notice={notifications.notice}
-          announcements={notifications.announcements}
-          loading={notifications.loading}
-          onCloseToday={notifications.closeToday}
-        />
-      )}
-    </>
+    <PublicHeader
+      className='codego-global-console-header'
+      navLinks={props.navLinks}
+      showNavigation={props.showTopNav}
+      beforeBrand={
+        <SidebarTrigger variant='ghost' className='codego-console-menu-icon' />
+      }
+      leftContent={props.leftContent}
+      rightContent={props.rightContent}
+      showSearch={props.showSearch !== false}
+      showNotifications={props.showNotifications}
+      showProfileDropdown={props.showProfileDropdown}
+      actionContent={props.showConfigDrawer !== false && <ConfigDrawer />}
+    />
   )
 }

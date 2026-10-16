@@ -25,7 +25,6 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -106,16 +105,13 @@ export function RateLimitDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-[500px]'>
+      <DialogContent className='settings-dialog sm:max-w-[500px]'>
         <DialogHeader>
           <DialogTitle>
             {isEditMode
               ? t('Edit group rate limit')
               : t('Add group rate limit')}
           </DialogTitle>
-          <DialogDescription>
-            {t('Configure rate limiting rules for a specific user group.')}
-          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -137,9 +133,7 @@ export function RateLimitDialog({
                     />
                   </FormControl>
                   <FormDescription>
-                    {isEditMode
-                      ? t('Group name cannot be changed when editing.')
-                      : t('Unique identifier for this group.')}
+                    {isEditMode ? t('Group: locked') : t('Group ID')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -171,8 +165,8 @@ export function RateLimitDialog({
                       </span>
                     </div>
                   </FormControl>
-                  <FormDescription>
-                    {t('Total requests allowed per period. 0 = unlimited.')}
+                  <FormDescription className='settings-field-fact'>
+                    {t('0 = unlimited')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -202,8 +196,8 @@ export function RateLimitDialog({
                       </span>
                     </div>
                   </FormControl>
-                  <FormDescription>
-                    {t('Only successful requests count toward this limit.')}
+                  <FormDescription className='settings-field-fact'>
+                    {t('Successful requests')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

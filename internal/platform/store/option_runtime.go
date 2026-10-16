@@ -3,7 +3,6 @@ package store
 import (
 	toolpricing "github.com/sh2001sh/new-api/internal/billing/toolpricing"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
-	luckysettings "github.com/sh2001sh/new-api/internal/commerce/luckysettings"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewaygroups "github.com/sh2001sh/new-api/internal/gateway/groupsettings"
@@ -375,9 +374,6 @@ func handleConfigUpdate(key, value string) (bool, error) {
 		return false, nil
 	}
 
-	if configName == "daily_lucky_number_setting" {
-		return true, luckysettings.ApplyField(configKey, value)
-	}
 	if err := config.UpdateConfigFromMap(cfg, map[string]string{configKey: value}); err != nil {
 		return true, err
 	}

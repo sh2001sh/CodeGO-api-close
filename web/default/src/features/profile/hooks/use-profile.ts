@@ -34,6 +34,7 @@ export function useProfile() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   // Fetch user profile (with optional silent mode)
   const fetchProfile = useCallback(async (silent = false) => {
@@ -45,8 +46,16 @@ export function useProfile() {
 
       if (response.success && response.data) {
         setProfile(response.data)
+        setFetchError(null)
+      } else {
+        throw new Error(response.message || i18next.t('Failed to load profile'))
       }
     } catch (error) {
+      setFetchError(
+        error instanceof Error
+          ? error.message
+          : i18next.t('Failed to load profile')
+      )
       // eslint-disable-next-line no-console
       console.error('Failed to fetch profile:', error)
       if (!silent) {
@@ -127,6 +136,7 @@ export function useProfile() {
     profile,
     loading,
     updating,
+    fetchError,
     fetchProfile,
     refreshProfile,
     updateProfile,

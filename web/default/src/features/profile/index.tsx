@@ -20,6 +20,8 @@ import i18n from '@/i18n/config'
 import { useTranslation, Trans } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useStatus } from '@/hooks/use-status'
+import { Alert, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Main } from '@/components/layout'
 import {
   CardStaggerContainer,
@@ -35,10 +37,12 @@ import { ProfileSettingsCard } from './components/profile-settings-card'
 import { SidebarModulesCard } from './components/sidebar-modules-card'
 import { TwoFACard } from './components/two-fa-card'
 import { useProfile } from './hooks'
+import './profile.css'
 
 export function Profile() {
-  useTranslation()
-  const { profile, loading, refreshProfile } = useProfile()
+  const { t } = useTranslation()
+  const { profile, loading, refreshProfile, fetchError, fetchProfile } =
+    useProfile()
   const { status } = useStatus()
   const permissions = useAuthStore((s) => s.auth.user?.permissions)
 
@@ -50,7 +54,7 @@ export function Profile() {
   const canConfigureSidebar = permissions?.sidebar_settings !== false
 
   return (
-    <Main>
+    <Main className='market-profile'>
       <SiteSeo
         title={i18n.t('个人资料')}
         description={i18n.t('个人资料')}
@@ -58,25 +62,37 @@ export function Profile() {
         robots='noindex,follow'
       />
       <div className='codego-page-intro shrink-0 px-4 pt-6 pb-6 sm:px-7 sm:pt-8 sm:pb-7'>
-        <div className='flex items-center gap-2.5'>
-          <span className='codego-page-signal' aria-hidden='true' />
-          <span className='codego-page-kicker'>
-            AI CODING GATEWAY · CONSOLE
-          </span>
-        </div>
-        <h2 className='codego-page-title text-foreground mt-3 text-3xl leading-[1.04] font-semibold text-balance sm:text-4xl'>
+        <h1 className='profile-page-title'>
           <Trans i18nKey={'个人资料'} />
-        </h2>
+        </h1>
       </div>
       <div className='codego-page-content min-h-0 flex-1 overflow-auto px-4 pt-5 pb-6 sm:px-7 sm:pt-6 sm:pb-8'>
-        <CardStaggerContainer className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-6'>
+        <CardStaggerContainer className='mx-auto flex w-full max-w-[1440px] flex-col gap-4 sm:gap-6'>
+          {fetchError && (
+            <Alert
+              variant='destructive'
+              className='flex flex-wrap items-center justify-between gap-4'
+            >
+              <AlertTitle>{fetchError}</AlertTitle>
+              <Button
+                variant='outline'
+                disabled={loading}
+                onClick={() => void fetchProfile()}
+              >
+                {t('Retry')}
+              </Button>
+            </Alert>
+          )}
           <CardStaggerItem>
             <ProfileHeader profile={profile} loading={loading} />
           </CardStaggerItem>
 
           <CardStaggerItem>
-            <div className='grid gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.46fr)] xl:items-start'>
-              <div className='space-y-4 sm:space-y-6'>
+            <div className='profile-layout'>
+              <section
+                className='profile-settings-column'
+                aria-label={t('个人资料')}
+              >
                 <ProfileSettingsCard
                   profile={profile}
                   loading={loading}
@@ -87,13 +103,13 @@ export function Profile() {
                   onProfileUpdate={refreshProfile}
                 />
                 <ProfileSecurityCard profile={profile} loading={loading} />
-                <div className='grid items-start gap-4 sm:grid-cols-2 sm:gap-5'>
+                <div className='profile-security-methods'>
                   <PasskeyCard loading={loading} />
                   <TwoFACard loading={loading} />
                 </div>
-              </div>
+              </section>
 
-              <div className='space-y-4 sm:space-y-6 xl:sticky xl:top-6'>
+              <aside className='profile-preferences-column'>
                 {checkinEnabled && (
                   <CheckinCalendarCard
                     checkinEnabled={checkinEnabled}
@@ -102,7 +118,7 @@ export function Profile() {
                   />
                 )}
                 {canConfigureSidebar && <SidebarModulesCard />}
-              </div>
+              </aside>
             </div>
           </CardStaggerItem>
         </CardStaggerContainer>

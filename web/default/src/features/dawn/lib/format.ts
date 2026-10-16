@@ -1,3 +1,5 @@
+import { getIntlLocale } from '@/i18n/format'
+
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -17,19 +19,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com.
 */
 
-/** 0–1 → 百分数文本；空值输出横杠。 */
+/** Marketplace API percentages use a 0–100 scale, including values below 1%. */
 export function pct(value: number | null | undefined, digits = 1): string {
   if (value == null || !Number.isFinite(value)) return '—'
-  const scaled = value <= 1 ? value * 100 : value
-  return `${scaled.toFixed(digits)}`
-}
-
-/** Normalize API success rates, which may be returned as either 0–1 or 0–100. */
-export function successRatePercent(
-  value: number | null | undefined
-): number | null {
-  if (value == null || !Number.isFinite(value)) return null
-  return value <= 1 ? value * 100 : value
+  return value.toFixed(digits)
 }
 
 /** 毫秒 → 秒文本。 */
@@ -51,18 +44,18 @@ export function compactCount(value: number | null | undefined): string {
 
 export function fmtInt(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—'
-  return value.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+  return value.toLocaleString(getIntlLocale(), { maximumFractionDigits: 0 })
 }
 
 export function fmtMoney(
   value: number | null | undefined,
-  prefix = '$'
+  prefix = ''
 ): string {
   if (value == null || !Number.isFinite(value)) return '—'
-  return `${prefix}${value.toLocaleString('zh-CN', {
+  return `${prefix}${value.toLocaleString(getIntlLocale(), {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`
+  })}${prefix ? '' : ' credits'}`
 }
 
 export function dash<T>(

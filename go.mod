@@ -66,6 +66,7 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/boj/redistore v1.4.1 // indirect
 	github.com/dlclark/regexp2/v2 v2.5.1 // indirect
+	github.com/go-text/typesetting v0.3.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect

@@ -58,7 +58,7 @@ export function AccessTokenDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='profile-dialog sm:max-w-md'>
         <DialogHeader>
           <DialogTitle>{t('Access Token')}</DialogTitle>
           <DialogDescription>

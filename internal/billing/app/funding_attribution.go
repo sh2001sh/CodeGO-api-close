@@ -44,7 +44,9 @@ func RecordRequestEconomics(relayInfo *gatewayruntime.RelayInfo, amount int) err
 		channelID = relayInfo.ChannelId
 	}
 	revenueMultiplier := 0.0
-	if relayInfo.BillingSource == BillingSourceSubscription {
+	if relayInfo.CreditPackGrantedQuota > 0 {
+		revenueMultiplier = float64(relayInfo.CreditPackPaidQuota) / float64(relayInfo.CreditPackGrantedQuota)
+	} else if relayInfo.BillingSource == BillingSourceSubscription {
 		var policy billingschema.FundingSourcePolicy
 		if err := platformdb.DB.Where("source = ?", billingschema.FundingSourceSubscription).First(&policy).Error; err == nil {
 			revenueMultiplier = policy.RevenueMultiplier
@@ -203,7 +205,7 @@ func recordFundingLotTx(tx *gorm.DB, accountID string, amount int64, idempotency
 	}
 	source := fundingSourceFromReason(reasonCode)
 	multiplier := 0.0
-	if tx.Migrator().HasTable(&billingschema.FundingSourcePolicy{}) {
+	if reasonCode != "referral_consumption_rebate" && tx.Migrator().HasTable(&billingschema.FundingSourcePolicy{}) {
 		var policy billingschema.FundingSourcePolicy
 		if err := tx.Where("source = ?", source).First(&policy).Error; err == nil {
 			multiplier = policy.RevenueMultiplier
@@ -233,49 +235,64 @@ func AllocateSettledFundingFIFO(requestID, accountID string, amount int64) error
 		return nil
 	}
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		var allocations int64
-		if err := tx.Model(&billingschema.FundingAllocation{}).Where("request_id = ?", requestID).Count(&allocations).Error; err != nil {
+		return allocateSettledFundingFIFOTx(tx, requestID, accountID, amount)
+	})
+}
+
+func allocateSettledFundingFIFOTx(tx *gorm.DB, requestID, accountID string, amount int64) error {
+	// Both the relay and outbox retry use the account lock before reading
+	// allocations, so one request cannot decrement its lots twice.
+	var account billingschema.BillingAccount
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("account_id").Where("account_id = ?", accountID).Find(&account).Error; err != nil {
+		return err
+	}
+	var allocations int64
+	if err := tx.Model(&billingschema.FundingAllocation{}).Where("request_id = ?", requestID).Count(&allocations).Error; err != nil {
+		return err
+	}
+	if allocations > 0 {
+		return nil
+	}
+	remaining := amount
+	for remaining > 0 {
+		var lot billingschema.FundingLot
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("account_id = ? AND remaining_amount > 0", accountID).
+			Order("created_at asc, lot_id asc").Take(&lot).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			lot = billingschema.FundingLot{
+				AccountID: accountID, Source: billingschema.FundingSourceLegacyUnattributed,
+				ReferenceType: "legacy_wallet", ReferenceID: requestID,
+				OriginalAmount: remaining, RemainingAmount: remaining,
+				RevenueMultiplier: 0, IdempotencyKey: "legacy-wallet:" + accountID + ":" + requestID,
+			}
+			if err := tx.Create(&lot).Error; err != nil {
+				return err
+			}
+		} else if err != nil {
 			return err
 		}
-		if allocations > 0 {
-			return nil
+		used := lot.RemainingAmount
+		if used > remaining {
+			used = remaining
 		}
-		remaining := amount
-		for remaining > 0 {
-			var lot billingschema.FundingLot
-			err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-				Where("account_id = ? AND remaining_amount > 0", accountID).
-				Order("created_at asc, lot_id asc").Take(&lot).Error
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				lot = billingschema.FundingLot{
-					AccountID: accountID, Source: billingschema.FundingSourceLegacyUnattributed,
-					ReferenceType: "legacy_wallet", ReferenceID: requestID,
-					OriginalAmount: remaining, RemainingAmount: remaining,
-					RevenueMultiplier: 0, IdempotencyKey: "legacy-wallet:" + accountID + ":" + requestID,
-				}
-				if err := tx.Create(&lot).Error; err != nil {
-					return err
-				}
-			} else if err != nil {
-				return err
-			}
-			used := lot.RemainingAmount
-			if used > remaining {
-				used = remaining
-			}
-			if err := tx.Model(&lot).Update("remaining_amount", gorm.Expr("remaining_amount - ?", used)).Error; err != nil {
-				return err
-			}
-			if err := tx.Create(&billingschema.FundingAllocation{
-				RequestID: requestID, LotID: lot.LotID, AccountID: accountID,
-				Source: lot.Source, Amount: used, RevenueMultiplier: lot.RevenueMultiplier,
-			}).Error; err != nil {
-				return err
-			}
-			remaining -= used
+		paid := int64(0)
+		if lot.PaidQuota > 0 && lot.PaidQuota <= lot.OriginalAmount && lot.RemainingAmount <= lot.OriginalAmount {
+			consumed := lot.OriginalAmount - lot.RemainingAmount
+			paid = floorPaidQuota(consumed+used, lot.PaidQuota, lot.OriginalAmount) - floorPaidQuota(consumed, lot.PaidQuota, lot.OriginalAmount)
 		}
-		return nil
-	})
+		if err := tx.Model(&lot).Update("remaining_amount", gorm.Expr("remaining_amount - ?", used)).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&billingschema.FundingAllocation{
+			RequestID: requestID, LotID: lot.LotID, AccountID: accountID,
+			Source: lot.Source, Amount: used, PaidQuota: paid, RevenueMultiplier: lot.RevenueMultiplier,
+		}).Error; err != nil {
+			return err
+		}
+		remaining -= used
+	}
+	return nil
 }
 
 func fundingSourceFromReason(reasonCode string) string {

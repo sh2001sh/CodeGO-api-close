@@ -40,8 +40,8 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
 
   if (loading) {
     return (
-      <div className='bg-card overflow-hidden rounded-lg border'>
-        <div className='p-4 sm:p-5'>
+      <section className='profile-identity'>
+        <div className='profile-identity-header'>
           <div className='flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left'>
             <Skeleton className='h-16 w-16 rounded-2xl' />
             <div className='space-y-3'>
@@ -58,9 +58,9 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
           </div>
         </div>
         <div className='border-t'>
-          <div className='divide-border/60 grid grid-cols-2 divide-x divide-y sm:grid-cols-4 sm:divide-y-0'>
+          <div className='profile-identity-stats'>
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className='px-4 py-3.5 sm:px-5 sm:py-4'>
+              <div key={i} className='profile-identity-stat'>
                 <Skeleton className='h-3.5 w-20' />
                 <Skeleton className='mt-2 h-7 w-28' />
                 <Skeleton className='mt-1.5 h-3.5 w-24' />
@@ -68,7 +68,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
             ))}
           </div>
         </div>
-      </div>
+      </section>
     )
   }
 
@@ -81,38 +81,35 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
     {
       label: t('Universal Credit'),
       value: formatQuota(profile.quota),
-      description: t('Permanent available credit'),
       icon: WalletCards,
     },
     {
       label: t('Total Usage'),
       value: formatQuota(profile.used_quota),
-      description: t('Total consumed quota'),
       icon: BarChart3,
     },
     {
       label: t('API Requests'),
       value: formatCompactNumber(profile.request_count),
-      description: t('Total requests made'),
       icon: Activity,
     },
   ]
 
   return (
-    <div className='bg-card overflow-hidden rounded-lg border'>
-      <div className='p-3 sm:p-5'>
-        <div className='flex items-center gap-3 text-left sm:gap-4'>
+    <section className='profile-identity'>
+      <header className='profile-identity-header'>
+        <div className='profile-identity-person'>
           <Avatar className='ring-background h-12 w-12 rounded-xl text-sm ring-2 sm:h-16 sm:w-16 sm:rounded-2xl sm:text-lg sm:ring-4'>
             <AvatarFallback className='bg-primary/10 text-primary rounded-xl sm:rounded-2xl'>
               {initials}
             </AvatarFallback>
           </Avatar>
 
-          <div className='min-w-0 flex-1 space-y-1.5 sm:space-y-3'>
+          <div className='profile-identity-details'>
             <div className='flex min-w-0 items-center gap-2'>
-              <h1 className='truncate text-xl font-semibold tracking-tight sm:text-2xl'>
+              <h2 className='text-2xl font-medium tracking-tight break-words'>
                 {displayName}
-              </h1>
+              </h2>
               <StatusBadge
                 label={roleLabel}
                 variant='neutral'
@@ -120,7 +117,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
               />
             </div>
 
-            <div className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:gap-x-4 sm:text-sm'>
+            <div className='profile-identity-meta'>
               <span className='truncate'>@{profile.username}</span>
               {profile.external_id && (
                 <>
@@ -150,28 +147,19 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
             </div>
           </div>
         </div>
-      </div>
-      <div className='border-t'>
-        <div className='divide-border/60 grid grid-cols-2 divide-x divide-y sm:grid-cols-3 sm:divide-y-0'>
-          {stats.map((item) => (
-            <div key={item.label} className='min-w-0 px-3 py-3 sm:px-5 sm:py-4'>
-              <div className='flex items-center gap-2'>
-                <item.icon className='text-muted-foreground/60 size-3.5 shrink-0' />
-                <div className='text-muted-foreground truncate text-xs font-medium tracking-wider uppercase'>
-                  {item.label}
-                </div>
-              </div>
+      </header>
+      <dl className='profile-identity-stats'>
+        {stats.map((item) => (
+          <div key={item.label} className='profile-identity-stat'>
+            <dt className='flex items-center gap-2'>
+              <item.icon className='text-muted-foreground/60 size-3.5 shrink-0' />
+              <span className='profile-stat-label'>{item.label}</span>
+            </dt>
 
-              <div className='text-foreground mt-1.5 truncate font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
-                {item.value}
-              </div>
-              <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
-                {item.description}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+            <dd className='profile-stat-value'>{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }

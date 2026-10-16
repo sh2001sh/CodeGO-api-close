@@ -74,11 +74,6 @@ function PassThroughField({ form }: SettingsFieldsProps) {
             <FormLabel className='text-base'>
               {t('Enable Request Passthrough')}
             </FormLabel>
-            <FormDescription>
-              {t(
-                'Forward requests directly to upstream providers without any post-processing.'
-              )}
-            </FormDescription>
           </div>
           <FormControl>
             <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -105,10 +100,8 @@ function ThinkingBlacklistField({ form }: SettingsFieldsProps) {
               {...field}
             />
           </FormControl>
-          <FormDescription>
-            {t(
-              'Models listed here will not automatically append or remove -thinking / -nothinking suffixes.'
-            )}
+          <FormDescription className='settings-field-fact'>
+            {t('-thinking / -nothinking: unchanged')}
           </FormDescription>
           <Button
             type='button'
@@ -137,11 +130,6 @@ function KeepAliveToggle({ form }: SettingsFieldsProps) {
         <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
           <div className='space-y-0.5'>
             <FormLabel className='text-base'>{t('Keep-alive Ping')}</FormLabel>
-            <FormDescription>
-              {t(
-                'Periodically send ping frames to keep streaming connections active.'
-              )}
-            </FormDescription>
           </div>
           <FormControl>
             <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -175,9 +163,7 @@ function PingIntervalField({ form }: SettingsFieldsProps) {
               ref={field.ref}
             />
           </FormControl>
-          <FormDescription>
-            {t('Recommended to keep this high to avoid upstream throttling.')}
-          </FormDescription>
+
           <FormMessage />
         </FormItem>
       )}

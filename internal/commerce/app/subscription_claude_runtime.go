@@ -75,6 +75,11 @@ func BuildSubscriptionClaudeConversionLog(planTitle string, conversionPercent in
 
 // BuildSubscriptionClaudeConversionPreview calculates the cash-out value of the whole monthly pass.
 func BuildSubscriptionClaudeConversionPreview(plan *commerceschema.SubscriptionPlan, sub *commerceschema.UserSubscription) commerceschema.SubscriptionClaudeConversionPreview {
+	pricedPlan, err := legacyConversionPaidPlanTx(platformdb.DB, plan, sub)
+	if err != nil {
+		return commerceschema.SubscriptionClaudeConversionPreview{IneligibleReason: err.Error()}
+	}
+	plan = pricedPlan
 	quote := calculateMonthlyPassConversionQuote(plan, sub, platformruntime.GetTimestamp(), 0)
 	return commerceschema.SubscriptionClaudeConversionPreview{
 		Eligible:             quote.targetQuota > 0,
@@ -143,7 +148,11 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 		if resetUsed {
 			return commerceschema.ErrSubscriptionClaudeConversionResetUsed
 		}
-		quote := calculateMonthlyPassConversionQuote(plan, sub, now, conversionPercent)
+		pricedPlan, err := legacyConversionPaidPlanTx(tx, plan, sub)
+		if err != nil {
+			return err
+		}
+		quote := calculateMonthlyPassConversionQuote(pricedPlan, sub, now, conversionPercent)
 		if quote.targetQuota <= 0 {
 			return commerceschema.ErrSubscriptionClaudeConversionNoTarget
 		}
@@ -179,34 +188,31 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 			}
 		}
 
-		if err := billingapp.CreditClaudeWalletQuotaTx(
-			tx,
-			userID,
-			quote.targetQuota,
-			fmt.Sprintf("monthly-pass-conversion:%s", requestID),
-			"monthly_pass_conversion",
-		); err != nil {
+		converted, err := createCreditPackBalanceTx(tx, userID, sub.PlanId, int64(quote.targetQuota), int64(quote.targetQuota), creditPackChannelShareBPS, fmt.Sprintf("monthly-pass-conversion:%s", requestID))
+		if err != nil {
 			return err
 		}
 
 		record := &commerceschema.SubscriptionClaudeConversion{
-			UserId:             userID,
-			UserSubscriptionId: sub.Id,
-			RequestId:          requestID,
-			Status:             commerceschema.SubscriptionClaudeConversionStatusCompleted,
-			SourceQuota:        quote.remainingQuota,
-			TargetQuota:        quote.targetQuota,
-			PlanPriceAmount:    quote.planPriceAmount,
-			UnusedRatio:        quote.unusedRatio,
-			ConversionPercent:  conversionPercent,
-			RatioNumerator:     0,
-			RatioDenominator:   0,
+			UserId:                         userID,
+			UserSubscriptionId:             sub.Id,
+			TargetCreditPackSubscriptionId: converted.Id,
+			RequestId:                      requestID,
+			Status:                         commerceschema.SubscriptionClaudeConversionStatusCompleted,
+			SourceQuota:                    quote.remainingQuota,
+			TargetQuota:                    quote.targetQuota,
+			PlanPriceAmount:                quote.planPriceAmount,
+			UnusedRatio:                    quote.unusedRatio,
+			ConversionPercent:              conversionPercent,
+			RatioNumerator:                 0,
+			RatioDenominator:               0,
 		}
 		if err := tx.Create(record).Error; err != nil {
 			return err
 		}
 
 		result.Conversion = record
+		result.TargetCreditPackSubscriptionId = converted.Id
 		result.SourceQuota = quote.remainingQuota
 		result.TargetQuota = quote.targetQuota
 		result.PlanPriceAmount = quote.planPriceAmount
@@ -216,8 +222,8 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 		result.SubscriptionEnded = ended
 		result.AmountUsedAfter = sub.AmountUsed
 		result.PeriodUsedAfter = sub.PeriodUsed
-		result.QuotaAfter, err = getUserClaudeQuotaTx(tx, userID)
-		return err
+		result.QuotaAfter = int(converted.AmountTotal - converted.AmountUsed)
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -249,13 +255,24 @@ func loadExistingMonthlyPassConversionResult(tx *gorm.DB, result *commerceschema
 	if err := tx.Where("id = ?", existing.UserSubscriptionId).First(sub).Error; err != nil {
 		return err
 	}
-	balance, err := getUserClaudeQuotaTx(tx, existing.UserId)
-	if err != nil {
-		return err
+	balance := 0
+	if existing.TargetCreditPackSubscriptionId > 0 {
+		var target commerceschema.UserSubscription
+		if err := tx.Where("id = ? AND user_id = ?", existing.TargetCreditPackSubscriptionId, existing.UserId).First(&target).Error; err != nil {
+			return err
+		}
+		balance = int(target.AmountTotal - target.AmountUsed)
+	} else {
+		var err error
+		balance, err = getUserClaudeQuotaTx(tx, existing.UserId)
+		if err != nil {
+			return err
+		}
 	}
 	result.Conversion = existing
 	result.SourceQuota = existing.SourceQuota
 	result.TargetQuota = existing.TargetQuota
+	result.TargetCreditPackSubscriptionId = existing.TargetCreditPackSubscriptionId
 	result.QuotaAfter = balance
 	result.AmountUsedAfter = sub.AmountUsed
 	result.PeriodUsedAfter = sub.PeriodUsed
@@ -270,7 +287,7 @@ func loadExistingMonthlyPassConversionResult(tx *gorm.DB, result *commerceschema
 }
 
 func calculateMonthlyPassConversionQuote(plan *commerceschema.SubscriptionPlan, sub *commerceschema.UserSubscription, now int64, conversionPercent int) monthlyPassConversionQuote {
-	if plan == nil || sub == nil || sub.Status != "active" || sub.EndTime <= now || plan.PlanType != commerceschema.SubscriptionPlanTypeMonthly || plan.PriceAmount <= 0 || sub.AmountTotal <= 0 {
+	if plan == nil || sub == nil || sub.Status != "active" || sub.EndTime <= now || sub.CreditPackGrantedQuota > 0 || plan.PlanType == commerceschema.SubscriptionPlanTypeCreditPack || plan.PriceAmount <= 0 || sub.AmountTotal <= 0 {
 		return monthlyPassConversionQuote{}
 	}
 	remaining := sub.AmountTotal - sub.AmountUsed

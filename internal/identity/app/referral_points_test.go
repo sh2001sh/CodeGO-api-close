@@ -129,7 +129,7 @@ func snapshotPaymentSettingForAppTest() func() {
 	}
 }
 
-func TestInsertUserAndApplyRegistrationRewardsCreditsInviteePointsWithoutBlindBoxes(t *testing.T) {
+func TestInsertUserAndApplyRegistrationRewardsOnlyRecordsInvitation(t *testing.T) {
 	db := setupReferralPointsAppTestDB(t)
 	t.Cleanup(snapshotPaymentSettingForAppTest())
 
@@ -160,7 +160,7 @@ func TestInsertUserAndApplyRegistrationRewardsCreditsInviteePointsWithoutBlindBo
 
 	inviteeAccount, err := billingapp.EnsurePointAccountTx(db, invitee.Id)
 	require.NoError(t, err)
-	assert.EqualValues(t, referralInviteeRegisterRewardPoints, inviteeAccount.Balance)
+	assert.Zero(t, inviteeAccount.Balance)
 
 	var blindBoxOrderCount int64
 	require.NoError(t, db.Model(&commerceschema.BlindBoxOrder{}).Where("user_id = ?", invitee.Id).Count(&blindBoxOrderCount).Error)

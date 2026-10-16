@@ -14,7 +14,7 @@ func ListMarketplaceGroupStatus(viewerUserID int) ([]GroupStatusListItem, error)
 		Order("updated_at DESC, id ASC").Find(&groups).Error; err != nil {
 		return nil, err
 	}
-	channels, err := marketplaceChannelReadMap(groups)
+	channels, err := marketplaceChannelReadMap(groups, false)
 	if err != nil {
 		return nil, err
 	}

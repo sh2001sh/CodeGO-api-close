@@ -32,13 +32,13 @@ import {
 } from '@tanstack/react-table'
 import { Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { Alert, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import {
   Empty,
-  EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
@@ -57,6 +57,7 @@ import {
   API_KEY_STATUSES,
   ERROR_MESSAGES,
 } from '../constants'
+import '../keys.css'
 import { type ApiKey } from '../types'
 import { ApiKeyCell } from './api-keys-cells'
 import { useApiKeysColumns } from './api-keys-columns'
@@ -115,11 +116,7 @@ function ApiKeysMobileList({
               <Database className='size-6' />
             </EmptyMedia>
             <EmptyTitle>{t('No API Keys Found')}</EmptyTitle>
-            <EmptyDescription>
-              {t(
-                'No API keys available. Create your first API key to get started.'
-              )}
-            </EmptyDescription>
+            <ApiKeysPrimaryButtons />
           </EmptyHeader>
         </Empty>
       </div>
@@ -145,9 +142,6 @@ function ApiKeysMobileList({
               <div className='min-w-0'>
                 <div className='truncate text-sm font-semibold'>
                   {apiKey.name}
-                </div>
-                <div className='text-muted-foreground text-[11px]'>
-                  {t('API Key')}
                 </div>
               </div>
               {statusConfig && (
@@ -214,7 +208,7 @@ export function ApiKeysTable() {
 
   // Fetch data with React Query
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: [
       'keys',
       pagination.pageIndex + 1,
@@ -229,8 +223,7 @@ export function ApiKeysTable() {
       if (hasFilter) {
         const result = await searchApiKeys({ keyword: globalFilter })
         if (!result.success) {
-          toast.error(result.message || t(ERROR_MESSAGES.SEARCH_FAILED))
-          return { items: [], total: 0 }
+          throw new Error(result.message || t(ERROR_MESSAGES.SEARCH_FAILED))
         }
         return {
           items: result.data || [],
@@ -245,8 +238,7 @@ export function ApiKeysTable() {
       })
 
       if (!result.success) {
-        toast.error(result.message || t(ERROR_MESSAGES.LOAD_FAILED))
-        return { items: [], total: 0 }
+        throw new Error(result.message || t(ERROR_MESSAGES.LOAD_FAILED))
       }
 
       return {
@@ -302,33 +294,53 @@ export function ApiKeysTable() {
   }, [pageCount, ensurePageInRange])
 
   return (
-    <DataTablePage
-      table={table}
-      columns={columns}
-      isLoading={isLoading}
-      isFetching={isFetching}
-      emptyTitle={t('No API Keys Found')}
-      emptyDescription={t(
-        'No API keys available. Create your first API key to get started.'
+    <div className='console-key-table' aria-busy={isFetching}>
+      {isError && (
+        <Alert
+          variant='destructive'
+          className='mb-6 flex flex-wrap items-center justify-between gap-4'
+        >
+          <AlertTitle>
+            {error instanceof Error
+              ? error.message
+              : t(ERROR_MESSAGES.LOAD_FAILED)}
+          </AlertTitle>
+          <Button
+            variant='outline'
+            disabled={isFetching}
+            onClick={() => void refetch()}
+          >
+            {t('Retry')}
+          </Button>
+        </Alert>
       )}
-      skeletonKeyPrefix='api-keys-skeleton'
-      toolbarProps={{
-        preActions: <ApiKeysPrimaryButtons />,
-        searchPlaceholder: t('Filter by name or key...'),
-        filters: [
-          {
-            columnId: 'status',
-            title: t('Status'),
-            options: API_KEY_STATUS_OPTIONS,
-            singleSelect: true,
-          },
-        ],
-      }}
-      mobile={<ApiKeysMobileList table={table} isLoading={isLoading} />}
-      getRowClassName={(row) =>
-        isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined
-      }
-      bulkActions={<DataTableBulkActions table={table} />}
-    />
+      <DataTablePage
+        table={table}
+        columns={columns}
+        isLoading={isLoading}
+        isFetching={isFetching}
+        emptyTitle={t('No API Keys Found')}
+        emptyAction={<ApiKeysPrimaryButtons />}
+        skeletonKeyPrefix='api-keys-skeleton'
+        toolbarProps={{
+          className: 'console-key-toolbar',
+          preActions: <ApiKeysPrimaryButtons />,
+          searchPlaceholder: t('Filter by name or key...'),
+          filters: [
+            {
+              columnId: 'status',
+              title: t('Status'),
+              options: API_KEY_STATUS_OPTIONS,
+              singleSelect: true,
+            },
+          ],
+        }}
+        mobile={<ApiKeysMobileList table={table} isLoading={isLoading} />}
+        getRowClassName={(row) =>
+          isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined
+        }
+        bulkActions={<DataTableBulkActions table={table} />}
+      />
+    </div>
   )
 }

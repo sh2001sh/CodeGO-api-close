@@ -18,7 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Link, useSearch } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
+import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { normalizeSystemName } from '@/lib/branding'
 import { useStatus } from '@/hooks/use-status'
 import { SiteSeo } from '@/components/seo'
 import { AuthLayout } from '../auth-layout'
@@ -29,6 +31,7 @@ export function SignIn() {
   const { t } = useTranslation()
   const { redirect } = useSearch({ from: '/(auth)/sign-in' })
   const { status } = useStatus()
+  const brand = normalizeSystemName()
 
   return (
     <AuthLayout>
@@ -40,32 +43,46 @@ export function SignIn() {
         canonicalPath='/sign-in'
         robots='noindex,follow'
       />
-      <div className='w-full space-y-8'>
-        <div className='space-y-2'>
-          <h2 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
-            {t('Sign in')}
-          </h2>
-          {!status?.self_use_mode_enabled && (
-            <p className='text-muted-foreground text-left text-sm sm:text-base'>
-              {t("Don't have an account?")}{' '}
-              <Link
-                to='/sign-up'
-                search={redirect ? { redirect } : {}}
-                className='hover:text-primary font-medium underline underline-offset-4'
-              >
-                {t('Sign up')}
-              </Link>
-              .
-            </p>
-          )}
+      <div className='w-full'>
+        {/* Top Brand Logo & Title (Vercel & OpenDesign style) */}
+        <div className='market-auth-header'>
+          <div className='market-auth-brand-emblem' aria-hidden='true'>
+            <img
+              src='/code-go-logo.svg'
+              alt=''
+              width='32'
+              height='32'
+              className='size-8 object-contain'
+            />
+          </div>
+          <h1 className='market-auth-title'>
+            {t('Sign in to {{brand}}', { brand })}
+          </h1>
         </div>
 
         <UserAuthForm redirectTo={redirect} />
 
+        {/* Switch to Sign Up */}
+        {!status?.self_use_mode_enabled && (
+          <div className='market-auth-switch-row'>
+            <span>{t("Don't have an account?")}</span>
+            <Link
+              to='/sign-up'
+              search={redirect ? { redirect } : {}}
+              className='market-auth-switch-link'
+            >
+              {t('Sign up')}
+              <ArrowRight className='ml-1 inline-block size-3' />
+            </Link>
+          </div>
+        )}
+
+        {/* Security Trust Seal */}
+
         <TermsFooter
           variant='sign-in'
           status={status}
-          className='text-center'
+          className='mt-3 text-center text-xs'
         />
       </div>
     </AuthLayout>

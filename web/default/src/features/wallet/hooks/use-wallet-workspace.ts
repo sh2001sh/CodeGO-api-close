@@ -39,11 +39,14 @@ export function useWalletWorkspace() {
     return current ? (current as UserWalletData) : null
   })
   const [userLoading, setUserLoading] = useState(true)
+  const [userError, setUserError] = useState(false)
   const [subscriptionData, setSubscriptionData] =
     useState<SelfSubscriptionData | null>(null)
   const [subscriptionLoading, setSubscriptionLoading] = useState(true)
+  const [subscriptionError, setSubscriptionError] = useState(false)
   const [publicPlans, setPublicPlans] = useState<PlanRecord[]>([])
   const [publicPlansLoading, setPublicPlansLoading] = useState(true)
+  const [publicPlansError, setPublicPlansError] = useState(false)
   const [topupAmount, setTopupAmount] = useState(0)
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null)
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
@@ -59,7 +62,13 @@ export function useWalletWorkspace() {
 
   const { status } = useStatus()
   const { currency } = useSystemConfig()
-  const { topupInfo, presetAmounts, loading: topupLoading } = useTopupInfo()
+  const {
+    topupInfo,
+    presetAmounts,
+    loading: topupLoading,
+    error: topupError,
+    refetch: fetchTopupInfo,
+  } = useTopupInfo()
 
   const effectiveUsdExchangeRate = useMemo(() => {
     return currency?.quotaDisplayType === 'USD'
@@ -87,16 +96,27 @@ export function useWalletWorkspace() {
       setUserLoading(true)
       const response = await getSelf()
       if (response.success && response.data) {
+        setUserError(false)
         const userData = response.data as UserWalletData
         setUser(userData)
         setAuthUser(response.data)
       } else {
+        setUserError(true)
         // Preserve the last known balance on a transient business failure.
         // Clearing it would make both wallet and package pages show $0.
-        setUser((current) => current || (useAuthStore.getState().auth.user as UserWalletData | null))
+        setUser(
+          (current) =>
+            current ||
+            (useAuthStore.getState().auth.user as UserWalletData | null)
+        )
       }
     } catch (_error) {
-      setUser((current) => current || (useAuthStore.getState().auth.user as UserWalletData | null))
+      setUserError(true)
+      setUser(
+        (current) =>
+          current ||
+          (useAuthStore.getState().auth.user as UserWalletData | null)
+      )
     } finally {
       setUserLoading(false)
     }
@@ -107,12 +127,13 @@ export function useWalletWorkspace() {
       setSubscriptionLoading(true)
       const response = await getSelfSubscriptionFull()
       if (response.success && response.data) {
+        setSubscriptionError(false)
         setSubscriptionData(response.data)
       } else {
-        setSubscriptionData(null)
+        setSubscriptionError(true)
       }
     } catch (_error) {
-      setSubscriptionData(null)
+      setSubscriptionError(true)
     } finally {
       setSubscriptionLoading(false)
     }
@@ -122,9 +143,14 @@ export function useWalletWorkspace() {
     try {
       setPublicPlansLoading(true)
       const response = await getPublicPlans()
-      setPublicPlans(response.success ? response.data || [] : [])
+      if (!response.success) {
+        setPublicPlansError(true)
+        return
+      }
+      setPublicPlansError(false)
+      setPublicPlans(response.data || [])
     } catch (_error) {
-      setPublicPlans([])
+      setPublicPlansError(true)
     } finally {
       setPublicPlansLoading(false)
     }
@@ -273,13 +299,18 @@ export function useWalletWorkspace() {
   return {
     user,
     userLoading,
+    userError,
     subscriptionData,
     subscriptionLoading,
+    subscriptionError,
     publicPlans,
     publicPlansLoading,
+    publicPlansError,
     topupInfo,
     presetAmounts,
     topupLoading,
+    topupError,
+    fetchTopupInfo,
     topupAmount,
     selectedPreset,
     selectedPaymentMethod,

@@ -1,0 +1,245 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+.dawn-console-layout,
+.codego-console-shell {
+  --app-header-height: 76px;
+  background: var(--bg-canvas);
+  color: var(--ink-primary);
+}
+
+.dawn-console-layout {
+  display: flex;
+  flex-direction: column;
+}
+
+.dawn-console-layout .dawn-console-body {
+  height: calc(100dvh - var(--app-header-height));
+  min-height: 0;
+  flex: 1;
+}
+
+.dawn-console-layout .dawn-console-main {
+  background: var(--bg-canvas);
+  overscroll-behavior: contain;
+}
+
+.codego-public-header .codego-console-sidebar-menu {
+  display: none;
+  flex-shrink: 0;
+}
+
+.dawn .dawn-console-sidebar,
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-inner'] {
+  border: 0;
+  background: var(--bg-subtle);
+  color: var(--ink-secondary);
+}
+
+.dawn .dawn-console-sidebar {
+  width: 232px;
+  padding: 18px 14px 28px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-light) transparent;
+}
+
+.dawn .dawn-console-sidebar.collapsed {
+  width: 68px;
+}
+
+.dawn .dawn-console-sidebar-toggle {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 12px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--ink-muted);
+  transition:
+    color 180ms var(--ease-spring),
+    background 180ms var(--ease-spring);
+}
+
+.dawn .dawn-console-sidebar-toggle:hover {
+  background: var(--surface-card);
+  color: var(--ink-primary);
+}
+
+.dawn .dawn-console-sidebar .sgroup,
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-group-label'] {
+  color: var(--ink-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.015em;
+  text-transform: none;
+}
+
+.dawn .dawn-console-sidebar .sgroup {
+  padding: 22px 12px 8px;
+}
+
+.dawn .dawn-console-sidebar .sgroup.tog {
+  min-height: 42px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+}
+
+.dawn .dawn-console-sidebar .sitem,
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-menu-button'],
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-menu-sub-button'] {
+  position: relative;
+  min-height: 40px;
+  border-radius: 12px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  font-weight: 450;
+  transition:
+    background-color 180ms var(--ease-spring),
+    color 180ms var(--ease-spring),
+    box-shadow 220ms var(--ease-spring),
+    transform 160ms var(--ease-spring);
+}
+
+.dawn .dawn-console-sidebar .sitem {
+  gap: 11px;
+  margin-block: 4px;
+  padding: 10px 12px;
+}
+
+.dawn .dawn-console-sidebar .sitem > span:first-of-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dawn .dawn-console-sidebar .sitem > svg {
+  color: var(--ink-muted);
+  stroke-width: 1.7;
+}
+
+.dawn .dawn-console-sidebar .sitem:hover,
+.dawn .dawn-console-sidebar .sgroup.tog:hover,
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-menu-button']:hover,
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-menu-sub-button']:hover {
+  background: color-mix(in srgb, var(--surface-card) 65%, transparent);
+  color: var(--ink-primary);
+}
+
+.dawn .dawn-console-sidebar .sitem.on,
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-menu-button'][data-active],
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-menu-sub-button'][data-active] {
+  background: var(--surface-card);
+  color: var(--ink-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-card), var(--specular-highlight);
+}
+
+.dawn .dawn-console-sidebar .sitem.on::before,
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-menu-button'][data-active]::before,
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-menu-sub-button'][data-active]::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--brand-orange);
+  content: '';
+}
+
+/* Collapsed icon adjustments */
+:is(.codego-console-shell)
+  [data-collapsible='icon']
+  [data-slot='sidebar-menu-button'][data-active]::before {
+  left: 2px;
+  top: 8px;
+  bottom: 8px;
+}
+
+.dawn .dawn-console-sidebar .sitem.on > svg,
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-menu-button'][data-active]
+  svg,
+:is(.codego-console-shell, .codego-console-sidebar[data-mobile])
+  [data-slot='sidebar-menu-sub-button'][data-active]
+  svg {
+  color: var(--brand-orange-ink);
+}
+
+.dawn .dawn-console-sidebar .badge {
+  border-radius: 6px;
+  background: var(--bg-canvas);
+  color: var(--ink-secondary);
+  font-size: 10px;
+}
+
+.dawn.console-mobile-sidebar {
+  background: var(--bg-subtle);
+}
+
+.dawn.console-mobile-sidebar .dawn-console-sidebar {
+  width: 100%;
+  height: auto;
+}
+
+@media (max-width: 1199px) {
+  .dawn-console-layout,
+  .codego-console-shell {
+    --app-header-height: 64px;
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .codego-global-console-header .codego-console-settings,
+  .codego-global-console-header .codego-console-wallet {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .codego-public-header .codego-console-sidebar-menu {
+    display: inline-flex;
+  }
+
+  .codego-global-console-header .codego-public-brand > span,
+  .codego-global-console-header .codego-console-settings {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dawn .dawn-console-sidebar,
+  .dawn .dawn-console-sidebar *,
+  .codego-console-shell [data-sidebar] {
+    transition-duration: 0s !important;
+  }
+}

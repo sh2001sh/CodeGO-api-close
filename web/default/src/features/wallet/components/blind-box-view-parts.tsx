@@ -1,3 +1,5 @@
+import interfaceI18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import { CirclePause, CirclePlay, Gift, RefreshCw } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -15,15 +17,7 @@ export function BlindBoxPropsList(props: {
   const { t } = useTranslation()
 
   return (
-    <section className='app-subtle-panel p-4'>
-      <div className='text-foreground text-sm font-semibold'>
-        {t('My props')}
-      </div>
-      <div className='text-muted-foreground mt-1 text-xs leading-5'>
-        {t(
-          '倍率卡需手动启用，九折充值卡会自动应用于下一笔套餐购买或余额充值。'
-        )}
-      </div>
+    <section>
       <div className='mt-3 space-y-2'>
         {props.props.map((prop) => {
           const manual = isManualUseProp(prop)
@@ -41,15 +35,20 @@ export function BlindBoxPropsList(props: {
           return (
             <div
               key={prop.id}
-              className='border-border/70 bg-background/60 flex min-w-0 flex-col items-stretch gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3'
+              className='bg-muted/55 flex min-w-0 flex-col items-stretch gap-3 rounded-xl px-4 py-4 sm:flex-row sm:items-center sm:justify-between'
             >
               <div className='min-w-0 flex-1'>
                 <div className='text-foreground text-sm font-medium break-words'>
                   {getPropTitle(prop)}
                 </div>
-                <div className='text-muted-foreground mt-0.5 text-xs leading-5 break-words'>
-                  {getPropDescription(prop, t)}
-                </div>
+                <dl className='mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm'>
+                  {getPropFacts(prop, t).map((fact) => (
+                    <div key={fact.label} className='flex flex-wrap gap-x-2'>
+                      <dt className='text-muted-foreground'>{fact.label}</dt>
+                      <dd>{fact.value}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
               <div className='flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row'>
                 {available ? (
@@ -136,66 +135,71 @@ function isManualUseProp(prop: BlindBoxProp) {
   ].includes(prop.prop_type)
 }
 
-function getPropDescription(
+function getPropFacts(
   prop: BlindBoxProp,
   t: (key: string, options?: Record<string, unknown>) => string
 ) {
-  if (prop.status === 'active' && prop.expires_at) {
-    if (prop.prop_type === 'consume_discount_10') {
-      return `盲盒 0.1 倍率卡已生效；剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}，全部现有官方分组通用。`
-    }
-    if (prop.prop_type === 'monthly_pass_multiplier') {
-      return `套餐 0.1 倍率卡已生效；剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}，仅官方分组实际扣月卡额度时生效，第三方分组不享受此倍率。`
-    }
-    if (prop.prop_type === 'zero_hour_multiplier') {
-      return `历史 0 倍率道具已生效，剩余约 ${formatSeconds(prop.expires_at - Math.floor(Date.now() / 1000))}；可随时暂停并保留剩余时间。`
-    }
-    return `${t('Active until {{date}}', {
-      date: new Date(prop.expires_at * 1000).toLocaleString(),
-    })} 仅官方渠道可用。`
-  }
+  const facts = [
+    { label: t('状态'), value: getPropStatusLabel(prop.status, t) },
+  ]
   if (isManualUseProp(prop)) {
-    if (prop.prop_type === 'consume_discount_10') {
-      const remaining = prop.remaining_seconds || prop.duration_seconds
-      if (prop.status === 'paused') {
-        return `已暂停，剩余 ${formatSeconds(remaining)}。恢复后在原有官方分组直接按 0.1 倍率计费。`
-      }
-      return `启用后可随时暂停，累计可用 ${formatSeconds(remaining)}；全部现有官方分组通用，不新建分组。`
+    const pausable = [
+      'consume_discount_10',
+      'monthly_pass_multiplier',
+      'zero_hour_multiplier',
+    ].includes(prop.prop_type)
+    const runningSeconds =
+      prop.status === 'active' && prop.expires_at
+        ? prop.expires_at - Math.floor(Date.now() / 1000)
+        : prop.remaining_seconds || prop.duration_seconds
+    if (pausable) {
+      facts.push({ label: t('剩余时间'), value: formatSeconds(runningSeconds) })
+    } else if (prop.status === 'active' && prop.expires_at) {
+      facts.push({
+        label: t('有效期'),
+        value: new Date(prop.expires_at * 1000).toLocaleString(getIntlLocale()),
+      })
+    } else if (prop.status === 'available') {
+      facts.push({
+        label: t('生效时长'),
+        value: formatSeconds(prop.duration_seconds),
+      })
     }
-    if (prop.prop_type === 'monthly_pass_multiplier') {
-      const remaining = prop.remaining_seconds || prop.duration_seconds
-      if (prop.status === 'paused') {
-        return `已暂停，剩余 ${formatSeconds(remaining)}。恢复后仅在官方分组实际扣月卡额度时额外乘 0.1。`
-      }
-      return `启用后可随时暂停，累计可用 ${formatSeconds(remaining)}；仅官方分组扣月卡额度时生效，第三方分组与余额扣费不享受该倍率。`
-    }
+    let scope = t('仅官方渠道')
+    if (prop.prop_type === 'consume_discount_10') scope = t('全部现有官方分组')
+    if (prop.prop_type === 'monthly_pass_multiplier')
+      scope = `${t('官方分组')} · ${t('月卡额度')}`
+    if (prop.prop_type === 'zero_hour_multiplier') scope = t('倍率卡专属分组')
+    facts.push({ label: t('适用范围'), value: scope })
     if (prop.prop_type === 'zero_hour_multiplier') {
-      const remaining = prop.remaining_seconds || prop.duration_seconds
-      if (prop.status === 'paused') {
-        return `已暂停，剩余 ${formatSeconds(remaining)}。恢复后重新接入倍率卡专属分组，按 0 倍率计费。`
-      }
-      return prop.status === 'available'
-        ? '迁移前获得的历史道具，启用后可随时暂停并保留剩余时间。'
-        : '0 倍率已生效，可随时暂停；仅限当前用户，单用户并发最多 10 个请求。'
+      facts.push({ label: t('并发'), value: '10' })
+      facts.push({ label: t('用户'), value: t('仅限当前用户') })
     }
-    return prop.status === 'available'
-      ? `${t('Click Use to activate this card for {{hours}} hours.', {
-          hours: Math.max(1, Math.round(prop.duration_seconds / 3600)),
-        })} 仅官方渠道可用。`
-      : t('Multiplier card')
+  } else if (
+    prop.prop_type === 'topup_discount_90' &&
+    prop.status === 'available'
+  ) {
+    facts.push({
+      label: t('适用范围'),
+      value: `${t('套餐购买')} / ${t('余额充值')}`,
+    })
+    facts.push({ label: t('次数'), value: '1' })
+    facts.push({ label: t('生效方式'), value: t('下次订单自动生效') })
   }
-  if (prop.status === 'available') {
-    return t('Automatically applied to the next eligible order.')
-  }
-  return t('This prop is no longer available.')
+  return facts
 }
 
 function getPropTitle(prop: BlindBoxProp) {
-  if (prop.prop_type === 'topup_discount_90') return '九折充值卡'
-  if (prop.prop_type === 'consume_discount_10') return '15 分钟 0.1 倍率卡'
-  if (prop.prop_type === 'monthly_pass_multiplier') return '套餐 0.1 倍率卡'
-  if (prop.prop_type === 'subscription_discount_90') return '历史套餐折扣卡'
-  if (prop.prop_type === 'zero_hour_multiplier') return '历史 0 倍率道具'
+  if (prop.prop_type === 'topup_discount_90')
+    return interfaceI18n.t('九折充值卡')
+  if (prop.prop_type === 'consume_discount_10')
+    return interfaceI18n.t('15 分钟 0.1 倍率卡')
+  if (prop.prop_type === 'monthly_pass_multiplier')
+    return interfaceI18n.t('套餐 0.1 倍率卡')
+  if (prop.prop_type === 'subscription_discount_90')
+    return interfaceI18n.t('历史套餐折扣卡')
+  if (prop.prop_type === 'zero_hour_multiplier')
+    return interfaceI18n.t('历史 0 倍率道具')
   return prop.title
 }
 
@@ -207,16 +211,16 @@ function getPropActionLabel(
   t: (key: string) => string
 ) {
   if (prop.prop_type === 'consume_discount_10') {
-    if (paused) return '继续启用'
-    if (available) return '启用'
+    if (paused) return interfaceI18n.t('继续启用')
+    if (available) return interfaceI18n.t('启用')
   }
   if (prop.prop_type === 'monthly_pass_multiplier') {
-    if (paused) return '继续开启'
-    if (available) return '开启'
+    if (paused) return interfaceI18n.t('继续开启')
+    if (available) return interfaceI18n.t('开启')
   }
   if (prop.prop_type === 'zero_hour_multiplier') {
-    if (paused) return '继续开启'
-    if (available) return '开启'
+    if (paused) return interfaceI18n.t('继续开启')
+    if (available) return interfaceI18n.t('开启')
   }
   if (active) return t('Active')
   if (available) return t('Use')
@@ -227,8 +231,12 @@ function formatSeconds(value: number) {
   const total = Math.max(0, Math.ceil(value))
   const minutes = Math.floor(total / 60)
   const seconds = total % 60
-  if (minutes === 0) return `${seconds} 秒`
-  return `${minutes} 分${seconds > 0 ? ` ${seconds} 秒` : ''}`
+  if (minutes === 0)
+    return interfaceI18n.t('{{param0}} 秒', { param0: seconds })
+  return interfaceI18n.t('{{param0}} 分{{param1}}', {
+    param0: minutes,
+    param1: seconds > 0 ? ` ${seconds} 秒` : '',
+  })
 }
 
 function getPropStatusLabel(
@@ -241,7 +249,7 @@ function getPropStatusLabel(
     case 'active':
       return t('Active')
     case 'paused':
-      return '已暂停'
+      return interfaceI18n.t('已暂停')
     case 'reserved':
       return t('Reserved')
     case 'used':

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo } from 'react'
+import { getIntlLocale } from '@/i18n/format'
 import { VChart } from '@visactor/react-vchart'
 import { useTranslation } from 'react-i18next'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
@@ -35,13 +36,13 @@ function formatHourLabel(iso: string): string {
 function formatDayLabel(date: string): string {
   const parsed = new Date(date)
   if (date.includes('T')) {
-    return parsed.toLocaleString(undefined, {
+    return parsed.toLocaleString(getIntlLocale(), {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
     })
   }
-  return parsed.toLocaleDateString(undefined, {
+  return parsed.toLocaleDateString(getIntlLocale(), {
     month: 'short',
     day: 'numeric',
   })
@@ -67,11 +68,13 @@ export function LatencyTrendChart(props: {
     }))
     return {
       type: 'line' as const,
+      animation: false,
+      color: [resolvedTheme === 'dark' ? '#f3a27f' : '#b8562e'],
       data: [{ id: 'latency', values: data }],
       xField: 'time',
       yField: 'ttft',
       seriesField: 'group',
-      smooth: true,
+      smooth: false,
       point: {
         visible: true,
         style: { size: 5, stroke: '#ffffff', lineWidth: 1.5 },
@@ -109,7 +112,7 @@ export function LatencyTrendChart(props: {
         },
       ],
     }
-  }, [props.series, t])
+  }, [props.series, t, resolvedTheme])
 
   if (props.series.length === 0) {
     return (
@@ -125,18 +128,45 @@ export function LatencyTrendChart(props: {
   }
 
   return (
-    <div className={cn('h-64 sm:h-72', props.className)}>
-      {themeReady && spec && (
-        <VChart
-          key={`latency-${resolvedTheme}`}
-          spec={{
-            ...spec,
-            theme: resolvedTheme === 'dark' ? 'dark' : 'light',
-            background: 'transparent',
-          }}
-          option={VCHART_OPTION}
-        />
-      )}
+    <div className={props.className}>
+      <div className='h-64 sm:h-72' aria-hidden='true'>
+        {themeReady && spec && (
+          <VChart
+            key={`latency-${resolvedTheme}`}
+            spec={{
+              ...spec,
+              theme: resolvedTheme === 'dark' ? 'dark' : 'light',
+              background: 'transparent',
+            }}
+            option={VCHART_OPTION}
+          />
+        )}
+      </div>
+      <details className='model-source-details'>
+        <summary>{t('数据')}</summary>
+        <div className='overflow-x-auto'>
+          <table className='w-full text-sm'>
+            <thead>
+              <tr>
+                <th>{t('时间')}</th>
+                <th>{t('Group')}</th>
+                <th>{t('Average TTFT')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.series.map((point) => (
+                <tr key={`${point.timestamp}-${point.group}`}>
+                  <td>
+                    {new Date(point.timestamp).toLocaleString(getIntlLocale())}
+                  </td>
+                  <td>{point.group}</td>
+                  <td>{Math.round(point.ttft_ms)} ms</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
   )
 }
@@ -164,12 +194,16 @@ export function UptimeTrendChart(props: {
 
     return {
       type: 'line' as const,
+      animation: false,
       data: [{ id: 'uptime', values: data }],
       xField: 'date',
       yField: 'uptime',
-      smooth: true,
+      smooth: false,
       line: {
-        style: { stroke: '#10b981', lineWidth: 2 },
+        style: {
+          stroke: resolvedTheme === 'dark' ? '#8ad7ad' : '#17603a',
+          lineWidth: 2,
+        },
       },
       point: {
         visible: true,
@@ -178,9 +212,11 @@ export function UptimeTrendChart(props: {
           stroke: '#ffffff',
           lineWidth: 1.5,
           fill: (datum: { uptime: number }) => {
-            if (datum.uptime >= 99.9) return '#10b981'
-            if (datum.uptime >= 99.0) return '#f59e0b'
-            return '#ef4444'
+            if (datum.uptime >= 99.9)
+              return resolvedTheme === 'dark' ? '#8ad7ad' : '#17603a'
+            if (datum.uptime >= 99.0)
+              return resolvedTheme === 'dark' ? '#f1c36f' : '#7b4b00'
+            return resolvedTheme === 'dark' ? '#ffaaa4' : '#a72727'
           },
         },
       },
@@ -189,16 +225,8 @@ export function UptimeTrendChart(props: {
           title: { value: (d: { date: string }) => d.date },
           content: [
             {
-              key: t('Uptime'),
+              key: t('Success rate'),
               value: (d: { uptime: number }) => `${d.uptime.toFixed(2)}%`,
-            },
-            {
-              key: t('Incidents'),
-              value: (d: { incidents: number }) => `${d.incidents}`,
-            },
-            {
-              key: t('Outage'),
-              value: (d: { outage: number }) => `${d.outage} ${t('minutes')}`,
             },
           ],
         },
@@ -214,7 +242,7 @@ export function UptimeTrendChart(props: {
         },
         {
           orient: 'left',
-          min: 95,
+          min: 0,
           max: 100,
           label: {
             formatMethod: (val: number | string) => `${val}%`,
@@ -224,7 +252,7 @@ export function UptimeTrendChart(props: {
         },
       ],
     }
-  }, [props.series, t])
+  }, [props.series, t, resolvedTheme])
 
   if (props.series.length === 0) {
     return (
@@ -240,18 +268,43 @@ export function UptimeTrendChart(props: {
   }
 
   return (
-    <div className={cn('h-56 sm:h-64', props.className)}>
-      {themeReady && spec && (
-        <VChart
-          key={`uptime-trend-${resolvedTheme}`}
-          spec={{
-            ...spec,
-            theme: resolvedTheme === 'dark' ? 'dark' : 'light',
-            background: 'transparent',
-          }}
-          option={VCHART_OPTION}
-        />
-      )}
+    <div className={props.className}>
+      <div className='h-56 sm:h-64' aria-hidden='true'>
+        {themeReady && spec && (
+          <VChart
+            key={`uptime-trend-${resolvedTheme}`}
+            spec={{
+              ...spec,
+              theme: resolvedTheme === 'dark' ? 'dark' : 'light',
+              background: 'transparent',
+            }}
+            option={VCHART_OPTION}
+          />
+        )}
+      </div>
+      <details className='model-source-details'>
+        <summary>{t('数据')}</summary>
+        <div className='overflow-x-auto'>
+          <table className='w-full text-sm'>
+            <thead>
+              <tr>
+                <th>{t('时间')}</th>
+                <th>{t('Success rate')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.series.map((point) => (
+                <tr key={point.date}>
+                  <td>
+                    {new Date(point.date).toLocaleString(getIntlLocale())}
+                  </td>
+                  <td>{point.uptime_pct.toFixed(2)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
   )
 }
@@ -281,13 +334,14 @@ export function ThroughputBarChart(props: {
     if (filtered.length === 0) return null
     return {
       type: 'bar' as const,
+      animation: false,
       direction: 'horizontal' as const,
       data: [{ id: 'tput', values: filtered.map((r) => ({ ...r })) }],
       xField: 'throughput_tps',
       yField: 'group',
       bar: {
         style: {
-          fill: '#6366f1',
+          fill: resolvedTheme === 'dark' ? '#f3a27f' : '#b8562e',
           ...(barRadius == null ? {} : { cornerRadius: barRadius }),
         },
       },
@@ -322,7 +376,7 @@ export function ThroughputBarChart(props: {
         },
       },
     }
-  }, [barRadius, filtered, t])
+  }, [barRadius, filtered, t, resolvedTheme])
 
   if (filtered.length === 0) {
     return null

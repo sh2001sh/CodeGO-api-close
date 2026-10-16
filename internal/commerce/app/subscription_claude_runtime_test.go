@@ -32,12 +32,12 @@ func TestConvertMonthlyPassToUnifiedCreditPartialPercentage(t *testing.T) {
 	assert.InDelta(t, 0.8, result.UnusedRatio, 0.00000001)
 	assert.InDelta(t, 0.2, result.RemainingRatioAfter, 0.00000001)
 	assert.False(t, result.SubscriptionEnded)
-	assert.Equal(t, 100+expectedQuota, result.QuotaAfter)
+	assert.Equal(t, expectedQuota, result.QuotaAfter)
 	assert.Equal(t, 60, result.Conversion.ConversionPercent)
 
 	var savedUser identityschema.User
 	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
-	assert.Equal(t, 100+expectedQuota, savedUser.ClaudeQuota)
+	assert.Equal(t, 100, savedUser.ClaudeQuota)
 
 	var savedSub commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", sub.Id).First(&savedSub).Error)
@@ -69,7 +69,7 @@ func TestConvertMonthlyPassToUnifiedCreditAllRemainingEndsPass(t *testing.T) {
 	assert.Equal(t, expectedQuota, result.TargetQuota)
 	assert.True(t, result.SubscriptionEnded)
 	assert.Zero(t, result.RemainingRatioAfter)
-	assert.Equal(t, 100+expectedQuota, result.QuotaAfter)
+	assert.Equal(t, expectedQuota, result.QuotaAfter)
 
 	var savedSub commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", sub.Id).First(&savedSub).Error)
@@ -139,7 +139,7 @@ func TestConvertMonthlyPassToUnifiedCreditWritesOffConversionDustOnly(t *testing
 	require.True(t, result.SubscriptionEnded)
 	require.Equal(t, int64(1), result.SourceQuota)
 	require.Equal(t, 1, result.TargetQuota)
-	require.Equal(t, 101, result.QuotaAfter)
+	require.Equal(t, 1, result.QuotaAfter)
 
 	var savedSub commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", sub.Id).First(&savedSub).Error)
@@ -193,7 +193,7 @@ func TestConvertMonthlyPassToUnifiedCreditRejectsInvalidPercentages(t *testing.T
 	}
 }
 
-func TestConvertMonthlyPassToUnifiedCreditRejectsDayPass(t *testing.T) {
+func TestConvertMonthlyPassToUnifiedCreditAcceptsLegacyDayPass(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	restoreSubscriptionClaudeConversionConfigForTest(t)
 	commerceschema.SubscriptionClaudeConversionEnabled = true
@@ -212,8 +212,9 @@ func TestConvertMonthlyPassToUnifiedCreditRejectsDayPass(t *testing.T) {
 	}
 	require.NoError(t, db.Create(sub).Error)
 
-	_, err := ConvertMonthlyPassToUnifiedCredit("req-day-pass", user.Id, sub.Id, 50)
-	require.ErrorIs(t, err, commerceschema.ErrSubscriptionClaudeConversionNoTarget)
+	result, err := ConvertMonthlyPassToUnifiedCredit("req-day-pass", user.Id, sub.Id, 50)
+	require.NoError(t, err)
+	require.Equal(t, quotaUnitsFromUSD(25), int64(result.TargetQuota))
 }
 
 func TestConvertMonthlyPassToUnifiedCreditIdempotencyIncludesPercentage(t *testing.T) {

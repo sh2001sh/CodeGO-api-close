@@ -16,6 +16,7 @@ import (
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/checkout/session"
 	"github.com/thanhpk/randstr"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -102,9 +103,6 @@ func NormalizeSubscriptionPurchaseFields(userID int, req SubscriptionPurchaseFie
 
 func normalizeSubscriptionPurchaseFieldsForPlan(userID int, plan *commerceschema.SubscriptionPlan, req SubscriptionPurchaseFields) (string, int64, error) {
 	purchaseType := commercedomain.NormalizeSubscriptionPurchaseType(req.PurchaseType)
-	if purchaseType == commerceschema.SubscriptionPurchaseTypeNormal && supportsGroupBuyPlan(plan) {
-		purchaseType = commerceschema.SubscriptionPurchaseTypeGroupBuy
-	}
 	groupBuyID := req.GroupBuyID
 	if purchaseType != commerceschema.SubscriptionPurchaseTypeJoinGroup {
 		groupBuyID = 0
@@ -353,6 +351,10 @@ func CreateSubscriptionStripePayment(userID int, req SubscriptionStripePayReques
 	if preview.Action == commerceschema.SubscriptionPurchaseActionUpgrade && preview.AmountDue != plan.PriceAmount {
 		return nil, errors.New("subscription upgrades are currently supported via WeChat Pay only")
 	}
+	currency, err := subscriptionStripeCurrency(plan.Currency)
+	if err != nil {
+		return nil, err
+	}
 	if !strings.HasPrefix(commercestore.StripeApiSecret, "sk_") && !strings.HasPrefix(commercestore.StripeApiSecret, "rk_") {
 		return nil, errors.New("Stripe is not configured correctly")
 	}
@@ -384,7 +386,7 @@ func CreateSubscriptionStripePayment(userID int, req SubscriptionStripePayReques
 	if _, err := CreatePendingSubscriptionOrderWithDiscounts(order, preview.BaseAmountDue); err != nil {
 		return nil, errors.New("failed to create order")
 	}
-	payLink, err := genStripeSubscriptionLink(referenceID, user.StripeCustomer, user.Email, plan.Title, order.Money)
+	payLink, err := genStripeSubscriptionLink(referenceID, user.StripeCustomer, user.Email, plan.Title, currency, order.Money)
 	if err != nil {
 		_ = ExpireSubscriptionOrder(referenceID, commerceschema.PaymentProviderStripe)
 		return nil, errors.New("failed to create payment")
@@ -480,8 +482,27 @@ func CollectSubscriptionPaymentParams(rawURLValues url.Values) map[string]string
 	return params
 }
 
-func genStripeSubscriptionLink(referenceID string, customerID string, email string, productName string, amountDue float64) (string, error) {
-	stripe.Key = commercestore.StripeApiSecret
+// CNY and USD both use hundredths. Reject other currencies until their minor
+// units are supported instead of charging a different currency or amount.
+func subscriptionStripeCurrency(currency string) (string, error) {
+	switch normalizeSubscriptionCurrency(currency) {
+	case "CNY":
+		return "cny", nil
+	case "USD":
+		return "usd", nil
+	default:
+		return "", errors.New("unsupported Stripe subscription currency")
+	}
+}
+
+func genStripeSubscriptionLink(referenceID string, customerID string, email string, productName string, currency string, amountDue float64) (string, error) {
+	currency, err := subscriptionStripeCurrency(currency)
+	if err != nil {
+		return "", err
+	}
+	if math.IsNaN(amountDue) || math.IsInf(amountDue, 0) || amountDue <= 0 || amountDue >= float64(math.MaxInt64)/100 {
+		return "", errors.New("invalid stripe amount")
+	}
 	unitAmount := StripeMoneyToMinorUnits(amountDue)
 	if unitAmount < 1 {
 		return "", fmt.Errorf("invalid stripe amount")
@@ -494,7 +515,7 @@ func genStripeSubscriptionLink(referenceID string, customerID string, email stri
 			{
 				Quantity: stripe.Int64(1),
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
-					Currency:   stripe.String("usd"),
+					Currency:   stripe.String(currency),
 					UnitAmount: stripe.Int64(unitAmount),
 					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
 						Name: stripe.String(productName),
@@ -512,7 +533,8 @@ func genStripeSubscriptionLink(referenceID string, customerID string, email stri
 	} else {
 		params.Customer = stripe.String(customerID)
 	}
-	result, err := session.New(params)
+	client := session.Client{B: stripe.GetBackend(stripe.APIBackend), Key: commercestore.StripeApiSecret}
+	result, err := client.New(params)
 	if err != nil {
 		return "", err
 	}

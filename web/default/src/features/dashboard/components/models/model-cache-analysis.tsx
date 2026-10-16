@@ -54,7 +54,7 @@ export function ModelCacheAnalysis() {
 function CacheSummary(props: { summary: ReturnType<typeof summarize> }) {
   const { t } = useTranslation()
   return (
-    <div className='grid overflow-hidden rounded-lg border sm:grid-cols-3 sm:divide-x'>
+    <div className='solaris-insight-grid grid sm:grid-cols-3'>
       <SummaryMetric
         label={t('综合缓存命中率')}
         value={`${props.summary.hitRate.toFixed(1)}%`}
@@ -75,14 +75,11 @@ function CacheRateChart(props: { rows: CacheRow[] }) {
   const { t } = useTranslation()
   const rows = useMemo(() => props.rows.slice(0, 12), [props.rows])
   return (
-    <section className='overflow-hidden rounded-lg border'>
+    <section className='solaris-telemetry-panel overflow-hidden rounded-lg border'>
       <header className='flex items-center gap-2 border-b px-4 py-3'>
         <DatabaseZap className='text-primary size-4' />
         <div>
           <h2 className='text-sm font-semibold'>{t('模型缓存命中率')}</h2>
-          <p className='text-muted-foreground mt-0.5 text-xs'>
-            {t('按近 24 小时缓存命中率排序，最多展示 12 个模型。')}
-          </p>
         </div>
       </header>
       <ul className='divide-y'>
@@ -98,11 +95,12 @@ function CacheRateChart(props: { rows: CacheRow[] }) {
             >
               {row.model}
             </span>
-            <span className='bg-border/40 relative block h-1.5 overflow-hidden rounded-sm'>
+            <span className='bg-muted relative block h-2 overflow-hidden rounded-sm'>
               <span
                 className='dawn-bar bg-primary/75 absolute inset-y-0 left-0 rounded-sm'
                 style={{
-                  width: `${Math.max(2, Math.min(100, row.cacheHitRate))}%`,
+                  width: `${Math.min(100, row.cacheHitRate)}%`,
+                  minWidth: row.cacheHitRate > 0 ? 6 : 0,
                   animationDelay: `${index * 40}ms`,
                 }}
               />
@@ -128,7 +126,7 @@ function CacheDetailsTable(props: { rows: CacheRow[]; requestCount: number }) {
     t('请求数'),
   ]
   return (
-    <section className='overflow-hidden rounded-lg border'>
+    <section className='solaris-telemetry-panel overflow-hidden rounded-lg border'>
       <header className='flex items-center justify-between gap-3 border-b px-4 py-3'>
         <div>
           <h2 className='text-sm font-semibold'>{t('缓存使用明细')}</h2>

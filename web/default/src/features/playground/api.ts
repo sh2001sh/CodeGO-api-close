@@ -29,11 +29,20 @@ import type {
  * Send chat completion request (non-streaming)
  */
 export async function sendChatCompletion(
-  payload: ChatCompletionRequest
+  payload: ChatCompletionRequest,
+  options?: { signal?: AbortSignal; apiKey?: string }
 ): Promise<ChatCompletionResponse> {
-  const res = await api.post(API_ENDPOINTS.CHAT_COMPLETIONS, payload, {
-    skipErrorHandler: true,
-  } as Record<string, unknown>)
+  const res = await api.post(
+    options?.apiKey ? '/v1/chat/completions' : API_ENDPOINTS.CHAT_COMPLETIONS,
+    payload,
+    {
+      skipErrorHandler: true,
+      signal: options?.signal,
+      ...(options?.apiKey
+        ? { headers: { Authorization: `Bearer ${options.apiKey}` } }
+        : {}),
+    } as Record<string, unknown>
+  )
   return res.data
 }
 

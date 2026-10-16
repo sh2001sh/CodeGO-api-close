@@ -8,7 +8,7 @@ export function BalanceBlindBoxPanel(props: {
   onRefresh: () => Promise<void>
   cashMethods: PaymentMethod[]
   selectedCashMethod: PaymentMethod | null
-  cashAmountDue: number
+  cashAmountDue: number | null
   cashPaying: boolean
   onCashMethodChange: (method: PaymentMethod) => void
   onCashQuantityChange: (count: number) => void

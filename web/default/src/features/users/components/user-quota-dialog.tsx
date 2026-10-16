@@ -94,9 +94,7 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
         value: mode === 'override' ? value : Math.abs(value),
       })
       if (result.success) {
-        toast.success(
-          t('通用额度调整成功')
-        )
+        toast.success(t('通用额度调整成功'))
         setAmount('')
         setMode('add')
         props.onOpenChange(false)
@@ -123,7 +121,7 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent>
+      <DialogContent className='solaris-admin-dialog'>
         <DialogHeader>
           <DialogTitle>{props.title || t('Adjust Quota')}</DialogTitle>
           <DialogDescription>
@@ -137,16 +135,17 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
 
           <div className='space-y-2'>
             <Label>{t('Mode')}</Label>
-            <div className='flex gap-1'>
+            <div className='solaris-quota-modes flex gap-1'>
               {(['add', 'subtract', 'override'] as const).map((m) => (
                 <Button
                   key={m}
                   type='button'
                   variant='outline'
                   size='sm'
+                  aria-pressed={mode === m}
                   className={cn(
                     mode === m &&
-                      'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+                      'bg-secondary text-secondary-foreground hover:bg-secondary/90 hover:text-secondary-foreground'
                   )}
                   onClick={() => {
                     setMode(m)

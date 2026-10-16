@@ -85,11 +85,6 @@ func updateAdminUserSubscriptionRuntime(userSubscriptionID int, input adminUpdat
 		if err := maybeResetUserSubscriptionWithPlanTx(tx, sub, plan, now); err != nil {
 			return err
 		}
-		if subscriptionLuckyNumberTableReady() {
-			if err := backfillSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
-				return err
-			}
-		}
 		if err := tx.Save(sub).Error; err != nil {
 			return err
 		}
@@ -226,6 +221,9 @@ func resetAdminUserSubscriptionQuotaRuntime(userSubscriptionID int, input adminR
 		sub := &commerceschema.UserSubscription{}
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", userSubscriptionID).First(sub).Error; err != nil {
 			return err
+		}
+		if sub.CreditPackGrantedQuota > 0 {
+			return errors.New("permanent credit packs cannot be refreshed")
 		}
 
 		plan, err := getSubscriptionPlanRecordTx(tx, sub.PlanId)

@@ -153,7 +153,7 @@ export function AudioPreviewDialog(props: AudioPreviewDialogProps) {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='sm:max-w-lg'>
+      <DialogContent className='solaris-log-details sm:max-w-lg'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Music className='h-5 w-5' />

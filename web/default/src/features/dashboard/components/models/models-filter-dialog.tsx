@@ -152,7 +152,7 @@ export function ModelsFilter(props: ModelsFilterProps) {
       <DialogContent className='flex max-h-[calc(100dvh-2rem)] flex-col max-sm:h-dvh max-sm:w-screen max-sm:max-w-none max-sm:rounded-none max-sm:p-4 sm:max-w-lg'>
         <DialogHeader>
           <DialogTitle>{t('Filter Dashboard Models')}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className='sr-only'>
             {t(
               'Set filters to customize your dashboard statistics and charts.'
             )}

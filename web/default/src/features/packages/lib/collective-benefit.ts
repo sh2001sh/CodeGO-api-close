@@ -26,7 +26,12 @@ export function buildPackageQuotaTiers(
     },
   ]
 
-  if (!plan.group_buy_enabled || plan.plan_type === 'daily') return tiers
+  if (
+    !plan.group_buy_enabled ||
+    plan.plan_type === 'daily' ||
+    plan.plan_type === 'credit_pack'
+  )
+    return tiers
 
   for (const [count, bonus] of [
     [2, plan.group_buy_bonus_2],

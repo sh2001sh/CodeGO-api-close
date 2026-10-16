@@ -27,7 +27,39 @@ import type {
   ManageUserAction,
   ManageUserQuotaPayload,
   ApiResponse,
+  RefundableOrder,
+  RefundResult,
 } from './types'
+
+export async function getAdminRefundableOrders(
+  userId: number
+): Promise<ApiResponse<{ items: RefundableOrder[] }>> {
+  const res = await api.get(
+    `/api/wallet/admin/users/${userId}/refunds/eligible`
+  )
+  return res.data
+}
+
+export async function createAdminRefund(
+  userId: number,
+  request: { order_type: string; trade_no: string }
+): Promise<ApiResponse<RefundResult>> {
+  const res = await api.post(
+    `/api/wallet/admin/users/${userId}/refunds`,
+    request
+  )
+  return res.data
+}
+
+export async function syncAdminRefund(
+  userId: number,
+  refundNo: string
+): Promise<ApiResponse<RefundResult>> {
+  const res = await api.post(
+    `/api/wallet/admin/users/${userId}/refunds/${encodeURIComponent(refundNo)}/sync`
+  )
+  return res.data
+}
 
 // ============================================================================
 // User Management APIs
@@ -209,6 +241,9 @@ export async function revokeUserBlindBoxes(
   userId: number,
   payload: { quantity: number; reason: string }
 ): Promise<ApiResponse> {
-  const res = await api.post(`/api/blind-box/admin/users/${userId}/revoke`, payload)
+  const res = await api.post(
+    `/api/blind-box/admin/users/${userId}/revoke`,
+    payload
+  )
   return res.data
 }

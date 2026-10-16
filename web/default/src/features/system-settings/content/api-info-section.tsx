@@ -38,7 +38,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -46,7 +45,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -138,6 +136,7 @@ export function ApiInfoSection({ enabled, data }: ApiInfoSectionProps) {
   })
 
   useEffect(() => {
+    if (hasChanges) return
     try {
       const parsed = JSON.parse(data || '[]')
       if (Array.isArray(parsed)) {
@@ -151,7 +150,7 @@ export function ApiInfoSection({ enabled, data }: ApiInfoSectionProps) {
     } catch {
       setApiInfoList([])
     }
-  }, [data])
+  }, [data, hasChanges])
 
   useEffect(() => {
     setIsEnabled(enabled)
@@ -279,7 +278,7 @@ export function ApiInfoSection({ enabled, data }: ApiInfoSectionProps) {
   return (
     <SettingsSection
       title={t('API Addresses')}
-      description={t('Curate quick links to your different Domains')}
+      description={t('Configure API information display')}
     >
       <div className='space-y-4'>
         <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -414,14 +413,11 @@ export function ApiInfoSection({ enabled, data }: ApiInfoSectionProps) {
       </div>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
+        <DialogContent className='settings-dialog'>
           <DialogHeader>
             <DialogTitle>
               {editingApiInfo ? t('Edit API Shortcut') : t('Add API Shortcut')}
             </DialogTitle>
-            <DialogDescription>
-              {t('Configure API documentation links for the dashboard')}
-            </DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form
@@ -500,7 +496,7 @@ export function ApiInfoSection({ enabled, data }: ApiInfoSectionProps) {
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={t('Select a color')} />
+                          <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent alignItemWithTrigger={false}>
@@ -518,9 +514,7 @@ export function ApiInfoSection({ enabled, data }: ApiInfoSectionProps) {
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <FormDescription>
-                      {t('Visual indicator color for the API card')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -543,7 +537,7 @@ export function ApiInfoSection({ enabled, data }: ApiInfoSectionProps) {
       </Dialog>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className='settings-dialog'>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('Are you sure?')}</AlertDialogTitle>
             <AlertDialogDescription>

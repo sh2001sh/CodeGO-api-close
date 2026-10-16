@@ -70,6 +70,9 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		usage.PromptTokens = responsesResponse.Usage.InputTokens
 		usage.CompletionTokens = responsesResponse.Usage.OutputTokens
 		usage.TotalTokens = responsesResponse.Usage.TotalTokens
+		if responsesResponse.Usage.OutputTokensDetails != nil {
+			usage.CompletionTokenDetails = *responsesResponse.Usage.OutputTokensDetails
+		}
 		if responsesResponse.Usage.InputTokensDetails != nil {
 			usage.PromptTokensDetails.CachedTokens = responsesResponse.Usage.InputTokensDetails.CachedTokens
 			usage.PromptTokensDetails.CachedCreationTokens = responsesResponse.Usage.InputTokensDetails.GetCachedCreationTokens()
@@ -197,14 +200,17 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			usage.PromptTokens = providerUsage.InputTokens
 			usage.CompletionTokens = providerUsage.OutputTokens
 			usage.TotalTokens = providerUsage.TotalTokens
+			if providerUsage.OutputTokensDetails != nil {
+				usage.CompletionTokenDetails = *providerUsage.OutputTokensDetails
+			}
 			if providerUsage.InputTokensDetails != nil {
 				usage.PromptTokensDetails.CachedTokens = providerUsage.InputTokensDetails.CachedTokens
 				usage.PromptTokensDetails.CachedCreationTokens = providerUsage.InputTokensDetails.GetCachedCreationTokens()
 			}
 		}
-		if streamResponse.Type == "response.incomplete" && streamResponse.Response != nil && streamResponse.Response.Usage != nil {
+		if streamResponse.Type == "response.incomplete" || streamResponse.Type == "response.cancelled" || streamResponse.Type == "response.canceled" {
 			sawResponseCompleted.Store(true)
-			if err := sendResponsesStreamData(c, info, streamResponse, data); err != nil {
+			if err := flushBufferedResponsesStreamEvents(c, info, preOutputEvents, &streamResponse, data); err != nil {
 				sr.Stop(err)
 				return
 			}

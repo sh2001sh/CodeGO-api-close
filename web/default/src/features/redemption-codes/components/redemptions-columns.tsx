@@ -122,7 +122,7 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
                 ? 'info'
                 : redeemType === REDEMPTION_TYPES.BLIND_BOX
                   ? 'warning'
-                : 'info'
+                  : 'info'
             }
             copyable={false}
           />
@@ -218,9 +218,7 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
             ? t('Plan #{{id}}', { id: redemption.plan_id })
             : '-')
 
-        return (
-          <StatusBadge label={label} variant='neutral' copyable={false} />
-        )
+        return <StatusBadge label={label} variant='neutral' copyable={false} />
       },
     },
     {

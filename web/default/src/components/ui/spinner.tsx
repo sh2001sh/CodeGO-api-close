@@ -17,23 +17,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import i18n from '@/i18n/config'
-import { Loading03Icon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
+import { LoaderCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
-type SpinnerProps = Omit<
-  React.ComponentProps<typeof HugeiconsIcon>,
-  'icon' | 'strokeWidth'
-> & {
-  strokeWidth?: number
-}
+type SpinnerProps = React.ComponentProps<typeof LoaderCircle>
 
 function Spinner({ className, strokeWidth = 2, ...props }: SpinnerProps) {
   useTranslation()
   return (
-    <HugeiconsIcon
-      icon={Loading03Icon}
+    <LoaderCircle
       strokeWidth={strokeWidth}
       role='status'
       aria-label={i18n.t('加载中')}

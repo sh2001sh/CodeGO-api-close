@@ -81,7 +81,7 @@ export function WaffoSettingsSection(props: Props) {
   const [loading, setLoading] = useState(false)
   const iconFileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const form = useForm<Omit<WaffoSettingsValues, 'WaffoPayMethods'>>({
+  const form = useForm<WaffoSettingsValues>({
     defaultValues: props.defaultValues,
   })
 
@@ -102,13 +102,14 @@ export function WaffoSettingsSection(props: Props) {
   })
 
   useEffect(() => {
+    if (loading || form.formState.isDirty) return
     form.reset(props.defaultValues)
     try {
       setPayMethods(JSON.parse(props.defaultValues.WaffoPayMethods || '[]'))
     } catch {
       setPayMethods([])
     }
-  }, [props.defaultValues, form])
+  }, [props.defaultValues, form, loading, form.formState.isDirty])
 
   const handleSave = async () => {
     setLoading(true)
@@ -148,6 +149,7 @@ export function WaffoSettingsSection(props: Props) {
       for (const opt of options) {
         await updateOption.mutateAsync(opt)
       }
+      form.reset({ ...values, WaffoPayMethods: JSON.stringify(payMethods) })
       toast.success(t('Updated successfully'))
     } catch {
       toast.error(t('Update failed'))
@@ -171,13 +173,16 @@ export function WaffoSettingsSection(props: Props) {
   const saveMethod = () => {
     if (!methodForm.name.trim())
       return toast.error(t('Payment method name is required'))
-    if (editingIdx === -1) {
-      setPayMethods((prev) => [...prev, methodForm])
-    } else {
-      setPayMethods((prev) =>
-        prev.map((m, i) => (i === editingIdx ? methodForm : m))
-      )
-    }
+    const next =
+      editingIdx === -1
+        ? [...payMethods, methodForm]
+        : payMethods.map((method, index) =>
+            index === editingIdx ? methodForm : method
+          )
+    setPayMethods(next)
+    form.setValue('WaffoPayMethods', JSON.stringify(next), {
+      shouldDirty: true,
+    })
     setMethodDialogOpen(false)
   }
 
@@ -212,17 +217,11 @@ export function WaffoSettingsSection(props: Props) {
 
   return (
     <>
-      <SettingsSection
-        title={t('Waffo Payment Gateway')}
-        description={t(
-          'Configure Waffo payment aggregation platform integration'
-        )}
-      >
+      <SettingsSection title={t('Waffo Payment Gateway')}>
         <Alert>
-          <AlertDescription className='text-xs'>
-            {t(
-              'Obtain the API key, merchant ID, and RSA key pair from the Waffo dashboard, and configure the callback URL.'
-            )}
+          <AlertDescription>
+            Waffo · {t('API Key')} · {t('Merchant ID')} · RSA ·{' '}
+            {t('Callback URL')}
           </AlertDescription>
         </Alert>
 
@@ -230,14 +229,18 @@ export function WaffoSettingsSection(props: Props) {
           <div className='flex items-center gap-2'>
             <Switch
               checked={form.watch('WaffoEnabled')}
-              onCheckedChange={(v) => form.setValue('WaffoEnabled', v)}
+              onCheckedChange={(v) =>
+                form.setValue('WaffoEnabled', v, { shouldDirty: true })
+              }
             />
             <Label>{t('Enable Waffo')}</Label>
           </div>
           <div className='flex items-center gap-2'>
             <Switch
               checked={form.watch('WaffoSandbox')}
-              onCheckedChange={(v) => form.setValue('WaffoSandbox', v)}
+              onCheckedChange={(v) =>
+                form.setValue('WaffoSandbox', v, { shouldDirty: true })
+              }
             />
             <Label>{t('Sandbox mode')}</Label>
           </div>
@@ -396,11 +399,17 @@ export function WaffoSettingsSection(props: Props) {
                           variant='ghost'
                           size='icon'
                           className='h-7 w-7'
-                          onClick={() =>
-                            setPayMethods((prev) =>
-                              prev.filter((_, i) => i !== idx)
+                          onClick={() => {
+                            const next = payMethods.filter(
+                              (_, index) => index !== idx
                             )
-                          }
+                            setPayMethods(next)
+                            form.setValue(
+                              'WaffoPayMethods',
+                              JSON.stringify(next),
+                              { shouldDirty: true }
+                            )
+                          }}
                         >
                           <Trash2 className='h-3 w-3' />
                         </Button>
@@ -419,7 +428,7 @@ export function WaffoSettingsSection(props: Props) {
       </SettingsSection>
 
       <Dialog open={methodDialogOpen} onOpenChange={setMethodDialogOpen}>
-        <DialogContent>
+        <DialogContent className='settings-dialog'>
           <DialogHeader>
             <DialogTitle>
               {editingIdx === -1
@@ -480,10 +489,8 @@ export function WaffoSettingsSection(props: Props) {
                   </Button>
                 ) : null}
               </div>
-              <p className='text-muted-foreground text-xs'>
-                {t(
-                  'Supports PNG, JPG, SVG, or WebP. Recommended size: 128×128 or smaller.'
-                )}
+              <p className='text-muted-foreground text-base'>
+                {t('PNG / JPG / SVG / WebP · ≤ 128 × 128')}
               </p>
             </div>
             <div className='grid gap-1.5'>

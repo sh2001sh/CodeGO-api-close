@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
+import { getIntlLocale } from '@/i18n/format'
 import { Eye, Radio, UserRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota, formatUseTime } from '@/lib/format'
@@ -63,20 +64,26 @@ export function useOwnerChannelLogColumns(
         cell: ({ row }) => (
           <div className='text-xs tabular-nums'>
             <div>
-              {row.original.prompt_tokens.toLocaleString()} {t('输入')}
+              {row.original.prompt_tokens.toLocaleString(getIntlLocale())}{' '}
+              {t('输入')}
             </div>
             <div className='text-success mt-0.5'>
               {t('缓存命中')}:{' '}
-              {(row.original.cache_read_tokens ?? 0).toLocaleString()}
+              {(row.original.cache_read_tokens ?? 0).toLocaleString(
+                getIntlLocale()
+              )}
             </div>
             {(row.original.cache_write_tokens ?? 0) > 0 && (
               <div className='text-muted-foreground mt-0.5'>
                 {t('缓存写入')}:{' '}
-                {row.original.cache_write_tokens.toLocaleString()}
+                {row.original.cache_write_tokens.toLocaleString(
+                  getIntlLocale()
+                )}
               </div>
             )}
             <div className='text-muted-foreground mt-0.5'>
-              {row.original.completion_tokens.toLocaleString()} {t('输出')}
+              {row.original.completion_tokens.toLocaleString(getIntlLocale())}{' '}
+              {t('输出')}
             </div>
           </div>
         ),
@@ -173,9 +180,9 @@ function renderDateTime(timestamp: number) {
   const value = new Date(timestamp * 1000)
   return (
     <div className='text-xs tabular-nums'>
-      <div>{value.toLocaleDateString()}</div>
+      <div>{value.toLocaleDateString(getIntlLocale())}</div>
       <div className='text-muted-foreground mt-0.5'>
-        {value.toLocaleTimeString()}
+        {value.toLocaleTimeString(getIntlLocale())}
       </div>
     </div>
   )

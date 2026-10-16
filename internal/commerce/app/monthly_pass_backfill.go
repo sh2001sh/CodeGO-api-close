@@ -37,11 +37,6 @@ func backfillMonthlyPassSubscriptionTx(tx *gorm.DB, sub *commerceschema.UserSubs
 		}
 		return err
 	}
-	if subscriptionLuckyNumberTableReady() {
-		if err := backfillSubscriptionLuckyNumberTx(tx, sub, plan); err != nil {
-			return err
-		}
-	}
 	if monthlyPassDurationSeconds(plan) == 0 {
 		return nil
 	}

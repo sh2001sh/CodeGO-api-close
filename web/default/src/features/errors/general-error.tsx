@@ -20,11 +20,14 @@ import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { PublicLayout } from '@/components/layout'
+import './errors.css'
 
 const FEEDBACK_URL = 'https://github.com/sh2001sh/new-api/issues'
 
 type GeneralErrorProps = React.HTMLAttributes<HTMLDivElement> & {
   minimal?: boolean
+  embedded?: boolean
   error?: unknown
 }
 
@@ -39,6 +42,7 @@ function getHttpStatus(error: unknown): number | undefined {
 export function GeneralError({
   className,
   minimal = false,
+  embedded = false,
   error,
 }: GeneralErrorProps) {
   const { t } = useTranslation()
@@ -48,13 +52,17 @@ export function GeneralError({
   const isRateLimited = status === 429
   const title = isRateLimited
     ? t('Too many requests')
-    : `${t('Oops! Something went wrong')} ${`:')`}`
-  const description = isRateLimited
-    ? t('Please wait a moment before trying again.')
-    : t('Please try again later.')
+    : t('Oops! Something went wrong')
 
-  return (
-    <div className={cn('codego-error-page h-svh w-full', className)}>
+  const content = (
+    <div
+      className={cn(
+        'market-error w-full',
+        minimal && 'market-error-minimal',
+        embedded && 'market-error-embedded',
+        className
+      )}
+    >
       <div className='m-auto flex h-full w-full flex-col items-center justify-center gap-2'>
         {!minimal && (
           <h1 className='text-[7rem] leading-tight font-bold'>
@@ -70,14 +78,6 @@ export function GeneralError({
             {'\n'}
             {(error as { stack?: string }).stack ?? ''}
           </pre>
-        )}
-        <p className='text-muted-foreground text-center'>
-          {t('We apologize for the inconvenience.')} <br /> {description}
-        </p>
-        {!minimal && (
-          <p className='text-muted-foreground text-center text-sm'>
-            {t('If this keeps happening, please report it on GitHub Issues.')}
-          </p>
         )}
         {!minimal && (
           <div className='mt-6 flex flex-wrap justify-center gap-4'>
@@ -103,5 +103,15 @@ export function GeneralError({
         )}
       </div>
     </div>
+  )
+
+  if (minimal || embedded) return content
+
+  return (
+    <PublicLayout showMainContainer={false}>
+      <main id='content' tabIndex={-1}>
+        {content}
+      </main>
+    </PublicLayout>
   )
 }

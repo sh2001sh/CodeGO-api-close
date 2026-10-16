@@ -1,6 +1,7 @@
 package app
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samber/hot"
 	auditprojection "github.com/sh2001sh/new-api/internal/audit/projection"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -16,6 +18,7 @@ import (
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -23,10 +26,19 @@ const rankingVersion = "marketplace-v7-consumer-cost"
 
 var marketplaceListCache struct {
 	sync.Mutex
-	at     time.Time
-	key    string
-	result *GroupListResult
+	entries *hot.HotCache[string, *GroupListResult]
 }
+var marketplaceListLoads singleflight.Group
+
+type marketplaceListSnapshot struct {
+	channels map[string]marketplaceschema.Channel
+	items    map[string]GroupListItem
+}
+
+// Share immutable metrics only when the freshly authorized group set matches.
+// Personal prices, active concurrency and feedback never enter this cache.
+var marketplaceSnapshotCache = hot.NewHotCache[string, *marketplaceListSnapshot](hot.LRU, 4).WithTTL(5 * time.Second).Build()
+var marketplaceSnapshotLoads singleflight.Group
 
 type rankingTotals struct {
 	requestCount   int64
@@ -47,49 +59,50 @@ type rankingTotals struct {
 }
 
 func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
-	startedAt := time.Now()
 	query = normalizeGroupQuery(query)
-	cacheKey := fmt.Sprintf("%+v", query)
+	cacheKey := fmt.Sprintf("%p:%+v", platformdb.DB, query)
 	marketplaceListCache.Lock()
-	if marketplaceListCache.result != nil && marketplaceListCache.key == cacheKey && time.Since(marketplaceListCache.at) < 5*time.Second {
-		result := marketplaceListCache.result
-		marketplaceListCache.Unlock()
+	if marketplaceListCache.entries == nil {
+		marketplaceListCache.entries = hot.NewHotCache[string, *GroupListResult](hot.LRU, 64).WithTTL(5 * time.Second).Build()
+	}
+	cache := marketplaceListCache.entries
+	marketplaceListCache.Unlock()
+	if result, found, err := cache.Get(cacheKey); err != nil {
+		return nil, err
+	} else if found {
 		return result, nil
 	}
-	marketplaceListCache.Unlock()
-	groups, channels, err := loadPublicGroups(query)
+	value, err, _ := marketplaceListLoads.Do(cacheKey, func() (any, error) {
+		if result, found, err := cache.Get(cacheKey); err != nil {
+			return nil, err
+		} else if found {
+			return result, nil
+		}
+		result, err := loadMarketplaceGroups(query)
+		if err != nil {
+			return nil, err
+		}
+		cache.Set(cacheKey, result)
+		return result, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	groups, channels = filterGroupsBySource(groups, channels, query.Source)
-	var snapshots map[string]marketplaceschema.RankingSnapshot
-	var recentSeries map[int][]RecentRequestBucket
-	loadSnapshots := func() error {
-		var err error
-		snapshots, err = rankingSnapshotsForList(groups, channels, query.WindowHours)
-		return err
+	return value.(*GroupListResult), nil
+}
+
+func loadMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
+	startedAt := time.Now()
+	groups, err := loadPublicGroupRows(query)
+	if err != nil {
+		return nil, err
 	}
-	loadRecentSeries := func() error {
-		var err error
-		recentSeries, err = marketplaceRecentRequestSeries(groups, channels)
-		return err
+	base, err := loadMarketplaceListSnapshot(groups, query.WindowHours)
+	if err != nil {
+		return nil, err
 	}
-	if platformdb.DB.Dialector.Name() == "sqlite" {
-		if err := loadSnapshots(); err != nil {
-			return nil, err
-		}
-		if err := loadRecentSeries(); err != nil {
-			return nil, err
-		}
-	} else {
-		var group errgroup.Group
-		group.Go(loadSnapshots)
-		group.Go(loadRecentSeries)
-		if err := group.Wait(); err != nil {
-			return nil, err
-		}
-	}
-	items, err := filterAndSortGroups(groups, channels, snapshots, recentSeries, query)
+	groups, channels := filterGroupsBySource(groups, base.channels, query.Source)
+	items, err := filterAndSortGroups(groups, channels, nil, nil, query, base.items)
 	if err != nil {
 		return nil, err
 	}
@@ -142,20 +155,108 @@ func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 		}
 	}
 	items = paginateGroups(items, query.Page, query.PageSize)
+	if err := attachGroupVerification(items); err != nil {
+		return nil, err
+	}
 	if err := attachChannelFeedback(items, channels, query.ViewerUserID); err != nil {
 		return nil, err
 	}
 	result := &GroupListResult{Items: items, OfficialItems: officialItems, Highlights: highlights, Total: total, Page: query.Page, PageSize: query.PageSize, RankedCount: ranked, WindowHours: query.WindowHours}
-	marketplaceListCache.Lock()
-	marketplaceListCache.at, marketplaceListCache.key, marketplaceListCache.result = time.Now(), cacheKey, result
-	marketplaceListCache.Unlock()
 	if elapsed := time.Since(startedAt); elapsed >= 500*time.Millisecond {
 		platformobservability.SysLog(fmt.Sprintf("slow marketplace list query groups=%d returned=%d window_hours=%d total_ms=%d", total, len(items), query.WindowHours, elapsed.Milliseconds()))
 	}
 	return result, nil
 }
 
+func loadMarketplaceListSnapshot(groups []marketplaceschema.Group, hours int) (*marketplaceListSnapshot, error) {
+	digest := sha256.New()
+	for _, group := range groups {
+		fmt.Fprintf(digest, "%s:%d;", group.ID, group.UpdatedAt.UnixNano())
+	}
+	key := fmt.Sprintf("%p:%p:%d:%x", platformdb.DB, platformdb.LogDB, hours, digest.Sum(nil))
+	if value, found, err := marketplaceSnapshotCache.Get(key); err != nil {
+		return nil, err
+	} else if found {
+		return value, nil
+	}
+	value, err, _ := marketplaceSnapshotLoads.Do(key, func() (any, error) {
+		if value, found, err := marketplaceSnapshotCache.Get(key); err != nil {
+			return nil, err
+		} else if found {
+			return value, nil
+		}
+		base, err := buildMarketplaceListSnapshot(groups, hours)
+		if err != nil {
+			return nil, err
+		}
+		marketplaceSnapshotCache.Set(key, base)
+		return base, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return value.(*marketplaceListSnapshot), nil
+}
+
+func buildMarketplaceListSnapshot(groups []marketplaceschema.Group, hours int) (*marketplaceListSnapshot, error) {
+	channels, err := marketplaceChannelReadMap(groups, false)
+	if err != nil {
+		return nil, err
+	}
+	var snapshots map[string]marketplaceschema.RankingSnapshot
+	var recentSeries map[int][]RecentRequestBucket
+	loadSnapshots := func() error {
+		var err error
+		snapshots, err = rankingSnapshotsForList(groups, channels, hours)
+		return err
+	}
+	loadRecentSeries := func() error {
+		var err error
+		recentSeries, err = marketplaceRecentRequestSeries(groups, channels)
+		return err
+	}
+	if platformdb.DB.Dialector.Name() == "sqlite" {
+		if err := loadSnapshots(); err != nil {
+			return nil, err
+		}
+		if err := loadRecentSeries(); err != nil {
+			return nil, err
+		}
+	} else {
+		var group errgroup.Group
+		group.Go(loadSnapshots)
+		group.Go(loadRecentSeries)
+		if err := group.Wait(); err != nil {
+			return nil, err
+		}
+	}
+	base := &marketplaceListSnapshot{channels: channels, items: make(map[string]GroupListItem, len(groups))}
+	for _, group := range groups {
+		channel, ok := channels[group.ChannelID]
+		if !ok {
+			continue
+		}
+		id := 0
+		if channel.InternalChannelID != nil {
+			id = *channel.InternalChannelID
+		}
+		base.items[group.ID] = groupListItem(group, channel, decodeModels(channel.DeclaredModels), snapshots[group.ID], recentSeries[id])
+	}
+	return base, nil
+}
+
 func matchesGroupListItemQuery(item GroupListItem, query GroupQuery) bool {
+	if (query.CreditPack == "supported" && !item.CreditPackSupported) ||
+		(query.CreditPack == "unsupported" && item.CreditPackSupported) {
+		return false
+	}
+	if (query.MultiplierCard == "supported" && !item.MultiplierCardSupported) ||
+		(query.MultiplierCard == "unsupported" && item.MultiplierCardSupported) {
+		return false
+	}
+	if query.ShopID > 0 || query.Tag != "" {
+		return false
+	}
 	search := strings.ToLower(strings.TrimSpace(query.Search))
 	if search != "" {
 		haystack := strings.ToLower(strings.Join(append([]string{item.ID, item.PublicSlug, item.SystemDisplayName, item.SourceLabel, item.ProviderType}, item.Models...), " "))
@@ -256,7 +357,7 @@ func loadPublicGroups(query GroupQuery) ([]marketplaceschema.Group, map[string]m
 
 func loadPublicGroupRows(query GroupQuery) ([]marketplaceschema.Group, error) {
 	var groups []marketplaceschema.Group
-	if err := publicGroupsQuery(query).Order("updated_at DESC, id ASC").Limit(1000).Find(&groups).Error; err != nil {
+	if err := publicGroupsQuery(query).Order("updated_at DESC, id ASC").Find(&groups).Error; err != nil {
 		return nil, err
 	}
 	return groups, nil
@@ -264,6 +365,10 @@ func loadPublicGroupRows(query GroupQuery) ([]marketplaceschema.Group, error) {
 
 func publicGroupsQuery(query GroupQuery) *gorm.DB {
 	dbQuery := platformdb.DB.Model(&marketplaceschema.Group{}).Select(marketplaceGroupColumns())
+	dbQuery = dbQuery.Where("(moderation_status IS NULL OR moderation_status <> ?)", "failed")
+	if query.ShopID > 0 {
+		dbQuery = dbQuery.Where("owner_user_id = ?", query.ShopID)
+	}
 	// Public discovery requires approval even for owners and explicit filters.
 	dbQuery = dbQuery.Where("verification_status = ? AND lifecycle_status IN ?", marketplacedomain.VerificationPassed, []string{
 		marketplacedomain.LifecycleActive,
@@ -294,10 +399,10 @@ func publicGroupsQuery(query GroupQuery) *gorm.DB {
 }
 
 func marketplaceGroupColumns() string {
-	return "id, channel_id, owner_user_id, public_slug, system_display_name, internal_group_name, source_type, credit_pool_policy, multiplier, lifecycle_status, verification_status, visibility, published_at, verification_due_at, created_at, updated_at"
+	return "id, channel_id, owner_user_id, public_slug, system_display_name, internal_group_name, source_type, credit_pool_policy, multiplier, lifecycle_status, verification_status, visibility, published_at, verification_due_at, created_at, updated_at, custom_name, description, tags, moderation_status"
 }
 
-func marketplaceChannelReadMap(groups []marketplaceschema.Group) (map[string]marketplaceschema.Channel, error) {
+func marketplaceChannelReadMap(groups []marketplaceschema.Group, includeEvidence ...bool) (map[string]marketplaceschema.Channel, error) {
 	ids := make([]string, 0, len(groups))
 	for _, group := range groups {
 		ids = append(ids, group.ChannelID)
@@ -307,7 +412,10 @@ func marketplaceChannelReadMap(groups []marketplaceschema.Group) (map[string]mar
 		return result, nil
 	}
 	var channels []marketplaceschema.Channel
-	const columns = "id, owner_user_id, provider_type, approved_source_label, source_label_status, model_prices, declared_models, model_verification_results, connectivity_test_status, connectivity_test_checked_at, model_consistency_status, transport_capabilities, max_concurrency, user_max_concurrency, internal_channel_id, multiplier_card_supported, multiplier_card_user_enabled"
+	columns := "id, owner_user_id, provider_type, approved_source_label, source_label_status, model_prices, declared_models, connectivity_test_status, connectivity_test_checked_at, model_consistency_status, transport_capabilities, max_concurrency, user_max_concurrency, internal_channel_id, multiplier_card_supported, multiplier_card_user_enabled, credit_pack_supported"
+	if len(includeEvidence) == 0 || includeEvidence[0] {
+		columns += ", model_verification_results"
+	}
 	if err := platformdb.DB.Select(columns).Where("id IN ?", ids).Find(&channels).Error; err != nil {
 		return nil, err
 	}
@@ -315,6 +423,34 @@ func marketplaceChannelReadMap(groups []marketplaceschema.Group) (map[string]mar
 		result[channel.ID] = channel
 	}
 	return result, nil
+}
+
+// Verification evidence is displayed only for the returned page. It does not
+// affect ranking, so decoding it for every group wastes database IO and memory.
+func attachGroupVerification(items []GroupListItem) error {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.ChannelID != "" {
+			ids = append(ids, item.ChannelID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	var rows []marketplaceschema.Channel
+	if err := platformdb.DB.Select("id, model_verification_results").Where("id IN ?", ids).Find(&rows).Error; err != nil {
+		return err
+	}
+	byID := make(map[string]string, len(rows))
+	for _, row := range rows {
+		byID[row.ID] = row.ModelVerificationResults
+	}
+	for i := range items {
+		raw := byID[items[i].ChannelID]
+		items[i].VerificationCompletedAt = latestModelVerificationAt(raw)
+		items[i].ModelVerificationResults = publicModelVerificationResults(raw)
+	}
+	return nil
 }
 
 func channelMap(groups []marketplaceschema.Group) (map[string]marketplaceschema.Channel, error) {

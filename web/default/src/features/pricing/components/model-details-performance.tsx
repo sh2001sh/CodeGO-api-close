@@ -18,9 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, HeartPulse, Timer } from 'lucide-react'
+import { HeartPulse, Timer } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -66,11 +68,6 @@ function StatCard(props: {
       >
         {props.value}
       </span>
-      {props.hint && (
-        <span className='text-muted-foreground/70 text-[11px]'>
-          {props.hint}
-        </span>
-      )}
     </div>
   )
 }
@@ -81,6 +78,7 @@ type PerformanceRow = {
   avg_latency_ms: number
   success_rate: number
   avg_tps: number
+  request_count: number
 }
 
 function toLatencySeries(groups: PerformanceGroup[]) {
@@ -109,6 +107,7 @@ function toUptimeSeries(groups: PerformanceGroup[]): UptimeDayPoint[] {
   const byTs = new Map<number, { rates: number[]; incidents: number }>()
   for (const group of groups) {
     for (const point of group.series) {
+      if (!(point.request_count > 0)) continue
       const current = byTs.get(point.ts) ?? { rates: [], incidents: 0 }
       if (Number.isFinite(point.success_rate)) {
         current.rates.push(point.success_rate)
@@ -135,12 +134,14 @@ function toUptimeSeries(groups: PerformanceGroup[]): UptimeDayPoint[] {
 }
 
 function toGroupUptimeSeries(group: PerformanceGroup): UptimeDayPoint[] {
-  return group.series.map((point) => ({
-    date: new Date(point.ts * 1000).toISOString(),
-    uptime_pct: Math.round(point.success_rate * 100) / 100,
-    incidents: point.success_rate < 100 ? 1 : 0,
-    outage_minutes: 0,
-  }))
+  return group.series
+    .filter((point) => point.request_count > 0)
+    .map((point) => ({
+      date: new Date(point.ts * 1000).toISOString(),
+      uptime_pct: Math.round(point.success_rate * 100) / 100,
+      incidents: point.success_rate < 100 ? 1 : 0,
+      outage_minutes: 0,
+    }))
 }
 
 function average(
@@ -173,6 +174,10 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
         avg_latency_ms: group.avg_latency_ms,
         success_rate: group.success_rate,
         avg_tps: group.avg_tps,
+        request_count: group.series.reduce(
+          (sum, point) => sum + (point.request_count || 0),
+          0
+        ),
       })),
     [groups]
   )
@@ -186,10 +191,38 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
     return map
   }, [groups])
 
-  if (metricsQuery.isLoading || performances.length === 0) {
+  if (metricsQuery.isLoading)
+    return (
+      <div aria-busy='true' aria-label={t('Loading')}>
+        <Skeleton className='h-24 w-full' />
+        <Skeleton className='mt-6 h-64 w-full' />
+      </div>
+    )
+
+  if (metricsQuery.isError)
+    return (
+      <div
+        role='alert'
+        className='flex flex-wrap items-center gap-4 border p-6'
+      >
+        <span>{t('加载失败，请重试')}</span>
+        <Button variant='outline' onClick={() => void metricsQuery.refetch()}>
+          {t('重试')}
+        </Button>
+      </div>
+    )
+
+  if (performances.length === 0) {
     return (
       <div className='text-muted-foreground rounded-lg border p-6 text-center text-sm'>
-        {t('Performance data is not yet available for this model.')}
+        <span>{t('暂无数据')}</span>
+        <Button
+          variant='outline'
+          className='ml-4'
+          onClick={() => void metricsQuery.refetch()}
+        >
+          {t('刷新')}
+        </Button>
       </div>
     )
   }
@@ -209,8 +242,7 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
     successRates.length > 0
       ? successRates.reduce((sum, value) => sum + value, 0) /
         successRates.length
-      : 0
-  const incidentCount = uptimeSeries.reduce((s, p) => s + p.incidents, 0)
+      : Number.NaN
   let intent: 'default' | 'warning' | 'success' = 'warning'
   if (successRate >= 99.9) {
     intent = 'success'
@@ -224,12 +256,7 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
   return (
     <div className='flex flex-col gap-4'>
       <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
-        <StatCard
-          icon={Timer}
-          label='TPS'
-          value={formatThroughput(avgTps)}
-          hint={t('Sustained tokens per second')}
-        />
+        <StatCard icon={Timer} label='TPS' value={formatThroughput(avgTps)} />
         <StatCard
           icon={Timer}
           label={t('Average latency')}
@@ -239,28 +266,20 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
           icon={HeartPulse}
           label={t('Success rate')}
           value={formatUptimePct(successRate)}
-          hint={
-            incidentCount > 0
-              ? t('{{count}} incidents in the last 24 hours', {
-                  count: incidentCount,
-                })
-              : t('No incidents in the last 24 hours')
-          }
           intent={intent}
         />
       </div>
 
       <section>
-        <SectionHeader
-          icon={HeartPulse}
-          title={t('Per-group performance')}
-          description={t('Average latency, TTFT, TPS, and success rate')}
-        />
+        <SectionHeader icon={HeartPulse} title={t('Per-group performance')} />
         <div className='overflow-x-auto rounded-lg border'>
           <Table className='text-sm'>
             <TableHeader>
               <TableRow className='hover:bg-transparent'>
                 <TableHead className={headerCellClass}>{t('Group')}</TableHead>
+                <TableHead className={`${headerCellClass} text-right`}>
+                  {t('样本')}
+                </TableHead>
                 <TableHead className={`${headerCellClass} text-right`}>
                   TPS
                 </TableHead>
@@ -282,6 +301,9 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
                 <TableRow key={perf.group}>
                   <TableCell className='py-2.5'>
                     <GroupBadge group={perf.group} size='sm' />
+                  </TableCell>
+                  <TableCell className='py-2.5 text-right font-mono'>
+                    {perf.request_count || '—'}
                   </TableCell>
                   <TableCell className='py-2.5 text-right font-mono'>
                     {formatThroughput(perf.avg_tps)}
@@ -306,39 +328,12 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
       </section>
 
       <section>
-        <SectionHeader
-          icon={Timer}
-          title={t('Latency trend (last 24h)')}
-          description={t('Average TTFT')}
-        />
+        <SectionHeader icon={Timer} title={t('Latency trend (last 24h)')} />
         <LatencyTrendChart series={latencySeries} />
       </section>
 
       <section>
-        <SectionHeader
-          icon={HeartPulse}
-          title={t('Availability (last 24h)')}
-          description={
-            incidentCount > 0
-              ? t(
-                  'Request success rate; {{incidents}} incident buckets in the last 24 hours',
-                  {
-                    incidents: incidentCount,
-                  }
-                )
-              : t('Request success rate sampled over the last 24 hours')
-          }
-          accent={
-            incidentCount > 0 ? (
-              <span className='inline-flex items-center gap-1 text-warning'>
-                <AlertTriangle className='size-3.5' />
-                {t('{{count}} incidents', {
-                  count: incidentCount,
-                })}
-              </span>
-            ) : null
-          }
-        />
+        <SectionHeader icon={HeartPulse} title={t('Availability (last 24h)')} />
         <UptimeTrendChart series={uptimeSeries} />
       </section>
     </div>
@@ -360,11 +355,6 @@ function SectionHeader(props: {
           <div className='text-foreground text-sm font-semibold'>
             {props.title}
           </div>
-          {props.description && (
-            <p className='text-muted-foreground/80 text-xs'>
-              {props.description}
-            </p>
-          )}
         </div>
       </div>
       {props.accent && (

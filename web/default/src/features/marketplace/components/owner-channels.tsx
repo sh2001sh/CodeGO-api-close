@@ -1,9 +1,13 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import interfaceI18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import {
   AlertTriangle,
   Activity,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
   Clock3,
   PauseCircle,
@@ -19,16 +23,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useMyMarketplaceChannels } from '../hooks'
+import { useMyMarketplaceChannels, useMyMarketplaceChannelPage } from '../hooks'
 import { formatMultiplier } from '../lib/format'
-import type { MarketplaceChannel } from '../types'
+import type { MarketplaceChannel, OwnerChannelIndexItem } from '../types'
 import { ChannelDeleteDialog } from './channel-delete-dialog'
 import { ChannelEditDialog } from './channel-edit-dialog'
 import { ChannelVerificationStatus } from './channel-verification-status'
 import { AutoProbeStatusView } from './model-verification'
 import { OwnerChannelActions } from './owner-channel-actions'
 import { IncomeMetric } from './owner-channel-metric'
-import { OwnerIncomeOverview } from './owner-income-overview'
 import { SensitiveWordPolicyControl } from './sensitive-word-policy-control'
 import { MarketplaceStatusBadge } from './status-badge'
 
@@ -37,27 +40,51 @@ export function OwnerChannels(props: { onAdd: () => void }) {
   const query = useMyMarketplaceChannels()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
+  const [pagination, setPagination] = useState({ scope: '', page: 1 })
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)
   const [deleting, setDeleting] = useState<MarketplaceChannel | null>(null)
   const [expandedChannelIDs, setExpandedChannelIDs] = useState<Set<string>>(
     new Set()
   )
-  const channels = query.data ?? []
-  const keyword = search.trim().toLowerCase()
-  const visible = channels.filter(
-    (channel) =>
-      (!status ||
-        (status === 'deleted'
-          ? Boolean(channel.deleted_at)
-          : !channel.deleted_at && channel.lifecycle_status === status)) &&
-      (!keyword ||
-        [
-          channel.id,
-          channel.system_display_name,
-          channel.submitted_source_label,
-          ...channel.declared_models,
-        ].some((value) => value.toLowerCase().includes(keyword)))
+  const channels = useMemo(() => query.data ?? [], [query.data])
+  const visible = useMemo(() => {
+    const keyword = search.trim().toLowerCase()
+    return channels.filter(
+      (channel) =>
+        (!status ||
+          (status === 'deleted'
+            ? Boolean(channel.deleted_at)
+            : !channel.deleted_at && channel.lifecycle_status === status)) &&
+        (!keyword || channel.search_text.includes(keyword))
+    )
+  }, [channels, search, status])
+  const pageScope = JSON.stringify([search, status])
+  const pageCount = Math.max(1, Math.ceil(visible.length / 50))
+  const page = Math.min(
+    pagination.scope === pageScope ? pagination.page : 1,
+    pageCount
   )
+  if (pagination.scope !== pageScope || pagination.page !== page) {
+    setPagination({ scope: pageScope, page })
+  }
+  const pageChannels = visible.slice((page - 1) * 50, page * 50)
+  const details = useMyMarketplaceChannelPage(
+    pageChannels.map((channel) => channel.id)
+  )
+  const isLoading =
+    query.isLoading || (pageChannels.length > 0 && details.isLoading)
+  const isError = query.isError || details.isError
+  const refresh = () => {
+    void query.refetch()
+    if (pageChannels.length > 0) void details.refetch()
+  }
+  const setPage = (value: number) => {
+    if (!Number.isFinite(value)) return
+    setPagination({
+      scope: pageScope,
+      page: Math.max(1, Math.min(pageCount, Math.trunc(value))),
+    })
+  }
   const toggleChannel = (channelID: string) => {
     setExpandedChannelIDs((current) => {
       const next = new Set(current)
@@ -68,33 +95,30 @@ export function OwnerChannels(props: { onAdd: () => void }) {
   }
   return (
     <>
-      <section className='border-border bg-card overflow-hidden rounded-lg border'>
+      <section className='owner-channel-inventory'>
         <header className='flex flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-5'>
-          <div className='flex min-w-0 items-start gap-3'>
-            <span className='border-primary/30 text-primary bg-primary/[0.04] flex size-10 shrink-0 items-center justify-center rounded-md border'>
-              <WalletCards className='size-5' />
-            </span>
-            <div>
-              <h3 className='font-semibold'>{t('渠道经营台')}</h3>
-              <p className='text-muted-foreground mt-1 text-sm'>
-                {t('统一查看服务状态、审核进度、收入与结算。')}
-              </p>
-            </div>
-          </div>
-          <Button size='sm' onClick={props.onAdd}>
-            <Plus />
-            {t('添加渠道')}
+          <h2 className='text-lg font-semibold'>{t('我的渠道')}</h2>
+          <Button
+            variant='ghost'
+            size='sm'
+            disabled={query.isFetching || details.isFetching}
+            onClick={refresh}
+          >
+            <RefreshCcw
+              className={
+                query.isFetching || details.isFetching
+                  ? 'animate-spin motion-reduce:animate-none'
+                  : ''
+              }
+              aria-hidden='true'
+            />
+            {t('刷新')}
           </Button>
         </header>
-        <div className='border-border bg-muted/30 text-muted-foreground border-y px-4 py-3 text-xs leading-5 sm:px-5'>
-          <strong>{t('渠道关停与冻结额度规则')}</strong>：
-          {t(
-            '暂停、下架或删除渠道都不会没收收益；冻结期内的待结算额度会继续冻结，并在原定时间到账。已删除渠道的使用日志与结算记录仍可查询。'
-          )}
-        </div>
-        <OwnerOperationsPulse channels={channels} />
-        <OwnerIncomeOverview channels={channels} />
-        <div className='flex flex-wrap gap-2 border-b p-4'>
+        {!query.isLoading && !query.isError && channels.length > 0 && (
+          <OwnerOperationsPulse channels={channels} />
+        )}
+        <div className='owner-channel-filters'>
           <Input
             className='w-full sm:w-80'
             value={search}
@@ -118,21 +142,62 @@ export function OwnerChannels(props: { onAdd: () => void }) {
             <option value='deleted'>{t('已删除')}</option>
           </NativeSelect>
         </div>
+        {!query.isLoading && !query.isError && pageCount > 1 && (
+          <nav
+            className='owner-channel-pagination flex flex-wrap items-center justify-between gap-3 px-4 pb-4 sm:px-5'
+            aria-label={t('pagination')}
+          >
+            <span className='text-muted-foreground text-sm'>
+              {t('Total')} {visible.length.toLocaleString(getIntlLocale())}
+            </span>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Button
+                variant='outline'
+                disabled={page === 1}
+                onClick={() => setPage(page - 1)}
+              >
+                <ChevronLeft aria-hidden='true' />
+                {t('上一页')}
+              </Button>
+              <label className='flex items-center gap-2 text-sm'>
+                <span className='sr-only'>{t('Page')}</span>
+                <Input
+                  type='number'
+                  className='w-[68px] text-center tabular-nums'
+                  min={1}
+                  max={pageCount}
+                  value={page}
+                  aria-label={t('Page')}
+                  onChange={(event) => setPage(Number(event.target.value))}
+                />
+                <span>/ {pageCount.toLocaleString(getIntlLocale())}</span>
+              </label>
+              <Button
+                variant='outline'
+                disabled={page === pageCount}
+                onClick={() => setPage(page + 1)}
+              >
+                {t('下一页')}
+                <ChevronRight aria-hidden='true' />
+              </Button>
+            </div>
+          </nav>
+        )}
         <div>
-          {query.isLoading ? (
+          {isLoading ? (
             <div className='space-y-2 p-3'>
               {Array.from({ length: 4 }).map((_, index) => (
                 <Skeleton key={index} className='h-20 w-full' />
               ))}
             </div>
-          ) : query.isError ? (
+          ) : isError ? (
             <div className='px-4 py-12 text-center'>
               <div className='font-medium'>{t('渠道数据加载失败')}</div>
               <Button
                 variant='outline'
                 size='sm'
                 className='mt-4'
-                onClick={() => void query.refetch()}
+                onClick={refresh}
               >
                 <RefreshCcw />
                 {t('重试')}
@@ -141,9 +206,6 @@ export function OwnerChannels(props: { onAdd: () => void }) {
           ) : channels.length === 0 ? (
             <div className='px-4 py-12 text-center'>
               <div className='font-medium'>{t('还没有渠道')}</div>
-              <p className='text-muted-foreground mt-1 text-sm'>
-                {t('添加第一个渠道后，可在这里查看审核状态和收入。')}
-              </p>
               <Button size='sm' className='mt-4' onClick={props.onAdd}>
                 <Plus />
                 {t('添加渠道')}
@@ -155,16 +217,22 @@ export function OwnerChannels(props: { onAdd: () => void }) {
             </p>
           ) : (
             <div className='divide-border divide-y'>
-              {visible.map((channel) => (
-                <article
-                  key={channel.id}
-                  className='hover:bg-muted/20 px-4 py-4 transition-colors sm:px-5'
-                >
+              {(details.data ?? []).map((channel) => (
+                <article key={channel.id} className='owner-channel-record'>
                   <div>
                     <div className='min-w-0'>
                       <div className='flex flex-wrap items-center gap-2'>
-                        <span className='text-[15px] font-semibold'>
-                          {channel.system_display_name}
+                        <span
+                          className='min-w-0 flex-1 truncate text-[15px] font-semibold'
+                          title={
+                            channel.custom_name
+                              ? `${channel.id}-${channel.custom_name}`
+                              : channel.system_display_name
+                          }
+                        >
+                          {channel.custom_name
+                            ? `${channel.id}-${channel.custom_name}`
+                            : channel.system_display_name}
                         </span>
                         {channel.deleted_at ? (
                           <Badge
@@ -178,7 +246,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                             status={channel.lifecycle_status}
                           />
                         )}
-                        <span className='border-primary/25 bg-primary/[0.07] text-primary app-numeric ml-1 rounded-[4px] border px-1.5 py-0.5 text-xs font-semibold tabular-nums'>
+                        <span className='owner-channel-multiplier app-numeric'>
                           {formatMultiplier(channel.multiplier)}x
                         </span>
                       </div>
@@ -211,7 +279,9 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                           </dd>
                         </div>
                         <div className='flex min-w-0 items-baseline gap-1.5'>
-                          <dt className='shrink-0 opacity-80'>Key</dt>
+                          <dt className='shrink-0 opacity-80'>
+                            {interfaceI18n.t('Key')}
+                          </dt>
                           <dd className='truncate font-mono'>
                             ····{channel.credential_tail}
                           </dd>
@@ -246,14 +316,13 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                         {!expandedChannelIDs.has(channel.id) && (
                           <span className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
                             <ChannelHealthSummary channel={channel} />
-                            <span>{t('检测、模型与收入信息已折叠')}</span>
                           </span>
                         )}
                       </div>
                       {expandedChannelIDs.has(channel.id) && (
                         <div
                           id={`owner-channel-details-${channel.id}`}
-                          className='mt-3'
+                          className='owner-channel-details mt-3'
                         >
                           {!channel.deleted_at && (
                             <div className='border-border/60 mb-3 border-b pb-3'>
@@ -297,7 +366,7 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                             checkedAt={channel.auto_probe_last_at}
                           />
                           <div className='border-border/60 mt-4 border-t pt-3'>
-                            <div className='text-muted-foreground mb-2 text-[11px] font-medium tracking-[0.14em] uppercase'>
+                            <div className='text-muted-foreground mb-3 text-xs font-medium'>
                               {t('收入与结算')}
                             </div>
                             <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-4'>
@@ -337,6 +406,14 @@ export function OwnerChannels(props: { onAdd: () => void }) {
             </div>
           )}
         </div>
+        <details className='owner-channel-policy'>
+          <summary>{t('渠道关停与冻结额度规则')}</summary>
+          <p>
+            {t(
+              '暂停、下架或删除渠道都不会没收收益；冻结期内的待结算额度会继续冻结，并在原定时间到账。已删除渠道的使用日志与结算记录仍可查询。'
+            )}
+          </p>
+        </details>
       </section>
       <ChannelEditDialog
         channel={editing}
@@ -356,25 +433,14 @@ export function OwnerChannels(props: { onAdd: () => void }) {
   )
 }
 
-function OwnerOperationsPulse(props: { channels: MarketplaceChannel[] }) {
+function OwnerOperationsPulse(props: { channels: OwnerChannelIndexItem[] }) {
   const { t } = useTranslation()
   const channels = props.channels.filter((channel) => !channel.deleted_at)
-  const active = channels.filter((channel) => channel.lifecycle_status === 'active').length
-  const attention = channels.filter((channel) => {
-    const failedModels = channel.model_verification_results.filter(
-      (result) => result.status === 'failed' || !result.listed
-    ).length
-    return (
-      ['degraded', 'suspended'].includes(channel.lifecycle_status) ||
-      channel.connectivity_test_status === 'failed' ||
-      failedModels > 0 ||
-      channel.source_label_status === 'rejected'
-    )
-  }).length
-  const checking = channels.filter((channel) =>
-    ['verifying', 'queued', 'running'].includes(channel.lifecycle_status) ||
-    ['queued', 'running'].includes(channel.connectivity_test_status)
+  const active = channels.filter(
+    (channel) => channel.lifecycle_status === 'active'
   ).length
+  const attention = channels.filter((channel) => channel.needs_attention).length
+  const checking = channels.filter((channel) => channel.checking).length
   const cards = [
     {
       icon: CheckCircle2,
@@ -397,34 +463,31 @@ function OwnerOperationsPulse(props: { channels: MarketplaceChannel[] }) {
     {
       icon: PauseCircle,
       label: t('已暂停'),
-      value: channels.filter((channel) => channel.lifecycle_status === 'suspended').length,
+      value: channels.filter(
+        (channel) => channel.lifecycle_status === 'suspended'
+      ).length,
       tone: 'text-muted-foreground bg-muted',
     },
   ]
   return (
-    <section className='border-border bg-muted/15 border-y px-4 py-3 sm:px-5' aria-label={t('渠道运行概览')}>
+    <section className='owner-channel-pulse' aria-label={t('渠道运行概览')}>
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <div>
-          <h4 className='text-sm font-semibold'>{t('运营信号')}</h4>
-          <p className='text-muted-foreground mt-0.5 text-xs'>
-            {attention > 0
-              ? t('有 {{count}} 个渠道需要关注，建议先处理检测或服务状态。', { count: attention })
-              : t('当前没有需要立即处理的渠道。')}
-          </p>
+          <h3 className='text-sm font-semibold'>{t('运营信号')}</h3>
         </div>
-        <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+        <dl className='owner-channel-pulse-counts'>
           {cards.map(({ icon: Icon, label, value, tone }) => (
-            <div key={label} className='flex min-w-24 items-center gap-2 rounded-md border border-border/70 bg-card px-2.5 py-2'>
-              <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${tone}`}>
+            <div key={label} className='flex items-center gap-2'>
+              <span
+                className={`flex size-7 shrink-0 items-center justify-center rounded-md ${tone}`}
+              >
                 <Icon className='size-4' aria-hidden='true' />
               </span>
-              <span className='min-w-0'>
-                <span className='text-muted-foreground block truncate text-[11px]'>{label}</span>
-                <span className='mt-0.5 block text-base font-semibold tabular-nums'>{value}</span>
-              </span>
+              <dt className='text-muted-foreground text-xs'>{label}</dt>
+              <dd className='font-medium tabular-nums'>{value}</dd>
             </div>
           ))}
-        </div>
+        </dl>
       </div>
     </section>
   )
@@ -444,13 +507,29 @@ function ChannelHealthSummary(props: { channel: MarketplaceChannel }) {
         : status === 'running' || status === 'queued'
           ? t('检测中')
           : t('未检测')
-  const tone = status === 'passed' ? 'text-success' : status === 'failed' ? 'text-destructive' : 'text-muted-foreground'
+  const tone =
+    status === 'passed'
+      ? 'text-success'
+      : status === 'failed'
+        ? 'text-destructive'
+        : 'text-muted-foreground'
   return (
     <span className='inline-flex items-center gap-1'>
-      <span className={`size-1.5 rounded-full ${status === 'passed' ? 'bg-success' : status === 'failed' ? 'bg-destructive' : 'bg-muted-foreground'}`} aria-hidden='true' />
+      <span
+        className={`size-1.5 rounded-full ${status === 'passed' ? 'bg-success' : status === 'failed' ? 'bg-destructive' : 'bg-muted-foreground'}`}
+        aria-hidden='true'
+      />
       <span className={tone}>{label}</span>
-      {failedModels > 0 && <span className='text-destructive'>{t('{{count}} 个失败模型', { count: failedModels })}</span>}
-      {props.channel.request_count > 0 && <span>{t('{{count}} 次调用', { count: props.channel.request_count })}</span>}
+      {failedModels > 0 && (
+        <span className='text-destructive'>
+          {t('{{count}} 个失败模型', { count: failedModels })}
+        </span>
+      )}
+      {props.channel.request_count > 0 && (
+        <span>
+          {t('{{count}} 次调用', { count: props.channel.request_count })}
+        </span>
+      )}
     </span>
   )
 }

@@ -1,0 +1,267 @@
+.console-key-description {
+  margin: 0 0 24px;
+  color: var(--ink-secondary, var(--muted-foreground));
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.console-key-table {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.console-key-toolbar {
+  padding: 16px;
+  border: 1px solid var(--hairline-light, var(--border));
+  border-radius: 20px;
+  background: var(--surface-glass, var(--card));
+  backdrop-filter: blur(16px);
+}
+
+.console-key-table :is([data-slot='button'], [role='combobox'], input) {
+  min-height: 44px;
+}
+
+.console-key-table input {
+  border-radius: 12px;
+  background: var(--bg-subtle, var(--muted));
+}
+
+.console-key-table .codego-panel {
+  border: 1px solid var(--hairline-light, var(--border));
+  border-radius: 20px;
+  background: var(--surface-card, var(--card));
+  box-shadow: none;
+}
+
+.console-key-table [data-slot='table-container'] {
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+}
+
+.console-key-table table :is(th, td) {
+  height: 76px;
+  padding: 14px 18px;
+  font-size: 13px;
+}
+
+.console-key-table table th {
+  height: 54px;
+  color: var(--ink-secondary, var(--muted-foreground));
+  background: var(--bg-subtle, var(--muted));
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.console-key-table table tr {
+  border-color: var(--hairline-light, var(--border));
+}
+
+.console-key-table table tbody tr:hover {
+  background: color-mix(
+    in srgb,
+    var(--brand-orange, var(--primary)) 3%,
+    var(--surface-card, var(--card))
+  );
+}
+
+.console-key-table table tr[data-state='selected'] {
+  background: color-mix(
+    in srgb,
+    var(--brand-orange, var(--primary)) 7%,
+    var(--surface-card, var(--card))
+  );
+}
+
+.console-key-table table td [role='checkbox'] {
+  min-height: 20px;
+}
+
+.console-key-table .api-key-mask {
+  min-width: 0;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--bg-subtle, var(--muted));
+  border-radius: 8px;
+  padding-inline: 10px;
+  font-size: 12px;
+}
+
+.console-key-table [data-slot='empty'] {
+  padding-block: 64px;
+  border-radius: 20px;
+}
+
+.api-key-sheet {
+  color: var(--ink-primary, var(--foreground));
+  background: var(--bg-canvas, var(--background));
+}
+
+.api-key-sheet :is([data-slot='sheet-header'], [data-slot='sheet-footer']) {
+  padding: 24px;
+  border-color: var(--hairline-light, var(--border));
+  background: var(--surface-glass, var(--card));
+  backdrop-filter: blur(16px);
+}
+
+.api-key-sheet [data-slot='sheet-title'] {
+  font-size: 22px;
+  letter-spacing: -0.025em;
+}
+
+.api-key-form {
+  padding: 24px;
+}
+
+.api-key-form-section {
+  padding-block: 24px;
+  border-bottom: 1px solid var(--hairline-light, var(--border));
+}
+
+.api-key-form-section:first-child {
+  padding-top: 0;
+}
+
+.api-key-form-section-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.api-key-form-section-icon {
+  display: grid;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--brand-orange-deep, var(--primary));
+  background: color-mix(
+    in srgb,
+    var(--brand-orange, var(--primary)) 9%,
+    transparent
+  );
+}
+
+.api-key-form-section-heading h3 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.5;
+}
+
+.api-key-form-section-heading p {
+  margin-top: 4px;
+  color: var(--ink-secondary, var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.api-key-form :is(input, textarea, [role='combobox']) {
+  border-radius: 12px;
+  background: var(--surface-card, var(--card));
+}
+
+.api-key-form > section:not(.api-key-form-section) {
+  margin-top: 24px;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.api-key-dialog {
+  border-color: var(--hairline-light, var(--border));
+  border-radius: 20px;
+  background: var(--surface-card, var(--card));
+}
+
+.api-key-dialog-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-subtle, var(--muted));
+  font-size: 13px;
+}
+
+.api-key-dialog-context code {
+  margin-left: auto;
+  color: var(--ink-secondary, var(--muted-foreground));
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.api-key-model-id {
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--bg-subtle, var(--muted));
+  line-height: 1.6;
+}
+
+.api-key-secret {
+  border-color: rgb(255 255 255 / 12%);
+  border-radius: 16px;
+  color: #f4f1ec;
+  background: var(--surface-obsidian, #171819);
+}
+
+.api-key-secret .text-muted-foreground {
+  color: #b6b5b1;
+}
+
+.api-key-secret input {
+  min-width: 0;
+  width: min(70vw, 24rem);
+  color: inherit;
+  background: rgb(255 255 255 / 6%);
+  border-color: rgb(255 255 255 / 14%);
+}
+
+:is(.api-key-sheet, .api-key-dialog)
+  :is(
+    [data-slot='button'],
+    [role='combobox'],
+    input:not([type='checkbox']),
+    select
+  ) {
+  min-height: 44px;
+}
+
+:is(.api-key-sheet, .api-key-dialog, .console-key-table) :focus-visible {
+  outline-color: var(--brand-orange, var(--primary));
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .console-key-toolbar {
+    padding: 12px;
+    border-radius: 16px;
+  }
+  .console-key-table > div > .divide-border {
+    border-radius: 20px;
+    border-color: var(--hairline-light, var(--border));
+    background: var(--surface-card, var(--card));
+  }
+  .console-key-table > div > .divide-border > div {
+    padding: 20px 16px;
+  }
+  .console-key-table [data-slot='button'][data-size^='icon'] {
+    min-width: 44px;
+  }
+  .api-key-form,
+  .api-key-sheet :is([data-slot='sheet-header'], [data-slot='sheet-footer']) {
+    padding: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.console-key-table, .api-key-sheet, .api-key-dialog, .api-key-secret) * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

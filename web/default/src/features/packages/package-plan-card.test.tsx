@@ -4,6 +4,8 @@ import { test } from 'node:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { GroupBuyItem } from '@/features/group-buy/types'
 import { subscriptionPlanSchema } from '@/features/subscriptions/types'
+import { CurrentPackagePanel, PackageHistory, PlanZone } from './components'
+import { CreditPackRules } from './credit-pack-rules'
 import { PackagePlanCard } from './package-plan-card'
 
 await i18n.changeLanguage('en')
@@ -55,7 +57,7 @@ test('an active round shows deadline, countdown, tier totals, and one purchase e
   assert.match(html, /Deadline:/)
   assert.match(html, /Time left:/)
   assert.match(html, /Current tier/)
-  assert.match(html, /\$740/)
+  assert.match(html, /740 credits/)
   assert.equal(
     (html.match(/Purchase and participate in the current period/g) || [])
       .length,
@@ -87,4 +89,150 @@ test('unopened rounds explain the 48 hour window instead of inventing a date', (
   const html = render({ id: 0, current_count: 0, expires_at: 0 })
   assert.match(html, /Closes 48 hours after the first paid participant joins/)
   assert.doesNotMatch(html, /Deadline:|Time left:/)
+})
+
+test('a disabled plan exposes the actual purchase restriction', () => {
+  const html = renderToStaticMarkup(
+    <PackagePlanCard
+      record={{
+        plan,
+        action: 'disabled',
+        disabled_reason: 'Snapshot unavailable',
+      }}
+      purchaseCount={0}
+      onPurchase={() => {}}
+    />
+  )
+  assert.match(html, /role="status"[^>]*>Snapshot unavailable/)
+  assert.match(html, /disabled=""/)
+})
+
+test('historical entitlements retain identity and zero-expiry permanence', () => {
+  const html = renderToStaticMarkup(
+    <PackageHistory
+      loading={false}
+      plans={[{ plan }]}
+      subscriptions={[
+        {
+          plan,
+          subscription: {
+            id: 73,
+            user_id: 1,
+            plan_id: plan.id,
+            status: 'cancelled',
+            source: 'original-order',
+            start_time: 1,
+            end_time: 0,
+            amount_total: 10000000,
+            amount_used: 500000,
+          },
+        },
+      ]}
+    />
+  )
+  assert.match(html, /#73/)
+  assert.match(html, /original-order/)
+  assert.ok(html.includes(i18n.t('永久有效')))
+  assert.doesNotMatch(html, /1970/)
+})
+
+const creditPack = subscriptionPlanSchema.parse({
+  ...plan,
+  title: '64元永久额度包',
+  plan_type: 'credit_pack',
+  currency: 'CNY',
+  price_amount: 64,
+  total_amount: 33_600_000,
+  duration_unit: 'permanent',
+  fuel_enabled: true,
+  fuel_min_quota: 500_000,
+  fuel_quota_step: 500_000,
+})
+
+test('permanent packs offer a purchase even when old renewal and promotion flags remain', () => {
+  const html = renderToStaticMarkup(
+    <PackagePlanCard
+      record={{ plan: creditPack, action: 'renew' }}
+      purchaseCount={1}
+      collectiveRoom={room}
+      onPurchase={() => {}}
+      currentSubscription={{
+        subscription: {
+          id: 74,
+          user_id: 1,
+          plan_id: creditPack.id,
+          status: 'active',
+          start_time: 1,
+          end_time: 0,
+          amount_total: 33_600_000,
+          amount_used: 500_000,
+        },
+      }}
+    />
+  )
+  assert.ok(html.includes(i18n.t('购买')))
+  assert.ok(html.includes(i18n.t('到账额度')))
+  assert.match(html, /67.2 credits/)
+  assert.match(html, /3.2 credits/)
+  assert.doesNotMatch(
+    html,
+    /Renew|Add quota|Collective benefit|Deadline:|Time left:|套餐首购/
+  )
+})
+
+test('owned packs retain their snapshot and show only the actual bonus without sales actions', () => {
+  const html = renderToStaticMarkup(
+    <CurrentPackagePanel
+      loading={false}
+      plans={[]}
+      subscriptions={[
+        {
+          plan: creditPack,
+          subscription: {
+            id: 74,
+            user_id: 1,
+            plan_id: creditPack.id,
+            status: 'active',
+            start_time: 1,
+            end_time: 0,
+            amount_total: 33_600_000,
+            amount_used: 500_000,
+            credit_pack_paid_quota: 32_000_000,
+            credit_pack_granted_quota: 33_600_000,
+          },
+        },
+      ]}
+    />
+  )
+  assert.match(html, /64元永久额度包/)
+  assert.match(html, /3.2 credits/)
+  assert.ok(html.includes(i18n.t('永久有效')))
+  assert.doesNotMatch(html, /<button|Renew|Add quota|1970/)
+})
+
+test('new rules explain permanent separate funding and distinguish legacy entitlements', () => {
+  const html = renderToStaticMarkup(<CreditPackRules />)
+  for (const rule of [
+    /never expire/,
+    /wallet pricing/,
+    /tracked separately/,
+    /Legacy plans are no longer sold/,
+  ])
+    assert.match(html, rule)
+  assert.doesNotMatch(html, /30%|0.1x|first.purchase|10×|Monthly plan rules/)
+})
+
+test('an empty catalog gives an explicit empty state and no purchase action', () => {
+  const html = renderToStaticMarkup(
+    <PlanZone
+      title={i18n.t('永久额度包')}
+      plans={[]}
+      loading={false}
+      purchaseCountMap={new Map()}
+      subscriptions={[]}
+      onPurchase={() => {}}
+    />
+  )
+  assert.match(html, /No plans are currently available/)
+  assert.doesNotMatch(html, /<button/)
 })

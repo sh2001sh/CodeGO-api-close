@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Link, useSearch } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
+import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStatus } from '@/hooks/use-status'
 import { SiteSeo } from '@/components/seo'
@@ -40,30 +41,39 @@ export function SignUp() {
         canonicalPath='/sign-up'
         robots='noindex,follow'
       />
-      <div className='w-full space-y-8'>
-        <div className='space-y-2'>
-          <h2 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
-            {t('Create an account')}
-          </h2>
-          <p className='text-muted-foreground text-left text-sm sm:text-base'>
-            {t('Already have an account?')}{' '}
-            <Link
-              to='/sign-in'
-              search={redirect ? { redirect } : {}}
-              className='hover:text-primary font-medium underline underline-offset-4'
-            >
-              {t('Sign in')}
-            </Link>
-            .
-          </p>
+      <div className='w-full'>
+        {/* Top Brand Logo & Title (Vercel & OpenDesign style) */}
+        <div className='market-auth-header'>
+          <div className='market-auth-brand-emblem' aria-hidden='true'>
+            <img
+              src='/code-go-logo.svg'
+              alt=''
+              width='32'
+              height='32'
+              className='size-8 object-contain'
+            />
+          </div>
+          <h1 className='market-auth-title'>{t('Create an account')}</h1>
         </div>
 
         <SignUpForm redirectTo={redirect} />
 
+        <div className='market-auth-switch-row'>
+          <span>{t('Already have an account?')}</span>
+          <Link
+            to='/sign-in'
+            search={redirect ? { redirect } : {}}
+            className='market-auth-switch-link'
+          >
+            {t('Sign in')}
+            <ArrowRight className='ml-1 inline-block size-3' />
+          </Link>
+        </div>
+
         <TermsFooter
           variant='sign-up'
           status={status}
-          className='text-center'
+          className='mt-3 text-center text-xs'
         />
       </div>
     </AuthLayout>

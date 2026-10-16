@@ -12,6 +12,9 @@ const (
 )
 
 type CreateChannelRequest struct {
+	CustomName                       string                       `json:"custom_name"`
+	Description                      string                       `json:"description"`
+	Tags                             []string                     `json:"tags"`
 	ProviderType                     string                       `json:"provider_type"`
 	SourceLabel                      string                       `json:"source_label"`
 	BaseURL                          string                       `json:"base_url"`
@@ -26,6 +29,7 @@ type CreateChannelRequest struct {
 	MaintenanceWindow                string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled *bool                        `json:"sensitive_word_interception_enabled"`
 	MultiplierCardSupported          bool                         `json:"multiplier_card_supported"`
+	CreditPackSupported              bool                         `json:"credit_pack_supported"`
 	MultiplierCardUserEnabled        bool                         `json:"multiplier_card_user_enabled"`
 	AutoProbeEnabled                 bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         int                          `json:"auto_probe_interval_minutes"`
@@ -33,6 +37,9 @@ type CreateChannelRequest struct {
 }
 
 type UpdateChannelRequest struct {
+	CustomName                       *string                       `json:"custom_name"`
+	Description                      *string                       `json:"description"`
+	Tags                             *[]string                     `json:"tags"`
 	ProviderType                     *string                       `json:"provider_type"`
 	DeclaredModels                   *[]string                     `json:"declared_models"`
 	ModelPrices                      *map[string]ChannelModelPrice `json:"model_prices"`
@@ -44,6 +51,7 @@ type UpdateChannelRequest struct {
 	MaintenanceWindow                *string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled *bool                         `json:"sensitive_word_interception_enabled"`
 	MultiplierCardSupported          *bool                         `json:"multiplier_card_supported"`
+	CreditPackSupported              *bool                         `json:"credit_pack_supported"`
 	MultiplierCardUserEnabled        *bool                         `json:"multiplier_card_user_enabled"`
 	AutoProbeEnabled                 *bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         *int                          `json:"auto_probe_interval_minutes"`
@@ -68,6 +76,11 @@ type ModelVerificationResult struct {
 }
 
 type ChannelView struct {
+	CustomName                       string                       `json:"custom_name"`
+	Description                      string                       `json:"description"`
+	Tags                             []string                     `json:"tags"`
+	ModerationStatus                 string                       `json:"moderation_status"`
+	ModerationReason                 string                       `json:"moderation_reason"`
 	ID                               string                       `json:"id"`
 	OwnerUserID                      int                          `json:"owner_user_id"`
 	OwnerExternalID                  string                       `json:"owner_external_id"`
@@ -107,6 +120,7 @@ type ChannelView struct {
 	MaintenanceWindow                string                       `json:"maintenance_window"`
 	SensitiveWordInterceptionEnabled bool                         `json:"sensitive_word_interception_enabled"`
 	MultiplierCardSupported          bool                         `json:"multiplier_card_supported"`
+	CreditPackSupported              bool                         `json:"credit_pack_supported"`
 	MultiplierCardUserEnabled        bool                         `json:"multiplier_card_user_enabled"`
 	InternalChannelID                *int                         `json:"internal_channel_id"`
 	LastReviewReason                 string                       `json:"last_review_reason"`
@@ -210,6 +224,8 @@ type AdminOwnerIncomeResult struct {
 }
 
 type GroupQuery struct {
+	ShopID           int
+	Tag              string
 	SeparateOfficial bool
 	ViewerUserID     int
 	IncludeAccess    bool
@@ -228,9 +244,15 @@ type GroupQuery struct {
 	MinMultiplier    float64
 	MaxMultiplier    float64
 	MultiplierCard   string
+	CreditPack       string
 }
 
 type GroupListItem struct {
+	CustomName                 string                       `json:"custom_name,omitempty"`
+	Description                string                       `json:"description,omitempty"`
+	Tags                       []string                     `json:"tags"`
+	ShopID                     int                          `json:"shop_id,omitempty"`
+	ShopName                   string                       `json:"shop_name,omitempty"`
 	ModelPrices                map[string]ChannelModelPrice `json:"model_prices,omitempty"`
 	ID                         string                       `json:"id"`
 	ChannelID                  string                       `json:"channel_id"`
@@ -248,6 +270,7 @@ type GroupListItem struct {
 	SubscriptionEnabled        bool                         `json:"subscription_enabled"`
 	SubscriptionMultiplier     float64                      `json:"subscription_multiplier"`
 	MultiplierCardSupported    bool                         `json:"multiplier_card_supported"`
+	CreditPackSupported        bool                         `json:"credit_pack_supported"`
 	MultiplierCardUserEnabled  bool                         `json:"multiplier_card_user_enabled"`
 	Models                     []string                     `json:"models"`
 	ModelVerificationResults   []ModelVerificationResult    `json:"model_verification_results"`
@@ -452,6 +475,7 @@ type AutoRoutePoolItem struct {
 	AvgConsumerAmount         int64            `json:"avg_consumer_amount"`
 	AvgConsumerAmountByModel  map[string]int64 `json:"avg_consumer_amount_by_model"`
 	MultiplierCardSupported   bool             `json:"multiplier_card_supported"`
+	CreditPackSupported       bool             `json:"credit_pack_supported"`
 	MultiplierCardUserEnabled bool             `json:"multiplier_card_user_enabled"`
 	Selected                  bool             `json:"selected"`
 	Priority                  int              `json:"priority"`
@@ -480,6 +504,7 @@ type RoutePoolUpdateRequest struct {
 
 type RoutePoolAutoBuildConfig struct {
 	Enabled         bool       `json:"enabled"`
+	CreditPackOnly  bool       `json:"credit_pack_only"`
 	Schedule        string     `json:"schedule"`
 	IntervalMinutes int        `json:"interval_minutes"`
 	DailyTime       string     `json:"daily_time"`

@@ -16,21 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
 } from '@/components/ui/form'
 import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
+import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 import {
   SIDEBAR_MODULES_DEFAULT,
   type SidebarModulesAdminConfig,
@@ -168,9 +169,7 @@ export function SidebarModulesSection({
     defaultValues: formDefaults,
   })
 
-  useEffect(() => {
-    form.reset(formDefaults)
-  }, [formDefaults, form])
+  useResetForm(form, formDefaults)
 
   const onSubmit = async (values: SidebarFormValues) => {
     const serialized = serializeSidebarModulesAdmin(values)
@@ -182,6 +181,7 @@ export function SidebarModulesSection({
       key: 'SidebarModulesAdmin',
       value: serialized,
     })
+    form.reset(values)
   }
 
   const resetToDefault = () => {
@@ -193,12 +193,13 @@ export function SidebarModulesSection({
   return (
     <SettingsSection
       title={t('Sidebar modules')}
-      description={t(
-        'Control which sidebar areas and modules are available to all users.'
-      )}
+      description={t('Configure sidebar modules for admin')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           {sections.map(([sectionKey, sectionConfig]) => {
             const sectionInfo = sectionMeta[sectionKey] ?? {
               title: toTitleCase(sectionKey),
@@ -220,9 +221,6 @@ export function SidebarModulesSection({
                         <FormLabel className='text-base'>
                           {sectionInfo.title}
                         </FormLabel>
-                        <FormDescription>
-                          {sectionInfo.description}
-                        </FormDescription>
                       </div>
                       <FormControl>
                         <Switch
@@ -252,9 +250,6 @@ export function SidebarModulesSection({
                               <FormLabel className='text-base'>
                                 {moduleInfo.title}
                               </FormLabel>
-                              <FormDescription>
-                                {moduleInfo.description}
-                              </FormDescription>
                             </div>
                             <FormControl>
                               <Switch
@@ -276,7 +271,7 @@ export function SidebarModulesSection({
             )
           })}
 
-          <div className='flex flex-wrap gap-3'>
+          <div className='settings-save-bar flex flex-wrap gap-3'>
             <Button type='button' variant='outline' onClick={resetToDefault}>
               {t('Reset to default')}
             </Button>

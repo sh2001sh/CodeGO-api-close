@@ -19,7 +19,15 @@ For commercial licensing, please contact support@quantumnous.com
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
-import { RefreshCcw, Search } from 'lucide-react'
+import {
+  Activity,
+  Boxes,
+  CircleHelp,
+  ShieldCheck,
+  TriangleAlert,
+  RefreshCcw,
+  Search,
+} from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
@@ -29,6 +37,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { BoundedSelect } from '@/components/bounded-select'
 import { SectionPageLayout } from '@/components/layout'
 import {
   useMarketplaceAutoRoutePool,
@@ -48,10 +57,11 @@ import {
   sortItems,
   summarizeGroups,
 } from './presentation'
+import './status.css'
 import { useSidebarGroupStatus } from './use-sidebar-group-status'
 
 export function SidebarGroupStatusPage() {
-  useTranslation()
+  const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const authed = !!user
   const query = useSidebarGroupStatus()
@@ -128,6 +138,13 @@ export function SidebarGroupStatusPage() {
     [items, visibleGroupCount]
   )
   const modelOptions = useMemo(() => collectModelOptions(allItems), [allItems])
+  const modelFilterOptions = useMemo(
+    () => [
+      { value: '', label: t('全部模型') },
+      ...modelOptions.map((model) => ({ value: model, label: model })),
+    ],
+    [modelOptions, t]
+  )
   const summary = useMemo(() => summarizeGroups(allItems), [allItems])
   const toggleGroup = (group: string) => {
     setCollapsedGroups((current) => {
@@ -139,19 +156,19 @@ export function SidebarGroupStatusPage() {
   }
   const joinCurrentPool = async (groupID: string) => {
     if (!authed) {
-      toast.error('登录后才能添加到路由池')
+      toast.error(i18n.t('登录后才能添加到路由池'))
       return
     }
     if (!activePoolID) {
-      toast.error('请先在分组市场创建路由池')
+      toast.error(i18n.t('请先在分组市场创建路由池'))
       return
     }
     if (isAutoPool && !autoPool.data) {
-      toast.error('当前路由池仍在加载，请稍后重试')
+      toast.error(i18n.t('当前路由池仍在加载，请稍后重试'))
       return
     }
     if (!isAutoPool && !poolDetail.data) {
-      toast.error('当前路由池仍在加载，请稍后重试')
+      toast.error(i18n.t('当前路由池仍在加载，请稍后重试'))
       return
     }
     if (!groupID || poolMemberIDs.has(groupID)) return
@@ -169,22 +186,23 @@ export function SidebarGroupStatusPage() {
           config: poolDetail.data?.config,
         })
       }
-      toast.success(`已加入路由池（${activePoolName ?? '当前池'}）`)
+      toast.success(
+        i18n.t('已加入路由池（{{param0}}）', {
+          param0: activePoolName ?? i18n.t('当前池'),
+        })
+      )
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加入失败')
+      toast.error(error instanceof Error ? error.message : i18n.t('加入失败'))
     }
   }
 
   return (
-    <div className='demo-status-page'>
+    <div className='demo-status-page exchange-status'>
       <SectionPageLayout>
         <SectionPageLayout.Title>
           <span className='demo-status-title'>
-            <Trans i18nKey={'分组状态，'} />
-            <em>
-              <Trans i18nKey={'实时'} />
-            </em>
-            。
+            <Trans i18nKey={'Status'} />
+            <span aria-hidden='true'>.</span>
           </span>
         </SectionPageLayout.Title>
         <SectionPageLayout.Actions>
@@ -207,26 +225,44 @@ export function SidebarGroupStatusPage() {
           <div className='mx-auto flex w-full max-w-[1700px] flex-col gap-5'>
             <OverviewPanel summary={summary} loading={query.isLoading} />
 
-            <div className='border-border flex flex-col gap-3 border-b pb-3'>
+            {query.dataUpdatedAt > 0 && (
+              <div className='status-refresh-time'>
+                <span>{i18n.t('刷新时间')}</span>
+                <time dateTime={new Date(query.dataUpdatedAt).toISOString()}>
+                  {new Date(query.dataUpdatedAt).toLocaleString(i18n.language)}
+                </time>
+              </div>
+            )}
+            {query.isError && query.data && (
+              <div role='alert' className='status-stale-error'>
+                {i18n.t('模型状态暂时不可用')}
+                <Button variant='outline' onClick={() => void query.refetch()}>
+                  {i18n.t('重试')}
+                </Button>
+              </div>
+            )}
+
+            <div className='status-filter-workbench'>
               <div
-                className='border-border/70 flex w-fit items-center gap-4 border-b'
+                className='status-source-switch flex max-w-full items-center gap-1'
                 aria-label={i18n.t('分组来源筛选')}
               >
                 {(
                   [
-                    ['all', '全部'],
-                    ['official', '官方渠道'],
-                    ['marketplace_user', '第三方渠道'],
+                    ['all', i18n.t('全部')],
+                    ['official', i18n.t('官方渠道')],
+                    ['marketplace_user', i18n.t('第三方渠道')],
                   ] as const
                 ).map(([value, label]) => (
                   <button
                     key={value}
                     type='button'
                     onClick={() => setSource(value)}
-                    className={`-mb-px border-b-2 pb-2.5 text-[13px] transition-colors ${
+                    aria-pressed={source === value}
+                    className={`min-h-11 rounded-lg px-3 text-[13px] transition-colors ${
                       source === value
-                        ? 'border-primary text-foreground font-semibold'
-                        : 'text-muted-foreground hover:text-foreground border-transparent'
+                        ? 'bg-card text-foreground font-semibold shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     {i18n.t(label)}
@@ -244,21 +280,28 @@ export function SidebarGroupStatusPage() {
                     className='bg-background pl-9'
                   />
                 </label>
-                <NativeSelect
+                <BoundedSelect
+                  options={modelFilterOptions}
                   value={modelFilter}
-                  onChange={(event) => setModelFilter(event.target.value)}
+                  onValueChange={setModelFilter}
                   aria-label={i18n.t('按模型筛选')}
+                  placeholder={i18n.t('全部模型')}
                   className='min-h-11 w-full xl:w-52'
-                >
-                  <option value=''>
-                    <Trans i18nKey={'全部模型'} />
-                  </option>
-                  {modelOptions.map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                </NativeSelect>
+                />
+                {authed && (
+                  <NativeSelect
+                    value={activePoolID}
+                    onChange={(event) => setActivePoolID(event.target.value)}
+                    aria-label={i18n.t('当前路由池')}
+                    className='min-h-11 w-full xl:w-48'
+                  >
+                    {poolOptions.map((pool) => (
+                      <option key={pool.id} value={pool.id}>
+                        {pool.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                )}
                 <NativeSelect
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value)}
@@ -289,7 +332,14 @@ export function SidebarGroupStatusPage() {
             ) : query.isError && !query.data ? (
               <ErrorPanel onRetry={() => void query.refetch()} />
             ) : items.length === 0 ? (
-              <EmptyPanel />
+              <EmptyPanel
+                onClear={() => {
+                  setSearch('')
+                  setModelFilter('')
+                  setStatusFilter('')
+                  setSource('all')
+                }}
+              />
             ) : (
               <div className='flex flex-col gap-5'>
                 {visibleItems.map((group) => (
@@ -337,42 +387,47 @@ function OverviewPanel(props: {
   const metrics = [
     {
       label: t('分组'),
+      icon: Boxes,
       value: String(props.summary.groups),
       tone: 'text-foreground',
     },
     {
       label: t('稳定'),
+      icon: ShieldCheck,
       value: String(props.summary.healthyModels),
       tone: 'text-success',
     },
     {
       label: t('波动'),
+      icon: Activity,
       value: String(props.summary.unstableModels),
       tone: 'text-warning',
     },
     {
       label: t('异常'),
+      icon: TriangleAlert,
       value: String(props.summary.failedModels),
       tone: 'text-destructive',
     },
     {
       label: t('无请求'),
+      icon: CircleHelp,
       value: String(props.summary.unknownModels),
       tone: 'text-muted-foreground',
     },
   ]
 
   return (
-    <Card className='border-border py-0'>
+    <Card className='status-overview-panel border-border py-0'>
       <CardHeader className='border-border border-b py-4'>
         <div className='flex items-center justify-between gap-3'>
           <div className='flex items-center gap-2.5'>
-            <span aria-hidden className='bg-primary block h-3 w-[3px]' />
-            <CardTitle className='text-[13px] font-semibold'>
+            <CardTitle className='flex items-center gap-2 text-[13px] font-semibold'>
+              <Activity className='text-primary size-4' aria-hidden='true' />
               <Trans i18nKey={'分组模型状态'} />
             </CardTitle>
           </div>
-          <span className='codego-stat-label'>6H WINDOW</span>
+          <span className='codego-stat-label'>{i18n.t('6H WINDOW')}</span>
         </div>
       </CardHeader>
       <CardContent className='py-0'>
@@ -382,7 +437,10 @@ function OverviewPanel(props: {
               key={metric.label}
               className='min-w-0 px-4 py-4 sm:px-5 sm:py-5'
             >
-              <div className='codego-stat-label'>{metric.label}</div>
+              <div className='codego-stat-label flex items-center gap-2'>
+                <metric.icon className='size-4' aria-hidden='true' />
+                {metric.label}
+              </div>
               {props.loading ? (
                 <Skeleton className='mt-3 h-8 w-16' />
               ) : (
@@ -433,11 +491,6 @@ function ErrorPanel(props: { onRetry: () => void }) {
           <div className='text-base font-semibold'>
             <Trans i18nKey={'模型状态暂时不可用'} />
           </div>
-          <div className='text-muted-foreground text-sm leading-6'>
-            <Trans
-              i18nKey={'当前无法获取分组下模型状态数据，请稍后刷新重试。'}
-            />
-          </div>
         </div>
         <Button variant='outline' size='sm' onClick={props.onRetry}>
           <RefreshCcw className='size-3.5' />
@@ -448,7 +501,7 @@ function ErrorPanel(props: { onRetry: () => void }) {
   )
 }
 
-function EmptyPanel() {
+function EmptyPanel(props: { onClear: () => void }) {
   return (
     <Card>
       <CardContent className='py-8'>
@@ -456,13 +509,12 @@ function EmptyPanel() {
           <div className='text-base font-semibold'>
             <Trans i18nKey={'暂无可展示的模型状态'} />
           </div>
-          <div className='text-muted-foreground text-sm leading-6'>
-            <Trans
-              i18nKey={
-                '当前用户还没有可用的业务分组模型，或暂未产生用于监测的请求样本。'
-              }
-            />
-          </div>
+          <Button variant='outline' onClick={props.onClear}>
+            <Trans i18nKey={'清除筛选'} />
+          </Button>
+          <Button variant='outline' render={<Link to='/market' />}>
+            <Trans i18nKey={'前往分组市场'} />
+          </Button>
         </div>
       </CardContent>
     </Card>

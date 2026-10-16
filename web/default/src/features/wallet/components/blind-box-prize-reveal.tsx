@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import i18n from '@/i18n/config'
-import { CalendarClock, Hash, Sparkles, Star } from 'lucide-react'
+import { Sparkles, Star } from 'lucide-react'
 import {
   AnimatePresence,
   motion,
@@ -41,7 +41,7 @@ const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
  * Reward rarity drives reveal drama: legendary rewards (subscription / pity /
  * high-value) get glow + scale punch, common rewards get a quiet entrance.
  */
-export function classifyReward(record: BlindBoxRecord): RewardRarity {
+function classifyReward(record: BlindBoxRecord): RewardRarity {
   if (record.reward_type === 'subscription') return 'legendary'
   if (record.is_pity) return 'legendary'
   if (record.reward_type === 'claude_quota') {
@@ -65,12 +65,10 @@ const REVEAL_CONTAINER: Variants = {
 }
 
 const REVEAL_ITEM: Variants = {
-  initial: { opacity: 0, y: 18, scale: 0.94 },
+  initial: { opacity: 0.7 },
   animate: {
     opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: { duration: 0.42, ease: EASE_OUT_QUINT },
+    transition: { duration: 0.28, ease: EASE_OUT_QUINT },
   },
 }
 
@@ -85,12 +83,12 @@ const REDUCED_ITEM: Variants = {
 }
 
 function rewardTypeLabel(record: BlindBoxRecord) {
-  if (record.reward_type === 'subscription') return '套餐'
+  if (record.reward_type === 'subscription') return i18n.t('套餐')
   if (record.reward_type === 'claude_quota' || record.reward_type === 'quota') {
-    return '统一额度'
+    return i18n.t('统一额度')
   }
-  if (record.reward_type === 'prop') return '道具'
-  return '额度'
+  if (record.reward_type === 'prop') return i18n.t('道具')
+  return i18n.t('额度')
 }
 
 function isManualUseProp(record: BlindBoxRecord) {
@@ -114,9 +112,9 @@ export function PrizeRevealHeader(props: {
 
   return (
     <motion.div
-      initial={reduced ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: reduced ? 0.18 : 0.4, ease: EASE_OUT_QUINT }}
+      initial={{ opacity: reduced ? 1 : 0.7 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: reduced ? 0 : 0.28, ease: EASE_OUT_QUINT }}
       className={cn(
         'relative overflow-hidden rounded-xl border p-4',
         celebratory ? 'border-primary/40 bg-primary/8' : 'app-subtle-panel'
@@ -290,36 +288,6 @@ function PrizeRevealCard(props: {
         <div className='text-muted-foreground mt-3 text-xs leading-5'>
           <Trans i18nKey={'已进入统一额度账户，永久有效'} />
         </div>
-      ) : null}
-      {record.lucky_number ? (
-        <motion.div
-          initial={
-            props.reduced ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 6 }
-          }
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{
-            duration: props.reduced ? 0.15 : 0.32,
-            ease: EASE_OUT_QUINT,
-            delay: props.reduced ? 0 : 0.12,
-          }}
-          className='border-primary/25 bg-primary/[0.055] mt-3 flex flex-col gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between'
-        >
-          <div className='flex items-center gap-2'>
-            <Hash className='text-primary size-4' aria-hidden='true' />
-            <span className='text-muted-foreground text-xs'>
-              <Trans i18nKey={'今日幸运号'} />
-            </span>
-            <span className='text-foreground font-mono text-lg font-semibold tracking-widest tabular-nums'>
-              {record.lucky_number}
-            </span>
-          </div>
-          <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
-            <CalendarClock className='size-3.5' aria-hidden='true' />
-            <Trans i18nKey={'仅参与'} />{' '}
-            {record.lucky_draw_date || i18n.t('今日')}{' '}
-            <Trans i18nKey={'开奖，次日失效'} />
-          </div>
-        </motion.div>
       ) : null}
     </motion.div>
   )

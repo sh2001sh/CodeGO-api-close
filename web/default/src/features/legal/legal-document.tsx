@@ -19,12 +19,15 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { FileWarning } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Markdown } from '@/components/ui/markdown'
 import { Skeleton } from '@/components/ui/skeleton'
+import { CompanyIdentity } from '@/components/company-identity'
 import { PublicLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
+import '@/features/docs/reading.css'
 import type { LegalDocumentResponse } from './types'
 
 type LegalDocumentProps = {
@@ -54,17 +57,14 @@ function isLikelyHtml(value: string) {
 
 function DocumentHeader(props: { title: string; description: string }) {
   return (
-    <div className='space-y-3'>
+    <div className='solaris-document-heading space-y-3'>
       <h1 className='text-3xl font-semibold tracking-tight'>{props.title}</h1>
-      <p className='text-muted-foreground max-w-3xl text-sm leading-7'>
-        {props.description}
-      </p>
     </div>
   )
 }
 
 export function LegalDocument(props: LegalDocumentProps) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { data, isLoading } = useQuery({
     queryKey: [props.queryKey],
     queryFn: props.fetchDocument,
@@ -72,9 +72,7 @@ export function LegalDocument(props: LegalDocumentProps) {
   })
 
   const rawContent = data?.data?.trim() ?? ''
-  const hasContent =
-    rawContent.length > 0 &&
-    (i18n.language === 'zh' || !/[\u3400-\u9fff]/u.test(rawContent))
+  const hasContent = rawContent.length > 0
   const success = data?.success ?? false
 
   if (isLoading) {
@@ -86,7 +84,7 @@ export function LegalDocument(props: LegalDocumentProps) {
           keywords={props.seoKeywords}
           canonicalPath={props.canonicalPath}
         />
-        <div className='mx-auto flex max-w-4xl flex-col gap-4 py-12'>
+        <div className='market-reading market-reading-width flex flex-col gap-4'>
           <DocumentHeader
             title={props.title}
             description={t(props.seoDescription)}
@@ -116,7 +114,7 @@ export function LegalDocument(props: LegalDocumentProps) {
           keywords={props.seoKeywords}
           canonicalPath={props.canonicalPath}
         />
-        <div className='mx-auto max-w-4xl space-y-6 py-12'>
+        <div className='market-reading market-reading-width space-y-8'>
           <DocumentHeader
             title={props.title}
             description={t(props.seoDescription)}
@@ -150,7 +148,7 @@ export function LegalDocument(props: LegalDocumentProps) {
           keywords={props.seoKeywords}
           canonicalPath={props.canonicalPath}
         />
-        <div className='mx-auto max-w-4xl space-y-6 py-12'>
+        <div className='market-reading market-reading-width space-y-8'>
           <DocumentHeader
             title={props.title}
             description={t(props.seoDescription)}
@@ -160,11 +158,6 @@ export function LegalDocument(props: LegalDocumentProps) {
               <CardTitle>{props.title}</CardTitle>
             </CardHeader>
             <CardContent className='space-y-4'>
-              <p className='text-muted-foreground text-sm'>
-                {t(
-                  'The administrator configured an external link for this document.'
-                )}
-              </p>
               <Button
                 render={
                   <a
@@ -191,21 +184,34 @@ export function LegalDocument(props: LegalDocumentProps) {
         keywords={props.seoKeywords}
         canonicalPath={props.canonicalPath}
       />
-      <div className='mx-auto max-w-4xl space-y-6 py-12'>
+      <div className='market-reading market-reading-width space-y-8'>
         <DocumentHeader
           title={props.title}
           description={t(props.seoDescription)}
         />
 
+        <CompanyIdentity />
         {displayIsHtml ? (
           <div
             className='prose prose-neutral dark:prose-invert max-w-none'
             dangerouslySetInnerHTML={{ __html: displayContent }}
           />
         ) : (
-          <Markdown className='prose-neutral dark:prose-invert max-w-none'>
-            {displayContent}
-          </Markdown>
+          <div className='prose prose-neutral dark:prose-invert max-w-none'>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                h1: (heading) => <h2>{heading.children}</h2>,
+                a: (link) => (
+                  <a href={link.href} target='_blank' rel='noopener noreferrer'>
+                    {link.children}
+                  </a>
+                ),
+              }}
+            >
+              {displayContent}
+            </ReactMarkdown>
+          </div>
         )}
       </div>
     </PublicLayout>

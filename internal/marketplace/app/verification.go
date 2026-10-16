@@ -36,6 +36,9 @@ func probeMarketplaceChannelModels(
 	reportStage func(string),
 	reportResults func([]ModelVerificationResult),
 ) ([]ModelVerificationResult, error) {
+	var moderationErr error
+	ctx, moderationErr = preparePresentationProbe(ctx, channel)
+	if moderationErr != nil { return nil, moderationErr }
 	if reportStage != nil {
 		reportStage("basic_security")
 	}

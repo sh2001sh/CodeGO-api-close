@@ -537,6 +537,9 @@ func ensureSubscriptionOrderTableSQLiteTx(db *gorm.DB) error {
 		{Name: "booster_rate", DDL: "`booster_rate` decimal(10,6) DEFAULT 0"},
 		{Name: "booster_expires_at", DDL: "`booster_expires_at` bigint DEFAULT 0"},
 		{Name: "fuel_quota", DDL: "`fuel_quota` bigint DEFAULT 0"},
+		{Name: "credit_pack_quota", DDL: "`credit_pack_quota` bigint NOT NULL DEFAULT 0"},
+		{Name: "credit_pack_paid_quota", DDL: "`credit_pack_paid_quota` bigint NOT NULL DEFAULT 0"},
+		{Name: "credit_pack_channel_share_bps", DDL: "`credit_pack_channel_share_bps` bigint NOT NULL DEFAULT 0"},
 		{Name: "fuel_unit_price", DDL: "`fuel_unit_price` decimal(10,4) DEFAULT 0"},
 		{Name: "fuel_expires_at", DDL: "`fuel_expires_at` bigint DEFAULT 0"},
 	}
@@ -568,6 +571,9 @@ func ensureUserSubscriptionTableSQLiteTx(db *gorm.DB) error {
 	}
 	required := []sqliteColumnDef{
 		{Name: "period_amount", DDL: "`period_amount` bigint NOT NULL DEFAULT 0"},
+		{Name: "credit_pack_granted_quota", DDL: "`credit_pack_granted_quota` bigint NOT NULL DEFAULT 0"},
+		{Name: "credit_pack_paid_quota", DDL: "`credit_pack_paid_quota` bigint NOT NULL DEFAULT 0"},
+		{Name: "credit_pack_channel_share_bps", DDL: "`credit_pack_channel_share_bps` bigint NOT NULL DEFAULT 0"},
 		{Name: "period_used", DDL: "`period_used` bigint NOT NULL DEFAULT 0"},
 		{Name: "model_limits", DDL: "`model_limits` text"},
 		{Name: "model_usage", DDL: "`model_usage` text"},

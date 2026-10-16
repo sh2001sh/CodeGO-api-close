@@ -133,3 +133,30 @@ export interface ManageUserQuotaPayload {
 // ============================================================================
 
 export type UsersDialogType = 'create' | 'update' | 'delete'
+
+export interface RefundableOrder {
+  order_type: 'balance' | 'subscription' | string
+  trade_no: string
+  payment_method: string
+  created_at: number
+  paid_amount: number
+  total_quota: number
+  used_quota: number
+  remaining_quota: number
+  gross_refund: number
+  fee_amount: number
+  refund_amount: number
+  refund_status: string
+  refund_no?: string
+  refundable: boolean
+  unavailable_reason?: string
+}
+
+export interface RefundResult {
+  order_type: string
+  trade_no: string
+  refund_no: string
+  refund_id?: string
+  refund_amount: number
+  status: string
+}

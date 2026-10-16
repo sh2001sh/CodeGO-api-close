@@ -144,7 +144,7 @@ func openSealedBalanceBlindBoxItemTx(
 		CreditAmount: item.CreditAmount, RewardTitle: item.RewardTitle,
 		RewardWalletType: item.RewardWalletType, IsPity: item.IsPity, CreateTime: platformruntime.GetTimestamp(),
 	}
-	if err := createBlindBoxOpenRecordTx(tx, record); err != nil {
+	if err := tx.Create(record).Error; err != nil {
 		return nil, err
 	}
 	if item.RewardType == commerceschema.BlindBoxRewardTypeProp && item.RewardTitle == "再来一抽" {

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import interfaceI18n from '@/i18n/config'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useCountdown } from '@/hooks/use-countdown'
@@ -72,14 +73,20 @@ export function useWalletTransferPassword(options: {
     try {
       const response = await sendWalletTransferPasswordEmailCode()
       if (!isApiSuccess(response)) {
-        throw new Error(response.message || '验证码发送失败')
+        throw new Error(response.message || interfaceI18n.t('验证码发送失败'))
       }
       countdown.start()
       toast.success(
-        `验证码已发送至 ${response.data?.email_masked || '绑定邮箱'}`
+        interfaceI18n.t('验证码已发送至 {{param0}}', {
+          param0: response.data?.email_masked || interfaceI18n.t('绑定邮箱'),
+        })
       )
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : '验证码发送失败')
+      toast.error(
+        reason instanceof Error
+          ? reason.message
+          : interfaceI18n.t('验证码发送失败')
+      )
     } finally {
       setEmailSending(false)
     }

@@ -17,20 +17,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import * as React from 'react'
+import interfaceI18n from '@/i18n/config'
 import { mergeProps } from '@base-ui/react/merge-props'
 import { useRender } from '@base-ui/react/use-render'
-import {
-  ArrowRight01Icon,
-  MoreHorizontalCircle01Icon,
-} from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
-import { Trans } from 'react-i18next'
+import { ChevronRight, Ellipsis } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 function Breadcrumb({ className, ...props }: React.ComponentProps<'nav'>) {
+  useTranslation()
+
   return (
     <nav
-      aria-label='breadcrumb'
+      aria-label={interfaceI18n.t('breadcrumb')}
       data-slot='breadcrumb'
       className={cn(className)}
       {...props}
@@ -107,7 +106,7 @@ function BreadcrumbSeparator({
       className={cn('[&>svg]:size-3.5', className)}
       {...props}
     >
-      {children ?? <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />}
+      {children ?? <ChevronRight strokeWidth={2} />}
     </li>
   )
 }
@@ -127,7 +126,7 @@ function BreadcrumbEllipsis({
       )}
       {...props}
     >
-      <HugeiconsIcon icon={MoreHorizontalCircle01Icon} strokeWidth={2} />
+      <Ellipsis strokeWidth={2} />
       <span className='sr-only'>
         <Trans i18nKey={'更多'} />
       </span>

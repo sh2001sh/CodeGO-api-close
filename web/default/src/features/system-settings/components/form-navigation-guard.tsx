@@ -88,6 +88,7 @@ export function FormNavigationGuard({
 
   return (
     <ConfirmDialog
+      className='settings-dialog'
       open={showDialog}
       onOpenChange={(open) => {
         if (!open) handleCancel()

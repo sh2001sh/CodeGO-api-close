@@ -120,34 +120,24 @@ export function PerformanceOverview() {
   }
 
   return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='flex flex-wrap items-center gap-x-5 gap-y-2.5 px-4 py-2.5 sm:px-5 sm:py-3'>
-        {/* Title */}
-        <div className='flex items-center gap-1.5'>
-          <HeartPulse
-            className='text-muted-foreground/60 size-3.5 shrink-0'
-            aria-hidden='true'
-          />
-          <span className='text-xs font-semibold whitespace-nowrap'>
-            {t('Performance health')}
-          </span>
-        </div>
-
-        {/* Separator */}
-        <div className='bg-border hidden h-4 w-px sm:block' />
-
-        {/* 3 KPI inline metrics */}
+    <section className='solaris-telemetry-panel solaris-performance'>
+      <header className='flex items-center justify-between gap-3 border-b'>
+        <h2 className='flex items-center gap-2 text-[13px] font-semibold'>
+          <HeartPulse className='text-primary size-4' aria-hidden='true' />
+          {t('Performance health')}
+        </h2>
+        <span className='text-muted-foreground font-mono text-[11px]'>24H</span>
+      </header>
+      <div className='solaris-performance-metrics'>
         {loading ? (
-          <div className='flex flex-wrap items-center gap-x-5 gap-y-2'>
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className='flex items-center gap-1.5'>
-                <Skeleton className='h-3 w-14' />
-                <Skeleton className='h-4 w-16' />
-              </div>
-            ))}
-          </div>
+          Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className='space-y-3'>
+              <Skeleton className='h-3 w-20' />
+              <Skeleton className='h-6 w-24' />
+            </div>
+          ))
         ) : (
-          <div className='flex flex-wrap items-center gap-x-5 gap-y-2'>
+          <>
             <InlineMetric
               icon={HeartPulse}
               label={t('Success rate')}
@@ -164,22 +154,17 @@ export function PerformanceOverview() {
               label={t('Throughput')}
               value={formatThroughput(summary.avgTps)}
             />
-          </div>
-        )}
-
-        {/* Separator */}
-        <div className='bg-border hidden h-4 w-px lg:block' />
-
-        {/* Top models inline badges */}
-        {!loading && hasData && (
-          <div className='flex flex-wrap items-center gap-1.5'>
-            {topModels.map((model) => (
-              <ModelBadge key={model.model_name} model={model} />
-            ))}
-          </div>
+          </>
         )}
       </div>
-    </div>
+      {!loading && hasData && (
+        <div className='solaris-performance-models flex flex-wrap items-center gap-2'>
+          {topModels.map((model) => (
+            <ModelBadge key={model.model_name} model={model} />
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -192,15 +177,15 @@ function InlineMetric(props: {
   const Icon = props.icon
 
   return (
-    <div className='flex items-center gap-1.5'>
+    <div className='solaris-performance-metric'>
       <Icon
         className='text-muted-foreground/50 size-3 shrink-0'
         aria-hidden='true'
       />
-      <span className='text-muted-foreground text-[11px]'>{props.label}</span>
+      <span className='text-muted-foreground text-xs'>{props.label}</span>
       <span
         className={cn(
-          'font-mono text-xs font-semibold tabular-nums',
+          'font-mono text-xl font-medium tabular-nums',
           props.valueClassName
         )}
       >

@@ -27,7 +27,6 @@ import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -46,7 +45,6 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
-  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -170,22 +168,20 @@ export function UsersMutateDrawer({
           }
         }}
       >
-        <SheetContent className='flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]'>
+        <SheetContent
+          aria-describedby={undefined}
+          className='admin-editor solaris-admin-dialog flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]'
+        >
           <SheetHeader className='border-b px-4 py-3 text-start sm:px-6 sm:py-4'>
             <SheetTitle>
               {isUpdate ? t('Update') : t('Create')} {t('User')}
             </SheetTitle>
-            <SheetDescription>
-              {isUpdate
-                ? t('Update the user by providing necessary info.')
-                : t('Add a new user by providing necessary info.')}
-            </SheetDescription>
           </SheetHeader>
           <Form {...form}>
             <form
               id='user-form'
               onSubmit={form.handleSubmit(onSubmit)}
-              className='flex-1 space-y-4 overflow-y-auto px-3 py-3 pb-4 sm:space-y-6 sm:px-4'
+              className='solaris-user-form flex-1 space-y-4 overflow-y-auto px-4 py-6 sm:space-y-6 sm:px-6'
             >
               {/* Basic Information */}
               <div className='space-y-4'>
@@ -242,9 +238,7 @@ export function UsersMutateDrawer({
                             </SelectGroup>
                           </SelectContent>
                         </Select>
-                        <FormDescription>
-                          {t("Set the user's role (cannot be Root)")}
-                        </FormDescription>
+
                         <FormMessage />
                       </FormItem>
                     )}
@@ -260,12 +254,10 @@ export function UsersMutateDrawer({
                       <FormControl>
                         <Input
                           {...field}
-                          placeholder={t('Enter display name')}
+                          placeholder={t('Leave empty to use username')}
                         />
                       </FormControl>
-                      <FormDescription>
-                        {t('Leave empty to use username')}
-                      </FormDescription>
+
                       <FormMessage />
                     </FormItem>
                   )}

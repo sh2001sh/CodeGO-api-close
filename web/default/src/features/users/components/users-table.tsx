@@ -32,13 +32,13 @@ import {
 } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import {
   DISABLED_ROW_DESKTOP,
   DISABLED_ROW_MOBILE,
   DataTablePage,
 } from '@/components/data-table'
+import { AdminTableStatus } from '@/features/channels/components/admin-table-status'
 import { getUsers, searchUsers } from '../api'
 import {
   USER_STATUS,
@@ -87,7 +87,7 @@ export function UsersTable() {
   })
 
   // Fetch data with React Query
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: [
       'users',
       pagination.pageIndex + 1,
@@ -106,12 +106,8 @@ export function UsersTable() {
         ? await searchUsers({ ...params, keyword: globalFilter })
         : await getUsers(params)
 
-      if (!result.success) {
-        toast.error(
-          result.message || `Failed to ${hasFilter ? 'search' : 'load'} users`
-        )
-        return { items: [], total: 0 }
-      }
+      if (!result.success)
+        throw new Error(result.message || 'Failed to load records')
 
       return {
         items: result.data?.items || [],
@@ -192,26 +188,28 @@ export function UsersTable() {
 
   return (
     <div className='space-y-3'>
-      <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm'>
-        <span>
-          {t('Total users')}:{' '}
-          {totalUsersQuery.isLoading ? '—' : (totalUsersQuery.data ?? '—')}
-        </span>
-        {globalFilter?.trim() ? (
-          <span>
-            {t('Matching users')}: {data?.total ?? 0}
-          </span>
-        ) : null}
-      </div>
+      <AdminTableStatus
+        title={t('Users')}
+        total={globalFilter?.trim() ? data?.total : totalUsersQuery.data}
+        selected={table.getSelectedRowModel().rows.length}
+        loading={isLoading}
+        fetching={isFetching}
+        failed={isError || totalUsersQuery.isError}
+        onRetry={() => {
+          void refetch()
+          void totalUsersQuery.refetch()
+        }}
+      />
       <DataTablePage
+        className='admin-records solaris-records'
+        tableClassName='solaris-record-table'
+        tableHeaderClassName='sticky top-0 z-10'
         table={table}
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
         emptyTitle={t('No Users Found')}
-        emptyDescription={t(
-          'No users available. Try adjusting your search or filters.'
-        )}
+        emptyDescription=''
         skeletonKeyPrefix='users-skeleton'
         toolbarProps={{
           searchPlaceholder: t('Filter users...'),

@@ -18,6 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
+import '@/features/channels/admin-workspace.css'
+import '@/features/users/admin.css'
 import { UsersDeleteDialog } from './components/users-delete-dialog'
 import { UsersMutateDrawer } from './components/users-mutate-drawer'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
@@ -30,18 +32,17 @@ function UsersContent() {
 
   return (
     <>
-      <SectionPageLayout>
-        <SectionPageLayout.Title>{t('Users')}</SectionPageLayout.Title>
-        <SectionPageLayout.Description>
-          {t('Manage users and their permissions')}
-        </SectionPageLayout.Description>
-        <SectionPageLayout.Actions>
-          <UsersPrimaryButtons />
-        </SectionPageLayout.Actions>
-        <SectionPageLayout.Content>
-          <UsersTable />
-        </SectionPageLayout.Content>
-      </SectionPageLayout>
+      <div className='admin-workspace solaris-admin'>
+        <SectionPageLayout kicker=''>
+          <SectionPageLayout.Title>{t('Users')}</SectionPageLayout.Title>
+          <SectionPageLayout.Actions>
+            <UsersPrimaryButtons />
+          </SectionPageLayout.Actions>
+          <SectionPageLayout.Content>
+            <UsersTable />
+          </SectionPageLayout.Content>
+        </SectionPageLayout>
+      </div>
 
       <UsersMutateDrawer
         open={open === 'create' || open === 'update'}

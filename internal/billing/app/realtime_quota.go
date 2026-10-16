@@ -184,6 +184,8 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if tieredOk {
 		quota = tieredQuota
 	}
+	quotaBeforeServiceTier := quota
+	quota = relayInfo.ServiceTierQuota(quota)
 	discountDetail := calculateUsageConsumptionDiscount(relayInfo, quota)
 	quota = discountDetail.QuotaAfterDiscount
 
@@ -215,6 +217,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
 	appendUsageConsumptionDiscountInfo(other, discountDetail)
+	appendServiceTierCalculation(other, relayInfo, quotaBeforeServiceTier, quota)
 	relaycommon.AttachRouteLogInfo(ctx, other)
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
@@ -294,6 +297,8 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if tieredOk {
 		quota = tieredQuota
 	}
+	quotaBeforeServiceTier := quota
+	quota = relayInfo.ServiceTierQuota(quota)
 	discountDetail := calculateUsageConsumptionDiscount(relayInfo, quota)
 	quota = discountDetail.QuotaAfterDiscount
 
@@ -325,6 +330,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
 	appendUsageConsumptionDiscountInfo(other, discountDetail)
+	appendServiceTierCalculation(other, relayInfo, quotaBeforeServiceTier, quota)
 	relaycommon.AttachRouteLogInfo(ctx, other)
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,

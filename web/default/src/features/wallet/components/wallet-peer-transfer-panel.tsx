@@ -1,4 +1,5 @@
 import i18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import {
   ArrowRight,
   History,
@@ -36,18 +37,13 @@ export function WalletPeerTransferPanel(props: {
   const { t } = useTranslation()
 
   return (
-    <section className='app-page-shell p-4 sm:p-5'>
-      <div className='flex flex-wrap items-start justify-between gap-3'>
+    <section className='commerce-transfer-panel app-page-shell'>
+      <header className='commerce-panel-heading'>
         <div>
-          <div className='flex items-center gap-2 text-sm font-semibold'>
+          <h2 className='flex items-center gap-2'>
             <Send className='text-primary size-4' />
             {t('Quota transfer')}
-          </div>
-          <p className='text-muted-foreground mt-1 max-w-2xl text-xs leading-5'>
-            {t(
-              '向其他用户转出通用额度。接收方收到完整金额，发送方另付 1% 手续费；月卡不可转账。'
-            )}
-          </p>
+          </h2>
         </div>
         <div className='flex flex-wrap gap-2'>
           {props.onOpenHistory ? (
@@ -73,7 +69,7 @@ export function WalletPeerTransferPanel(props: {
               : t('Set payment password')}
           </Button>
         </div>
-      </div>
+      </header>
 
       {!props.overview.security.email_bound ||
       !props.overview.security.password_set ||
@@ -88,21 +84,13 @@ export function WalletPeerTransferPanel(props: {
                   ? t('Transfers are temporarily locked')
                   : t('Set a payment password before your first transfer')}
             </p>
-            <p className='text-muted-foreground'>
-              {!props.overview.security.email_bound
-                ? i18n.t(
-                    '请先前往个人设置绑定邮箱，后续修改支付密码时验证码会发送到该邮箱。'
-                  )
-                : props.locked
-                  ? t('Try again after {{time}}.', {
-                      time: new Date(
-                        props.overview.security.locked_until * 1000
-                      ).toLocaleString(),
-                    })
-                  : t(
-                      'Five failed password attempts lock transfers for 30 minutes.'
-                    )}
-            </p>
+            {props.locked ? (
+              <time>
+                {new Date(
+                  props.overview.security.locked_until * 1000
+                ).toLocaleString(getIntlLocale())}
+              </time>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -144,7 +132,7 @@ export function WalletPeerTransferPanel(props: {
           <p className='text-muted-foreground min-h-5 text-xs'>
             {props.recipient
               ? `${props.recipient.display_name_masked} · ${props.recipient.external_id}`
-              : t('The recipient name is shown only after an exact ID match.')}
+              : null}
           </p>
         </div>
 
@@ -158,8 +146,8 @@ export function WalletPeerTransferPanel(props: {
             </span>
           </div>
           <div className='relative'>
-            <span className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm'>
-              $
+            <span className='text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm'>
+              credits
             </span>
             <Input
               id='wallet-transfer-amount'
@@ -169,7 +157,7 @@ export function WalletPeerTransferPanel(props: {
               step='0.01'
               inputMode='decimal'
               value={props.amount}
-              className='pl-7 font-mono text-base tabular-nums'
+              className='pr-20 font-mono text-base tabular-nums'
               onChange={(event) => props.onAmountChange(event.target.value)}
             />
           </div>
@@ -193,14 +181,10 @@ export function WalletPeerTransferPanel(props: {
         </div>
       </div>
 
-      <div className='mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between'>
-        <p className='text-muted-foreground text-xs leading-5'>
-          {t(
-            '服务器会再次核对接收方、通用额度余额和 1% 手续费；转账完成后不可撤销。'
-          )}
-        </p>
+      <div className='mt-5 flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between'>
         <Button
           type='button'
+          className='commerce-transfer-submit'
           disabled={!props.canContinue}
           onClick={props.onReview}
         >

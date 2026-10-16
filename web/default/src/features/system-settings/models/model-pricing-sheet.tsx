@@ -49,7 +49,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -401,7 +400,10 @@ export const ModelPricingSheet = forwardRef<
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side='right' className='w-full gap-0 p-0 sm:max-w-2xl'>
+      <SheetContent
+        side='right'
+        className='settings-dialog w-full gap-0 p-0 sm:max-w-2xl'
+      >
         <SheetHeader className='sr-only'>
           <SheetTitle>{title}</SheetTitle>
           <SheetDescription>{description}</SheetDescription>
@@ -829,9 +831,7 @@ export const ModelPricingEditorPanel = forwardRef<
                         disabled={isEditMode}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('The exact model identifier as used in API requests.')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -919,11 +919,7 @@ export const ModelPricingEditorPanel = forwardRef<
                             </InputGroupAddon>
                           </InputGroup>
                         </FormControl>
-                        <FormDescription>
-                          {t(
-                            'Cost in USD per request, regardless of tokens used.'
-                          )}
-                        </FormDescription>
+
                         <FormMessage />
                       </FormItem>
                     )}

@@ -58,7 +58,7 @@ func TestResponsesRequestToChatCompletionsNormalizesDeveloperRoleAndEmptyRole(t 
 	require.Equal(t, "user", chat.Messages[1].Role)
 }
 
-func TestResponsesRequestToChatCompletionsDropsServerToolsAndToolChoice(t *testing.T) {
+func TestResponsesRequestToChatCompletionsRejectsUnsupportedServerTools(t *testing.T) {
 	request := &dto.OpenAIResponsesRequest{
 		Model:      "gpt-5.6-sol",
 		Input:      json.RawMessage(`"search"`),
@@ -66,10 +66,8 @@ func TestResponsesRequestToChatCompletionsDropsServerToolsAndToolChoice(t *testi
 		ToolChoice: json.RawMessage(`"auto"`),
 	}
 
-	chat, _, err := ResponsesRequestToChatCompletionsRequest(request)
-	require.NoError(t, err)
-	require.Empty(t, chat.Tools)
-	require.Nil(t, chat.ToolChoice)
+	_, _, err := ResponsesRequestToChatCompletionsRequest(request)
+	require.ErrorContains(t, err, "native Responses upstream")
 }
 
 func TestResponsesRequestToChatCompletionsPreservesResponsesJSONSchemaShape(t *testing.T) {

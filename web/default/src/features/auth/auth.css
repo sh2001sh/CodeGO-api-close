@@ -1,0 +1,455 @@
+/* Copyright (C) 2023-2026 QuantumNous. AGPL-3.0-or-later. */
+
+/* ==========================================================================
+   MARKET AUTH - APPLE & VERCEL & OPENDESIGN ETHEREAL FROSTED GLASS STAGE
+   ========================================================================== */
+
+.market-auth {
+  position: relative;
+  min-height: calc(100svh - 76px);
+  color: var(--ink-primary, var(--foreground));
+  background: var(--bg-canvas, #fbfaf7);
+  font-size: 15px;
+  line-height: 1.6;
+  caret-color: var(--brand-orange, #ea580c);
+  padding: clamp(24px, 4vh, 60px) 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: clip;
+  isolation: isolate;
+}
+
+.market-auth ::selection {
+  background: var(--brand-soft);
+  color: var(--brand-orange-ink);
+}
+
+.market-auth :focus-visible,
+.market-verification :focus-visible {
+  outline: 2px solid var(--brand-orange);
+  outline-offset: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   Atmospheric Organic Aurora Canvas (OpenDesign & Liquid Retina)
+   -------------------------------------------------------------------------- */
+.market-auth-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.market-auth-aurora-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(90px);
+  opacity: 0.85;
+  will-change: transform;
+}
+
+.market-auth-aurora-orb.orb-emerald {
+  top: -120px;
+  left: 8%;
+  width: 580px;
+  height: 580px;
+  background: radial-gradient(
+    circle,
+    rgba(16, 185, 129, 0.16) 0%,
+    rgba(52, 211, 153, 0.08) 40%,
+    transparent 70%
+  );
+  animation: solaris-aurora-drift-1 24s ease-in-out infinite alternate;
+}
+
+.market-auth-aurora-orb.orb-amber {
+  top: 10%;
+  right: 5%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(
+    circle,
+    rgba(249, 115, 22, 0.13) 0%,
+    rgba(251, 146, 60, 0.06) 45%,
+    transparent 70%
+  );
+  animation: solaris-aurora-drift-2 20s ease-in-out infinite alternate;
+}
+
+.market-auth-aurora-orb.orb-cyan {
+  bottom: -140px;
+  left: 15%;
+  width: 540px;
+  height: 540px;
+  background: radial-gradient(
+    circle,
+    rgba(14, 165, 233, 0.14) 0%,
+    rgba(56, 189, 248, 0.05) 50%,
+    transparent 70%
+  );
+  animation: solaris-aurora-drift-3 26s ease-in-out infinite alternate;
+}
+
+.market-auth-aurora-orb.orb-violet {
+  bottom: -80px;
+  right: 12%;
+  width: 480px;
+  height: 480px;
+  background: radial-gradient(
+    circle,
+    rgba(99, 102, 241, 0.1) 0%,
+    rgba(168, 85, 247, 0.04) 50%,
+    transparent 70%
+  );
+}
+
+.market-auth-grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    rgba(13, 13, 16, 0.06) 1px,
+    transparent 1px
+  );
+  background-size: 32px 32px;
+  mask-image: radial-gradient(
+    ellipse 80% 80% at 50% 50%,
+    #000 30%,
+    transparent 100%
+  );
+  opacity: 0.55;
+}
+
+.dark .market-auth-grid-overlay {
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.08) 1px,
+    transparent 1px
+  );
+  opacity: 0.4;
+}
+
+@keyframes solaris-aurora-drift-1 {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(40px, 30px) scale(1.08);
+  }
+  100% {
+    transform: translate(-30px, 50px) scale(0.95);
+  }
+}
+
+@keyframes solaris-aurora-drift-2 {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-50px, -20px) scale(1.06);
+  }
+  100% {
+    transform: translate(30px, 40px) scale(0.94);
+  }
+}
+
+@keyframes solaris-aurora-drift-3 {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(30px, -40px) scale(1.1);
+  }
+  100% {
+    transform: translate(-40px, -20px) scale(0.92);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Centered Frosted Glass Stage & Card
+   -------------------------------------------------------------------------- */
+.market-auth-centered-stage {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.market-auth-frosted-card {
+  position: relative;
+  width: 100%;
+  padding: clamp(32px, 5vw, 42px) clamp(22px, 4.5vw, 36px);
+  border-radius: 30px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(40px) saturate(190%);
+  -webkit-backdrop-filter: blur(40px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 24px 64px -14px rgba(15, 23, 42, 0.1),
+    0 4px 16px -2px rgba(15, 23, 42, 0.03),
+    inset 0 1px 1px rgba(255, 255, 255, 0.95),
+    0 0 0 1px rgba(0, 0, 0, 0.02);
+  transition:
+    box-shadow 260ms var(--ease-spring),
+    border-color 200ms ease;
+}
+
+.dark .market-auth-frosted-card {
+  background: rgba(18, 18, 23, 0.74);
+  backdrop-filter: blur(40px) saturate(160%);
+  -webkit-backdrop-filter: blur(40px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow:
+    0 30px 80px -20px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* --------------------------------------------------------------------------
+   Card Header (Vercel & OpenDesign Centered Hierarchy)
+   -------------------------------------------------------------------------- */
+.market-auth-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 26px;
+}
+
+.market-auth-brand-emblem {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  transition: transform 240ms var(--ease-spring);
+}
+
+.market-auth-brand-emblem:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.dark .market-auth-brand-emblem {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.market-auth-title {
+  margin: 0;
+  font-family: var(--dawn-display, 'Space Grotesk Variable', sans-serif);
+  font-size: clamp(23px, 2.5vw, 26px);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+  color: var(--ink-primary);
+}
+
+.market-auth-subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-secondary);
+  line-height: 1.5;
+  max-width: 360px;
+}
+
+/* --------------------------------------------------------------------------
+   Input Fields (OpenDesign Squircle Elements)
+   -------------------------------------------------------------------------- */
+.market-auth-frosted-card input:not([type='checkbox']):not([type='radio']) {
+  min-height: 48px;
+  font-size: 14.5px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.market-auth-frosted-card
+  input:not([type='checkbox']):not([type='radio']):focus {
+  background: #ffffff;
+  border-color: #0d0d10;
+  box-shadow:
+    0 0 0 3px rgba(13, 13, 16, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.dark
+  .market-auth-frosted-card
+  input:not([type='checkbox']):not([type='radio']) {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+
+.dark
+  .market-auth-frosted-card
+  input:not([type='checkbox']):not([type='radio']):focus {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: #ffffff;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.14),
+    0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.market-auth-frosted-card input:disabled {
+  opacity: 0.65;
+}
+
+.market-auth-frosted-card [data-slot='form-label'],
+.market-auth-frosted-card label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-primary);
+  margin-bottom: 5px;
+}
+
+.market-auth-frosted-card button[data-slot='checkbox'] {
+  min-height: 18px;
+  border-radius: 6px;
+}
+
+.market-auth-frosted-card [data-slot='form-message'],
+.market-auth-frosted-card [role='alert'] {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.market-auth-frosted-card [data-slot='input-otp-slot'] {
+  height: 48px;
+  min-width: 36px;
+  font-size: 20px;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+}
+
+/* --------------------------------------------------------------------------
+   Submit Action Button (OpenDesign Obsidian Pill)
+   -------------------------------------------------------------------------- */
+.market-auth-submit-btn {
+  height: 48px;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  background: #0d0d10;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 4px 14px rgba(13, 13, 16, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition:
+    transform 160ms var(--ease-spring),
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.market-auth-submit-btn:hover:not(:disabled) {
+  background: #202025;
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 20px rgba(13, 13, 16, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.market-auth-submit-btn:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.dark .market-auth-submit-btn {
+  background: #ffffff;
+  color: #0d0d10;
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.dark .market-auth-submit-btn:hover:not(:disabled) {
+  background: #f0f0f3;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+}
+
+/* --------------------------------------------------------------------------
+   Switch Row & Security Seal
+   -------------------------------------------------------------------------- */
+.market-auth-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+
+.market-auth-switch-link {
+  font-weight: 600;
+  color: var(--ink-primary);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  transition: color 160ms ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.market-auth-switch-link:hover {
+  color: var(--brand-orange, #ea580c);
+}
+
+.market-auth-trust-seal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+}
+
+.dark .market-auth-trust-seal {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+/* --------------------------------------------------------------------------
+   Mobile & Accessibility
+   -------------------------------------------------------------------------- */
+@media (max-width: 520px) {
+  .market-auth {
+    min-height: calc(100svh - 64px);
+    padding: 16px 12px 36px;
+  }
+  .market-auth-frosted-card {
+    padding: 26px 18px;
+    border-radius: 24px;
+  }
+  .market-auth-title {
+    font-size: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-auth *,
+  .market-verification * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

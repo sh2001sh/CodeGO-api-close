@@ -21,6 +21,7 @@ import { z } from 'zod'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import interfaceI18n from '@/i18n/config'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -319,7 +320,10 @@ export function UpdateConfigDialog({
                     <FormItem>
                       <FormLabel>{t('Command')}</FormLabel>
                       <FormControl>
-                        <Input placeholder='Optional' {...field} />
+                        <Input
+                          placeholder={interfaceI18n.t('Optional')}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

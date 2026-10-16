@@ -250,7 +250,7 @@ func routePoolPreferredHealthTier(candidates []scoredRoutePoolCandidate) []score
 			bestTier = tier
 		}
 	}
-	preferred := make([]scoredRoutePoolCandidate, 0, len(candidates))
+	preferred := candidates[:0]
 	for _, candidate := range candidates {
 		if routePoolReliabilityTier(candidate.health) == bestTier {
 			preferred = append(preferred, candidate)

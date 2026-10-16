@@ -1,35 +1,33 @@
 import { useMemo, useState } from 'react'
-import {
-  Activity,
-  CircleDollarSign,
-  RefreshCcw,
-  RotateCcw,
-  Store,
-} from 'lucide-react'
+import { getIntlLocale } from '@/i18n/format'
+import { RefreshCcw, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import dayjs from '@/lib/dayjs'
 import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { BoundedSelect } from '@/components/bounded-select'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { useMyMarketplaceUsageLogs } from '../hooks'
-import type { MarketplaceChannel } from '../types'
+import type { OwnerChannelOption } from '../types'
 
 interface DateRange {
   start?: Date
   end?: Date
 }
 
-export function OwnerIncomeOverview(props: { channels: MarketplaceChannel[] }) {
+export function OwnerIncomeOverview(props: { channels: OwnerChannelOption[] }) {
   const { t } = useTranslation()
   const [channelId, setChannelId] = useState('all')
+  const channelOptions = useMemo(
+    () => [
+      { value: 'all', label: t('全部渠道') },
+      ...props.channels.map((channel) => ({
+        value: channel.id,
+        label: `${channel.system_display_name}${channel.deleted_at ? ` (${t('已删除')})` : ''}`,
+      })),
+    ],
+    [props.channels, t]
+  )
   const [range, setRange] = useState<DateRange>(() => ({
     start: dayjs().startOf('day').toDate(),
   }))
@@ -41,79 +39,43 @@ export function OwnerIncomeOverview(props: { channels: MarketplaceChannel[] }) {
     page: 1,
     pageSize: 20,
   })
-  const runningCount = props.channels.filter(
-    (channel) =>
-      !channel.deleted_at &&
-      ['active', 'degraded'].includes(channel.lifecycle_status)
-  ).length
   const period = useMemo(() => formatPeriod(range, t), [range, t])
   const metrics = [
     {
-      icon: Store,
-      label: t('渠道总数'),
-      value: String(props.channels.length),
-    },
-    {
-      icon: RefreshCcw,
-      label: t('运行中'),
-      value: String(runningCount),
-    },
-    {
-      icon: CircleDollarSign,
       label: t('筛选范围总收入'),
       value: formatQuota(query.data?.summary.owner_income ?? 0),
     },
     {
-      icon: CircleDollarSign,
       label: t('已到账收益'),
       value: formatQuota(query.data?.summary.released_income ?? 0),
     },
     {
-      icon: Activity,
       label: t('筛选范围调用'),
-      value: (query.data?.summary.request_count ?? 0).toLocaleString(),
+      value: (query.data?.summary.request_count ?? 0).toLocaleString(
+        getIntlLocale()
+      ),
     },
     {
-      icon: CircleDollarSign,
       label: t('已回收额度'),
       value: formatQuota(query.data?.summary.reclaimed_income ?? 0),
     },
   ]
 
   return (
-    <div className='border-border border-y'>
-      <div className='bg-muted/15 flex flex-col gap-2 px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:justify-between'>
+    <div>
+      <div className='owner-income-filter'>
         <div className='min-w-0'>
           <div className='text-sm font-medium'>{t('收入统计范围')}</div>
-          <div className='text-muted-foreground mt-0.5 truncate text-xs'>
-            {period}
-          </div>
+          <div className='text-muted-foreground mt-0.5 text-xs'>{period}</div>
         </div>
-        <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
-          <Select
+        <div className='flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
+          <BoundedSelect
             value={channelId}
-            onValueChange={(value) => value && setChannelId(value)}
-          >
-            <SelectTrigger className='w-full sm:w-52'>
-              <SelectValue>
-                {channelId === 'all'
-                  ? t('全部渠道')
-                  : props.channels.find((channel) => channel.id === channelId)
-                      ?.system_display_name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectGroup>
-                <SelectItem value='all'>{t('全部渠道')}</SelectItem>
-                {props.channels.map((channel) => (
-                  <SelectItem key={channel.id} value={channel.id}>
-                    {channel.system_display_name}
-                    {channel.deleted_at ? ` (${t('已删除')})` : ''}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+            options={channelOptions}
+            onValueChange={setChannelId}
+            aria-label={t('收入统计范围')}
+            className='w-full sm:w-52'
+          />
           <CompactDateTimeRangePicker
             start={range.start}
             end={range.end}
@@ -144,28 +106,23 @@ export function OwnerIncomeOverview(props: { channels: MarketplaceChannel[] }) {
         </div>
       </div>
       {query.isError && (
-        <div className='bg-destructive/5 text-destructive border-border border-t px-4 py-2 text-xs sm:px-5'>
+        <div
+          role='alert'
+          className='bg-destructive/5 text-destructive border-border border-t px-4 py-2 text-xs sm:px-5'
+        >
           {t('所选范围的收入统计加载失败，请重试。')}
         </div>
       )}
-      <div className='bg-card grid sm:grid-cols-2 xl:grid-cols-3'>
-        {metrics.map(({ icon: Icon, label, value }) => (
-          <div
-            key={label}
-            className='border-border flex min-h-20 items-center gap-3 border-b px-4 py-3 sm:border-r xl:border-b-0'
-          >
-            <span className='bg-muted flex size-9 shrink-0 items-center justify-center rounded-md'>
-              <Icon className='text-primary size-4' />
-            </span>
-            <div className='min-w-0'>
-              <div className='text-muted-foreground text-xs'>{label}</div>
-              <div className='mt-1 truncate text-lg font-semibold tabular-nums'>
-                {query.isFetching ? t('加载中…') : query.isError ? '—' : value}
-              </div>
-            </div>
+      <dl className='owner-income-metrics'>
+        {metrics.map(({ label, value }) => (
+          <div key={label} className='min-w-0'>
+            <dt>{label}</dt>
+            <dd>
+              {query.isFetching ? t('加载中…') : query.isError ? '—' : value}
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
     </div>
   )
 }

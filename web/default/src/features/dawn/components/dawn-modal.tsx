@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com.
 */
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import i18n from '@/i18n/config'
 import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
@@ -30,11 +30,49 @@ export function DawnModal(props: {
   label?: string
 }) {
   const { open, onClose, children, variant = 'rail', label } = props
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef(onClose)
+  useEffect(() => {
+    closeRef.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     if (!open) return
+    const previousFocus = document.activeElement
+    const dialog = dialogRef.current
+    const controls = () =>
+      Array.from(
+        dialog?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), [tabindex="0"]'
+        ) ?? []
+      ).filter((element) => element.getClientRects().length > 0)
+    ;(controls()[0] ?? dialog)?.focus()
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeRef.current()
+      }
+      if (event.key === 'Tab') {
+        const items = controls()
+        const first = items[0]
+        const last = items[items.length - 1]
+        if (!first || !last) {
+          event.preventDefault()
+          dialog?.focus()
+          return
+        }
+        if (
+          event.shiftKey &&
+          (document.activeElement === first ||
+            document.activeElement === dialog)
+        ) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
+      }
     }
     document.addEventListener('keydown', onKey)
     const { overflow } = document.body.style
@@ -42,8 +80,9 @@ export function DawnModal(props: {
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = overflow
+      if (previousFocus instanceof HTMLElement) previousFocus.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
@@ -55,9 +94,14 @@ export function DawnModal(props: {
         role='dialog'
         aria-modal='true'
         aria-label={label ?? 'dialog'}
+        ref={dialogRef}
+        tabIndex={-1}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onClose()
+        }}
       >
         <div
-          className={`box${variant === 'narrow' ? 'narrow' : ''}${variant === 'plain' ? 'plain' : ''}`}
+          className={`box ${variant === 'narrow' ? 'narrow' : ''} ${variant === 'plain' ? 'plain' : ''}`}
         >
           {children}
         </div>

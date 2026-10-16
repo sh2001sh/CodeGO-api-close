@@ -1,9 +1,4 @@
-import {
-  Activity,
-  CirclePause,
-  Pencil,
-  Trash2,
-} from 'lucide-react'
+import { Activity, CirclePause, Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -11,8 +6,8 @@ import {
   useAdminMarketplaceVerification,
   useMarketplaceMutations,
 } from '../hooks'
-import { failedConnectivityModels } from '../lib/verification'
 import { isImageGenerationModel } from '../lib/model-capabilities'
+import { failedConnectivityModels } from '../lib/verification'
 import type { MarketplaceChannel } from '../types'
 
 export function AdminChannelActions(props: {
@@ -34,8 +29,10 @@ export function AdminChannelActions(props: {
   ).length
   const retryConnectivity =
     failedCount > 0 ||
-    (channel.connectivity_test_status === 'failed' && verifiableDeclaredCount > 0)
-  const retryConnectivityCount = failedCount > 0 ? failedCount : verifiableDeclaredCount
+    (channel.connectivity_test_status === 'failed' &&
+      verifiableDeclaredCount > 0)
+  const retryConnectivityCount =
+    failedCount > 0 ? failedCount : verifiableDeclaredCount
   const connectivityRunning = ['queued', 'running'].includes(
     channel.connectivity_test_status
   )
@@ -103,8 +100,7 @@ export function AdminChannelActions(props: {
             channelMutations.adminPause.mutate(
               { id: channel.id, paused: true },
               {
-                onSuccess: () =>
-                  toast.success(t('渠道已暂停，冻结额度已保留')),
+                onSuccess: () => toast.success(t('渠道已暂停，冻结额度已保留')),
                 onError: (error) =>
                   toast.error(
                     error instanceof Error ? error.message : t('暂停渠道失败')

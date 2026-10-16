@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/sh2001sh/new-api/constant"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -36,7 +37,7 @@ func TestRefundableTopupUsesFundingLotQuotaUnits(t *testing.T) {
 		RemainingAmount: 50_000_000,
 		IdempotencyKey:  fmt.Sprintf("topup:%s:unified", tradeNo),
 	}).Error)
-	order := commerceschema.TopUp{UserId: userID, TradeNo: tradeNo, Amount: 100, Money: 100, ProviderPayload: `{"trade_no":"provider-order"}`}
+	order := commerceschema.TopUp{UserId: userID, TradeNo: tradeNo, Amount: 100, Money: 100, Status: constant.TopUpStatusSuccess, PaymentProvider: commerceschema.PaymentProviderEpay, PaymentMethod: "alipay", ProviderPayload: `{"trade_no":"provider-order"}`}
 
 	item := refundableTopup(userID, &order)
 
@@ -92,17 +93,18 @@ func TestRefundableSubscriptionKeepsUsageClearedByReferralReset(t *testing.T) {
 	}).Error)
 	order := commerceschema.SubscriptionOrder{
 		UserId: userID, TargetSubscriptionId: subscriptionID, Money: 100,
+		Status: constant.TopUpStatusSuccess, PaymentProvider: commerceschema.PaymentProviderEpay, PaymentMethod: "alipay", FulfillmentStatus: commerceschema.SubscriptionOrderFulfillmentCompleted,
 		ProviderPayload: `{"trade_no":"provider-subscription-order"}`,
 	}
 
 	item := refundableSubscription(userID, &order)
 
 	require.EqualValues(t, 1_000, item.TotalQuota)
-	require.EqualValues(t, 350, item.UsedQuota)
-	require.EqualValues(t, 650, item.RemainingQuota)
-	require.Equal(t, 65.0, item.GrossRefund)
-	require.Equal(t, 1.3, item.FeeAmount)
-	require.Equal(t, 63.7, item.RefundAmount)
+	require.EqualValues(t, 400, item.UsedQuota)
+	require.EqualValues(t, 600, item.RemainingQuota)
+	require.Equal(t, 60.0, item.GrossRefund)
+	require.Equal(t, 1.2, item.FeeAmount)
+	require.Equal(t, 58.8, item.RefundAmount)
 	require.True(t, item.Refundable)
 }
 
@@ -125,6 +127,7 @@ func TestRefundableSubscriptionFailsClosedWhenResetUsageCannotBeVerified(t *test
 	}).Error)
 	order := commerceschema.SubscriptionOrder{
 		UserId: userID, TargetSubscriptionId: subscriptionID, Money: 100,
+		Status: constant.TopUpStatusSuccess, PaymentProvider: commerceschema.PaymentProviderEpay, PaymentMethod: "alipay", FulfillmentStatus: commerceschema.SubscriptionOrderFulfillmentCompleted,
 		ProviderPayload: `{"trade_no":"provider-subscription-order"}`,
 	}
 
@@ -134,7 +137,7 @@ func TestRefundableSubscriptionFailsClosedWhenResetUsageCannotBeVerified(t *test
 	require.Contains(t, item.UnavailableReason, "无法核验累计消耗")
 }
 
-func TestFinalizeSubscriptionRefundClosesPackageAfterPendingUsage(t *testing.T) {
+func TestFinalizeSubscriptionRefundFailsClosedForHistoricalUnfrozenAttempt(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 
 	const (
@@ -153,23 +156,23 @@ func TestFinalizeSubscriptionRefundClosesPackageAfterPendingUsage(t *testing.T) 
 		RefundStatus: commerceschema.RefundStatusProcessing, RefundQuota: 400,
 	}).Error)
 
-	require.NoError(t, finalizeUserRefund(userID, commerceschema.RefundOrderTypeSubscription, tradeNo, refundNo, 39.2))
+	require.Error(t, finalizeUserRefund(userID, commerceschema.RefundOrderTypeSubscription, tradeNo, refundNo, 39.2))
 
 	var subscription commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", subscriptionID).First(&subscription).Error)
-	require.Equal(t, commerceschema.SubscriptionStatusSettledCancelled, subscription.Status)
-	require.EqualValues(t, 950, subscription.AmountTotal)
+	require.Equal(t, "active", subscription.Status)
+	require.EqualValues(t, 1000, subscription.AmountTotal)
 	require.EqualValues(t, 950, subscription.AmountUsed)
-	require.EqualValues(t, 950, subscription.PeriodAmount)
+	require.EqualValues(t, 1000, subscription.PeriodAmount)
 	require.EqualValues(t, 950, subscription.PeriodUsed)
 	var order commerceschema.SubscriptionOrder
 	require.NoError(t, db.Where("trade_no = ?", tradeNo).First(&order).Error)
-	require.Equal(t, commerceschema.RefundStatusSuccess, order.RefundStatus)
-	require.Equal(t, refundNo, order.RefundNo)
+	require.Equal(t, commerceschema.RefundStatusProcessing, order.RefundStatus)
+	require.Empty(t, order.RefundNo)
 
-	require.NoError(t, finalizeUserRefund(userID, commerceschema.RefundOrderTypeSubscription, tradeNo, refundNo, 39.2))
+	require.Error(t, finalizeUserRefund(userID, commerceschema.RefundOrderTypeSubscription, tradeNo, refundNo, 39.2))
 	require.NoError(t, db.Where("id = ?", subscriptionID).First(&subscription).Error)
-	require.EqualValues(t, 950, subscription.AmountTotal)
+	require.EqualValues(t, 1000, subscription.AmountTotal)
 }
 
 func TestSuccessfulRefundStatusCannotBeDowngraded(t *testing.T) {
@@ -181,10 +184,11 @@ func TestSuccessfulRefundStatusCannotBeDowngraded(t *testing.T) {
 	)
 	require.NoError(t, db.Create(&commerceschema.SubscriptionOrder{
 		UserId: userID, TradeNo: tradeNo, RefundStatus: commerceschema.RefundStatusSuccess,
-		RefundProviderID: "provider-success",
+		RefundProviderID: "provider-success", RefundNo: "terminal-refund", RefundAmount: 98, Money: 100, ProviderPayload: `{"trade_no":"provider-paid"}`,
 	}).Error)
 
-	require.NoError(t, setRefundStatus(userID, commerceschema.RefundOrderTypeSubscription, tradeNo, commerceschema.RefundStatusProcessing, "provider-retry", ""))
+	require.NoError(t, saveRefundProviderState(userID, commerceschema.RefundOrderTypeSubscription, tradeNo, "terminal-refund", &JianPayRefundResult{RefundNo: "terminal-refund", RefundID: "provider-success", OrderID: "provider-paid", RefundAmount: 9800, Status: 1}))
+	require.Error(t, saveRefundProviderState(userID, commerceschema.RefundOrderTypeSubscription, tradeNo, "terminal-refund", &JianPayRefundResult{RefundNo: "terminal-refund", RefundID: "provider-retry", OrderID: "provider-paid", RefundAmount: 9800, Status: 1}))
 
 	var order commerceschema.SubscriptionOrder
 	require.NoError(t, db.Where("trade_no = ?", tradeNo).First(&order).Error)

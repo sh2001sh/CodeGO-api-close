@@ -87,7 +87,7 @@ export function UserInfoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-lg'>
+      <DialogContent className='solaris-log-details sm:max-w-lg'>
         <DialogHeader>
           <DialogTitle>{t('User Information')}</DialogTitle>
           <DialogDescription>

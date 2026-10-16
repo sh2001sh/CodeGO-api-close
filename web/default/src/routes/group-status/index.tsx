@@ -20,6 +20,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
 import { useTranslation } from 'react-i18next'
 import { SiteSeo } from '@/components/seo'
+import { SiteFooter } from '@/components/site-footer'
 import { DawnNav } from '@/features/dawn/components/dawn-nav'
 import { SidebarGroupStatusPage } from '@/features/sidebar-group-status'
 
@@ -39,9 +40,10 @@ function GroupStatusPage() {
       <div className='dawn !min-h-0 !bg-transparent'>
         <DawnNav />
       </div>
-      <div className='min-h-svh pt-32 pb-[env(safe-area-inset-bottom)] md:pt-20'>
+      <div className='status-public-body min-h-svh pb-[env(safe-area-inset-bottom)]'>
         <SidebarGroupStatusPage />
       </div>
+      <SiteFooter />
     </div>
   )
 }

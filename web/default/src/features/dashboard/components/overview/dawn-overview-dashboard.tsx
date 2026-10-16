@@ -16,31 +16,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
-import {
-  Activity,
-  ArrowUpRight,
-  BrainCircuit,
-  Copy,
-  Gift,
-  Globe,
-  PieChart,
-  Plug,
-  RefreshCw,
-  Wallet,
-  Waypoints,
-} from 'lucide-react'
-import { Trans, useTranslation } from 'react-i18next'
+import { ArrowUpRight, Copy, Gift, KeyRound, RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
-import { getCurrencyLabel } from '@/lib/currency'
 import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
 import { getConfiguredServerAddress } from '@/lib/server-url'
-import { cn } from '@/lib/utils'
+import { SegmentedControl } from '@/components/ui/segmented-control'
 import {
   Tooltip,
   TooltipContent,
@@ -50,28 +37,36 @@ import {
   getUserGroupOverview,
   getUserQuotaDates,
 } from '@/features/dashboard/api'
-import { aggregateUsageByBucket } from '@/features/dashboard/lib/overview-usage'
+import {
+  buildOverviewUsageTimeline,
+  getOverviewGroupLatency,
+} from '@/features/dashboard/lib/overview-usage'
 import type { QuotaDataItem } from '@/features/dashboard/types'
 import { DawnQueryError } from '@/features/dawn/components/query-error'
 import { getUserLogs } from '@/features/usage-logs/api'
 import type { UsageLog } from '@/features/usage-logs/data/schema'
 import { getTokenComposition } from '../../lib/token-composition'
+import './overview.css'
 
 type TimeRange = '24h' | '7d' | '30d'
 
 const RANGE_CONFIG: Record<
   TimeRange,
-  { hours: number; defaultTime: 'hour' | 'day'; bars: number }
+  { hours: number; defaultTime: 'hour' | 'day' }
 > = {
-  '24h': { hours: 24, defaultTime: 'hour', bars: 24 },
-  '7d': { hours: 24 * 7, defaultTime: 'day', bars: 7 },
-  '30d': { hours: 24 * 30, defaultTime: 'day', bars: 15 },
+  '24h': { hours: 24, defaultTime: 'hour' },
+  '7d': { hours: 24 * 7, defaultTime: 'day' },
+  '30d': { hours: 24 * 30, defaultTime: 'day' },
 }
 
 export function DawnOverviewDashboard() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
-  const [range, setRange] = useState<TimeRange>('24h')
+  const navigate = useNavigate()
+  const { range: selectedRange } = getRouteApi(
+    '/_authenticated/dashboard/$section'
+  ).useSearch()
+  const range: TimeRange = selectedRange ?? '24h'
   const [queryNow, setQueryNow] = useState(() => Math.floor(Date.now() / 1000))
 
   const config = RANGE_CONFIG[range]
@@ -82,31 +77,63 @@ export function DawnOverviewDashboard() {
     queryKey: [
       'dawn-overview',
       'usage',
+      user?.id,
       range,
       startTimestamp,
       endTimestamp,
       config.defaultTime,
     ],
-    queryFn: () =>
-      getUserQuotaDates({
+    queryFn: async () => {
+      const response = await getUserQuotaDates({
         start_timestamp: startTimestamp,
         end_timestamp: endTimestamp,
         default_time: config.defaultTime,
-      }),
+      })
+      if (!response.success) throw new Error(i18n.t('用量记录加载失败'))
+      return response
+    },
     staleTime: 60_000,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[2] === user?.id &&
+      previousQuery?.queryKey[3] === range
+        ? previousData
+        : undefined,
   })
 
   const groupQuery = useQuery({
-    queryKey: ['dawn-overview', 'groups', range, config.hours],
-    queryFn: () => getUserGroupOverview(config.hours),
+    queryKey: [
+      'dawn-overview',
+      'groups',
+      user?.id,
+      range,
+      config.hours,
+      queryNow,
+    ],
+    queryFn: async () => {
+      const response = await getUserGroupOverview(config.hours)
+      if (!response.success)
+        throw new Error(response.message || i18n.t('用量记录加载失败'))
+      return response
+    },
     staleTime: 60_000,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[2] === user?.id &&
+      previousQuery?.queryKey[3] === range
+        ? previousData
+        : undefined,
   })
 
   const logsQuery = useQuery({
-    queryKey: ['dawn-overview', 'logs', range, startTimestamp, endTimestamp],
+    queryKey: [
+      'dawn-overview',
+      'logs',
+      user?.id,
+      range,
+      startTimestamp,
+      endTimestamp,
+    ],
     queryFn: async () => {
-      // The dashboard only needs token totals. Fetch one bounded aggregate
-      // page instead of walking every log page sequentially on first paint.
+      // This is a bounded sample of consumption logs, not the quota projection.
       const response = await getUserLogs({
         type: 2,
         start_timestamp: startTimestamp,
@@ -117,11 +144,48 @@ export function DawnOverviewDashboard() {
         page_size: 100,
       })
       if (!response.success || !response.data) {
-        throw new Error(response.message || '用量记录加载失败')
+        throw new Error(response.message || i18n.t('用量记录加载失败'))
       }
-      return response.data.items as UsageLog[]
+      return {
+        items: response.data.items as UsageLog[],
+        total: response.data.total,
+      }
     },
     staleTime: 60_000,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[2] === user?.id &&
+      previousQuery?.queryKey[3] === range
+        ? previousData
+        : undefined,
+  })
+
+  const failedQuery = useQuery({
+    queryKey: [
+      'dawn-overview',
+      'failed',
+      user?.id,
+      range,
+      startTimestamp,
+      endTimestamp,
+    ],
+    queryFn: async () => {
+      const response = await getUserLogs({
+        type: 5,
+        start_timestamp: startTimestamp,
+        end_timestamp: endTimestamp,
+        p: 1,
+        page_size: 1,
+      })
+      if (!response.success || !response.data)
+        throw new Error(response.message || i18n.t('用量记录加载失败'))
+      return response.data.total
+    },
+    staleTime: 60_000,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[2] === user?.id &&
+      previousQuery?.queryKey[3] === range
+        ? previousData
+        : undefined,
   })
 
   const rows = useMemo(
@@ -132,7 +196,7 @@ export function DawnOverviewDashboard() {
   const groups = useMemo(() => groupQuery.data?.data ?? [], [groupQuery.data])
 
   const logs = useMemo(() => {
-    return (logsQuery.data ?? []) as UsageLog[]
+    return logsQuery.data?.items ?? []
   }, [logsQuery.data])
 
   const spend = useMemo(
@@ -148,20 +212,7 @@ export function DawnOverviewDashboard() {
     [rows]
   )
 
-  const totalGroupRequests = groups.reduce(
-    (sum, group) => sum + Number(group.request_count ?? 0),
-    0
-  )
-  const avgLatencyMs =
-    totalGroupRequests > 0
-      ? groups.reduce(
-          (sum, group) =>
-            sum +
-            Number(group.avg_latency_ms ?? 0) *
-              Number(group.request_count ?? 0),
-          0
-        ) / totalGroupRequests
-      : null
+  const avgLatencyMs = useMemo(() => getOverviewGroupLatency(groups), [groups])
 
   const tokenSplit = useMemo(() => getTokenComposition(logs), [logs])
 
@@ -179,381 +230,498 @@ export function DawnOverviewDashboard() {
   }, [rows])
 
   const bars = useMemo(() => {
-    const bucketSeconds = range === '24h' ? 60 * 60 : 24 * 60 * 60
-    const aggregated = aggregateUsageByBucket(
+    const bucketSeconds = range === '24h' ? 3600 : 86400
+    const aggregated = buildOverviewUsageTimeline(
       rows.map((row) => ({
         created_at: Number(row.created_at),
         quota: Number(row.quota ?? 0),
       })),
-      bucketSeconds,
-      config.bars
+      startTimestamp,
+      endTimestamp,
+      bucketSeconds
     )
-    const values = aggregated.map((row) => row.quota)
-    const max = Math.max(1, ...values)
+    const max = Math.max(1, ...aggregated.map((row) => row.quota))
     return aggregated.map((source) => {
-      const value = source.quota
-      const date = new Date(Number(source?.created_at ?? 0) * 1000)
+      const date = new Date(source.created_at * 1000)
       const label =
         range === '24h'
-          ? `${String(date.getHours()).padStart(2, '0')}:00`
-          : `${date.getMonth() + 1}/${date.getDate()}`
+          ? date.toLocaleTimeString(i18n.language, {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            })
+          : date.toLocaleDateString(i18n.language, {
+              month: 'short',
+              day: 'numeric',
+            })
+      const detail = date.toLocaleString(i18n.language, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
       return {
         label,
-        value,
-        height: Math.max(4, Math.round((value / max) * 100)),
+        detail,
+        timestamp: source.created_at,
+        value: source.quota,
+        height: source.quota > 0 ? Math.max(3, (source.quota / max) * 100) : 0,
       }
     })
-  }, [rows, range, config.bars])
+  }, [rows, range, startTimestamp, endTimestamp])
 
   const tokenTotal =
     tokenSplit.cacheHit + tokenSplit.cacheMiss + tokenSplit.output
-  const hitDeg = tokenTotal > 0 ? (tokenSplit.cacheHit / tokenTotal) * 360 : 0
-  const missDeg = tokenTotal > 0 ? (tokenSplit.cacheMiss / tokenTotal) * 360 : 0
-  const donutStyle = {
-    '--swp': `${hitDeg}deg`,
-    '--swp2': `${missDeg}deg`,
-  } as CSSProperties
+  const tokenSegments = [
+    { label: t('缓存命中输入 Token'), value: tokenSplit.cacheHit, tone: 'hit' },
+    {
+      label: t('缓存未命中输入 Token'),
+      value: tokenSplit.cacheMiss,
+      tone: 'miss',
+    },
+    { label: t('输出 Token'), value: tokenSplit.output, tone: 'output' },
+  ]
 
   const baseUrl = getConfiguredServerAddress()
   const activeGroup = groups[0]?.group ?? user?.group ?? '—'
 
-  const balance = Number(user?.quota ?? 0)
+  const balance = user?.quota == null ? null : Number(user.quota)
 
   const handleRefresh = async () => {
-    const nextNow = Math.floor(Date.now() / 1000)
-    if (nextNow !== queryNow) {
-      setQueryNow(nextNow)
-      toast.success('数据已刷新')
+    const refreshedAt = Math.floor(Date.now() / 1000)
+    if (refreshedAt !== queryNow) {
+      // Moving the shared window refetches all four queries with current bounds.
+      setQueryNow(refreshedAt)
       return
     }
-    await Promise.all([
+    const results = await Promise.all([
       usageQuery.refetch(),
       groupQuery.refetch(),
       logsQuery.refetch(),
+      failedQuery.refetch(),
     ])
-    toast.success('数据已刷新')
+    if (results.every((result) => !result.isError)) {
+      toast.success(i18n.t('数据已刷新'))
+    }
   }
 
   const handleCopy = async (text: string) => {
     const success = await copyToClipboard(text)
-    if (success) toast.success('已复制')
+    if (success) toast.success(i18n.t('已复制'))
+    else toast.error(i18n.t('Copy failed'))
   }
 
+  const refreshing =
+    usageQuery.isFetching ||
+    groupQuery.isFetching ||
+    logsQuery.isFetching ||
+    failedQuery.isFetching
+  const usageReady = usageQuery.isSuccess
+  const logsReady = logsQuery.isSuccess
+  const hasTokenSample = logsReady && logs.length > 0 && tokenTotal > 0
+  const metrics = [
+    { label: t('期间消耗'), value: usageReady ? formatQuota(spend) : '--' },
+    { label: t('请求次数'), value: usageReady ? formatNumber(requests) : '--' },
+    {
+      label: t('Tokens'),
+      value: usageReady ? formatCompactNumber(tokens) : '--',
+    },
+    {
+      label: t('可用分组平均耗时'),
+      value:
+        groupQuery.isSuccess && avgLatencyMs != null
+          ? `${(avgLatencyMs / 1000).toFixed(2)} s`
+          : '--',
+    },
+  ]
+  const rangeLabel = `${new Date(startTimestamp * 1000).toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' })} – ${new Date(endTimestamp * 1000).toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' })}`
+
   return (
-    <div className='dawn-overview'>
-      <div className='pgw'>
-        <div>
-          <div className='kick'>
-            <span className='n'>C·01</span>
-            OVERVIEW
-          </div>
-          <h1 className='pg'>
-            <Trans i18nKey={'概览'} />
-          </h1>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <div className='seg'>
-            {(['24h', '7d', '30d'] as TimeRange[]).map((value) => (
-              <button
-                key={value}
-                className={cn('rngb', range === value && 'on')}
-                aria-pressed={range === value}
-                onClick={() => {
-                  setQueryNow(Math.floor(Date.now() / 1000))
-                  setRange(value)
-                }}
-              >
-                {value.toUpperCase()}
-              </button>
-            ))}
-          </div>
+    <div className='market-overview' aria-busy={refreshing}>
+      <header className='market-overview-heading'>
+        <h1>{t('概览')}</h1>
+        <div className='market-overview-actions'>
+          <SegmentedControl
+            value={range}
+            onChange={(value) => {
+              setQueryNow(Math.floor(Date.now() / 1000))
+              void navigate({
+                to: '/dashboard/$section',
+                params: { section: 'overview' },
+                search: { range: value },
+              })
+            }}
+            options={[
+              { value: '24h', label: '24H' },
+              { value: '7d', label: '7D' },
+              { value: '30d', label: '30D' },
+            ]}
+          />
           <button
-            className='btn mini'
+            type='button'
+            className='overview-button'
+            disabled={refreshing}
             onClick={() => void handleRefresh()}
-            disabled={
-              usageQuery.isFetching ||
-              groupQuery.isFetching ||
-              logsQuery.isFetching
-            }
           >
             <RefreshCw
-              size={14}
-              className={
-                usageQuery.isFetching ||
-                groupQuery.isFetching ||
-                logsQuery.isFetching
-                  ? 'animate-spin'
-                  : ''
-              }
+              size={16}
+              className={refreshing ? 'animate-spin' : ''}
+              aria-hidden='true'
             />
-            <Trans i18nKey={'刷新'} />
+            {t('刷新')}
           </button>
         </div>
-      </div>
+      </header>
 
-      {usageQuery.isError || groupQuery.isError || logsQuery.isError ? (
+      {(usageQuery.isError ||
+        groupQuery.isError ||
+        logsQuery.isError ||
+        failedQuery.isError) && (
         <DawnQueryError
-          title={i18n.t('概览数据加载不完整')}
-          description={i18n.t('部分统计暂时不可用，请重新加载。')}
+          title={t('概览数据加载不完整')}
+          description={t('部分统计暂时不可用，请重新加载。')}
           onRetry={() => void handleRefresh()}
-          retrying={
-            usageQuery.isFetching ||
-            groupQuery.isFetching ||
-            logsQuery.isFetching
-          }
+          retrying={refreshing}
         />
-      ) : null}
+      )}
 
-      <div className='apicard rise'>
-        <div className='ap'>
-          <span className='apl'>
-            <Globe size={13} />
-            BASE URL
-          </span>
-          <code>{baseUrl}</code>
-          <button className='btn mini' onClick={() => void handleCopy(baseUrl)}>
-            <Copy size={14} />
-            <Trans i18nKey={'复制'} />
-          </button>
-        </div>
-
-        <div className='apdiv' />
-        <div className='ap'>
-          <span className='apl'>
-            <Plug size={13} />
-            <Trans i18nKey={'协议'} />
-          </span>
-          <span className='prtag'>OpenAI Compatible</span>
-          <span className='prtag'>Anthropic</span>
-          <span className='prtag'>Gemini</span>
-        </div>
-        <div className='apdiv' />
-        <div className='ap'>
-          <span className='apl'>
-            <Waypoints size={13} />
-            <Trans i18nKey={'可用分组'} />
-          </span>
-          <span
-            className='prtag'
-            style={{
-              borderColor: 'rgba(184,86,46,.4)',
-              color: 'var(--dawn-copper)',
-            }}
-          >
-            {activeGroup}
-          </span>
-          <Link className='btn mini' to='/market'>
-            <Trans i18nKey={'去市场'} /> <ArrowUpRight size={13} />
-          </Link>
-        </div>
-      </div>
-
-      <div
-        className='hero rise'
-        style={{ animationDelay: '.06s', marginTop: 18 }}
-      >
-        <div className='halo' />
-        <div className='hl'>
-          <Wallet size={13} />
-          <Trans i18nKey={'可用总额度'} />
-          <span
-            style={{
-              marginLeft: 'auto',
-              fontFamily: 'var(--dawn-mono)',
-              fontSize: 10,
-              border: '1px solid var(--dawn-line)',
-              borderRadius: 6,
-              padding: '2px 8px',
-            }}
-          >
-            {getCurrencyLabel()}
-          </span>
-        </div>
-        <div className='amt'>
-          <span>{formatQuota(balance)}</span>
-          <Link className='btn mini' to='/wallet' style={{ marginLeft: 12 }}>
-            <ArrowUpRight size={14} />
-            <Trans i18nKey={'钱包'} />
-          </Link>
-          <Link className='btn mini primary' to='/blind-box'>
-            <Gift size={14} />
-            <Trans i18nKey={'盲盒'} />
-          </Link>
-        </div>
-      </div>
-
-      <div className='sb4 rise' style={{ animationDelay: '.12s' }}>
-        <div className='cell'>
-          <b>{formatQuota(spend)}</b>
-          <span>
-            <Trans i18nKey={'期间消耗'} />
-          </span>
-        </div>
-        <div className='cell'>
-          <b>{formatNumber(requests)}</b>
-          <span>
-            <Trans i18nKey={'请求次数'} />
-          </span>
-        </div>
-        <div className='cell'>
-          <b>{formatCompactNumber(tokens)}</b>
-          <span>Tokens</span>
-        </div>
-        <div className='cell'>
-          <b>
-            {avgLatencyMs != null ? `${(avgLatencyMs / 1000).toFixed(2)}` : '—'}
-            <span className='u'>s</span>
-          </b>
-          <span>
-            <Trans i18nKey={'平均耗时'} />
-          </span>
-        </div>
-      </div>
-
-      <div className='cols'>
-        <div className='panel rise' style={{ animationDelay: '.18s' }}>
-          <div className='ph2'>
-            <Activity size={15} />
-            <Trans i18nKey={'请求走势'} />
-            <span className='win'>
-              {range.toUpperCase()} <Trans i18nKey={'· 消耗'} />
-            </span>
+      <div className='overview-summary'>
+        <section className='overview-account' aria-label={t('可用总额度')}>
+          <span className='overview-label'>{t('可用总额度')}</span>
+          <strong className='overview-balance'>
+            {balance == null ? '--' : formatQuota(balance)}
+          </strong>
+          <div className='market-overview-actions'>
+            <Link className='overview-text-link' to='/wallet'>
+              {t('钱包')}
+              <ArrowUpRight size={15} aria-hidden='true' />
+            </Link>
+            <Link className='overview-text-link' to='/blind-box'>
+              <Gift size={15} aria-hidden='true' />
+              {t('盲盒')}
+            </Link>
+            <Link className='overview-text-link' to='/keys'>
+              <KeyRound size={15} aria-hidden='true' />
+              {t('API Keys')}
+            </Link>
           </div>
-          {bars.length === 0 ? (
-            <div className='pp-empty' style={{ padding: '28px 0' }}>
-              <Activity size={20} />
+        </section>
+        <section className='overview-connection' aria-label={t('BASE URL')}>
+          <span className='overview-label'>{t('BASE URL')}</span>
+          <div className='overview-endpoint'>
+            <code>{baseUrl}</code>
+            <button
+              className='overview-copy'
+              type='button'
+              onClick={() => void handleCopy(baseUrl)}
+              aria-label={t('复制')}
+              title={t('复制')}
+            >
+              <Copy size={16} aria-hidden='true' />
+            </button>
+          </div>
+          <div className='overview-connection-meta'>
+            <Link to='/market' className='overview-text-link'>
               <span>
-                <Trans i18nKey={'窗口内暂无数据'} />
+                {t('可用分组')} · <strong>{activeGroup}</strong>
               </span>
+              <ArrowUpRight size={15} aria-hidden='true' />
+            </Link>
+          </div>
+        </section>
+      </div>
+
+      <section className='overview-usage-summary' aria-label={t('期间消耗')}>
+        <dl className='overview-metrics' aria-live='polite'>
+          {metrics.map((metric) => (
+            <div key={metric.label}>
+              <dt>{metric.label}</dt>
+              <dd>{metric.value}</dd>
             </div>
-          ) : (
+          ))}
+          <div>
+            <dt>{t('Failed')}</dt>
+            <dd>
+              <Link
+                className='overview-failed-link'
+                to='/usage-logs/$section'
+                params={{ section: 'common' }}
+                search={{
+                  type: ['5'],
+                  startTime: startTimestamp,
+                  endTime: endTimestamp,
+                }}
+              >
+                <span>
+                  {failedQuery.isSuccess
+                    ? formatNumber(failedQuery.data)
+                    : '--'}
+                </span>
+                <ArrowUpRight size={16} aria-hidden='true' />
+              </Link>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <div className='overview-chart-grid'>
+        <section className='overview-section overview-trend'>
+          <header>
+            <h2>{t('期间消耗')}</h2>
+            <span>{rangeLabel}</span>
+          </header>
+          {usageQuery.isLoading && (
+            <div
+              className='overview-chart-loading'
+              aria-label={t('Loading...')}
+            />
+          )}
+          {usageQuery.isError && (
+            <div className='overview-empty' role='status'>
+              {t('用量记录加载失败')}
+            </div>
+          )}
+          {usageReady && rows.length === 0 && (
+            <div className='overview-empty'>{t('窗口内暂无消耗记录')}</div>
+          )}
+          {usageReady && rows.length > 0 && (
             <>
-              <div className='ubars'>
-                {bars.map((bar, index) => (
-                  <div className='u1' key={`${bar.label}-${index}`}>
+              <div className='overview-bars'>
+                {bars.map((bar) => (
+                  <div className='overview-bar-slot' key={bar.timestamp}>
                     <Tooltip>
                       <TooltipTrigger
                         render={
                           <button
                             type='button'
-                            className='bar2'
-                            aria-label={`${bar.label} · ${formatQuota(bar.value)}`}
-                            style={{ height: `${bar.height}%` }}
-                          />
+                            className='overview-bar-target'
+                            aria-label={`${bar.detail} · ${formatQuota(bar.value)}`}
+                          >
+                            <span
+                              className='overview-bar'
+                              data-empty={bar.value === 0}
+                              style={{ height: `${bar.height}%` }}
+                            />
+                          </button>
                         }
                       />
                       <TooltipContent>
-                        {bar.label} · {formatQuota(bar.value)}
+                        {bar.detail} · {formatQuota(bar.value)}
                       </TooltipContent>
                     </Tooltip>
                   </div>
                 ))}
               </div>
-              <div className='mt-2 flex justify-between gap-2'>
+              <div className='overview-chart-ticks'>
                 {bars
                   .filter(
                     (_bar, index) =>
                       index % Math.max(1, Math.ceil((bars.length - 1) / 4)) ===
                         0 || index === bars.length - 1
                   )
-                  .map((bar, index) => (
-                    <span
-                      key={`${bar.label}-${index}`}
-                      style={{
-                        textAlign: 'center',
-                        fontFamily: 'var(--dawn-mono)',
-                        fontSize: 9,
-                        color: 'var(--dawn-ink2)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
+                  .map((bar) => (
+                    <time
+                      key={bar.timestamp}
+                      dateTime={new Date(bar.timestamp * 1000).toISOString()}
                     >
                       {bar.label}
-                    </span>
+                    </time>
                   ))}
               </div>
             </>
           )}
-        </div>
+        </section>
 
-        <div className='panel rise' style={{ animationDelay: '.24s' }}>
-          <div className='ph2'>
-            <PieChart size={15} />
-            {t('Token 构成')}
-            <span className='win'>
-              {range.toUpperCase()} ·{' '}
-              {t('最近 {{count}} 条调用', { count: logs.length })}
-            </span>
+        <section className='overview-section overview-composition'>
+          <header>
+            <h2>{t('Token 构成')}</h2>
+            <span>{t('日志样本')}</span>
+          </header>
+          <div className='overview-token-total'>
+            <strong>
+              {hasTokenSample ? formatCompactNumber(tokenTotal) : '--'}
+            </strong>
+            <span>{t('Tokens')}</span>
           </div>
-          <div className='donutwrap'>
-            <div
-              className='donut'
-              data-empty={tokenTotal === 0}
-              style={donutStyle}
-              aria-hidden='true'
-            />
-            <div className='dleg'>
-              <div className='li'>
-                <i className='token-cache-hit' />
-                <span>{t('缓存命中输入 Token')}</span>
-                <b>{formatCompactNumber(tokenSplit.cacheHit)}</b>
-              </div>
-              <div className='li'>
-                <i className='token-cache-miss' />
-                <span>{t('缓存未命中输入 Token')}</span>
-                <b>{formatCompactNumber(tokenSplit.cacheMiss)}</b>
-              </div>
-              <div className='li'>
-                <i className='token-output' />
-                <span>{t('输出 Token')}</span>
-                <b>{formatCompactNumber(tokenSplit.output)}</b>
-              </div>
-            </div>
-          </div>
-          {tokenTotal === 0 && (
-            <p className='text-muted-foreground text-sm'>
-              {t('暂无 Token 用量')}
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div
-        className='panel rise'
-        style={{ animationDelay: '.3s', marginTop: 18 }}
-      >
-        <div className='ph2'>
-          <BrainCircuit size={15} />
-          <Trans i18nKey={'模型用量'} />
-          <span className='win'>{range.toUpperCase()} · TOP 5</span>
-        </div>
-        {modelUsage.length ? (
-          <div className='musage'>
-            {modelUsage.map((item) => (
-              <div className='mu' key={item.name}>
-                <span className='n'>{item.name}</span>
-                <span className='v'>{formatQuota(item.quota)}</span>
-                <span className='tbar'>
-                  <i
-                    style={{
-                      width: `${Math.round(
-                        (item.quota / Math.max(1, modelUsage[0].quota)) * 100
-                      )}%`,
-                    }}
+          {hasTokenSample && (
+            <div className='overview-token-segments' aria-hidden='true'>
+              {tokenSegments
+                .filter((segment) => segment.value > 0)
+                .map((segment) => (
+                  <span
+                    key={segment.tone}
+                    className={`overview-${segment.tone}`}
+                    style={{ flexGrow: segment.value, flexBasis: '6px' }}
                   />
-                </span>
+                ))}
+            </div>
+          )}
+          <dl className='overview-token-list'>
+            {tokenSegments.map((segment) => (
+              <div key={segment.tone}>
+                <dt>
+                  <i
+                    className={`overview-${segment.tone}`}
+                    aria-hidden='true'
+                  />
+                  {segment.label}
+                </dt>
+                <dd>
+                  {hasTokenSample ? formatCompactNumber(segment.value) : '--'}
+                </dd>
               </div>
             ))}
-          </div>
-        ) : (
-          <div className='pp-empty' style={{ padding: '18px 0' }}>
-            <Activity size={20} />
-            <span>
-              <Trans i18nKey={'窗口内暂无消耗记录'} />
-            </span>
-          </div>
-        )}
+          </dl>
+          {logsQuery.isLoading && (
+            <p className='overview-scope'>{t('Loading...')}</p>
+          )}
+          {logsQuery.isError && (
+            <p className='overview-scope' role='status'>
+              {t('用量记录加载失败')}
+            </p>
+          )}
+          {logsReady && logs.length === 0 && (
+            <p className='overview-scope'>
+              {t('本时段暂无消费日志样本，无法拆分 Token。')}
+            </p>
+          )}
+          {logsReady && logs.length > 0 && tokenTotal === 0 && (
+            <p className='overview-scope'>{t('最近日志未提供 Token 明细。')}</p>
+          )}
+          {logsReady && logs.length > 0 && (
+            <p className='overview-scope'>
+              {t(
+                '本时段最近 {{count}} 条消费日志（共 {{total}} 条）；与上方按小时汇总的 Token 总量口径不同。',
+                { count: logs.length, total: logsQuery.data.total }
+              )}
+            </p>
+          )}
+        </section>
+      </div>
+
+      <div className='overview-detail-grid'>
+        <section className='overview-section'>
+          <header>
+            <h2>{t('模型用量')}</h2>
+            <Link
+              to='/dashboard/$section'
+              params={{ section: 'models' }}
+              className='overview-text-link'
+            >
+              {t('Model Call Analytics')}
+              <ArrowUpRight size={15} aria-hidden='true' />
+            </Link>
+          </header>
+          {usageQuery.isLoading && (
+            <div
+              className='overview-chart-loading'
+              aria-label={t('Loading...')}
+            />
+          )}
+          {usageQuery.isError && (
+            <div className='overview-empty'>{t('用量记录加载失败')}</div>
+          )}
+          {usageReady && modelUsage.length === 0 && (
+            <div className='overview-empty'>
+              <span>{t('窗口内暂无消耗记录')}</span>
+              <Link className='overview-text-link' to='/market'>
+                {t('去市场')}
+                <ArrowUpRight size={15} aria-hidden='true' />
+              </Link>
+            </div>
+          )}
+          {usageReady && modelUsage.length > 0 && (
+            <div className='overview-models'>
+              {modelUsage.map((item) => (
+                <div key={item.name}>
+                  <Link
+                    className='overview-model-name'
+                    to='/usage-logs/$section'
+                    params={{ section: 'common' }}
+                    search={{
+                      model: item.name,
+                      startTime: startTimestamp,
+                      endTime: endTimestamp,
+                    }}
+                  >
+                    {item.name}
+                  </Link>
+                  <span className='overview-model-track'>
+                    <i
+                      style={{
+                        width: `${(item.quota / Math.max(1, modelUsage[0].quota)) * 100}%`,
+                      }}
+                    />
+                  </span>
+                  <strong>{formatQuota(item.quota)}</strong>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className='overview-section'>
+          <header>
+            <h2>{t('Usage Logs')}</h2>
+            <Link
+              className='overview-text-link'
+              to='/usage-logs/$section'
+              params={{ section: 'common' }}
+              search={{ startTime: startTimestamp, endTime: endTimestamp }}
+            >
+              {t('查看日志')}
+              <ArrowUpRight size={15} aria-hidden='true' />
+            </Link>
+          </header>
+          {logsQuery.isLoading && (
+            <div
+              className='overview-chart-loading'
+              aria-label={t('Loading...')}
+            />
+          )}
+          {logsQuery.isError && (
+            <div className='overview-empty'>{t('用量记录加载失败')}</div>
+          )}
+          {logsReady && logs.length === 0 && (
+            <div className='overview-empty'>{t('窗口内暂无消耗记录')}</div>
+          )}
+          {logsReady && logs.length > 0 && (
+            <div className='overview-recent-wrap'>
+              <table className='overview-recent'>
+                <thead>
+                  <tr>
+                    <th>{t('Time')}</th>
+                    <th>{t('Model')}</th>
+                    <th>{t('Group')}</th>
+                    <th>{t('Tokens')}</th>
+                    <th>{t('Quota')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.slice(0, 5).map((log) => (
+                    <tr key={log.id}>
+                      <td>
+                        {new Date(log.created_at * 1000).toLocaleString(
+                          i18n.language
+                        )}
+                      </td>
+                      <td>{log.model_name || '—'}</td>
+                      <td>{log.group || '—'}</td>
+                      <td>
+                        {formatCompactNumber(
+                          Number(log.prompt_tokens || 0) +
+                            Number(log.completion_tokens || 0)
+                        )}
+                      </td>
+                      <td>{formatQuota(Number(log.quota || 0))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   )

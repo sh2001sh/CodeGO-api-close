@@ -16,22 +16,32 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com.
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import {
-  BadgeCheck,
+  Activity,
+  Check,
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
   GripVertical,
-  Info,
+  LoaderCircle,
   Plus,
   Sparkles,
   Waypoints,
   X,
+  Zap,
 } from 'lucide-react'
+import {
+  AnimatePresence,
+  motion,
+  Reorder,
+  useDragControls,
+  useReducedMotion,
+} from 'motion/react'
 import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatQuota } from '@/lib/format'
@@ -49,7 +59,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { getMarketplaceRoutePools } from '@/features/marketplace/api'
+import {
+  getMarketplaceRoutePools,
+  getMarketplaceBatchTest,
+  startMarketplaceBatchTest,
+} from '@/features/marketplace/api'
 import {
   useMarketplaceAutoRoutePool,
   useMarketplaceAutoRoutePoolUpdate,
@@ -61,10 +75,14 @@ import {
 } from '@/features/marketplace/hooks'
 import type {
   MarketplaceAutoRoutePoolConfig,
+  MarketplaceBatchTest,
+  MarketplaceBatchTestItem,
   MarketplaceGroup,
   MarketplaceRoutePoolAutoBuild,
 } from '@/features/marketplace/types'
+import { DawnQueryError } from '../components/query-error'
 import { pct, sec } from '../lib/format'
+import './pool-workbench.css'
 
 const STRATEGY_LABEL: Record<string, string> = {
   priority: '排序轮询',
@@ -78,6 +96,18 @@ const autoBuildControlClass =
 
 type PanelMode = 'pool' | 'create' | 'autobuild'
 
+interface WorkbenchMember {
+  id: string
+  name: string
+  source: string
+  multiplier: number
+  successRate: number | null
+  ttft: number | null
+  cache: number | null
+  observing: boolean
+  models: string[]
+}
+
 export type PoolPanelMode = PanelMode
 
 export function PoolWorkbench(props: {
@@ -88,7 +118,7 @@ export function PoolWorkbench(props: {
   mode: PoolPanelMode
   onModeChange: (mode: PoolPanelMode) => void
 }) {
-  useTranslation()
+  const { t } = useTranslation()
   const {
     authed,
     groups,
@@ -126,20 +156,27 @@ export function PoolWorkbench(props: {
       ? [
           {
             id: AUTO_ID,
-            name: 'AUTO 池',
+            name: t('AUTO 池'),
             count: autoPool.data.selected_count,
           },
         ]
       : []
     return [...auto, ...custom]
-  }, [pools.data, autoPool.data])
+  }, [pools.data, autoPool.data, t])
 
   useEffect(() => {
-    if (!authed) return
+    if (!authed || pools.isPending || autoPool.isPending) return
     if (activePoolID && poolOptions.some((pool) => pool.id === activePoolID))
       return
     onActivePoolChange(poolOptions[0]?.id ?? '')
-  }, [authed, activePoolID, poolOptions, onActivePoolChange])
+  }, [
+    authed,
+    activePoolID,
+    poolOptions,
+    onActivePoolChange,
+    pools.isPending,
+    autoPool.isPending,
+  ])
 
   const isAuto = activePoolID === AUTO_ID
   const persistedMemberIds = useMemo(() => {
@@ -149,10 +186,25 @@ export function PoolWorkbench(props: {
       .sort((a, b) => a.priority - b.priority)
       .map((item) => item.group_id)
   }, [isAuto, autoPool.data, poolDetail.data])
-  const [draftMemberIds, setDraftMemberIds] = useState<string[]>([])
-  useEffect(() => {
-    setDraftMemberIds(persistedMemberIds)
-  }, [activePoolID, persistedMemberIds.join(',')])
+  const persistedMemberKey = `${activePoolID}:${persistedMemberIds.join(',')}`
+  const [draft, setDraft] = useState({
+    key: persistedMemberKey,
+    ids: persistedMemberIds,
+  })
+  const draftMemberIds =
+    draft.key === persistedMemberKey ? draft.ids : persistedMemberIds
+  const setDraftMemberIds = (ids: string[]) =>
+    setDraft({ key: persistedMemberKey, ids })
+  const [poolTests, setPoolTests] = useState<{
+    poolID: string
+    items: MarketplaceBatchTestItem[]
+  }>({ poolID: activePoolID, items: [] })
+  const testItems = poolTests.poolID === activePoolID ? poolTests.items : []
+  const setTestItems = useCallback(
+    (items: MarketplaceBatchTestItem[]) =>
+      setPoolTests({ poolID: activePoolID, items }),
+    [activePoolID]
+  )
   const members = useMemo(() => {
     if (isAuto) {
       const items = (autoPool.data?.items ?? []).filter((item) => item.selected)
@@ -170,6 +222,7 @@ export function PoolWorkbench(props: {
             ttft: item.metrics_available ? item.avg_ttft_ms : null,
             cache: item.metrics_available ? item.cache_hit_rate : null,
             observing: item.observing,
+            models: item.models,
           }
         })
     }
@@ -191,6 +244,7 @@ export function PoolWorkbench(props: {
           ttft: item.metrics_available ? item.avg_ttft_ms : null,
           cache: item.metrics_available ? item.cache_hit_rate : null,
           observing: item.observing,
+          models: item.models,
         }
       })
   }, [isAuto, autoPool.data, poolDetail.data, draftMemberIds])
@@ -230,21 +284,18 @@ export function PoolWorkbench(props: {
     }
   }, [members])
 
-  const saveMemberOrder = async (orderedIds: string[]) => {
+  const saveMemberOrder = (orderedIds: string[]) => {
     if (isAuto) {
-      await updateAutoPool.mutateAsync({
-        groupIds: orderedIds,
-        config: currentConfig,
-      })
-      toast.success('AUTO 池已更新')
+      updateAutoPool.mutate(
+        { groupIds: orderedIds, config: currentConfig },
+        { onSuccess: () => toast.success(i18n.t('AUTO 池已更新')) }
+      )
       return
     }
-    await updatePool.mutateAsync({
-      id: activePoolID,
-      groupIds: orderedIds,
-      config: currentConfig,
-    })
-    toast.success('路由池已更新')
+    updatePool.mutate(
+      { id: activePoolID, groupIds: orderedIds, config: currentConfig },
+      { onSuccess: () => toast.success(i18n.t('路由池已更新')) }
+    )
   }
 
   const move = async (index: number, delta: number) => {
@@ -261,23 +312,29 @@ export function PoolWorkbench(props: {
 
   const isDirty = draftMemberIds.join(',') !== persistedMemberIds.join(',')
 
-  const setStrategy = async (strategy: string) => {
+  const setStrategy = (strategy: string) => {
+    const onSuccess = () => toast.success(i18n.t('路由方式已更新'))
     if (isAuto) {
-      await updateAutoPool.mutateAsync({
-        groupIds: members.map((m) => m.id),
-        config: { strategy: strategy as 'priority' | 'score' | 'cost' },
-      })
+      updateAutoPool.mutate(
+        {
+          groupIds: members.map((m) => m.id),
+          config: { strategy: strategy as 'priority' | 'score' | 'cost' },
+        },
+        { onSuccess }
+      )
     } else {
-      await updatePool.mutateAsync({
-        id: activePoolID,
-        groupIds: members.map((m) => m.id),
-        config: { strategy: strategy as 'priority' | 'score' | 'cost' },
-      })
+      updatePool.mutate(
+        {
+          id: activePoolID,
+          groupIds: members.map((m) => m.id),
+          config: { strategy: strategy as 'priority' | 'score' | 'cost' },
+        },
+        { onSuccess }
+      )
     }
-    toast.success('路由方式已更新')
   }
 
-  const rename = async (name: string) => {
+  const rename = (name: string) => {
     const trimmedName = name.trim()
     if (
       isAuto ||
@@ -286,7 +343,7 @@ export function PoolWorkbench(props: {
       updatePool.isPending
     )
       return
-    await updatePool.mutateAsync({
+    updatePool.mutate({
       id: activePoolID,
       name: trimmedName,
       groupIds: members.map((m) => m.id),
@@ -294,20 +351,28 @@ export function PoolWorkbench(props: {
     })
   }
 
-  const removePool = async () => {
+  const removePool = () => {
     if (isAuto) return
-    await deletePool.mutateAsync(activePoolID)
-    onActivePoolChange('')
-    toast.success('路由池已删除')
+    deletePool.mutate(activePoolID, {
+      onSuccess: () => {
+        onActivePoolChange('')
+        toast.success(i18n.t('路由池已删除'))
+      },
+    })
   }
 
   return (
-    <aside className='poolpanel'>
+    <aside
+      className='poolpanel pool-workbench'
+      id='market-route-workbench'
+      data-pool-target
+      tabIndex={-1}
+      aria-label={i18n.t('路由池工作台')}
+    >
       <div className='ph'>
-        <div className='kick'>
-          <span className='n'>M·02</span>
-          ROUTE POOL
-        </div>
+        <span className='pool-eyebrow'>
+          <Activity size={13} aria-hidden='true' /> M-02 / ROUTE POOL
+        </span>
         <h3>
           {mode === 'create'
             ? i18n.t('新建路由池')
@@ -322,55 +387,39 @@ export function PoolWorkbench(props: {
             ? i18n.t('POOL · {{param0}} 分组 · {{param1}}', {
                 param0: members.length,
                 param1: config
-                  ? (STRATEGY_LABEL[config.strategy] ?? config.strategy)
+                  ? i18n.t(STRATEGY_LABEL[config.strategy] ?? config.strategy)
                   : '—',
               })
             : mode === 'create'
-              ? 'CREATE'
-              : 'AUTO BUILD'}
+              ? i18n.t('Create')
+              : i18n.t('Auto build')}
         </div>
       </div>
       <div className='pb'>
+        {authed &&
+          (pools.isError || autoPool.isError || poolDetail.isError) && (
+            <DawnQueryError
+              title={i18n.t('加载失败')}
+              onRetry={() => {
+                void pools.refetch()
+                void autoPool.refetch()
+                if (activePoolID && activePoolID !== AUTO_ID)
+                  void poolDetail.refetch()
+              }}
+              retrying={
+                pools.isFetching || autoPool.isFetching || poolDetail.isFetching
+              }
+            />
+          )}
         {!authed ? (
           <>
-            <div className='compare'>
-              <div className='col'>
-                <h5>
-                  <BadgeCheck size={11} />
-                  <Trans i18nKey={'池构成'} />
-                </h5>
-                <div className='crow'>
-                  <Trans i18nKey={'分组'} /> <b>0</b>
-                </div>
-                <div className='crow'>
-                  <Trans i18nKey={'方式'} /> <b>—</b>
-                </div>
-                <div className='crow'>
-                  <Trans i18nKey={'类型'} /> <b>AUTO</b>
-                </div>
-              </div>
-              <div className='col pool'>
-                <h5>
-                  <Waypoints size={11} />
-                  <Trans i18nKey={'池内均值'} />
-                </h5>
-                <div className='crow'>
-                  <Trans i18nKey={'成功'} /> <b>—</b>
-                </div>
-                <div className='crow'>
-                  <Trans i18nKey={'首字'} /> <b>—</b>
-                </div>
-                <div className='crow'>
-                  <Trans i18nKey={'缓存'} /> <b>—</b>
-                </div>
-              </div>
-            </div>
+            <PoolTelemetry success={null} ttft={null} cache={null} />
             <div className='poolbox'>
               <div className='pool-head'>
                 <span>
                   <Trans i18nKey={'分组 · 0'} />
                 </span>
-                <span className='c2'>ORDER</span>
+                <span className='c2'>{i18n.t('排序')}</span>
               </div>
               <div className='pp-empty'>
                 <Waypoints size={26} />
@@ -381,17 +430,6 @@ export function PoolWorkbench(props: {
                   <Trans i18nKey={'登录 / 注册'} />
                 </Link>
               </div>
-            </div>
-            <div
-              className='pp-note'
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <Info size={12} />
-              <Trans i18nKey={'登录后可创建与编辑路由池'} />
             </div>
           </>
         ) : mode === 'create' ? (
@@ -404,15 +442,15 @@ export function PoolWorkbench(props: {
               })
               onActivePoolChange(pool.id)
               onModeChange('pool')
-              toast.success('路由池已创建')
+              toast.success(i18n.t('路由池已创建'))
             }}
           />
         ) : mode === 'autobuild' ? (
           <AutoBuildPanel
             groups={groups}
             onCancel={() => onModeChange('pool')}
-            onGenerate={async (name, groupIds, strategy) => {
-              let generatedName = name.trim() || '自动池'
+            onGenerate={async (name, groupIds, strategy, autoBuild) => {
+              let generatedName = name.trim() || i18n.t('自动池')
               if (generatedName === '自动池') {
                 const existingNames = new Set(
                   (pools.data ?? []).map((pool) => pool.name)
@@ -428,10 +466,15 @@ export function PoolWorkbench(props: {
                 name: generatedName,
                 groupIds,
                 config: { strategy },
+                autoBuild,
               })
               onActivePoolChange(pool.id)
               onModeChange('pool')
-              toast.success(`已生成路由池 · ${groupIds.length} 分组`)
+              toast.success(
+                i18n.t('已生成路由池 · {{param0}} 分组', {
+                  param0: groupIds.length,
+                })
+              )
             }}
           />
         ) : (
@@ -440,6 +483,7 @@ export function PoolWorkbench(props: {
               <div className='row'>
                 <select
                   className='iname'
+                  aria-label={i18n.t('路由池')}
                   value={activePoolID}
                   onChange={(event) => onActivePoolChange(event.target.value)}
                 >
@@ -451,6 +495,7 @@ export function PoolWorkbench(props: {
                 </select>
                 <button
                   className='btn mini'
+                  aria-label={i18n.t('新建路由池')}
                   title={i18n.t('新建路由池')}
                   onClick={() => onModeChange('create')}
                 >
@@ -458,6 +503,7 @@ export function PoolWorkbench(props: {
                 </button>
                 <button
                   className='btn mini'
+                  aria-label={i18n.t('智能新建一个路由池')}
                   title={i18n.t('智能新建一个路由池')}
                   onClick={() => onModeChange('autobuild')}
                 >
@@ -467,26 +513,33 @@ export function PoolWorkbench(props: {
               <div className='row'>
                 <input
                   className='iname'
-                  defaultValue={isAuto ? 'AUTO 池' : poolDetail.data?.name}
+                  aria-label={i18n.t('路由池名称')}
+                  defaultValue={
+                    isAuto ? i18n.t('AUTO 池') : poolDetail.data?.name
+                  }
                   key={`${activePoolID}-${poolDetail.data?.name}`}
-                  disabled={isAuto || updatePool.isPending}
+                  disabled={isAuto || updatePool.isPending || isDirty}
                   onBlur={(event) => void rename(event.target.value)}
                 />
                 <select
                   value={config?.strategy ?? 'priority'}
-                  disabled={updatePool.isPending || updateAutoPool.isPending}
+                  disabled={
+                    updatePool.isPending || updateAutoPool.isPending || isDirty
+                  }
                   onChange={(event) => void setStrategy(event.target.value)}
+                  aria-label={i18n.t('路由方式')}
                   title={i18n.t('路由方式')}
                 >
                   {Object.entries(STRATEGY_LABEL).map(([value, label]) => (
                     <option key={value} value={value}>
-                      {label}
+                      {i18n.t(label)}
                     </option>
                   ))}
                 </select>
                 {!isAuto && (
                   <button
                     className='btn mini'
+                    aria-label={i18n.t('删除池')}
                     title={i18n.t('删除池')}
                     disabled={deletePool.isPending || updatePool.isPending}
                     onClick={() => void removePool()}
@@ -501,10 +554,14 @@ export function PoolWorkbench(props: {
               <RoutePoolAutoBuildSettings
                 value={poolDetail.data.auto_build}
                 groups={groups}
-                busy={runAutoBuild.isPending || updatePool.isPending}
+                busy={runAutoBuild.isPending || updatePool.isPending || isDirty}
                 onRun={async () => {
                   const pool = await runAutoBuild.mutateAsync(activePoolID)
-                  toast.success(`自动构建完成 · ${pool.selected_count} 分组`)
+                  toast.success(
+                    i18n.t('自动构建完成 · {{param0}} 分组', {
+                      param0: pool.selected_count,
+                    })
+                  )
                 }}
                 onSave={async (autoBuild) => {
                   await updatePool.mutateAsync({
@@ -513,167 +570,69 @@ export function PoolWorkbench(props: {
                     config: currentConfig,
                     autoBuild,
                   })
-                  toast.success('自动构建计划已保存')
+                  toast.success(i18n.t('自动构建计划已保存'))
                 }}
               />
             )}
 
-            <div className='compare'>
-              <div className='col'>
-                <h5>
-                  <BadgeCheck size={11} />
-                  <Trans i18nKey={'池构成'} />
-                </h5>
-                <div className='crow'>
-                  <Trans i18nKey={'分组'} /> <b>{members.length}</b>
-                </div>
-                <div className='crow'>
-                  <Trans i18nKey={'方式'} />{' '}
-                  <b>
-                    {config
-                      ? (STRATEGY_LABEL[config.strategy] ?? config.strategy)
-                      : '—'}
-                  </b>
-                </div>
-                <div className='crow'>
-                  <Trans i18nKey={'类型'} />{' '}
-                  <b>{isAuto ? 'AUTO' : i18n.t('手动')}</b>
-                </div>
-              </div>
-              <div className='col pool'>
-                <h5>
-                  <Waypoints size={11} />
-                  <Trans i18nKey={'池内均值'} />
-                </h5>
-                <div className='crow'>
-                  <Trans i18nKey={'成功'} />{' '}
-                  <b
-                    className={
-                      weighted &&
-                      weighted.success != null &&
-                      weighted.success >= 0.98
-                        ? 'ok'
-                        : 'bad'
-                    }
-                  >
-                    {weighted?.success != null
-                      ? `${pct(weighted.success)}%`
-                      : '—'}
-                  </b>
-                </div>
-                <div className='crow'>
-                  <Trans i18nKey={'首字'} />{' '}
-                  <b
-                    className={
-                      weighted && weighted.ttft != null && weighted.ttft <= 600
-                        ? 'ok'
-                        : 'bad'
-                    }
-                  >
-                    {weighted?.ttft != null ? `${sec(weighted.ttft)}s` : '—'}
-                  </b>
-                </div>
-                <div className='crow'>
-                  <Trans i18nKey={'缓存'} />{' '}
-                  <b>
-                    {weighted?.cache != null
-                      ? `${pct(weighted.cache, 0)}%`
-                      : '—'}
-                  </b>
-                </div>
-              </div>
+            <PoolTelemetry
+              success={weighted?.success ?? null}
+              ttft={weighted?.ttft ?? null}
+              cache={weighted?.cache ?? null}
+            />
+            <div className='pool-composition'>
+              <span>
+                {i18n.t('池构成')} <b>{members.length}</b>
+              </span>
+              <span>{isAuto ? 'AUTO' : i18n.t('手动')}</span>
+              <span>
+                {config
+                  ? i18n.t(STRATEGY_LABEL[config.strategy] ?? config.strategy)
+                  : '—'}
+              </span>
             </div>
-
             <div className='poolbox'>
               <div className='pool-head'>
                 <span>
-                  <Trans i18nKey={'分组 ·'} /> {members.length}
+                  {i18n.t('分组 ·')} {members.length}
                 </span>
-                <span className='c2'>ORDER</span>
+                <span className='c2'>{i18n.t('排序')}</span>
               </div>
               {members.length ? (
-                members.map((member, index) => (
-                  <div className='pool-item' key={member.id}>
-                    <div className='r1'>
-                      <GripVertical size={13} color='var(--dawn-ink2)' />
-                      <i className={cn('dot', member.observing && 'w')} />
-                      <span className='cname'>{member.name}</span>
-                      <span className='csrc'>{member.source}</span>
-                      <span className='ord'>
-                        <button
-                          disabled={index === 0}
-                          onClick={() => void move(index, -1)}
-                          title={i18n.t('上移')}
-                        >
-                          <ChevronUp size={13} />
-                        </button>
-                        <button
-                          disabled={index === members.length - 1}
-                          onClick={() => void move(index, 1)}
-                          title={i18n.t('下移')}
-                        >
-                          <ChevronDown size={13} />
-                        </button>
-                        <button
-                          onClick={() => void remove(member.id)}
-                          title={i18n.t('移出')}
-                        >
-                          <X size={13} />
-                        </button>
-                      </span>
-                    </div>
-                    <div className='r2'>
-                      <div>
-                        <Trans i18nKey={'倍率'} />
-                        <b>{member.multiplier}×</b>
-                      </div>
-                      <div>
-                        <Trans i18nKey={'成功'} />
-                        <b
-                          className={
-                            member.successRate != null &&
-                            member.successRate < 0.98
-                              ? 'warn'
-                              : ''
-                          }
-                        >
-                          {member.successRate != null
-                            ? `${pct(member.successRate)}%`
-                            : '—'}
-                        </b>
-                      </div>
-                      <div>
-                        <Trans i18nKey={'首字'} />
-                        <b
-                          className={
-                            member.ttft != null && member.ttft > 600
-                              ? 'warn'
-                              : ''
-                          }
-                        >
-                          {member.ttft != null ? `${sec(member.ttft)}s` : '—'}
-                        </b>
-                      </div>
-                      <div>
-                        <Trans i18nKey={'缓存'} />
-                        <b>
-                          {member.cache != null
-                            ? `${pct(member.cache, 0)}%`
-                            : '—'}
-                        </b>
-                      </div>
-                    </div>
-                  </div>
-                ))
+                <Reorder.Group
+                  className='pool-node-list'
+                  axis='y'
+                  values={draftMemberIds}
+                  onReorder={setDraftMemberIds}
+                >
+                  <AnimatePresence initial={false}>
+                    {members.map((member, index) => (
+                      <PoolNode
+                        key={member.id}
+                        member={member}
+                        index={index}
+                        count={members.length}
+                        test={testItems.find(
+                          (item) => item.group_id === member.id
+                        )}
+                        onMove={(delta) => void move(index, delta)}
+                        onRemove={() => void remove(member.id)}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </Reorder.Group>
               ) : (
                 <div className='pp-empty'>
-                  <Waypoints size={26} />
-                  <span>
-                    <Trans i18nKey={'空池 · 在市场条目点「加入当前池」'} />
-                  </span>
+                  <Waypoints size={26} aria-hidden='true' />
+                  <span>{i18n.t('空池')}</span>
                 </div>
               )}
             </div>
+            <PoolConnectivityTest
+              key={activePoolID}
+              members={members}
+              onResults={setTestItems}
+            />
             {isDirty && (
               <div className='pp-foot'>
                 <span className='sub2'>
@@ -688,16 +647,435 @@ export function PoolWorkbench(props: {
                 </button>
               </div>
             )}
-            <div className='text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-5'>
-              <Info size={12} className='mt-1 shrink-0' />
-              <span>
-                <Trans i18nKey={'排序即调度顺序；指标取窗口均值。'} />
-              </span>
-            </div>
           </>
         )}
       </div>
     </aside>
+  )
+}
+
+function PoolValue(props: { value: string; className?: string }) {
+  const reducedMotion = useReducedMotion()
+  return (
+    <span className={cn('pool-value', props.className)}>
+      <AnimatePresence initial={false} mode='popLayout'>
+        <motion.span
+          key={props.value}
+          initial={reducedMotion ? false : { y: 8, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={reducedMotion ? undefined : { y: -8, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          {props.value}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  )
+}
+
+function PoolTelemetry(props: {
+  success: number | null
+  ttft: number | null
+  cache: number | null
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className='pool-telemetry' aria-label={t('池内均值')}>
+      <div>
+        <span>{t('成功率')}</span>
+        <PoolValue
+          value={props.success == null ? '—' : `${pct(props.success)}%`}
+          className={
+            props.success != null && props.success >= 98 ? 'ok' : undefined
+          }
+        />
+      </div>
+      <div>
+        <span>{t('首字')}</span>
+        <PoolValue value={props.ttft == null ? '—' : `${sec(props.ttft)}s`} />
+      </div>
+      <div>
+        <span>{t('缓存')}</span>
+        <PoolValue
+          value={props.cache == null ? '—' : `${pct(props.cache, 0)}%`}
+        />
+      </div>
+    </div>
+  )
+}
+
+function PoolNode(props: {
+  member: WorkbenchMember
+  index: number
+  count: number
+  test?: MarketplaceBatchTestItem
+  onMove: (delta: number) => void
+  onRemove: () => void
+}) {
+  const { t } = useTranslation()
+  const dragControls = useDragControls()
+  const reducedMotion = useReducedMotion()
+  return (
+    <Reorder.Item
+      className='pool-item'
+      value={props.member.id}
+      dragListener={false}
+      dragControls={dragControls}
+      layout
+      initial={reducedMotion ? false : { opacity: 0, y: 12, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={reducedMotion ? undefined : { opacity: 0, scale: 0.96 }}
+      whileDrag={{
+        scale: 1.02,
+        opacity: 0.85,
+        zIndex: 5,
+        boxShadow: '0 14px 28px rgb(0 0 0 / 0.12)',
+      }}
+      transition={
+        reducedMotion
+          ? { duration: 0 }
+          : { type: 'spring', stiffness: 300, damping: 28 }
+      }
+      data-test-status={props.test?.status}
+    >
+      <div className='r1'>
+        <button
+          type='button'
+          className='pool-drag-handle'
+          onPointerDown={(event) => dragControls.start(event)}
+          aria-label={t('拖拽排序')}
+          title={t('拖拽排序')}
+        >
+          <GripVertical size={15} aria-hidden='true' />
+        </button>
+        <PoolValue
+          className='pool-order'
+          value={String(props.index + 1).padStart(2, '0')}
+        />
+        <i
+          className={cn(
+            'dot',
+            props.member.observing && 'w',
+            props.member.successRate == null && 'unknown'
+          )}
+          aria-hidden='true'
+        />
+        <span className='cname' title={props.member.name}>
+          {t(props.member.name)}
+        </span>
+        <span className='ord'>
+          <button
+            disabled={props.index === 0}
+            onClick={() => props.onMove(-1)}
+            aria-label={t('上移')}
+            title={t('上移')}
+          >
+            <ChevronUp size={13} aria-hidden='true' />
+          </button>
+          <button
+            disabled={props.index === props.count - 1}
+            onClick={() => props.onMove(1)}
+            aria-label={t('下移')}
+            title={t('下移')}
+          >
+            <ChevronDown size={13} aria-hidden='true' />
+          </button>
+          <button
+            onClick={props.onRemove}
+            aria-label={t('移出')}
+            title={t('移出')}
+          >
+            <X size={13} aria-hidden='true' />
+          </button>
+        </span>
+      </div>
+      <div className='pool-node-source'>
+        {t(props.member.source)}
+        {props.member.observing && <span>{t('观测中')}</span>}
+      </div>
+      <div className='r2'>
+        <div>
+          {t('倍率')}
+          <b>{props.member.multiplier}×</b>
+        </div>
+        <div>
+          {t('成功')}
+          <b
+            className={
+              props.member.successRate != null && props.member.successRate < 98
+                ? 'warn'
+                : undefined
+            }
+          >
+            {props.member.successRate == null
+              ? '—'
+              : `${pct(props.member.successRate)}%`}
+          </b>
+        </div>
+        <div>
+          {t('首字')}
+          <b
+            className={
+              props.member.ttft != null && props.member.ttft > 600
+                ? 'warn'
+                : undefined
+            }
+          >
+            {props.member.ttft == null ? '—' : `${sec(props.member.ttft)}s`}
+          </b>
+        </div>
+        <div>
+          {t('缓存')}
+          <b>
+            {props.member.cache == null
+              ? '—'
+              : `${pct(props.member.cache, 0)}%`}
+          </b>
+        </div>
+      </div>
+      {props.test && (
+        <div className='pool-test-node-status' role='status'>
+          {props.test.status === 'passed' ? (
+            <Check size={12} aria-hidden='true' />
+          ) : props.test.status === 'failed' ? (
+            <X size={12} aria-hidden='true' />
+          ) : (
+            <LoaderCircle
+              className='pool-test-spinner'
+              size={12}
+              aria-hidden='true'
+            />
+          )}
+          <span>{batchItemLabel(props.test)}</span>
+          {props.test.quota_charged > 0 && (
+            <span>{formatQuota(props.test.quota_charged)}</span>
+          )}
+        </div>
+      )}
+    </Reorder.Item>
+  )
+}
+
+function batchItemLabel(item: MarketplaceBatchTestItem): string {
+  if (item.status === 'passed') return `${item.latency_ms}ms`
+  if (item.status === 'failed') return item.error || i18n.t('测试失败')
+  return item.status === 'queued' ? i18n.t('排队中') : i18n.t('测试中')
+}
+
+function PoolConnectivityTest(props: {
+  members: WorkbenchMember[]
+  onResults: (items: MarketplaceBatchTestItem[]) => void
+}) {
+  const { t } = useTranslation()
+  const onResults = props.onResults
+  const [open, setOpen] = useState(false)
+  const [model, setModel] = useState('')
+  const [billingConfirmed, setBillingConfirmed] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState('')
+  const [requestedCount, setRequestedCount] = useState(0)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  const [batches, setBatches] = useState<MarketplaceBatchTest[]>([])
+  const commonModels = useMemo(() => {
+    const first = props.members[0]?.models ?? []
+    return first.filter((candidate) =>
+      props.members.every((member) =>
+        member.models.some(
+          (name) => name.toLowerCase() === candidate.toLowerCase()
+        )
+      )
+    )
+  }, [props.members])
+  const selectedModel = commonModels.includes(model)
+    ? model
+    : (commonModels[0] ?? '')
+  const results = useQuery({
+    queryKey: [
+      'marketplace-route-pool-tests',
+      batches.map((batch) => batch.id),
+    ],
+    queryFn: () =>
+      Promise.all(batches.map((batch) => getMarketplaceBatchTest(batch.id))),
+    initialData: batches,
+    enabled: batches.length > 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) => {
+      if (query.state.error) return false
+      return query.state.data?.some(
+        (batch) => batch.status === 'queued' || batch.status === 'running'
+      )
+        ? 1500
+        : false
+    },
+  })
+  const testResults = results.data
+  const running =
+    starting ||
+    testResults.some(
+      (batch) => batch.status === 'queued' || batch.status === 'running'
+    )
+  const items = useMemo(
+    () => testResults.flatMap((batch) => batch.items),
+    [testResults]
+  )
+  const completed = items.filter(
+    (item) => item.status === 'passed' || item.status === 'failed'
+  ).length
+  const failed =
+    !!startError ||
+    testResults.some((batch) => batch.status === 'failed') ||
+    items.some((item) => item.status === 'failed')
+  useEffect(() => {
+    onResults(items)
+  }, [items, onResults])
+
+  const start = async () => {
+    if (running || !selectedModel || !billingConfirmed || !props.members.length)
+      return
+    setStarting(true)
+    setStartError('')
+    setBatches([])
+    props.onResults([])
+    const started: MarketplaceBatchTest[] = []
+    const memberIDs = props.members.map((member) => member.id)
+    setRequestedCount(memberIDs.length)
+    try {
+      for (let offset = 0; offset < memberIDs.length; offset += 5) {
+        if (!mounted.current) break
+        const batch = await startMarketplaceBatchTest({
+          groupIds: memberIDs.slice(offset, offset + 5),
+          model: selectedModel,
+        })
+        if (!mounted.current) break
+        started.push(batch)
+        setBatches([...started])
+      }
+    } catch (error) {
+      if (mounted.current)
+        setStartError(error instanceof Error ? error.message : t('测试失败'))
+    } finally {
+      if (mounted.current) setStarting(false)
+    }
+  }
+
+  return (
+    <div className='pool-connectivity'>
+      {!open ? (
+        <button
+          className='btn primary pool-test-trigger'
+          onClick={() => setOpen(true)}
+          disabled={!props.members.length}
+        >
+          <Zap size={15} aria-hidden='true' />
+          {t('连通性测试')}
+        </button>
+      ) : (
+        <>
+          <div className='pool-test-heading'>
+            <span>{t('连通性测试')}</span>
+            <button
+              aria-label={t('收起参数')}
+              title={t('收起参数')}
+              onClick={() => setOpen(false)}
+            >
+              <ChevronUp size={16} aria-hidden='true' />
+            </button>
+          </div>
+          <label className='pool-test-model'>
+            <span>{t('模型')}</span>
+            <select
+              value={selectedModel}
+              onChange={(event) => setModel(event.target.value)}
+              disabled={running}
+            >
+              {!commonModels.length && (
+                <option value=''>{t('无共同模型')}</option>
+              )}
+              {commonModels.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className='pool-test-billing'>
+            <input
+              type='checkbox'
+              checked={billingConfirmed}
+              disabled={running}
+              onChange={(event) => setBillingConfirmed(event.target.checked)}
+            />
+            {t('使用账户额度计费')}
+          </label>
+          <button
+            className={cn(
+              'btn primary pool-test-trigger',
+              running && 'is-testing'
+            )}
+            disabled={
+              running ||
+              !selectedModel ||
+              !billingConfirmed ||
+              !props.members.length
+            }
+            onClick={() => void start()}
+          >
+            {running ? (
+              <LoaderCircle
+                className='pool-test-spinner'
+                size={15}
+                aria-hidden='true'
+              />
+            ) : (
+              <Zap size={15} aria-hidden='true' />
+            )}
+            {running ? t('测试中') : t('开始测试')}
+            <span>{props.members.length}</span>
+          </button>
+        </>
+      )}
+      {items.length > 0 && (
+        <div className='pool-test-summary' role='status' data-failed={failed}>
+          <span>
+            {running ? t('测试中') : failed ? t('存在异常') : t('连通正常')}
+          </span>
+          <PoolValue value={`${completed}/${requestedCount || items.length}`} />
+          <span>
+            {formatQuota(
+              items.reduce((total, item) => total + item.quota_charged, 0)
+            )}
+          </span>
+        </div>
+      )}
+      {startError && (
+        <div className='pool-test-error' role='alert'>
+          {startError}
+        </div>
+      )}
+      {results.isError && (
+        <div className='pool-test-error' role='alert'>
+          <span>
+            {results.error instanceof Error
+              ? results.error.message
+              : t('测试结果加载失败')}
+          </span>
+          <button
+            className='btn mini'
+            disabled={results.isFetching}
+            onClick={() => void results.refetch()}
+          >
+            {t('重试')}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -739,7 +1117,7 @@ function CreatePanel(props: {
         >
           {Object.entries(STRATEGY_LABEL).map(([value, label]) => (
             <option key={value} value={value}>
-              {label}
+              {i18n.t(label)}
             </option>
           ))}
         </select>
@@ -760,7 +1138,7 @@ function CreatePanel(props: {
             setBusy(true)
             setSubmitError('')
             try {
-              await props.onCreate(name.trim() || '未命名池', strategy)
+              await props.onCreate(name.trim() || i18n.t('未命名池'), strategy)
             } catch (error) {
               setSubmitError(
                 error instanceof Error
@@ -867,6 +1245,7 @@ function RoutePoolAutoBuildSettings(props: {
   useTranslation()
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState<MarketplaceRoutePoolAutoBuild>(props.value)
+  const [running, setRunning] = useState(false)
   useEffect(() => setValue(props.value), [props.value])
   const models = useMemo(
     () => Array.from(new Set(props.groups.flatMap((g) => g.models))).sort(),
@@ -875,48 +1254,50 @@ function RoutePoolAutoBuildSettings(props: {
   const selectedModels = value.models ?? (value.model ? [value.model] : [])
   const summary = value.enabled
     ? value.schedule === 'daily'
-      ? `每天 ${value.daily_time || '03:00'}`
-      : `每 ${value.interval_minutes || 60} 分钟`
-    : '已停用'
+      ? i18n.t('每天 {{param0}}', { param0: value.daily_time || '03:00' })
+      : i18n.t('每 {{param0}} 分钟', { param0: value.interval_minutes || 60 })
+    : i18n.t('已停用')
   return (
-    <div className='mb-3 rounded-md border border-amber-500/45 bg-amber-500/5 px-3 py-2 shadow-sm'>
+    <div className='pool-autobuild-settings'>
       <button
         className='flex w-full items-center justify-between gap-2 text-left text-xs'
         onClick={() => setOpen((v) => !v)}
       >
         <span className='flex min-w-0 items-center gap-1.5 font-medium'>
-          <Sparkles className='shrink-0 text-amber-600' size={14} />
+          <Sparkles
+            className='shrink-0 text-[var(--telemetry-warning)]'
+            size={14}
+          />
           <span>
             <Trans i18nKey={'自动重新构建'} />
           </span>
           <span
             className={cn(
-              'shrink-0 rounded px-1.5 py-0.5 text-[10px]',
+              'shrink-0 rounded px-1.5 py-0.5 text-xs',
               value.enabled
-                ? 'bg-emerald-500/15 text-emerald-700'
-                : 'bg-amber-500/15 text-amber-700'
+                ? 'bg-[var(--telemetry-success-bg)] text-[var(--telemetry-success)]'
+                : 'bg-[var(--telemetry-warning-bg)] text-[var(--telemetry-warning)]'
             )}
           >
             {value.enabled ? summary : i18n.t('未启用')}
           </span>
         </span>
-        <span className='flex shrink-0 items-center gap-1 text-amber-700'>
+        <span className='flex shrink-0 items-center gap-1 text-[var(--telemetry-warning)]'>
           {open ? i18n.t('收起参数') : i18n.t('配置参数')}
           {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </span>
       </button>
       {open && (
         <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
-          <p className='text-muted-foreground col-span-2'>
-            <Trans
-              i18nKey={'定时按模型、主选数量和探索位重新替换当前池成员。'}
-            />
-            {value.next_build_at
-              ? i18n.t(' 下次执行：{{param0}}', {
-                  param0: new Date(value.next_build_at).toLocaleString(),
-                })
-              : ''}
-          </p>
+          {value.next_build_at && (
+            <p className='text-muted-foreground col-span-2'>
+              {i18n.t('下次执行：{{param0}}', {
+                param0: new Date(value.next_build_at).toLocaleString(
+                  getIntlLocale()
+                ),
+              })}
+            </p>
+          )}
           <label className='col-span-2 flex items-center gap-2'>
             <input
               type='checkbox'
@@ -926,6 +1307,17 @@ function RoutePoolAutoBuildSettings(props: {
               }
             />
             <Trans i18nKey={'启用自动重新构建'} />
+          </label>
+          <label className='col-span-2 flex items-center gap-2'>
+            <input
+              type='checkbox'
+              checked={value.credit_pack_only ?? false}
+              disabled={props.busy}
+              onChange={(event) =>
+                setValue({ ...value, credit_pack_only: event.target.checked })
+              }
+            />
+            <Trans i18nKey={'仅支持套餐'} />
           </label>
           <label>
             <Trans i18nKey={'调度方式'} />
@@ -1031,7 +1423,7 @@ function RoutePoolAutoBuildSettings(props: {
                   className='grid grid-cols-[minmax(0,1fr)_1fr_42px] items-center gap-2 py-1'
                   key={weight.key}
                 >
-                  <span className='truncate'>{weight.label}</span>
+                  <span className='truncate'>{i18n.t(weight.label)}</span>
                   <input
                     type='range'
                     min={0}
@@ -1054,15 +1446,39 @@ function RoutePoolAutoBuildSettings(props: {
           <div className='col-span-2 flex justify-end gap-2 pt-1'>
             <button
               className='btn mini'
-              disabled={props.busy}
-              onClick={() => void props.onRun()}
+              disabled={props.busy || running}
+              onClick={async () => {
+                setRunning(true)
+                try {
+                  await props.onSave(value)
+                  await props.onRun()
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : i18n.t('生成路由池失败')
+                  )
+                } finally {
+                  setRunning(false)
+                }
+              }}
             >
               <Trans i18nKey={'立即构建'} />
             </button>
             <button
               className='btn mini primary'
-              disabled={props.busy}
-              onClick={() => void props.onSave(value)}
+              disabled={props.busy || running}
+              onClick={async () => {
+                try {
+                  await props.onSave(value)
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : i18n.t('生成路由池失败')
+                  )
+                }
+              }}
             >
               <Trans i18nKey={'保存计划'} />
             </button>
@@ -1113,11 +1529,12 @@ function AutoBuildPanel(props: {
   onGenerate: (
     name: string,
     groupIds: string[],
-    strategy: 'priority' | 'score' | 'cost'
+    strategy: 'priority' | 'score' | 'cost',
+    autoBuild: Partial<MarketplaceRoutePoolAutoBuild>
   ) => Promise<void>
 }) {
   useTranslation()
-  const [name, setName] = useState('自动池')
+  const [name, setName] = useState(() => i18n.t('自动池'))
   const [weights, setWeights] = useState<Record<WeightKey, number>>({
     consumer: 25,
     success: 35,
@@ -1127,6 +1544,7 @@ function AutoBuildPanel(props: {
   const [size, setSize] = useState(3)
   const [explore, setExplore] = useState(1)
   const [models, setModels] = useState<string[]>([])
+  const [creditPackOnly, setCreditPackOnly] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const total =
@@ -1136,6 +1554,7 @@ function AutoBuildPanel(props: {
     const candidates = props.groups.filter(
       (group) =>
         group.source_type === 'marketplace_user' &&
+        (!creditPackOnly || group.credit_pack_supported === true) &&
         group.request_count > 0 &&
         (group.lifecycle_status === 'active' ||
           group.lifecycle_status === 'degraded') &&
@@ -1179,13 +1598,14 @@ function AutoBuildPanel(props: {
         return { group, score }
       })
       .sort((a, b) => b.score - a.score)
-  }, [props.groups, weights, total, models])
+  }, [props.groups, weights, total, models, creditPackOnly])
 
   const exploration = useMemo(
     () =>
       props.groups.filter(
         (group) =>
           group.source_type === 'marketplace_user' &&
+          (!creditPackOnly || group.credit_pack_supported === true) &&
           (group.lifecycle_status === 'active' ||
             group.lifecycle_status === 'degraded') &&
           group.verification_status === 'passed' &&
@@ -1198,7 +1618,7 @@ function AutoBuildPanel(props: {
               )
             ))
       ),
-    [props.groups, models]
+    [props.groups, models, creditPackOnly]
   )
 
   const main = scored.slice(0, Math.max(1, size))
@@ -1218,6 +1638,15 @@ function AutoBuildPanel(props: {
           onChange={setModels}
         />
       </div>
+      <label className='mb-3 flex items-center gap-2 text-xs'>
+        <input
+          type='checkbox'
+          checked={creditPackOnly}
+          disabled={busy}
+          onChange={(event) => setCreditPackOnly(event.target.checked)}
+        />
+        <Trans i18nKey={'仅支持套餐'} />
+      </label>
       <div className='field'>
         <label>
           <Trans i18nKey={'路由池名称'} />
@@ -1230,7 +1659,7 @@ function AutoBuildPanel(props: {
         </label>
         {WEIGHTS.map((weight) => (
           <div className='wrow' key={weight.key}>
-            <span>{weight.label}</span>
+            <span>{i18n.t(weight.label)}</span>
             <input
               type='range'
               min={0}
@@ -1286,13 +1715,15 @@ function AutoBuildPanel(props: {
             <Trans i18nKey={'命中预览 · 主选'} /> {main.length}{' '}
             <Trans i18nKey={'+ 探索'} /> {explorer.length}
           </span>
-          <span className='c2'>PREVIEW</span>
+          <span className='c2'>{i18n.t('PREVIEW')}</span>
         </div>
         {main.length ? (
           main.map((entry, index) => (
             <div className='prev-row' key={entry.group.id}>
               <span className='rk'>{String(index + 1).padStart(2, '0')}</span>
-              <span className='nm'>{entry.group.system_display_name}</span>
+              <span className='nm'>
+                {i18n.t(entry.group.system_display_name)}
+              </span>
               <span className='mt'>
                 {selectedAverageConsumerAmount(entry.group, models) != null
                   ? `${formatQuota(selectedAverageConsumerAmount(entry.group, models) ?? 0)}/1M`
@@ -1321,7 +1752,7 @@ function AutoBuildPanel(props: {
               <div className='prev-row' key={group.id}>
                 <span className='rk'>{String(index + 1).padStart(2, '0')}</span>
                 <span className='nm'>
-                  {group.system_display_name}
+                  {i18n.t(group.system_display_name)}
                   <span className='tag'>
                     {group.observing ? i18n.t('观测中') : i18n.t('无流量')}
                   </span>
@@ -1348,16 +1779,29 @@ function AutoBuildPanel(props: {
             setBusy(true)
             try {
               await props.onGenerate(
-                name.trim() || '自动池',
+                name.trim() || i18n.t('自动池'),
                 [
                   ...main.map((entry) => entry.group.id),
                   ...explorer.map((group) => group.id),
                 ],
-                'priority'
+                'priority',
+                {
+                  enabled: false,
+                  credit_pack_only: creditPackOnly,
+                  models,
+                  size,
+                  explore,
+                  consumer_weight: weights.consumer,
+                  success_weight: weights.success,
+                  ttft_weight: weights.ttft,
+                  cache_weight: weights.cache,
+                }
               )
             } catch (error) {
               toast.error(
-                error instanceof Error ? error.message : '生成路由池失败'
+                error instanceof Error
+                  ? error.message
+                  : i18n.t('生成路由池失败')
               )
             } finally {
               setBusy(false)

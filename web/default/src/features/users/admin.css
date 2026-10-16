@@ -1,0 +1,364 @@
+/* Solaris administrative surfaces. Scoped to these workspaces and their portals. */
+.solaris-admin {
+  color: var(--ink-primary);
+  background: var(--bg-canvas);
+}
+.solaris-admin .codego-page-intro {
+  gap: 24px;
+  padding-block: 30px 24px;
+  border-color: var(--hairline-light);
+}
+.solaris-admin .codego-page-title {
+  color: var(--ink-primary);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+}
+.solaris-admin .codego-page-content {
+  gap: 24px;
+  padding-top: 24px;
+}
+.solaris-admin .admin-record-meta {
+  min-height: 78px;
+  gap: 16px 24px;
+  margin-bottom: 16px;
+  padding: 20px 24px;
+  border: 1px solid var(--hairline-light);
+  border-radius: 20px;
+  background: var(--surface-glass);
+}
+.solaris-admin .admin-record-meta h2 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.solaris-admin .admin-record-meta dt {
+  color: var(--ink-secondary);
+  font-size: 13px;
+}
+.solaris-admin .admin-record-meta dd {
+  color: var(--ink-primary);
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.solaris-admin :is(button, a[role='button']):not([role='switch']),
+.solaris-admin-dialog :is(button, a[role='button']):not([role='switch']),
+.solaris-audit-panel :is(button, a[role='button']):not([role='switch']) {
+  min-height: 44px;
+  border-radius: 12px;
+}
+.solaris-admin :is(input, textarea, select, [role='combobox']),
+.solaris-admin-dialog :is(input, textarea, select, [role='combobox']),
+.solaris-audit-panel :is(input, textarea, select, [role='combobox']) {
+  min-height: 44px;
+  border-color: var(--hairline-light);
+  border-radius: 12px;
+  background: var(--bg-subtle);
+  color: var(--ink-primary);
+  caret-color: var(--brand-orange);
+  font-size: 14px;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 2%);
+}
+.solaris-admin
+  :is(button, a, input, select, textarea, [tabindex]):focus-visible,
+.solaris-admin-dialog
+  :is(button, a, input, select, textarea, [tabindex]):focus-visible,
+.solaris-audit-panel
+  :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand-orange);
+  outline-offset: 3px;
+}
+.solaris-admin ::selection,
+.solaris-admin-dialog ::selection,
+.solaris-audit-panel ::selection {
+  background: var(--brand-orange);
+  color: white;
+}
+.solaris-admin [data-slot='badge'],
+.solaris-admin-dialog [data-slot='badge'],
+.solaris-audit-panel [data-slot='badge'] {
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.solaris-admin .admin-query-error {
+  border-color: color-mix(in srgb, var(--destructive) 30%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--destructive) 4%, var(--surface-card));
+}
+.solaris-admin .solaris-records {
+  min-width: 0;
+  gap: 16px;
+}
+.solaris-admin .solaris-record-table,
+.solaris-admin .admin-ledger-panel,
+.solaris-audit-panel.admin-ledger-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--hairline-light);
+  border-radius: 20px;
+  background: var(--surface-glass);
+}
+.solaris-admin [data-slot='table-container'],
+.solaris-audit-panel [data-slot='table-container'],
+.solaris-admin-dialog [data-slot='table-container'] {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-color: var(--hairline-light) transparent;
+}
+.solaris-admin [data-slot='table-header'],
+.solaris-audit-panel [data-slot='table-header'],
+.solaris-admin-dialog [data-slot='table-header'] {
+  background: var(--bg-subtle);
+}
+.solaris-admin [data-slot='table-head'],
+.solaris-audit-panel [data-slot='table-head'],
+.solaris-admin-dialog [data-slot='table-head'] {
+  height: 48px;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.solaris-admin [data-slot='table-cell'],
+.solaris-audit-panel [data-slot='table-cell'],
+.solaris-admin-dialog [data-slot='table-cell'] {
+  height: 56px;
+  padding-block: 12px;
+  font-size: 14px;
+}
+.solaris-admin [data-slot='table-row'],
+.solaris-audit-panel [data-slot='table-row'],
+.solaris-admin-dialog [data-slot='table-row'] {
+  border-color: var(--hairline-light);
+  transition: background-color 180ms var(--ease-optical);
+}
+.solaris-admin [data-slot='table-row'][data-state='selected'] {
+  background: color-mix(in srgb, var(--brand-orange) 7%, var(--surface-card));
+}
+.solaris-admin .solaris-operations-tabs [data-slot='tabs-list'] {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 52px;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--hairline-light);
+  border-radius: 14px;
+  background: var(--bg-subtle);
+}
+.solaris-admin .solaris-operations-tabs [data-slot='tabs-trigger'] {
+  padding-inline: 20px;
+  border-radius: 10px;
+  color: var(--ink-secondary);
+}
+.solaris-admin
+  .solaris-operations-tabs
+  [data-slot='tabs-trigger']:is([data-state='active'], [data-active]) {
+  background: var(--surface-obsidian);
+  color: var(--surface-obsidian-ink);
+}
+.solaris-admin .solaris-operations-tabs td.text-right,
+.solaris-admin-dialog td.tabular-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.solaris-admin-dialog {
+  border-color: var(--hairline-light);
+  border-radius: 20px;
+  color: var(--ink-primary);
+  background: var(--surface-card);
+  font-size: 14px;
+  scrollbar-color: var(--hairline-light) transparent;
+}
+.solaris-admin-dialog[data-slot='sheet-content'] {
+  border-radius: 20px 0 0 20px;
+}
+.solaris-admin-dialog
+  :is([data-slot='sheet-header'], [data-slot='dialog-header']) {
+  border-color: var(--hairline-light);
+}
+.solaris-admin-dialog
+  :is(
+    [data-slot='sheet-title'],
+    [data-slot='dialog-title'],
+    [data-slot='alert-dialog-title']
+  ) {
+  color: var(--ink-primary);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.4;
+}
+.solaris-admin-dialog
+  :is(
+    [data-slot='sheet-description'],
+    [data-slot='dialog-description'],
+    [data-slot='alert-dialog-description']
+  ) {
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.solaris-admin-dialog [data-slot='form-item'] {
+  min-width: 0;
+}
+.solaris-admin-dialog [data-slot='form-label'] {
+  color: var(--ink-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+.solaris-admin-dialog [data-slot='form-message'] {
+  font-size: 13px;
+}
+.solaris-user-form > div + div {
+  padding-top: 24px;
+  border-top: 1px solid var(--hairline-light);
+}
+.solaris-user-form h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.solaris-quota-modes {
+  padding: 4px;
+  border: 1px solid var(--hairline-light);
+  border-radius: 12px;
+  background: var(--bg-subtle);
+}
+.solaris-quota-modes > button {
+  flex: 1;
+  border-color: transparent;
+}
+.solaris-admin-dialog
+  :is([data-slot='sheet-footer'], [data-slot='dialog-footer']) {
+  border-color: var(--hairline-light);
+  background: var(--bg-subtle);
+}
+.solaris-admin-dialog [data-slot='sheet-footer'] {
+  padding-block: 20px;
+}
+.solaris-admin-dialog .text-xs,
+.solaris-admin .text-xs,
+.solaris-audit-panel .text-xs {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.solaris-audit-panel > header {
+  gap: 16px;
+  padding: 24px;
+  border-color: var(--hairline-light);
+}
+.solaris-audit-panel > header h2 {
+  font-size: 17px;
+  font-weight: 600;
+}
+.solaris-audit-summary {
+  margin: 20px 24px;
+  overflow: hidden;
+  border: 1px solid var(--hairline-light);
+  border-radius: 12px;
+  background: var(--bg-subtle);
+}
+.solaris-audit-stat {
+  min-width: 0;
+  padding: 16px 20px;
+  border-inline-end: 1px solid var(--hairline-light);
+}
+.solaris-audit-stat:last-child {
+  border-inline-end: 0;
+}
+.solaris-audit-stat > p:last-child {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.solaris-audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--hairline-light);
+}
+.solaris-audit-filters > form {
+  min-width: min(100%, 260px);
+}
+.solaris-audit-event {
+  border-radius: 0 !important;
+}
+.solaris-audit-detail-grid {
+  padding: 20px;
+  border: 1px solid var(--hairline-light);
+  border-radius: 12px;
+  background: var(--bg-subtle);
+}
+.solaris-audit-detail-grid > div {
+  min-width: 0;
+}
+.solaris-audit-detail-grid dd {
+  font-variant-numeric: tabular-nums;
+}
+.solaris-audit-detail pre {
+  padding: 16px;
+  border: 1px solid var(--hairline-light);
+  border-radius: 12px;
+  color: var(--ink-secondary);
+  background: var(--bg-subtle);
+  font-size: 12px;
+  line-height: 1.7;
+}
+@media (max-width: 767px) {
+  .solaris-admin .codego-page-intro {
+    padding-top: 24px;
+  }
+  .solaris-admin .codego-page-title {
+    font-size: 24px;
+  }
+  .solaris-admin .admin-record-meta {
+    padding: 16px;
+  }
+  .solaris-admin :is(input, textarea, select, [role='combobox']),
+  .solaris-admin-dialog :is(input, textarea, select, [role='combobox']),
+  .solaris-audit-panel :is(input, textarea, select, [role='combobox']) {
+    font-size: 16px;
+  }
+  .solaris-audit-panel > header,
+  .solaris-audit-filters {
+    padding: 16px;
+  }
+  .solaris-audit-summary {
+    margin: 16px;
+  }
+  .solaris-audit-stat {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--hairline-light);
+  }
+  .solaris-audit-stat:nth-child(even) {
+    border-inline-end: 0;
+  }
+  .solaris-audit-stat:last-child {
+    border-bottom: 0;
+  }
+  .solaris-audit-filters > :is(form, input) {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .solaris-admin-dialog[data-slot='sheet-content'] {
+    border-radius: 0;
+  }
+  .solaris-audit-detail-grid {
+    padding: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .solaris-admin *,
+  .solaris-admin-dialog *,
+  .solaris-audit-panel * {
+    animation: none !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}

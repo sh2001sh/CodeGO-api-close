@@ -1,3 +1,5 @@
+import interfaceI18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -189,16 +191,18 @@ function bucketTone(bucket: SidebarGroupStatusBucket) {
 }
 
 export function formatSampleWindowLabel(hours: number | null) {
-  if (hours == null || hours <= 0) return '暂无采样窗口'
+  if (hours == null || hours <= 0) return interfaceI18n.t('暂无采样窗口')
   const minutes = Math.round(hours * 60)
-  if (minutes < 60) return `最近 ${minutes} 分钟`
-  if (minutes % 60 === 0) return `最近 ${minutes / 60} 小时`
-  return `最近 ${minutes} 分钟`
+  if (minutes < 60)
+    return interfaceI18n.t('最近 {{param0}} 分钟', { param0: minutes })
+  if (minutes % 60 === 0)
+    return interfaceI18n.t('最近 {{param0}} 小时', { param0: minutes / 60 })
+  return interfaceI18n.t('最近 {{param0}} 分钟', { param0: minutes })
 }
 
 export function formatRequestCount(value?: number) {
   if (value == null) return '--'
-  return value.toLocaleString('zh-CN')
+  return value.toLocaleString(getIntlLocale())
 }
 
 function buildFallbackSegments(item: SidebarGroupModelStatusItem) {

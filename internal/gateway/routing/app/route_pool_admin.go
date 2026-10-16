@@ -71,7 +71,13 @@ func ListRoutePoolGroups() ([]RoutePoolGroup, error) {
 		return nil, err
 	}
 	poolByGroup := make(map[string]gatewaystore.RoutePoolDetail, len(pools))
+	membersByPool := make(map[int64]map[int]gatewayschema.RoutePoolMember, len(pools))
 	for _, detail := range pools {
+		members := make(map[int]gatewayschema.RoutePoolMember, len(detail.Members))
+		for _, member := range detail.Members {
+			members[member.ChannelID] = member
+		}
+		membersByPool[detail.Pool.ID] = members
 		current, found := poolByGroup[detail.Pool.Group]
 		if !found || (detail.Pool.Enabled && !current.Pool.Enabled) ||
 			(detail.Pool.Enabled == current.Pool.Enabled && detail.Pool.ID > current.Pool.ID) {
@@ -100,11 +106,8 @@ func ListRoutePoolGroups() ([]RoutePoolGroup, error) {
 			member := gatewayschema.RoutePoolMember{CostMultiplier: 1, ModelCostOverrides: "{}", Enabled: true}
 			if detail, found := poolByGroup[group]; found {
 				member.Enabled = detail.Pool.AutoDiscover
-				for _, configured := range detail.Members {
-					if configured.ChannelID == channel.Id {
-						member = configured
-						break
-					}
+				if configured, exists := membersByPool[detail.Pool.ID][channel.Id]; exists {
+					member = configured
 				}
 			}
 			view.Channels = append(view.Channels, RoutePoolGroupChannel{
@@ -241,7 +244,7 @@ func GetRoutePoolMetrics(poolID int64, modelName string) (*RoutePoolMetrics, err
 		}
 		metrics.Members = append(metrics.Members, metric)
 		if metric.Eligible {
-			scored = append(scored, scoredRoutePoolCandidate{channel: channel, score: effectiveRoutePoolCostForPool(member, modelName, metric.Health, &detail.Pool)})
+			scored = append(scored, scoredRoutePoolCandidate{channel: channel, health: metric.Health, score: effectiveRoutePoolCostForPool(member, modelName, metric.Health, &detail.Pool)})
 			memberIndexes = append(memberIndexes, len(metrics.Members)-1)
 		}
 	}

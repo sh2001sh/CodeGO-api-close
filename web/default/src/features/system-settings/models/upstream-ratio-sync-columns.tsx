@@ -72,11 +72,7 @@ export function useUpstreamRatioSyncColumns(
                       <AlertTriangle className='h-3.5 w-3.5 shrink-0 text-amber-500' />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>
-                        {t(
-                          'This model has both fixed price and ratio billing conflicts'
-                        )}
-                      </p>
+                      <p>{t('Conflicts: fixed price + ratio')}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -347,7 +343,7 @@ function renderUpstreamValue(args: RenderUpstreamValueArgs) {
               <AlertTriangle className='h-3.5 w-3.5 shrink-0 text-amber-500' />
             </TooltipTrigger>
             <TooltipContent>
-              <p>{t('This data may be unreliable, use with caution')}</p>
+              <p>{t('Unverified data')}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

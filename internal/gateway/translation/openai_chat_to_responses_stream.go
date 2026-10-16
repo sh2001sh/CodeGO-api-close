@@ -24,6 +24,7 @@ type ResponsesBridgeEvent struct {
 	Text           string                       `json:"text,omitempty"`
 	Arguments      string                       `json:"arguments,omitempty"`
 	Input          string                       `json:"input,omitempty"`
+	Refusal        string                       `json:"refusal,omitempty"`
 }
 
 type chatResponsesToolState struct {
@@ -37,6 +38,7 @@ type chatResponsesToolState struct {
 	itemType     string
 	namespace    string
 	originalName string
+	emittedInput string
 }
 
 type ChatToResponsesStreamState struct {
@@ -53,10 +55,14 @@ type ChatToResponsesStreamState struct {
 	reasoningIndex   int
 	reasoningID      string
 	reasoning        strings.Builder
+	reasoningPart    strings.Builder
 	messageOpen      bool
 	messageIndex     int
 	messageID        string
 	messageText      strings.Builder
+	messagePart      strings.Builder
+	messageKind      string
+	refusalText      strings.Builder
 	tools            map[int]*chatResponsesToolState
 	completedOutputs map[int]dto.ResponsesOutput
 	usage            *dto.Usage
@@ -89,6 +95,9 @@ func (s *ChatToResponsesStreamState) ConvertChunk(chunk *dto.ChatCompletionsStre
 }
 
 func (s *ChatToResponsesStreamState) Finalize() ([]ResponsesBridgeEvent, *dto.Usage, error) {
+	if s.finishReason == "" {
+		return nil, s.usage, errors.New("chat completions stream closed before finish_reason")
+	}
 	events := s.ensureStarted()
 	events = append(events, s.closeReasoning()...)
 	events = append(events, s.closeMessage()...)
@@ -106,8 +115,9 @@ func (s *ChatToResponsesStreamState) UsageText() string {
 	var text strings.Builder
 	text.WriteString(s.reasoning.String())
 	text.WriteString(s.messageText.String())
-	for index := 0; index < len(s.tools); index++ {
-		if tool := s.tools[index]; tool != nil {
+	text.WriteString(s.refusalText.String())
+	for _, tool := range s.tools {
+		if tool != nil {
 			text.WriteString(tool.name)
 			text.WriteString(tool.arguments.String())
 		}
@@ -130,6 +140,9 @@ func (s *ChatToResponsesStreamState) convertChoice(events []ResponsesBridgeEvent
 	}
 	if content := delta.GetContentString(); content != "" {
 		events = append(events, s.addTextDelta(content)...)
+	}
+	if delta.Refusal != nil && *delta.Refusal != "" {
+		events = append(events, s.addMessageDelta(*delta.Refusal, "refusal")...)
 	}
 	for _, toolCall := range delta.ToolCalls {
 		toolEvents, err := s.addToolDelta(toolCall)
@@ -200,12 +213,15 @@ func (s *ChatToResponsesStreamState) responseSnapshot(status string, includeOutp
 	}
 	if status == "incomplete" {
 		response.IncompleteDetails = &dto.IncompleteDetails{Reasoning: "max_output_tokens"}
+		if s.finishReason == "content_filter" {
+			response.IncompleteDetails.Reasoning = "content_filter"
+		}
 	}
 	return response
 }
 
 func (s *ChatToResponsesStreamState) completionStatus() string {
-	if s.finishReason == "length" {
+	if s.finishReason == "length" || s.finishReason == "content_filter" {
 		return "incomplete"
 	}
 	return "completed"

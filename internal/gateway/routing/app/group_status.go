@@ -1,7 +1,9 @@
 package app
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -12,6 +14,7 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"golang.org/x/sync/singleflight"
 )
 
 type UserGroupStatusBucket struct {
@@ -55,24 +58,71 @@ type groupStatusBuildContext struct {
 	sampleWindowHours float64
 	seriesWindowHours float64
 	bucketSeconds     int64
+	emptySeries       []UserGroupStatusBucket
 }
 
-func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, error) {
-	const requestHealthWindowMinutes = 6 * 60
-	const requestHealthSegmentCount = 12
+var groupStatusLoads singleflight.Group
+var publicStatusGroupLoads singleflight.Group
 
+func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, error) {
 	pricing := loadGatewayPricing()
 	groupNames, err := resolveVisibleGroupStatusGroups(userID, hasUser, pricing)
 	if err != nil {
 		return nil, err
 	}
-	groupSources := resolveGroupStatusSources(groupNames)
-	groupDisplayNames := resolveGroupStatusDisplayNames(groupNames)
-	groupRouteIDs := resolveGroupStatusRouteIDs(groupNames)
+	// Resolve permissions on every request before joining an in-flight read.
+	// The payload contains no personal prices; only identical authorized group
+	// sets share a build. No result survives the in-flight call, so subsequent
+	// requests still read current health and group metadata.
+	encodedGroups, _ := json.Marshal(groupNames)
+	digest := sha256.Sum256(encodedGroups)
+	key := fmt.Sprintf("%p:%p:%x", platformdb.DB, platformdb.LogDB, digest)
+	value, err, _ := groupStatusLoads.Do(key, func() (any, error) {
+		return buildGroupStatusForGroups(pricing, groupNames)
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Like pricing projections, this shared response is read-only. The HTTP
+	// handler serializes it directly without mutating slices or rate pointers.
+	return value.([]UserGroupStatusItem), nil
+}
+
+func buildGroupStatusForGroups(pricing []gatewaydomain.Pricing, groupNames []string) ([]UserGroupStatusItem, error) {
+	const requestHealthWindowMinutes = 6 * 60
+	const requestHealthSegmentCount = 12
+
+	groupSources := make(map[string]string, len(groupNames))
+	groupDisplayNames := make(map[string]string, len(groupNames))
+	groupRouteIDs := make(map[string]string, len(groupNames))
+	for _, name := range groupNames {
+		groupSources[name] = marketplacedomain.SourceTypeOfficial
+		groupDisplayNames[name] = name
+		groupRouteIDs[name] = "official:" + name
+	}
+	var groups []marketplaceschema.Group
+	if platformdb.DB != nil && len(groupNames) > 0 {
+		if err := platformdb.DB.Select("id, internal_group_name, system_display_name, source_type, channel_id").
+			Where("internal_group_name IN ?", groupNames).Find(&groups).Error; err != nil {
+			return nil, err
+		}
+	}
+	for _, group := range groups {
+		name := group.InternalGroupName
+		if display := strings.TrimSpace(group.SystemDisplayName); display != "" {
+			groupDisplayNames[name] = display
+		}
+		if group.SourceType == marketplacedomain.SourceTypeMarketplaceUser {
+			groupSources[name] = group.SourceType
+			groupRouteIDs[name] = group.ID
+		}
+	}
 
 	groupSummaries := buildPricingGroupModelSummaries(pricing, groupNames)
-	mergeMarketplaceGroupModels(groupSummaries, groupNames)
-	_, seriesByModel, _, seriesWindowHours, bucketSeconds := queryGroupModelRecentHealth(
+	if err := mergeMarketplaceGroupModelsFromRows(groupSummaries, groupNames, groups); err != nil {
+		return nil, err
+	}
+	seriesByModel, seriesWindowHours, bucketSeconds := queryGroupModelRecentHealth(
 		groupNames,
 		requestHealthWindowMinutes,
 		requestHealthSegmentCount,
@@ -84,6 +134,7 @@ func BuildUserGroupStatus(userID int, hasUser bool) ([]UserGroupStatusItem, erro
 		seriesByModel: seriesByModel, groupCacheRates: groupCacheRates,
 		modelCacheRates: modelCacheRates, sampleWindowHours: float64(bucketSeconds) / 3600,
 		seriesWindowHours: seriesWindowHours, bucketSeconds: bucketSeconds,
+		emptySeries: emptyStatusSeries(requestHealthWindowMinutes, requestHealthSegmentCount, bucketSeconds),
 	}
 	result := make([]UserGroupStatusItem, 0, len(groupNames))
 	for _, groupName := range groupNames {
@@ -122,33 +173,14 @@ func buildUserGroupStatusItem(groupName string, context groupStatusBuildContext)
 		RequestCount: groupRequestCount, SuccessRate: successRate, CacheHitRate: context.groupCacheRates[groupName], Models: modelItems}
 }
 
-func resolveGroupStatusRouteIDs(groupNames []string) map[string]string {
-	result := make(map[string]string, len(groupNames))
-	for _, groupName := range groupNames {
-		result[groupName] = "official:" + groupName
-	}
-	if platformdb.DB == nil || len(groupNames) == 0 {
-		return result
-	}
-	var groups []marketplaceschema.Group
-	if err := platformdb.DB.Select("id", "internal_group_name").
-		Where("internal_group_name IN ? AND source_type = ?", groupNames, marketplacedomain.SourceTypeMarketplaceUser).
-		Find(&groups).Error; err != nil {
-		return result
-	}
-	for _, group := range groups {
-		if group.ID != "" {
-			result[group.InternalGroupName] = group.ID
-		}
-	}
-	return result
-}
-
 func buildUserGroupModelStatusItem(groupName string, summary *GroupModelStatusSummary, context groupStatusBuildContext) UserGroupModelStatusItem {
 	key := groupName + "::" + summary.Model
 	series := context.seriesByModel[key]
 	if len(series) == 0 {
-		series = emptyStatusSeries(6*60, 12, context.bucketSeconds)
+		series = context.emptySeries
+		if series == nil {
+			series = emptyStatusSeries(6*60, 12, context.bucketSeconds)
+		}
 	}
 	rate, requestCount := latestNonEmptyGroupStatusBucket(series)
 	return UserGroupModelStatusItem{
@@ -161,6 +193,9 @@ func buildUserGroupModelStatusItem(groupName string, summary *GroupModelStatusSu
 func queryGroupCacheHitRates(groupNames []string, hours int) (map[string]*float64, map[string]*float64) {
 	groupRates := make(map[string]*float64, len(groupNames))
 	modelRates := make(map[string]*float64)
+	if len(groupNames) == 0 {
+		return groupRates, modelRates
+	}
 	groupRows, err := auditprojection.QuerySummaryByGroups(hours, groupNames)
 	if err == nil {
 		for _, row := range groupRows {
@@ -176,52 +211,6 @@ func queryGroupCacheHitRates(groupNames []string, hours int) (map[string]*float6
 		}
 	}
 	return groupRates, modelRates
-}
-
-func resolveGroupStatusSources(groupNames []string) map[string]string {
-	result := make(map[string]string, len(groupNames))
-	for _, groupName := range groupNames {
-		result[groupName] = marketplacedomain.SourceTypeOfficial
-	}
-	if platformdb.DB == nil || len(groupNames) == 0 {
-		return result
-	}
-	var groups []marketplaceschema.Group
-	// Only marketplace-owned groups should override the default official
-	// classification.  Official route metadata may also be present in the
-	// marketplace tables (for model/ranking purposes); treating every matching
-	// row as user supplied makes the official filter disappear from the status
-	// page.
-	if err := platformdb.DB.Select("internal_group_name").
-		Where("internal_group_name IN ? AND source_type = ?", groupNames, marketplacedomain.SourceTypeMarketplaceUser).
-		Find(&groups).Error; err != nil {
-		return result
-	}
-	for _, group := range groups {
-		result[group.InternalGroupName] = marketplacedomain.SourceTypeMarketplaceUser
-	}
-	return result
-}
-
-func resolveGroupStatusDisplayNames(groupNames []string) map[string]string {
-	result := make(map[string]string, len(groupNames))
-	for _, groupName := range groupNames {
-		result[groupName] = groupName
-	}
-	if platformdb.DB == nil || len(groupNames) == 0 {
-		return result
-	}
-	var groups []marketplaceschema.Group
-	if err := platformdb.DB.Select("internal_group_name", "system_display_name").
-		Where("internal_group_name IN ?", groupNames).Find(&groups).Error; err != nil {
-		return result
-	}
-	for _, group := range groups {
-		if displayName := strings.TrimSpace(group.SystemDisplayName); displayName != "" {
-			result[group.InternalGroupName] = displayName
-		}
-	}
-	return result
 }
 
 func resolveVisibleGroupStatusGroups(userID int, hasUser bool, pricing []gatewaydomain.Pricing) ([]string, error) {
@@ -270,16 +259,20 @@ func addMarketplaceStatusGroups(groups map[string]struct{}) {
 	if platformdb.DB == nil {
 		return
 	}
-	var items []marketplaceschema.Group
-	if err := platformdb.DB.Select("internal_group_name").
-		Where("visibility = ? AND lifecycle_status IN ?", marketplacedomain.VisibilityPublic, []string{
-			marketplacedomain.LifecycleActive,
-			marketplacedomain.LifecycleDegraded,
-		}).Limit(1000).Find(&items).Error; err != nil {
+	value, err, _ := publicStatusGroupLoads.Do(fmt.Sprintf("%p", platformdb.DB), func() (any, error) {
+		var names []string
+		err := platformdb.DB.Model(&marketplaceschema.Group{}).
+			Where("visibility = ? AND lifecycle_status IN ?", marketplacedomain.VisibilityPublic, []string{
+				marketplacedomain.LifecycleActive,
+				marketplacedomain.LifecycleDegraded,
+			}).Pluck("internal_group_name", &names).Error
+		return names, err
+	})
+	if err != nil {
 		return
 	}
-	for _, item := range items {
-		addGroupStatusName(groups, item.InternalGroupName)
+	for _, name := range value.([]string) {
+		addGroupStatusName(groups, name)
 	}
 }
 
@@ -336,28 +329,21 @@ func buildPricingGroupModelSummaries(pricing []gatewaydomain.Pricing, groupNames
 	return summaries
 }
 
-func mergeMarketplaceGroupModels(summaries map[string][]*GroupModelStatusSummary, groupNames []string) {
-	if platformdb.DB == nil || len(groupNames) == 0 {
-		return
-	}
+func mergeMarketplaceGroupModelsFromRows(summaries map[string][]*GroupModelStatusSummary, groupNames []string, groups []marketplaceschema.Group) error {
 	visible := make(map[string]struct{}, len(groupNames))
-	for _, groupName := range groupNames {
-		visible[groupName] = struct{}{}
-	}
-	var groups []marketplaceschema.Group
-	if err := platformdb.DB.Where("internal_group_name IN ?", groupNames).Find(&groups).Error; err != nil {
-		return
+	for _, name := range groupNames {
+		visible[name] = struct{}{}
 	}
 	channelIDs := make([]string, 0, len(groups))
 	for _, group := range groups {
 		channelIDs = append(channelIDs, group.ChannelID)
 	}
 	if len(channelIDs) == 0 {
-		return
+		return nil
 	}
 	var channels []marketplaceschema.Channel
-	if err := platformdb.DB.Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
-		return
+	if err := platformdb.DB.Select("id, declared_models").Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
+		return err
 	}
 	modelsByChannel := make(map[string][]string, len(channels))
 	for _, channel := range channels {
@@ -389,6 +375,7 @@ func mergeMarketplaceGroupModels(summaries map[string][]*GroupModelStatusSummary
 			})
 		}
 	}
+	return nil
 }
 
 func pricingTargetGroups(enableGroups []string, groupNames []string, visibleGroups map[string]struct{}) []string {

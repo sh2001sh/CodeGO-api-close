@@ -91,10 +91,6 @@ export function AmountOptionsVisualEditor({
   return (
     <div className='space-y-4'>
       <div>
-        <p className='text-muted-foreground mb-3 text-sm'>
-          {t('Preset recharge amounts displayed to users')}
-        </p>
-
         {amounts.length === 0 ? (
           <div className='text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm'>
             {t(

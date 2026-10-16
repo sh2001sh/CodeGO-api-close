@@ -58,8 +58,9 @@ export function WaffoPancakeSettingsSection(props: Props) {
   })
 
   useEffect(() => {
+    if (loading || form.formState.isDirty) return
     form.reset(props.defaultValues)
-  }, [props.defaultValues, form])
+  }, [props.defaultValues, form, loading, form.formState.isDirty])
 
   const handleSave = async () => {
     const values = form.getValues()
@@ -162,6 +163,7 @@ export function WaffoPancakeSettingsSection(props: Props) {
       for (const option of options) {
         await updateOption.mutateAsync(option)
       }
+      form.reset(values)
       toast.success(t('Updated successfully'))
     } catch {
       toast.error(t('Update failed'))
@@ -171,17 +173,19 @@ export function WaffoPancakeSettingsSection(props: Props) {
   }
 
   return (
-    <SettingsSection
-      title={t('Waffo Pancake Payment Gateway')}
-      description={t(
-        'Configure Waffo Pancake hosted checkout integration for USD-priced top-ups'
-      )}
-    >
+    <SettingsSection title={t('Waffo Pancake Payment Gateway')}>
       <Alert>
-        <AlertDescription className='text-xs'>
-          {t(
-            'Obtain the merchant, store, product and signing keys from your Waffo dashboard. Webhook URL: <ServerAddress>/api/waffo-pancake/webhook'
-          )}
+        <AlertDescription className='space-y-2'>
+          <div>
+            Waffo · {t('Merchant ID')} · {t('Store ID')} · {t('Product ID')} ·{' '}
+            {t('Private key')}
+          </div>
+          <dl>
+            <dt>Webhook</dt>
+            <dd>
+              <code>{'<ServerAddress>/api/waffo-pancake/webhook'}</code>
+            </dd>
+          </dl>
         </AlertDescription>
       </Alert>
 
@@ -190,7 +194,7 @@ export function WaffoPancakeSettingsSection(props: Props) {
           <Switch
             checked={form.watch('WaffoPancakeEnabled')}
             onCheckedChange={(value) =>
-              form.setValue('WaffoPancakeEnabled', value)
+              form.setValue('WaffoPancakeEnabled', value, { shouldDirty: true })
             }
           />
           <Label>{t('Enable Waffo Pancake')}</Label>
@@ -199,7 +203,7 @@ export function WaffoPancakeSettingsSection(props: Props) {
           <Switch
             checked={form.watch('WaffoPancakeSandbox')}
             onCheckedChange={(value) =>
-              form.setValue('WaffoPancakeSandbox', value)
+              form.setValue('WaffoPancakeSandbox', value, { shouldDirty: true })
             }
           />
           <Label>{t('Sandbox mode')}</Label>
@@ -243,8 +247,8 @@ export function WaffoPancakeSettingsSection(props: Props) {
             {...form.register('WaffoPancakePrivateKey')}
             className='font-mono text-xs'
           />
-          <p className='text-muted-foreground text-xs'>
-            {t('Stored value is not echoed back for security')}
+          <p className='text-muted-foreground text-base'>
+            {t('Secret: masked')}
           </p>
         </div>
         <div className='grid gap-1.5'>
@@ -253,8 +257,8 @@ export function WaffoPancakeSettingsSection(props: Props) {
             placeholder='https://example.com/console/topup'
             {...form.register('WaffoPancakeReturnURL')}
           />
-          <p className='text-muted-foreground text-xs'>
-            {t('Defaults to the wallet page when empty')}
+          <p className='text-muted-foreground text-base'>
+            {t('Empty: wallet')}
           </p>
         </div>
       </div>

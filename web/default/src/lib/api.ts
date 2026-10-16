@@ -21,6 +21,12 @@ import i18next from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    skipErrorHandler?: boolean
+  }
+}
+
 // ============================================================================
 // Axios Instance Configuration
 // ============================================================================
@@ -56,7 +62,7 @@ api.get = ((url: string, config = {}) => {
   const params = (config as unknown as Record<string, unknown>)?.params
     ? JSON.stringify((config as unknown as Record<string, unknown>).params)
     : '{}'
-  const key = `${url}?${params}`
+  const key = `${i18next.language || 'zh-TW'}:${url}?${params}`
 
   // Return existing in-flight request if available
   if (inFlightGet.has(key)) return inFlightGet.get(key)!
@@ -87,7 +93,7 @@ api.interceptors.response.use(
       if (!response.data.success) {
         // Show error toast for business failures
         const msg = response.data.message || 'Request failed'
-        toast.error(msg)
+        toast.error(i18next.t(msg))
       }
     }
     return response
@@ -109,7 +115,7 @@ api.interceptors.response.use(
         // Other errors: show error message from response or default
         const msg =
           error?.response?.data?.message || error?.message || 'Request error'
-        toast.error(msg)
+        toast.error(i18next.t(msg))
       }
     }
     return Promise.reject(error)
@@ -173,6 +179,10 @@ export function getCommonHeaders(): Record<string, string> {
 
 // Attach user ID header for all requests
 api.interceptors.request.use((config) => {
+  config.headers.set(
+    'Accept-Language',
+    i18next.language === 'zh' ? 'zh-CN' : i18next.language || 'zh-TW'
+  )
   if (isAuthenticationRequest(config.url)) return config
   const uid = getUserId()
   if (uid) {

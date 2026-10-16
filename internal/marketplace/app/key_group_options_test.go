@@ -105,3 +105,63 @@ func TestKeyPoolOptionPreservesEmptyPoolAndOfficialModels(t *testing.T) {
 	require.Empty(t, empty.Models)
 	require.NotNil(t, empty.Models)
 }
+
+func TestKeyGroupOptionsKeepViewerPricesAndAccessFresh(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.GroupAccess{},
+		&marketplaceschema.ChannelUserBlock{}, &marketplaceschema.RoutePool{}, &marketplaceschema.RoutePoolMember{},
+		&marketplaceschema.AutoRoutePoolMember{}, &marketplaceschema.RankingSnapshot{}))
+	for _, id := range []string{"public", "invited"} {
+		visibility := marketplacedomain.VisibilityPublic
+		if id == "invited" {
+			visibility = marketplacedomain.VisibilityPrivate
+		}
+		require.NoError(t, db.Create(&marketplaceschema.Channel{ID: id, OwnerUserID: 30, DeclaredModels: `["model"]`}).Error)
+		require.NoError(t, db.Create(&marketplaceschema.Group{
+			ID: id, ChannelID: id, OwnerUserID: 30, PublicSlug: id, InternalGroupName: id,
+			SourceType: marketplacedomain.SourceTypeMarketplaceUser, Visibility: visibility,
+			LifecycleStatus: marketplacedomain.LifecycleActive, VerificationStatus: marketplacedomain.VerificationPassed, Multiplier: 2,
+		}).Error)
+		require.NoError(t, db.Create(&marketplaceschema.RankingSnapshot{GroupID: id, WindowHours: 24, RankingVersion: rankingVersion,
+			RawSuccessRate: 98.5, AvgTTFTMs: 42, RequestCount: 100,
+			AvgConsumerAmountByModel: strings.Repeat("heavy-private-unused-field", 1000),
+		}).Error)
+	}
+	require.NoError(t, db.Create(&marketplaceschema.GroupAccess{GroupID: "invited", UserID: 10}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.UserMultiplier{ChannelID: "public", UserID: 10, Multiplier: 0.7}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.UserMultiplier{ChannelID: "public", UserID: 11, Multiplier: 1.3}).Error)
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("narrow_key_snapshots", func(tx *gorm.DB) {
+		if tx.Statement.Table == (marketplaceschema.RankingSnapshot{}).TableName() {
+			require.Equal(t, []string{"group_id, raw_success_rate, avg_ttft_ms, request_count"}, tx.Statement.Selects)
+		}
+	}))
+	read := func(userID int) map[string]KeyGroupOption {
+		t.Helper()
+		options, err := ListKeyGroupOptions(userID)
+		require.NoError(t, err)
+		result := make(map[string]KeyGroupOption, len(options))
+		for _, option := range options {
+			result[option.Value] = option
+		}
+		return result
+	}
+	first, second := read(10), read(11)
+	require.Equal(t, 0.7, *first["market:public"].Multiplier)
+	require.Equal(t, 1.3, *second["market:public"].Multiplier)
+	require.Contains(t, first, "market:invited")
+	require.NotContains(t, second, "market:invited")
+	require.Equal(t, 98.5, *first["market:public"].SuccessRate)
+	require.Equal(t, 42.0, *first["market:public"].AvgTTFTMs)
+	require.EqualValues(t, 100, first["market:public"].RequestCount)
+	// Completed loads must never cache permission, price or health changes.
+	require.NoError(t, db.Model(&marketplaceschema.UserMultiplier{}).Where("user_id = ?", 10).Update("multiplier", 0.9).Error)
+	require.NoError(t, db.Delete(&marketplaceschema.GroupAccess{}, "user_id = ?", 10).Error)
+	require.NoError(t, db.Model(&marketplaceschema.RankingSnapshot{}).Where("group_id = ?", "public").Update("raw_success_rate", 75.0).Error)
+	updated := read(10)
+	require.Equal(t, 0.9, *updated["market:public"].Multiplier)
+	require.NotContains(t, updated, "market:invited")
+	require.Equal(t, 75.0, *updated["market:public"].SuccessRate)
+	require.NoError(t, db.Create(&marketplaceschema.ChannelUserBlock{ChannelID: "public", UserID: 10}).Error)
+	require.NotContains(t, read(10), "market:public")
+	require.Contains(t, read(11), "market:public")
+}

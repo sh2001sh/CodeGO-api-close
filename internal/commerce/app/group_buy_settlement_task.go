@@ -65,8 +65,4 @@ func runGroupBuySettlementOnce() {
 	if platformconfig.DebugEnabled && totalSettled > 0 {
 		logger.LogDebug(ctx, "group buy settlement: settled_count=%d", totalSettled)
 	}
-
-	if err := EnsureGhostGroupBuys(); err != nil {
-		logger.LogWarn(ctx, fmt.Sprintf("ensure ghost group buys failed: %v", err))
-	}
 }

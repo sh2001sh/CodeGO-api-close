@@ -11,6 +11,35 @@ import (
 	"testing"
 )
 
+func TestExistingBalanceSnapshotNeedsOneLockedRead(t *testing.T) {
+	db := openLedgerTestDB(t)
+	originalDB := platformdb.DB
+	platformdb.DB = db
+	t.Cleanup(func() { platformdb.DB = originalDB })
+	account := seedAccountWithCredit(t, 15901, 1000)
+	queries := 0
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("count_balance_reads", func(tx *gorm.DB) {
+		if tx.Statement.Table == (billingschema.BillingBalanceSnapshot{}).TableName() {
+			queries++
+		}
+	}))
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		snapshot, err := ensureAndLockBalanceSnapshot(tx, account.AccountID)
+		require.NoError(t, err)
+		require.EqualValues(t, 1000, snapshot.AvailableBalance)
+		return nil
+	}))
+	require.Equal(t, 1, queries)
+	// Preserve initialization for legacy accounts whose snapshot is missing.
+	require.NoError(t, db.Where("account_id = ?", account.AccountID).Delete(&billingschema.BillingBalanceSnapshot{}).Error)
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		snapshot, err := ensureAndLockBalanceSnapshot(tx, account.AccountID)
+		require.NoError(t, err)
+		require.Zero(t, snapshot.AvailableBalance)
+		return nil
+	}))
+}
+
 func TestLedgerReservationIdempotency(t *testing.T) {
 	db := openLedgerTestDB(t)
 	platformdb.DB = db

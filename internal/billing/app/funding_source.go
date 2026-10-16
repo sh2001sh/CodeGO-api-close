@@ -10,14 +10,17 @@ import (
 )
 
 type SubscriptionFundingPreConsumeResult struct {
-	UserSubscriptionID int
-	PreConsumed        int64
-	AmountTotal        int64
-	AmountUsedAfter    int64
-	ReservationID      string
-	AccountID          string
-	PlanID             int
-	PlanTitle          string
+	CreditPackGrantedQuota    int64
+	CreditPackPaidQuota       int64
+	CreditPackChannelShareBPS int64
+	UserSubscriptionID        int
+	PreConsumed               int64
+	AmountTotal               int64
+	AmountUsedAfter           int64
+	ReservationID             string
+	AccountID                 string
+	PlanID                    int
+	PlanTitle                 string
 }
 
 type SubscriptionFundingPlanInfo struct {
@@ -59,12 +62,14 @@ type BlindBoxConsumptionDiscountResult struct {
 }
 
 type SubscriptionFundingHooks struct {
+	PreConsumeCreditPack             func(requestID string, userID int, modelName string, amount int64) (*SubscriptionFundingPreConsumeResult, error)
 	PreConsume                       func(requestID string, userID int, modelName string, amount int64) (*SubscriptionFundingPreConsumeResult, error)
 	ReserveAdditional                func(requestID string, subscriptionID int, modelName string, amount int64) error
 	GetPlanInfo                      func(userSubscriptionID int) (*SubscriptionFundingPlanInfo, error)
 	PostConsumeDelta                 func(subscriptionID int, modelName string, delta int64) error
 	RefundPreConsume                 func(requestID string) error
 	SettleReservation                func(requestID string, subscriptionID int, modelName string, actualAmount int64) error
+	SettleReservationTx              func(tx *gorm.DB, requestID string, subscriptionID int, modelName string, actualAmount int64) error
 	GetMonthlyPassEntitlement        func(userID int) (*MonthlyPassEntitlement, error)
 	ValidateMonthlyPassEntitlement   func(userID int, entitlement MonthlyPassEntitlement) (bool, error)
 	ApplyBlindBoxConsumptionDiscount func(request BlindBoxConsumptionDiscountRequest) (BlindBoxConsumptionDiscountResult, error)
@@ -126,33 +131,44 @@ type fundingAvailableBalance interface {
 }
 
 type SubscriptionFunding struct {
-	requestID       string
-	userID          int
-	modelName       string
-	amount          int64
-	subscriptionID  int
-	preConsumed     int64
-	AmountTotal     int64
-	AmountUsedAfter int64
-	PlanId          int
-	PlanTitle       string
-	reservationID   string
-	accountID       string
-	settlementID    string
+	creditPack                bool
+	CreditPackGrantedQuota    int64
+	CreditPackPaidQuota       int64
+	CreditPackChannelShareBPS int64
+	requestID                 string
+	userID                    int
+	modelName                 string
+	amount                    int64
+	subscriptionID            int
+	preConsumed               int64
+	AmountTotal               int64
+	AmountUsedAfter           int64
+	PlanId                    int
+	PlanTitle                 string
+	reservationID             string
+	accountID                 string
+	settlementID              string
 }
 
 func (s *SubscriptionFunding) Source() string { return BillingSourceSubscription }
 
 func (s *SubscriptionFunding) PreConsume(amount int) error {
-	if subscriptionFundingHooks.PreConsume == nil {
+	preConsume := subscriptionFundingHooks.PreConsume
+	if s.creditPack {
+		preConsume = subscriptionFundingHooks.PreConsumeCreditPack
+	}
+	if preConsume == nil {
 		return errors.New("subscription funding pre-consume hook is not registered")
 	}
 	s.amount = int64(amount)
-	res, err := subscriptionFundingHooks.PreConsume(s.requestID, s.userID, s.modelName, s.amount)
+	res, err := preConsume(s.requestID, s.userID, s.modelName, s.amount)
 	if err != nil {
 		return err
 	}
 	s.subscriptionID = res.UserSubscriptionID
+	s.CreditPackGrantedQuota = res.CreditPackGrantedQuota
+	s.CreditPackPaidQuota = res.CreditPackPaidQuota
+	s.CreditPackChannelShareBPS = res.CreditPackChannelShareBPS
 	s.preConsumed = res.PreConsumed
 	s.AmountTotal = res.AmountTotal
 	s.AmountUsedAfter = res.AmountUsedAfter
@@ -173,6 +189,13 @@ func (s *SubscriptionFunding) PreConsume(amount int) error {
 			s.PlanId = planInfo.PlanID
 			s.PlanTitle = planInfo.PlanTitle
 		}
+	}
+	if s.creditPack && (s.CreditPackGrantedQuota <= 0 || s.CreditPackPaidQuota <= 0 ||
+		s.CreditPackPaidQuota > s.CreditPackGrantedQuota || s.CreditPackChannelShareBPS < 0 || s.CreditPackChannelShareBPS > 10000) {
+		return errors.Join(errors.New("invalid credit pack funding snapshot"), s.Refund())
+	}
+	if !s.creditPack && s.CreditPackGrantedQuota > 0 {
+		return errors.Join(errors.New("credit pack cannot use legacy subscription pricing"), s.Refund())
 	}
 	return nil
 }

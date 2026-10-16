@@ -1,3 +1,4 @@
+import interfaceI18n from '@/i18n/config'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -18,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { AlertCircle } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
-import { Trans } from 'react-i18next'
+import { useTranslation, Trans } from 'react-i18next'
 import type { BlindBoxStatistics } from '../types'
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const
@@ -70,38 +71,45 @@ function summarizeRewards(
       (total, entry) => total + entry.reward_usd,
       0
     )
-    return `${openedCount} 次 · $${rewardUsd.toFixed(2)}`
+    return interfaceI18n.t('{{param0}} 次 · {{param1}} credits', {
+      param0: openedCount,
+      param1: rewardUsd.toFixed(2),
+    })
   }
-  return `${openedCount} 次`
+  return interfaceI18n.t('{{param0}} 次', { param0: openedCount })
 }
 
 export function BlindBoxStatsPanel(props: { statistics?: BlindBoxStatistics }) {
+  useTranslation()
+
   const rows = [
     {
-      label: '通用额度',
+      label: interfaceI18n.t('通用额度'),
       value: summarizeRewards(props.statistics, ['quota', 'claude_quota']),
     },
-    { label: '道具', value: summarizeRewards(props.statistics, ['prop']) },
     {
-      label: '月卡',
+      label: interfaceI18n.t('道具'),
+      value: summarizeRewards(props.statistics, ['prop']),
+    },
+    {
+      label: interfaceI18n.t('月卡'),
       value: summarizeRewards(props.statistics, ['subscription']),
     },
   ]
 
   return (
-    <div className='codego-panel p-4'>
+    <section className='blind-box-sidebar-section'>
       <div className='flex items-center justify-between gap-2'>
         <div className='flex items-center gap-2.5'>
-          <span aria-hidden className='bg-primary block h-3 w-[3px]' />
-          <div className='text-foreground text-[13px] font-semibold'>
+          <h2 className='text-foreground text-sm font-semibold'>
             <Trans i18nKey={'我的战绩'} />
-          </div>
+          </h2>
         </div>
         <span className='codego-stat-label'>
           <Trans i18nKey={'保底'} /> {props.statistics?.pity_wins || 0}
         </span>
       </div>
-      <div className='border-border/60 mt-3 flex items-baseline justify-between gap-3 border-t py-2.5'>
+      <div className='mt-3 flex items-baseline justify-between gap-3 py-2.5'>
         <span className='codego-stat-label'>
           <Trans i18nKey={'累计开启'} />
         </span>
@@ -117,7 +125,7 @@ export function BlindBoxStatsPanel(props: { statistics?: BlindBoxStatistics }) {
         {rows.map((row) => (
           <div
             key={row.label}
-            className='border-border/60 flex items-baseline justify-between gap-3 border-b py-2 last:border-b-0'
+            className='flex items-baseline justify-between gap-3 py-2'
           >
             <dt className='codego-stat-label'>{row.label}</dt>
             <dd className='text-foreground font-mono text-xs font-medium tabular-nums'>
@@ -126,6 +134,6 @@ export function BlindBoxStatsPanel(props: { statistics?: BlindBoxStatistics }) {
           </div>
         ))}
       </dl>
-    </div>
+    </section>
   )
 }

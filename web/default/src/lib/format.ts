@@ -16,9 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import dayjs from '@/lib/dayjs'
-import i18next from 'i18next'
 import { toIntlLocale } from '@/i18n/languages'
+import i18next from 'i18next'
+import dayjs from '@/lib/dayjs'
 import {
   formatCurrencyFromUSD,
   formatQuotaWithCurrency,
@@ -31,9 +31,9 @@ import {
 
 export function formatNumber(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value as number)) return '-'
-  return Intl.NumberFormat(toIntlLocale(i18next.language), { maximumFractionDigits: 2 }).format(
-    value as number
-  )
+  return Intl.NumberFormat(toIntlLocale(i18next.language), {
+    maximumFractionDigits: 2,
+  }).format(value as number)
 }
 
 export function formatCompactNumber(value: number | null | undefined): string {
@@ -58,13 +58,10 @@ export function formatCurrencyUSD(value: number | null | undefined): string {
 
 export function formatUsdAmount(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value as number)) return '-'
-  return new Intl.NumberFormat(toIntlLocale(i18next.language), {
-    style: 'currency',
-    currency: 'USD',
-    currencyDisplay: 'narrowSymbol',
+  return `${new Intl.NumberFormat(toIntlLocale(i18next.language), {
     minimumFractionDigits: 0,
     maximumFractionDigits: Math.abs(value as number) >= 1 ? 2 : 4,
-  }).format(value as number)
+  }).format(value as number)} credits`
 }
 
 // ============================================================================

@@ -1,3 +1,4 @@
+import interfaceI18n from '@/i18n/config'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -126,9 +127,9 @@ function PaymentQrPanel(props: { payment: FuelPaymentState }) {
 }
 
 function getFuelPaymentStatusTitle(stage: FuelPaymentStage): string {
-  if (stage === 'pending') return '订单已创建，等待支付'
-  if (stage === 'success') return '支付成功'
-  return '支付未完成'
+  if (stage === 'pending') return interfaceI18n.t('订单已创建，等待支付')
+  if (stage === 'success') return interfaceI18n.t('支付成功')
+  return interfaceI18n.t('支付未完成')
 }
 
 function getFuelPaymentStatusIcon(stage: FuelPaymentStage) {

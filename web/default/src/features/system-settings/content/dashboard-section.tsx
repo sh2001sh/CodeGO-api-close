@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -42,7 +41,9 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
+import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const dataDashboardSchema = z.object({
   DataExportEnabled: z.boolean(),
@@ -71,9 +72,7 @@ export function DashboardSection({ defaultValues }: DashboardSectionProps) {
     defaultValues,
   })
 
-  useEffect(() => {
-    form.reset(defaultValues)
-  }, [defaultValues, form])
+  useResetForm(form, defaultValues)
 
   const onSubmit = async (values: DataDashboardFormValues) => {
     const updates = Object.entries(values).filter(
@@ -84,6 +83,7 @@ export function DashboardSection({ defaultValues }: DashboardSectionProps) {
     for (const [key, value] of updates) {
       await updateOption.mutateAsync({ key, value })
     }
+    form.reset(values)
   }
 
   const isEnabled = form.watch('DataExportEnabled')
@@ -91,10 +91,13 @@ export function DashboardSection({ defaultValues }: DashboardSectionProps) {
   return (
     <SettingsSection
       title={t('Data Dashboard')}
-      description={t('Configure experimental data export for the dashboard')}
+      description={t('Configure data export settings for dashboard')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <FormField
             control={form.control}
             name='DataExportEnabled'
@@ -133,8 +136,8 @@ export function DashboardSection({ defaultValues }: DashboardSectionProps) {
                       onChange={(e) => field.onChange(e.target.valueAsNumber)}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('Keep this above 1 minute to avoid heavy database load')}
+                  <FormDescription className='settings-field-fact'>
+                    {t('> 1 min')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -160,7 +163,7 @@ export function DashboardSection({ defaultValues }: DashboardSectionProps) {
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder={t('Select granularity')} />
+                        <SelectValue />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent alignItemWithTrigger={false}>
@@ -173,10 +176,8 @@ export function DashboardSection({ defaultValues }: DashboardSectionProps) {
                       </SelectGroup>
                     </SelectContent>
                   </Select>
-                  <FormDescription>
-                    {t(
-                      'UI granularity only &mdash; data is still aggregated hourly'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('Hourly aggregation')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -184,9 +185,11 @@ export function DashboardSection({ defaultValues }: DashboardSectionProps) {
             />
           </div>
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save Changes')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save Changes')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

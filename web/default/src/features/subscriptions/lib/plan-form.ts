@@ -37,7 +37,14 @@ export function getPlanFormSchema(t: TFunction) {
     subtitle: z.string().optional(),
     price_amount: z.coerce.number().min(0, t('Please enter amount')),
     currency: z.string().min(1),
-    duration_unit: z.enum(['year', 'month', 'day', 'hour', 'custom']),
+    duration_unit: z.enum([
+      'year',
+      'month',
+      'day',
+      'hour',
+      'custom',
+      'permanent',
+    ]),
     duration_value: z.coerce.number().min(1),
     custom_seconds: z.coerce.number().min(0).optional(),
     quota_reset_period: z.enum([
@@ -53,7 +60,6 @@ export function getPlanFormSchema(t: TFunction) {
     sort_order: z.coerce.number(),
     max_purchase_per_user: z.coerce.number().min(0),
     membership_tier: z.enum(['none', 'lite', 'standard', 'pro', 'ultra']),
-    lucky_draw_enabled: z.boolean(),
     total_amount: z.coerce.number().min(0),
     period_amount: z.coerce.number().min(0),
     model_limits: z.string().optional(),
@@ -84,7 +90,6 @@ export const PLAN_FORM_DEFAULTS: PlanFormValues = {
   sort_order: 0,
   max_purchase_per_user: 0,
   membership_tier: 'none',
-  lucky_draw_enabled: false,
   total_amount: 0,
   period_amount: 0,
   model_limits: '',
@@ -113,7 +118,6 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     sort_order: Number(plan.sort_order || 0),
     max_purchase_per_user: Number(plan.max_purchase_per_user || 0),
     membership_tier: plan.membership_tier || 'none',
-    lucky_draw_enabled: plan.lucky_draw_enabled === true,
     total_amount: subscriptionQuotaUnitsToUSD(plan.total_amount),
     period_amount: subscriptionQuotaUnitsToUSD(plan.period_amount),
     model_limits: plan.model_limits || '',
@@ -142,6 +146,8 @@ export function formValuesToPlanPayload(values: PlanFormValues): PlanPayload {
 
   return {
     plan: {
+      plan_type:
+        values.duration_unit === 'permanent' ? 'credit_pack' : undefined,
       title: values.title,
       subtitle: values.subtitle || '',
       price_amount: Number(values.price_amount || 0),
@@ -159,8 +165,6 @@ export function formValuesToPlanPayload(values: PlanFormValues): PlanPayload {
       sort_order: Number(values.sort_order || 0),
       max_purchase_per_user: Number(values.max_purchase_per_user || 0),
       membership_tier: values.membership_tier,
-      lucky_draw_enabled:
-        isMonthlyCard && values.lucky_draw_enabled && values.membership_tier !== 'none',
       // Kept in the API payload for older servers; subscription gifts are paused.
       blind_box_benefit_count: 0,
       total_amount: totalAmount,

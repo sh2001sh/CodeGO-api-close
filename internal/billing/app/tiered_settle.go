@@ -87,6 +87,9 @@ func TryTieredSettle(relayInfo *relaycommon.RelayInfo, params billingexpr.TokenP
 	tr, err := billingexpr.ComputeTieredQuotaWithRequest(snap, params, requestInput)
 	if err != nil {
 		quota = relayInfo.FinalPreConsumedQuota
+		// Reservations already include the speed tier. The caller applies it
+		// to the base settlement exactly once, including this fallback path.
+		quota /= relaycommon.ServiceTierMultiplier(relayInfo.ServiceTier)
 		if quota <= 0 {
 			quota = snap.EstimatedQuotaAfterGroup
 		}

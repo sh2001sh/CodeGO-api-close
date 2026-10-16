@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import interfaceI18n from '@/i18n/config'
 import { AlertCircle, RefreshCw, Save } from 'lucide-react'
-import { Trans } from 'react-i18next'
+import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { SectionPageLayout } from '@/components/layout'
+import '@/features/channels/admin-workspace.css'
 import { RoutePoolGroupList } from './components/route-pool-group-list'
 import { RoutePoolInsights } from './components/route-pool-insights'
+import './route-pools.css'
 import type { FundingPolicy, RoutePoolGroup, RoutePoolMetrics } from './types'
 
 type DailyEconomics = {
@@ -25,25 +28,23 @@ const fundingSources: FundingPolicy['source'][] = [
 
 export function RoutePools() {
   return (
-    <SectionPageLayout>
-      <SectionPageLayout.Title>
-        <Trans i18nKey={'渠道与智能路由'} />
-      </SectionPageLayout.Title>
-      <SectionPageLayout.Description>
-        <Trans
-          i18nKey={
-            '渠道分组来自渠道配置；启用算法后按成本、成功率、冷却和首字耗时自动选择。'
-          }
-        />
-      </SectionPageLayout.Description>
-      <SectionPageLayout.Content>
-        <RoutePoolsContent />
-      </SectionPageLayout.Content>
-    </SectionPageLayout>
+    <div className='admin-workspace route-pools-page'>
+      <SectionPageLayout kicker=''>
+        <SectionPageLayout.Title>
+          <Trans i18nKey={'渠道与智能路由'} />
+        </SectionPageLayout.Title>
+
+        <SectionPageLayout.Content>
+          <RoutePoolsContent />
+        </SectionPageLayout.Content>
+      </SectionPageLayout>
+    </div>
   )
 }
 
 export function RoutePoolsContent() {
+  useTranslation()
+
   const queryClient = useQueryClient()
   const [model, setModel] = useState('')
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
@@ -105,22 +106,22 @@ export function RoutePoolsContent() {
         })),
       }),
     onSuccess: () => {
-      toast.success('自动路由配置已保存')
+      toast.success(interfaceI18n.t('自动路由配置已保存'))
       void queryClient.invalidateQueries({ queryKey: ['route-pool-groups'] })
       void queryClient.invalidateQueries({ queryKey: ['route-pool-metrics'] })
     },
-    onError: () => toast.error('自动路由配置保存失败'),
+    onError: () => toast.error(interfaceI18n.t('自动路由配置保存失败')),
   })
   const savePolicies = useMutation({
     mutationFn: (items: FundingPolicy[]) =>
       api.put('/api/route-finance/policies', { policies: items }),
     onSuccess: () => {
-      toast.success('来源倍率已保存')
+      toast.success(interfaceI18n.t('来源倍率已保存'))
       void queryClient.invalidateQueries({
         queryKey: ['route-finance-policies'],
       })
     },
-    onError: () => toast.error('来源倍率保存失败'),
+    onError: () => toast.error(interfaceI18n.t('来源倍率保存失败')),
   })
   const policyDraft = useMemo(
     () =>
@@ -143,21 +144,20 @@ export function RoutePoolsContent() {
   const queryFailed = groups.isError || policies.isError || daily.isError
 
   return (
-    <div className='space-y-4'>
-      <div className='flex flex-col justify-between gap-3 sm:flex-row sm:items-start'>
+    <div className='route-pool-workspace space-y-6'>
+      <div className='route-pool-toolbar'>
         <div>
           <h2 className='text-lg font-semibold'>
             <Trans i18nKey={'自动路由'} />
           </h2>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            <Trans
-              i18nKey={
-                '分组与候选渠道自动同步自渠道配置。开启后，未命中缓存粘性的请求按成本、健康度和首字时间评分选择。'
-              }
-            />
-          </p>
         </div>
-        <Button variant='outline' onClick={refresh}>
+        <Button
+          variant='outline'
+          onClick={refresh}
+          disabled={
+            groups.isFetching || policies.isFetching || daily.isFetching
+          }
+        >
           <RefreshCw />
           <Trans i18nKey={'刷新'} />
         </Button>
@@ -172,11 +172,6 @@ export function RoutePoolsContent() {
                 <p className='font-medium'>
                   <Trans i18nKey={'路由数据暂时无法加载'} />
                 </p>
-                <p className='text-muted-foreground mt-1'>
-                  <Trans
-                    i18nKey={'请刷新重试；现有渠道和运行中的路由不会被修改。'}
-                  />
-                </p>
               </div>
             </div>
             <Button size='sm' variant='outline' onClick={refresh}>
@@ -189,12 +184,24 @@ export function RoutePoolsContent() {
       <RoutePoolGroupList
         groups={groups.data ?? []}
         loading={groups.isLoading}
-        savingGroup={saveGroup.variables?.group}
+        savingGroup={
+          saveGroup.isPending ? saveGroup.variables?.group : undefined
+        }
         onSelectGroup={setSelectedGroup}
         onSave={(group) => saveGroup.mutate(group)}
       />
 
-      <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]'>
+      {metrics.isError && (
+        <div role='alert' className='admin-query-error'>
+          <span>
+            <Trans i18nKey={'路由数据暂时无法加载'} />
+          </span>
+          <Button variant='outline' onClick={() => void metrics.refetch()}>
+            <Trans i18nKey={'重试'} />
+          </Button>
+        </div>
+      )}
+      <div className='route-pool-analysis-layout'>
         <RoutePoolInsights
           groups={groups.data ?? []}
           model={model}
@@ -205,16 +212,21 @@ export function RoutePoolsContent() {
           onModelChange={setModel}
           onGroupChange={setSelectedGroup}
         />
-        <Card>
+        <Card className='route-funding-policy'>
           <CardContent className='space-y-3 pt-6'>
             <h3 className='font-semibold'>
               <Trans i18nKey={'用户来源倍率'} />
             </h3>
-            <p className='text-muted-foreground text-sm'>
-              <Trans
-                i18nKey={'仅影响新入账额度的收益归因，不影响渠道采购倍率。'}
-              />
-            </p>
+            <dl className='text-sm'>
+              <div className='flex flex-wrap justify-between gap-2'>
+                <dt className='text-muted-foreground'>
+                  <Trans i18nKey={'作用范围'} />
+                </dt>
+                <dd>
+                  <Trans i18nKey={'新入账额度的收益归因'} />
+                </dd>
+              </div>
+            </dl>
             {policyDraft.map((policy, index) => (
               <label
                 key={policy.source}
@@ -249,7 +261,16 @@ export function RoutePoolsContent() {
               className='w-full'
               variant='outline'
               onClick={() => savePolicies.mutate(policyDraft)}
-              disabled={savePolicies.isPending}
+              disabled={
+                savePolicies.isPending ||
+                policies.isLoading ||
+                policies.isError ||
+                policyDraft.some(
+                  (policy) =>
+                    !Number.isFinite(policy.revenue_multiplier) ||
+                    policy.revenue_multiplier < 0
+                )
+              }
             >
               <Save />
               <Trans i18nKey={'保存来源倍率'} />

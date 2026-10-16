@@ -25,7 +25,6 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -116,14 +115,11 @@ export function AmountDiscountDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-[500px]'>
+      <DialogContent className='settings-dialog sm:max-w-[500px]'>
         <DialogHeader>
           <DialogTitle>
             {isEditMode ? t('Edit discount tier') : t('Add discount tier')}
           </DialogTitle>
-          <DialogDescription>
-            {t('Set a discount rate for a specific recharge amount threshold.')}
-          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -152,10 +148,8 @@ export function AmountDiscountDialog({
                   </FormControl>
                   <FormDescription>
                     {isEditMode
-                      ? t('Amount cannot be changed when editing.')
-                      : t(
-                          'Minimum recharge amount to qualify for this discount.'
-                        )}
+                      ? t('Amount: locked')
+                      : t('Minimum recharge amount')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

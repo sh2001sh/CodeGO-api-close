@@ -60,7 +60,7 @@ export function NowPaymentsPaymentDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='commerce-dialog sm:max-w-md'>
         <DialogHeader>
           <DialogTitle>{t('Pay with USDT')}</DialogTitle>
           <DialogDescription>
@@ -79,7 +79,7 @@ export function NowPaymentsPaymentDialog({
                 <p className='text-muted-foreground text-xs'>
                   {t('Payment amount')}
                 </p>
-                <p className='mt-1 text-lg font-semibold'>
+                <p className='mt-1 font-mono text-lg font-semibold tabular-nums'>
                   {payment.pay_amount} {currency}
                 </p>
               </div>

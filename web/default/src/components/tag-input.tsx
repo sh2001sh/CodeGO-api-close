@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useRef, type KeyboardEvent } from 'react'
+import interfaceI18n from '@/i18n/config'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -86,7 +87,7 @@ export function TagInput({
               type='button'
               variant='ghost'
               size='icon-sm'
-              aria-label='Remove tag'
+              aria-label={interfaceI18n.t('Remove tag')}
               onClick={(e) => {
                 e.stopPropagation()
                 removeTag(tag)

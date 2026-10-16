@@ -23,6 +23,7 @@ import { type TFunction } from 'i18next'
 // ============================================================================
 
 export const DURATION_UNITS = [
+  { value: 'permanent', labelKey: '长期有效' },
   { value: 'year', labelKey: 'years' },
   { value: 'month', labelKey: 'months' },
   { value: 'day', labelKey: 'days' },

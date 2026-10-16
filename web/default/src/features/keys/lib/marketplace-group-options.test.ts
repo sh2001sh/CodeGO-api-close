@@ -16,40 +16,47 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18n from '@/i18n/config'
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { toApiKeyGroupOptions } from './marketplace-group-options'
 
 describe('API key group option metadata', () => {
-  test('preserves named and empty pool names, token groups and model lists', () => {
-    const options = toApiKeyGroupOptions([
-      {
-        value: 'market:pool:one',
-        label: 'GPT 工作池',
-        category: 'marketplace_pool',
-        models: ['gpt-5.6'],
-      },
-      {
-        value: 'market:pool:empty',
-        label: 'Empty pool',
-        category: 'marketplace_pool',
-        models: [],
-      },
-      {
-        value: 'market:auto',
-        label: 'AUTO 路由池',
-        category: 'marketplace_auto',
-        models: ['claude'],
-      },
-    ])
-    const labels = Object.fromEntries(
-      options.map((option) => [option.value, option.label])
-    )
-    assert.equal(labels['market:pool:one'], 'GPT 工作池')
-    assert.equal(labels['market:pool:empty'], 'Empty pool')
-    assert.equal(labels['market:auto'], 'AUTO 路由池')
-    assert.deepEqual(options[0].models, ['gpt-5.6'])
-    assert.equal(options[0].ratio, '动态')
+  test('preserves named and empty pool names, token groups and model lists', async () => {
+    const previousLanguage = i18n.language
+    await i18n.changeLanguage('zh')
+    try {
+      const options = toApiKeyGroupOptions([
+        {
+          value: 'market:pool:one',
+          label: 'GPT 工作池',
+          category: 'marketplace_pool',
+          models: ['gpt-5.6'],
+        },
+        {
+          value: 'market:pool:empty',
+          label: 'Empty pool',
+          category: 'marketplace_pool',
+          models: [],
+        },
+        {
+          value: 'market:auto',
+          label: 'AUTO 路由池',
+          category: 'marketplace_auto',
+          models: ['claude'],
+        },
+      ])
+      const labels = Object.fromEntries(
+        options.map((option) => [option.value, option.label])
+      )
+      assert.equal(labels['market:pool:one'], 'GPT 工作池')
+      assert.equal(labels['market:pool:empty'], 'Empty pool')
+      assert.equal(labels['market:auto'], 'AUTO 路由池')
+      assert.deepEqual(options[0].models, ['gpt-5.6'])
+      assert.equal(options[0].ratio, '动态')
+    } finally {
+      await i18n.changeLanguage(previousLanguage)
+    }
   })
   test('keeps personal prices and subscription metadata without fabricating statistics', () => {
     const [option] = toApiKeyGroupOptions([

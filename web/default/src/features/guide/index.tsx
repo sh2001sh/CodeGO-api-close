@@ -1,30 +1,24 @@
 import { Link } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
 import { ArrowRight, Compass } from 'lucide-react'
-import { motion, useReducedMotion, type Variants } from 'motion/react'
 import { useTranslation, Trans } from 'react-i18next'
-import { MOTION_TRANSITION } from '@/lib/motion'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 import { Button } from '@/components/ui/button'
 import { PublicLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
+import '@/features/docs/reading.css'
 import { guideSections } from './content'
 
 const guideSeo = getPublicPageSeoEntry('/guide')
 
-const SECTION_REVEAL: Variants = {
-  hidden: { opacity: 0, y: 24 },
-  visible: { opacity: 1, y: 0, transition: MOTION_TRANSITION.slow },
-}
-
 function GuideDiagram(props: { title: string; steps: string[] }) {
   return (
-    <div className='overview-soft-card p-4'>
+    <div className='guide-diagram p-4'>
       <div className='text-foreground text-sm font-medium'>{props.title}</div>
       <div className='mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
         {props.steps.map((step, index) => (
-          <div key={step} className='app-subtle-panel relative p-3'>
-            <div className='text-muted-foreground text-[11px] font-semibold tracking-[0.22em] uppercase'>
+          <div key={step} className='guide-diagram-step relative p-3'>
+            <div className='text-muted-foreground text-xs font-medium'>
               <Trans i18nKey={'第'} /> {index + 1} <Trans i18nKey={'步'} />
             </div>
             <div className='mt-2 text-sm leading-6 font-medium'>{step}</div>
@@ -44,26 +38,19 @@ function GuideDiagram(props: { title: string; steps: string[] }) {
 
 function GuideSectionBlock(props: { section: (typeof guideSections)[number] }) {
   const { section } = props
-  const shouldReduceMotion = Boolean(useReducedMotion())
 
   return (
-    <motion.section
+    <section
       id={section.id}
       className='border-border/50 scroll-mt-24 border-t py-10 first:border-t-0 first:pt-0'
-      variants={SECTION_REVEAL}
-      initial={shouldReduceMotion ? false : 'hidden'}
-      whileInView='visible'
-      viewport={{ once: true, margin: '-60px' }}
     >
-      <div className='grid gap-8 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]'>
+      <div className='guide-section-content'>
         <div className='space-y-5'>
           <div className='space-y-3'>
-            <div className='text-muted-foreground text-xs font-semibold tracking-[0.24em] uppercase'>
-              {section.eyebrow}
-            </div>
             <h2 className='text-foreground text-2xl font-semibold tracking-tight'>
               {section.title}
             </h2>
+            <p className='text-muted-foreground'>{section.summary}</p>
           </div>
 
           {section.steps && section.steps.length > 0 ? (
@@ -82,30 +69,29 @@ function GuideSectionBlock(props: { section: (typeof guideSections)[number] }) {
             </ol>
           ) : null}
 
+          {section.images.map((image) => (
+            <figure className='guide-image' key={image.src}>
+              <img src={image.src} alt={image.alt} loading='lazy' />
+              {image.caption ? <figcaption>{image.caption}</figcaption> : null}
+            </figure>
+          ))}
+
           {section.diagram_title && section.diagram_steps?.length ? (
             <GuideDiagram
               title={section.diagram_title}
               steps={section.diagram_steps}
             />
           ) : null}
-        </div>
-
-        <div className='space-y-5'>
-          {section.images.map((image) => (
-            <figure key={image.src} className='space-y-3'>
-              <div className='overview-soft-card overflow-hidden'>
-                <img
-                  src={image.src}
-                  alt={image.alt}
-                  className='h-auto w-full object-cover'
-                  loading='lazy'
-                />
-              </div>
-            </figure>
-          ))}
+          {section.notes?.length ? (
+            <aside className='guide-notes'>
+              {section.notes.map((note) => (
+                <p key={note}>{note}</p>
+              ))}
+            </aside>
+          ) : null}
         </div>
       </div>
-    </motion.section>
+    </section>
   )
 }
 
@@ -113,6 +99,7 @@ export function Guide() {
   const { t } = useTranslation()
   const localizedSections = guideSections.map((section) => ({
     ...section,
+    eyebrow: t(section.eyebrow),
     title: t(section.title),
     summary: t(section.summary),
     steps: section.steps?.map((step) => t(step)),
@@ -133,9 +120,8 @@ export function Guide() {
         keywords={guideSeo.keywords}
         canonicalPath={guideSeo.path}
       />
-      <main className='bg-background'>
-        <section className='border-border/50 relative overflow-hidden border-b px-6 pt-28 pb-10 md:px-10 md:pt-32 md:pb-14'>
-          <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,color-mix(in_oklch,var(--primary)_10%,transparent),transparent)]' />
+      <main id='content' tabIndex={-1} className='market-reading market-guide'>
+        <section className='border-border/50 relative overflow-hidden border-b px-5 pt-8 pb-10 md:px-8 md:pt-16 md:pb-14'>
           <div className='mx-auto flex max-w-7xl flex-col gap-8 lg:flex-row lg:items-end lg:justify-between'>
             <div className='max-w-3xl space-y-4'>
               <div className='space-y-3'>
@@ -145,23 +131,16 @@ export function Guide() {
               </div>
             </div>
 
-            <div className='grid gap-3 sm:grid-cols-3 lg:min-w-[440px]'>
-              <div className='overview-soft-card px-4 py-4'>
-                <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  <Trans i18nKey={'章节数量'} />
-                </div>
-                <div className='mt-2 text-2xl font-semibold'>
-                  {localizedSections.length}
-                </div>
-              </div>
-            </div>
+            <p className='text-muted-foreground text-sm'>
+              <Trans i18nKey={'章节数量'} /> · {localizedSections.length}
+            </p>
           </div>
         </section>
 
         <section className='px-6 py-8 md:px-10'>
           <div className='mx-auto grid max-w-7xl gap-10 xl:grid-cols-[240px_minmax(0,1fr)]'>
             <aside className='xl:sticky xl:top-24 xl:self-start'>
-              <div className='overview-glass-card space-y-4 rounded-2xl p-4'>
+              <div className='guide-navigation space-y-4 p-5'>
                 <div className='flex items-center gap-2 text-sm font-semibold'>
                   <Compass className='size-4' />
                   <Trans i18nKey={'导航目录'} />
@@ -175,9 +154,6 @@ export function Guide() {
                           href={`#${section.id}`}
                           className='text-muted-foreground hover:bg-background/50 hover:text-foreground flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors'
                         >
-                          <span className='text-muted-foreground/60 text-[10px] font-bold tracking-[0.2em] uppercase'>
-                            {section.eyebrow}
-                          </span>
                           <span>{section.title}</span>
                         </a>
                       </li>
@@ -200,7 +176,7 @@ export function Guide() {
               </div>
             </aside>
 
-            <div className='min-w-0 space-y-2'>
+            <div className='guide-sections min-w-0 space-y-2'>
               {localizedSections.map((section) => (
                 <GuideSectionBlock key={section.id} section={section} />
               ))}

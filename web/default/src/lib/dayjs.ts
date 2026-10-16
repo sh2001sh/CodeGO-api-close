@@ -17,8 +17,28 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import dayjs from 'dayjs'
+import i18n from '@/i18n/config'
+import { normalizeInterfaceLanguage } from '@/i18n/languages'
+import 'dayjs/locale/fr'
+import 'dayjs/locale/ja'
+import 'dayjs/locale/ru'
+import 'dayjs/locale/vi'
+import 'dayjs/locale/zh-cn'
+import 'dayjs/locale/zh-tw'
 import relativeTime from 'dayjs/plugin/relativeTime'
 
 dayjs.extend(relativeTime)
+const updateLocale = (language: string) => {
+  const normalized = normalizeInterfaceLanguage(language)
+  const locale =
+    normalized === 'zh-TW'
+      ? 'zh-tw'
+      : normalized === 'zh'
+        ? 'zh-cn'
+        : normalized
+  dayjs.locale(locale)
+}
+i18n.on('languageChanged', updateLocale)
+updateLocale(i18n.language)
 
 export default dayjs

@@ -25,6 +25,7 @@ import {
 } from 'react-hook-form'
 import i18next from 'i18next'
 import { toast } from 'sonner'
+import { handleSettingsAction } from '../utils/settings-action'
 
 type SettingsFormOptions<T extends FieldValues> = UseFormProps<T> & {
   onSubmit: (data: T, changedFields: Record<string, unknown>) => Promise<void>
@@ -207,7 +208,12 @@ export function useSettingsForm<T extends FieldValues>({
   /* eslint-enable react-hooks/refs */
 
   useEffect(() => {
-    if (!expandedDefaults) return
+    if (
+      !expandedDefaults ||
+      form.formState.isDirty ||
+      form.formState.isSubmitting
+    )
+      return
 
     const flattened = flattenValues(expandedDefaults as T)
     const serialized = JSON.stringify(flattened)
@@ -220,7 +226,12 @@ export function useSettingsForm<T extends FieldValues>({
     defaultValuesRef.current = expandedDefaults as T
     serializedDefaultsRef.current = serialized
     form.reset(expandedDefaults as T)
-  }, [expandedDefaults, form])
+  }, [
+    expandedDefaults,
+    form,
+    form.formState.isDirty,
+    form.formState.isSubmitting,
+  ])
 
   const defaultCompare = (a: unknown, b: unknown): boolean => {
     if (a === b) return true
@@ -278,7 +289,7 @@ export function useSettingsForm<T extends FieldValues>({
   return {
     form,
     // eslint-disable-next-line react-hooks/refs
-    handleSubmit: form.handleSubmit(handleSubmit),
+    handleSubmit: handleSettingsAction(form.handleSubmit(handleSubmit)),
     handleReset,
     isDirty: form.formState.isDirty,
     isSubmitting: form.formState.isSubmitting,

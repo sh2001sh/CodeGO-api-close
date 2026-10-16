@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	"github.com/sh2001sh/new-api/dto"
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -72,6 +73,17 @@ func shouldCheckPromptSensitiveForRelay(relayFormat types.RelayFormat) bool {
 	// not apply the site's prompt interception to that protocol, otherwise
 	// harmless user prompts can match vocabulary embedded in metadata.
 	return requestsettings.ShouldCheckPromptSensitive() && relayFormat != types.RelayFormatClaude
+}
+
+func checkPromptSensitiveRequestForChannel(c *gin.Context, relayFormat types.RelayFormat, channel *gatewayschema.Channel, request dto.Request, meta *types.TokenCountMeta, retry bool) *types.NewAPIError {
+	// Release the joined prompt before waiting on a long upstream stream.
+	// A retry may select a channel with a different interception policy, so
+	// rebuild from the original request rather than skipping its check.
+	defer func() { meta.CombineText = "" }()
+	if retry && shouldCheckPromptSensitiveForRelay(relayFormat) {
+		meta.CombineText = request.GetTokenCountMeta().CombineText
+	}
+	return checkPromptSensitiveForChannel(c, relayFormat, channel, meta)
 }
 
 func checkPromptSensitiveForChannel(

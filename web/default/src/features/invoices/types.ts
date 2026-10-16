@@ -27,6 +27,7 @@ export type InvoiceEligibleOrder = {
   currency: string
   paid_at: number
   requested: boolean
+  refund_status?: string
 }
 
 export type InvoiceRequest = {
@@ -54,6 +55,13 @@ export type InvoiceRequest = {
 
 export type InvoicePage = {
   items: InvoiceRequest[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type InvoiceEligibleOrdersPage = {
+  items: InvoiceEligibleOrder[]
   total: number
   page: number
   page_size: number

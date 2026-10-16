@@ -21,6 +21,7 @@ import i18next from 'i18next'
 import { toast } from 'sonner'
 import { updateSystemOption } from '../api'
 import type { UpdateOptionRequest } from '../types'
+import { notifySettingsSaveError } from '../utils/settings-action'
 
 // Configuration keys that require status refresh
 const STATUS_RELATED_KEYS = [
@@ -42,15 +43,23 @@ export function useUpdateOption() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (request: UpdateOptionRequest) => updateSystemOption(request),
-    onSuccess: (data, variables) => {
+    mutationFn: async (request: UpdateOptionRequest) => {
+      const response = await updateSystemOption(request)
+      if (!response.success) {
+        throw new Error(
+          response.message || i18next.t('Failed to update setting')
+        )
+      }
+      return response
+    },
+    onSuccess: async (data, variables) => {
       if (data.success) {
         // Always refresh system-options
-        queryClient.invalidateQueries({ queryKey: ['system-options'] })
+        await queryClient.invalidateQueries({ queryKey: ['system-options'] })
 
         // If updating frontend-display-related config, also refresh status
         if (STATUS_RELATED_KEYS.includes(variables.key)) {
-          queryClient.invalidateQueries({ queryKey: ['status'] })
+          await queryClient.invalidateQueries({ queryKey: ['status'] })
         }
 
         toast.success(i18next.t('Setting updated successfully'))
@@ -59,7 +68,7 @@ export function useUpdateOption() {
       }
     },
     onError: (error: Error) => {
-      toast.error(error.message || i18next.t('Failed to update setting'))
+      notifySettingsSaveError(error)
     },
   })
 }

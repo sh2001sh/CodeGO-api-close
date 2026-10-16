@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react'
+import { getIntlLocale } from '@/i18n/format'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
@@ -42,7 +43,7 @@ export const RecentRequestStrip = memo(function RecentRequestStrip(props: {
   )
   const formatter = useMemo(
     () =>
-      new Intl.DateTimeFormat(i18n.language, {
+      new Intl.DateTimeFormat(getIntlLocale(), {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,

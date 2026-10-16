@@ -1,0 +1,568 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/
+.dawn.exchange-market .poolpanel.pool-workbench {
+  border: 0;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface-glass) 96%, transparent);
+  box-shadow:
+    0 16px 40px rgb(30 40 55 / 10%),
+    inset 0 0 0 1px var(--hairline-light),
+    inset 0 1px 0 rgb(255 255 255 / 75%);
+  backdrop-filter: blur(24px) saturate(125%);
+  -webkit-backdrop-filter: blur(24px) saturate(125%);
+  isolation: isolate;
+}
+
+.dawn.exchange-market .pool-workbench .ph {
+  border: 0;
+  padding: 20px 20px 0;
+  background: transparent;
+}
+
+.dawn.exchange-market .pool-workbench .pool-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--dawn-ink2);
+  font: 12px var(--dawn-mono);
+  letter-spacing: 0.08em;
+}
+
+.dawn.exchange-market .pool-workbench .pool-eyebrow svg {
+  color: var(--dawn-copper);
+}
+
+.dawn.exchange-market .pool-workbench .ph h3 {
+  margin: 10px 0 4px;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
+}
+
+.dawn.exchange-market .pool-workbench .ph .psub {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.dawn.exchange-market .pool-workbench .pb {
+  padding: 18px 20px 20px;
+  max-height: none;
+  overflow: visible;
+}
+
+.dawn.exchange-market .pool-workbench .toolbar {
+  gap: 7px;
+  margin-bottom: 15px;
+}
+
+.dawn.exchange-market .pool-workbench .toolbar .row {
+  gap: 6px;
+}
+
+.dawn.exchange-market
+  .pool-workbench
+  :is(input:not([type='checkbox']):not([type='range']), select) {
+  min-height: 44px;
+  border: 0;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface-card) 80%, transparent);
+  box-shadow: none;
+  font-size: 12px;
+  transition:
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.dawn.exchange-market .pool-workbench :is(input, select, button):focus-visible {
+  outline: 2px solid var(--dawn-copper);
+  outline-offset: 3px;
+}
+
+.dawn.exchange-market
+  .pool-workbench
+  :is(input:not([type='checkbox']), select):focus-visible {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--dawn-copper) 11%, transparent);
+}
+
+.dawn.exchange-market .pool-workbench .toolbar .btn.mini {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px;
+  border: 0;
+  background: color-mix(in srgb, var(--surface-card) 75%, transparent);
+}
+
+.dawn.exchange-market .pool-workbench .btn {
+  border-radius: 999px;
+  transition:
+    transform 200ms cubic-bezier(0.25, 1, 0.5, 1),
+    box-shadow 200ms ease;
+}
+
+.dawn.exchange-market .pool-workbench .btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.dawn.exchange-market .pool-workbench .btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.dawn.exchange-market .pool-workbench .pool-telemetry {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 14px 10px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-card) 76%, transparent);
+}
+
+.dawn.exchange-market .pool-workbench .pool-telemetry > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 7px;
+  padding: 0 2px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-telemetry > div > span:first-child {
+  color: var(--dawn-ink2);
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-value {
+  display: inline-flex;
+  position: relative;
+  font-family: var(--dawn-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dawn.exchange-market .pool-workbench .pool-value > span {
+  display: inline-block;
+}
+
+.dawn.exchange-market .pool-workbench .pool-telemetry .pool-value {
+  color: var(--dawn-ink);
+  font-size: clamp(16px, 1.25vw, 20px);
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -0.06em;
+}
+
+.dawn.exchange-market .pool-workbench .pool-telemetry .ok {
+  color: var(--dawn-ok);
+}
+
+.dawn.exchange-market .pool-workbench .pool-composition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 2px 9px;
+  color: var(--dawn-ink2);
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-composition > span {
+  border-radius: 8px;
+  padding: 3px 6px;
+  background: color-mix(in srgb, var(--surface-card) 45%, transparent);
+}
+
+.dawn.exchange-market .pool-workbench .pool-composition b {
+  margin-left: 4px;
+  color: var(--dawn-ink);
+  font-family: var(--dawn-mono);
+}
+
+.dawn.exchange-market .pool-workbench .poolbox {
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.dawn.exchange-market .pool-workbench .pool-head {
+  padding: 7px 2px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-node-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dawn.exchange-market .pool-workbench .pool-item {
+  position: relative;
+  margin: 0;
+  padding: 11px 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
+  box-shadow: 0 2px 4px rgb(24 24 28 / 0.025);
+}
+
+.dawn.exchange-market .pool-workbench .pool-item .r1 {
+  display: grid;
+  grid-template-columns: 44px 20px 8px minmax(0, 1fr);
+  gap: 5px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-height: 44px;
+  margin-left: -4px;
+  padding: 0;
+  color: var(--dawn-ink2);
+  border-radius: 8px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.dawn.exchange-market .pool-workbench .pool-drag-handle:active {
+  cursor: grabbing;
+}
+
+.dawn.exchange-market .pool-workbench .pool-order {
+  min-width: 17px;
+  color: var(--dawn-ink2);
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-item .r1 .dot {
+  width: 5px;
+  height: 5px;
+  box-shadow: 0 0 7px color-mix(in srgb, var(--dawn-ok) 25%, transparent);
+}
+
+.dawn.exchange-market .pool-workbench .pool-item .r1 .dot.unknown {
+  background: var(--dawn-ink3);
+  box-shadow: none;
+}
+
+.dawn.exchange-market .pool-workbench .pool-item .cname {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--dawn-mono);
+  font-size: 12px;
+  font-weight: 550;
+  letter-spacing: -0.04em;
+}
+
+.dawn.exchange-market .pool-workbench .pool-item .ord {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  border-top: 1px solid var(--hairline-light);
+  padding-top: 4px;
+  gap: 0;
+  margin-left: 0;
+}
+
+.dawn.exchange-market .pool-workbench .pool-item .ord button {
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0;
+}
+
+.dawn.exchange-market
+  .pool-workbench
+  .pool-item
+  .ord
+  button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-subtle) 65%, transparent);
+}
+
+.dawn.exchange-market .pool-workbench .pool-node-source {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 0;
+  color: var(--dawn-ink2);
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-node-source span {
+  color: var(--dawn-warn);
+}
+
+.dawn.exchange-market .pool-workbench .pool-item .r2 {
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-item .r2 div {
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-item .r2 b {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pp-empty {
+  border: 0;
+  border-radius: 16px;
+  padding: 26px 14px;
+  margin-top: 12px;
+  background: color-mix(in srgb, var(--surface-card) 65%, transparent);
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pp-foot {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dawn.exchange-market .pool-workbench .pp-foot .sub2 {
+  color: var(--dawn-warn);
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-connectivity {
+  margin-top: 14px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 48px;
+  padding: 9px 15px;
+  border: 0;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 8px rgb(24 24 28 / 0.08);
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-trigger > span {
+  font: 12px var(--dawn-mono);
+  opacity: 0.7;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-trigger.is-testing {
+  opacity: 1;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dawn-copper) 20%, transparent);
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-trigger.is-testing::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid transparent;
+  border-radius: inherit;
+  background: conic-gradient(
+      from var(--pool-ring-angle),
+      transparent 45%,
+      var(--dawn-copper),
+      transparent 90%
+    )
+    border-box;
+  mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: pool-test-ring 1.3s linear infinite;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-heading button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-model {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-model select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-billing {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 7px;
+  margin: 12px 0;
+  color: var(--dawn-ink2);
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench input[type='checkbox'] {
+  min-height: 16px;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  accent-color: var(--dawn-copper);
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--dawn-ok);
+  font-size: 12px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-summary[data-failed='true'] {
+  color: var(--dawn-bad);
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-node-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 9px;
+  color: var(--dawn-ink2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-node-status svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-item[data-test-status='passed'] {
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--dawn-ok) 22%, transparent);
+}
+
+.dawn.exchange-market
+  .pool-workbench
+  .pool-item[data-test-status='passed']
+  .pool-test-node-status {
+  color: var(--dawn-ok);
+}
+
+.dawn.exchange-market .pool-workbench .pool-item[data-test-status='failed'] {
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--dawn-bad) 32%, transparent);
+}
+
+.dawn.exchange-market
+  .pool-workbench
+  .pool-item[data-test-status='failed']
+  .pool-test-node-status,
+.dawn.exchange-market .pool-workbench .pool-test-error {
+  color: var(--dawn-bad);
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.dawn.exchange-market .pool-workbench .pool-test-spinner {
+  animation: pool-test-spin 1s linear infinite;
+}
+
+.dawn.exchange-market .poolpanel.pool-workbench[data-receiving='true'] {
+  animation: pool-workbench-receive 450ms ease-out;
+}
+
+.dawn.exchange-market .pool-workbench .pool-autobuild-settings {
+  border: 0;
+  border-radius: 12px;
+  padding: 11px 12px;
+  margin-bottom: 14px;
+  background: color-mix(in srgb, var(--surface-card) 60%, transparent);
+  box-shadow: none;
+}
+
+.dawn.exchange-market .pool-workbench .pool-autobuild-settings > button {
+  min-height: 44px;
+  flex-wrap: wrap;
+}
+
+@keyframes pool-test-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@property --pool-ring-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes pool-test-ring {
+  to {
+    --pool-ring-angle: 360deg;
+  }
+}
+
+@keyframes pool-workbench-receive {
+  35% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--dawn-copper) 14%, transparent),
+      0 12px 44px rgb(24 24 28 / 0.055);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dawn.exchange-market .pool-workbench .btn,
+  .dawn.exchange-market .pool-workbench :is(input, select) {
+    transition: none;
+  }
+
+  .dawn.exchange-market .pool-workbench .pool-test-spinner,
+  .dawn.exchange-market .pool-workbench .pool-test-trigger.is-testing::after,
+  .dawn.exchange-market .poolpanel.pool-workbench[data-receiving='true'] {
+    animation: none;
+  }
+}

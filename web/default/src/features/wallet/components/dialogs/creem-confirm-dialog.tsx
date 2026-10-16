@@ -52,7 +52,7 @@ export function CreemConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-sm:w-[calc(100vw-1.5rem)] sm:max-w-[425px]'>
+      <DialogContent className='commerce-dialog max-sm:w-[calc(100vw-1.5rem)] sm:max-w-[425px]'>
         <DialogHeader>
           <DialogTitle>{t('Confirm Creem Purchase')}</DialogTitle>
           <DialogDescription>
@@ -67,13 +67,15 @@ export function CreemConfirmDialog({
           </div>
           <div className='flex items-center justify-between'>
             <span className='text-muted-foreground'>{t('Price')}</span>
-            <span className='font-medium text-indigo-600'>
+            <span className='font-mono font-medium tabular-nums'>
               {formatCreemPrice(product.price, product.currency)}
             </span>
           </div>
           <div className='flex items-center justify-between'>
             <span className='text-muted-foreground'>{t('Quota')}</span>
-            <span className='font-medium'>{formatNumber(product.quota)}</span>
+            <span className='font-mono font-medium tabular-nums'>
+              {formatNumber(product.quota)}
+            </span>
           </div>
         </div>
 

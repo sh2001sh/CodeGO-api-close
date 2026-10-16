@@ -28,6 +28,8 @@ import {
   type InputHTMLAttributes,
   type MouseEvent as ReactMouseEvent,
 } from 'react'
+import interfaceI18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import { ChevronDown, Copy, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -323,9 +325,11 @@ function formatTokenHint(n: number | string | null | undefined): string {
   if (n == null || n === '' || Number.isNaN(Number(n))) return ''
   const v = Number(n)
   if (v === 0) return '= 0'
-  if (v >= 1_000_000) return `= ${(v / 1_000_000).toLocaleString()}M tokens`
-  if (v >= 1_000) return `= ${(v / 1_000).toLocaleString()}K tokens`
-  return `= ${v.toLocaleString()} tokens`
+  if (v >= 1_000_000)
+    return `= ${(v / 1_000_000).toLocaleString(getIntlLocale())}M tokens`
+  if (v >= 1_000)
+    return `= ${(v / 1_000).toLocaleString(getIntlLocale())}K tokens`
+  return `= ${v.toLocaleString(getIntlLocale())} tokens`
 }
 
 function formatNumberDraft(value: number | string): string {
@@ -496,7 +500,7 @@ function ConditionRow({ condition, onChange, onRemove }: ConditionRowProps) {
         variant='ghost'
         size='icon'
         onClick={onRemove}
-        aria-label='remove'
+        aria-label={interfaceI18n.t('remove')}
         className='ml-auto'
       >
         <Trash2 className='text-destructive h-4 w-4' />
@@ -659,9 +663,7 @@ function VisualTierCard({
           </Button>
         </div>
         {tier.conditions.length === 0 ? (
-          <p className='text-muted-foreground text-xs'>
-            {t('Always matches (default tier).')}
-          </p>
+          <p className='text-muted-foreground text-base'>{t('Default tier')}</p>
         ) : (
           tier.conditions.map((condition, conditionIndex) => (
             <ConditionRow
@@ -840,10 +842,8 @@ function VisualEditor({ visualConfig, onChange }: VisualEditorProps) {
 
   return (
     <div className='space-y-2'>
-      <p className='text-muted-foreground text-xs'>
-        {t(
-          'Each tier supports up to 2 conditions. The last tier without conditions is the fallback.'
-        )}
+      <p className='text-muted-foreground text-base'>
+        {t('≤ 2 conditions / tier · Last unconditional tier: fallback')}
       </p>
       {config.tiers.map((tier, index) => (
         <VisualTierCard
@@ -1387,11 +1387,6 @@ function CostEstimator({ effectiveExpr }: EstimatorProps) {
     <div className='bg-muted/30 space-y-3 rounded-md border p-3'>
       <div className='space-y-1'>
         <h4 className='text-sm font-medium'>{t('Token estimator')}</h4>
-        <p className='text-muted-foreground text-xs'>
-          {t(
-            'Enter token counts to preview the estimated cost (excluding group multipliers).'
-          )}
-        </p>
       </div>
       <div className='grid grid-cols-2 gap-3'>
         <div className='space-y-1'>
@@ -1455,7 +1450,8 @@ function CostEstimator({ effectiveExpr }: EstimatorProps) {
         ) : (
           <div className='flex items-center gap-2'>
             <span className='font-medium'>
-              {t('Estimated quota cost')}: {result.cost.toLocaleString()}
+              {t('Estimated quota cost')}:{' '}
+              {result.cost.toLocaleString(getIntlLocale())}
             </span>
             {result.matchedTier && (
               <Badge variant='outline' className='text-xs'>
@@ -1589,11 +1585,6 @@ function LlmPromptHelper({ modelName }: LlmPromptHelperProps) {
       <CollapsibleContent className='mt-2'>
         <div className='bg-muted/30 rounded-md border p-3'>
           <div className='mb-2 flex items-center justify-between'>
-            <p className='text-muted-foreground text-xs'>
-              {t(
-                'Copy this prompt and send it to an LLM (e.g. ChatGPT / Claude) to help design your billing expression.'
-              )}
-            </p>
             <Button
               variant='outline'
               size='sm'
@@ -1816,9 +1807,9 @@ export const TieredPricingEditor = memo(function TieredPricingEditor({
               <h4 className='text-sm font-medium'>
                 {t('Request rule pricing')}
               </h4>
-              <p className='text-muted-foreground text-xs'>
+              <p className='text-muted-foreground text-base'>
                 {t(
-                  'When conditions match, the final price is multiplied by X. Multiple matches multiply together; values < 1 act as discounts.'
+                  'Final price × X · Multiple matches: product · X < 1: discount'
                 )}
               </p>
             </div>

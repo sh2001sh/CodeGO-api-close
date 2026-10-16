@@ -22,13 +22,14 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useStatus } from '@/hooks/use-status'
 import { getPricing } from '../api'
 
-export function usePricingData() {
+export function usePricingData(enabled = true) {
   const { status } = useStatus()
   const userID = useAuthStore((state) => state.auth.user?.id)
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['pricing', userID],
     queryFn: getPricing,
+    enabled,
     staleTime: 60 * 1000,
   })
 
@@ -43,7 +44,7 @@ export function usePricingData() {
   )
 
   const pricingModels = useMemo(() => {
-    if (!data?.data || !data?.vendors) {
+    if (!enabled || !data?.data || !data?.vendors) {
       return { models: [], pricedModelDetails: [] }
     }
 
@@ -65,7 +66,7 @@ export function usePricingData() {
       models: data.data.map(enrich),
       pricedModelDetails: (data.priced_model_details ?? []).map(enrich),
     }
-  }, [data])
+  }, [data, enabled])
   const models = pricingModels.models
   const pricedModelDetails = pricingModels.pricedModelDetails
 

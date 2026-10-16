@@ -241,6 +241,9 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 		}
 
 	case types.RelayFormatGemini:
+		if strings.TrimSpace(lastStreamData) == "" {
+			return
+		}
 		var streamResponse dto.ChatCompletionsStreamResponse
 		if err := platformencoding.Unmarshal(platformtext.StringToByteSlice(lastStreamData), &streamResponse); err != nil {
 			platformobservability.SysLog("error unmarshalling stream response: " + err.Error())

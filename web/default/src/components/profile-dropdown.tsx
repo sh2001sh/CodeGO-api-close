@@ -18,15 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import {
-  User,
-  Wallet,
-  LogOut,
-  Settings,
-  Sparkles,
-  Workflow,
-  ReceiptText,
-} from 'lucide-react'
+import { User, Wallet, LogOut, Settings, Workflow } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
@@ -43,9 +35,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { SignOutDialog } from '@/components/sign-out-dialog'
-import { TierBadge } from '@/features/daily-lucky-number/components/tier-badge'
-import { useDailyLuckyNumberSelf } from '@/features/daily-lucky-number/hooks/use-daily-lucky-number'
-import { getMembershipTierRank } from '@/features/daily-lucky-number/lib'
 
 const avatarFallbackClassName = 'font-semibold text-white'
 
@@ -62,17 +51,6 @@ export function ProfileDropdown() {
     () => getUserAvatarStyle(avatarName),
     [avatarName]
   )
-  const dailyLuckyQuery = useDailyLuckyNumberSelf(Boolean(user))
-  const featuredLuckyCard = useMemo(() => {
-    const cards = dailyLuckyQuery.data?.subscriptions ?? []
-    return [...cards].sort((left, right) => {
-      const tierDifference =
-        getMembershipTierRank(right.plan.membership_tier) -
-        getMembershipTierRank(left.plan.membership_tier)
-      if (tierDifference !== 0) return tierDifference
-      return right.subscription.end_time - left.subscription.end_time
-    })[0]
-  }, [dailyLuckyQuery.data?.subscriptions])
   return (
     <>
       <DropdownMenu modal={false}>
@@ -80,7 +58,8 @@ export function ProfileDropdown() {
           render={
             <Button
               variant='ghost'
-              className='relative h-8 gap-1 rounded-full px-1.5'
+              aria-label={t('Account menu')}
+              className='relative size-11 rounded-md p-2'
             />
           }
         >
@@ -134,34 +113,6 @@ export function ProfileDropdown() {
             <Wallet className='size-4' />
             {t('Wallet')}
           </DropdownMenuItem>
-
-          <DropdownMenuItem onClick={() => navigate({ to: '/invoices' })}>
-            <ReceiptText className='size-4' />
-            <Trans i18nKey={'电子发票'} />
-          </DropdownMenuItem>
-
-          {featuredLuckyCard?.number ? (
-            <DropdownMenuItem
-              className='items-start gap-2'
-              onClick={() => navigate({ to: '/daily-lucky-number' })}
-            >
-              <Sparkles className='mt-0.5 size-4 shrink-0' />
-              <span className='min-w-0'>
-                <span className='block text-xs font-medium'>
-                  {t('Daily Lucky Number')}
-                </span>
-                <span className='mt-1 flex min-w-0 items-center gap-1.5'>
-                  <TierBadge
-                    tier={featuredLuckyCard.plan.membership_tier}
-                    compact
-                  />
-                  <span className='truncate font-mono text-[11px] tabular-nums'>
-                    {featuredLuckyCard.number.card_code}
-                  </span>
-                </span>
-              </span>
-            </DropdownMenuItem>
-          ) : null}
 
           {isSuperAdmin && (
             <>

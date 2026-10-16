@@ -20,7 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
  * Theme customization — density and layout attributes.
  *
  * The multi-preset color switcher was removed: the app ships a single
- * CodeGo dawn-copper palette defined in ./theme.css. What remains here
+ * CodeGo Solaris Optics palette defined in ./theme.css. What remains here
  * are the user-adjustable density/layout attributes applied on <body>:
  *   <body data-theme-radius="lg" data-theme-scale="sm" />
  */

@@ -26,7 +26,6 @@ import { Combobox } from '@/components/ui/combobox'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -172,14 +171,11 @@ export function PaymentMethodDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-[500px]'>
+      <DialogContent className='settings-dialog sm:max-w-[500px]'>
         <DialogHeader>
           <DialogTitle>
             {isEditMode ? t('Edit payment method') : t('Add payment method')}
           </DialogTitle>
-          <DialogDescription>
-            {t('Configure a payment method for user recharge options.')}
-          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -196,9 +192,7 @@ export function PaymentMethodDialog({
                   <FormControl>
                     <Input placeholder={t('e.g., Alipay, WeChat')} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t('Display name for this payment method.')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -215,14 +209,11 @@ export function PaymentMethodDialog({
                       options={PAYMENT_TYPES}
                       value={field.value}
                       onValueChange={field.onChange}
-                      placeholder={t('Select or enter payment type')}
                       searchPlaceholder={t('Search payment types...')}
                       allowCustomValue
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('Select from presets or type custom identifier.')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -240,7 +231,6 @@ export function PaymentMethodDialog({
                         options={COLOR_PRESETS}
                         value={field.value}
                         onValueChange={field.onChange}
-                        placeholder={t('Select or enter color value')}
                         searchPlaceholder={t('Search colors...')}
                         allowCustomValue
                         className='flex-1'
@@ -254,9 +244,7 @@ export function PaymentMethodDialog({
                       )}
                     </div>
                   </FormControl>
-                  <FormDescription>
-                    {t('Select preset or enter custom CSS color value.')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -277,7 +265,7 @@ export function PaymentMethodDialog({
                     />
                   </FormControl>
                   <FormDescription>
-                    {t('Optional minimum recharge amount for this method.')}
+                    {t('Minimum recharge amount')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

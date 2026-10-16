@@ -81,6 +81,58 @@ func (c *HybridCache[V]) Get(key string) (value V, found bool, err error) {
 	return c.GetWithTimeout(key, defaultRedisOpTimeout)
 }
 
+// GetManyWithTimeout reads one snapshot in a single Redis round trip. Missing
+// keys are omitted, including on the memory backend.
+func (c *HybridCache[V]) GetManyWithTimeout(keys []string, timeout time.Duration) (map[string]V, error) {
+	values := make(map[string]V, len(keys))
+	if len(keys) == 0 {
+		return values, nil
+	}
+	if !c.redisOn() {
+		for _, key := range keys {
+			value, found, err := c.memCache().Get(c.ns.FullKey(key))
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				values[key] = value
+			}
+		}
+		return values, nil
+	}
+	fullKeys := make([]string, len(keys))
+	for index, key := range keys {
+		fullKeys[index] = c.ns.FullKey(key)
+	}
+	if timeout <= 0 {
+		timeout = defaultRedisOpTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	rows, err := c.redis.MGet(ctx, fullKeys...).Result()
+	if err != nil {
+		return nil, err
+	}
+	var decodeError error
+	for index, row := range rows {
+		if row == nil {
+			continue
+		}
+		raw, ok := row.(string)
+		if !ok {
+			decodeError = errors.Join(decodeError, errors.New("invalid cached value type"))
+			continue
+		}
+		value, err := c.redisCodec.Decode(raw)
+		if err != nil {
+			decodeError = errors.Join(decodeError, err)
+			continue
+		}
+		values[keys[index]] = value
+	}
+	return values, decodeError
+}
+
 // GetWithTimeout reads a value with a caller-specific Redis latency budget.
 // The memory fallback is unaffected by the timeout.
 func (c *HybridCache[V]) GetWithTimeout(key string, timeout time.Duration) (value V, found bool, err error) {

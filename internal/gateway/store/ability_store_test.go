@@ -166,6 +166,7 @@ func TestHasAlternativeSelectableRouteHonorsRoutePoolMembership(t *testing.T) {
 	require.NoError(t, db.Create(&gatewayschema.RoutePoolMember{
 		RoutePoolID: pool.ID, ChannelID: 1, CostMultiplier: 0.05, Enabled: true,
 	}).Error)
+	InvalidateRoutePoolCache()
 
 	alternative, err := HasAlternativeSelectableRoute(1, "default", "gpt-test")
 	require.NoError(t, err)

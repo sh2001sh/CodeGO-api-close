@@ -3,12 +3,12 @@ package app
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/sh2001sh/new-api/constant"
+	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
@@ -91,6 +91,7 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		MaintenanceWindow: strings.TrimSpace(req.MaintenanceWindow), Status: marketplacedomain.LifecycleDraft,
 		SensitiveWordInterceptionEnabled: &sensitiveWordInterceptionEnabled,
 		MultiplierCardSupported:          req.MultiplierCardSupported,
+		CreditPackSupported:              req.CreditPackSupported,
 		MultiplierCardUserEnabled:        req.MultiplierCardUserEnabled,
 		AutoProbeEnabled:                 req.AutoProbeEnabled, AutoProbeIntervalMinutes: req.AutoProbeIntervalMinutes,
 		AutoProbeModel: strings.TrimSpace(req.AutoProbeModel),
@@ -104,6 +105,9 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 	}
 	markMarketplaceCapabilitiesPending(channel)
 	group := newMarketplaceGroup(channelID, ownerUserID, ownerName, sourceLabel, req.Multiplier, req.Visibility)
+	if err := applyPublicPresentation(group, &req.CustomName, &req.Description, &req.Tags); err != nil {
+		return nil, nil, err
+	}
 	return channel, group, nil
 }
 
@@ -132,8 +136,31 @@ func newMarketplaceGroup(channelID string, ownerUserID int, ownerName, sourceLab
 }
 
 func ListOwnerChannels(ownerUserID int) ([]ChannelView, error) {
+	return listOwnerChannelViews(ownerUserID, nil)
+}
+
+// ListOwnerChannelsByIDs hydrates only the visible inventory page. The ownership
+// predicate is applied before any group, income, or verification data is loaded.
+func ListOwnerChannelsByIDs(ownerUserID int, ids []string) ([]ChannelView, error) {
+	if ownerUserID <= 0 {
+		return nil, errors.New("用户未登录")
+	}
+	if len(ids) > 50 {
+		return nil, errors.New("每次最多查询 50 个渠道")
+	}
+	if len(ids) == 0 {
+		return []ChannelView{}, nil
+	}
+	return listOwnerChannelViews(ownerUserID, ids)
+}
+
+func listOwnerChannelViews(ownerUserID int, ids []string) ([]ChannelView, error) {
 	var channels []marketplaceschema.Channel
-	if err := platformdb.DB.Unscoped().Where("owner_user_id = ?", ownerUserID).Order("deleted_at asc, created_at desc").Find(&channels).Error; err != nil {
+	query := platformdb.DB.Unscoped().Omit("base_url_ciphertext", "credential_ciphertext", "transport_capabilities", "gpt56_mapping_results").Where("owner_user_id = ?", ownerUserID)
+	if ids != nil {
+		query = query.Where("id IN ?", ids)
+	}
+	if err := query.Order("deleted_at asc, created_at desc, id asc").Find(&channels).Error; err != nil {
 		return nil, err
 	}
 	groups, err := groupsByChannelIDsWithDeleted(channelIDs(channels))
@@ -225,6 +252,9 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 	}); err != nil {
 		return nil, err
 	}
+	if capabilitiesChanged || !channel.AutoProbeEnabled {
+		marketplaceAutoProbeTasks.cancelChannel(channel.ID)
+	}
 	invalidateAdminMarketplaceStatsCache()
 	if channel.InternalChannelID != nil {
 		if err := syncInternalChannel(channel, group); err != nil {
@@ -248,25 +278,7 @@ func PauseOwnerChannel(ownerUserID int, channelID string, paused bool) error {
 	} else if group.VerificationStatus != marketplacedomain.VerificationPassed {
 		return errors.New("检测未通过，不能恢复服务")
 	}
-	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(channel).Update("status", status).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(group).Update("lifecycle_status", status).Error; err != nil {
-			return err
-		}
-		if paused {
-			return removeGroupFromRoutePools(tx, group.ID)
-		}
-		return nil
-	})
-	if err == nil {
-		err = syncPausedMarketplaceChannel(channel, paused)
-	}
-	if err == nil {
-		invalidateAdminMarketplaceStatsCache()
-	}
-	return err
+	return setMarketplaceChannelLifecycle(channel, group, status, paused)
 }
 
 func PauseAdminChannel(channelID string, paused bool) error {
@@ -278,25 +290,30 @@ func PauseAdminChannel(channelID string, paused bool) error {
 	if paused {
 		status = marketplacedomain.LifecycleSuspended
 	}
-	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	return setMarketplaceChannelLifecycle(channel, group, status, paused)
+}
+
+func setMarketplaceChannelLifecycle(channel *marketplaceschema.Channel, group *marketplaceschema.Group, status string, paused bool) error {
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(channel).Update("status", status).Error; err != nil {
 			return err
 		}
 		if err := tx.Model(group).Update("lifecycle_status", status).Error; err != nil {
 			return err
 		}
-		if paused {
-			return removeGroupFromRoutePools(tx, group.ID)
-		}
-		return nil
+		return syncPausedMarketplaceChannelWithDB(tx, channel, paused)
 	})
-	if err == nil {
-		err = syncPausedMarketplaceChannel(channel, paused)
+	if err != nil {
+		return err
 	}
-	if err == nil {
-		invalidateAdminMarketplaceStatsCache()
+	if paused {
+		marketplaceAutoProbeTasks.cancelChannel(channel.ID)
+		marketplaceVerificationTasks.cancelChannel(channel.ID)
 	}
-	return err
+	gatewaystore.InitChannelCache()
+	gatewaystore.NotifyChannelCacheChanged()
+	invalidateAdminMarketplaceStatsCache()
+	return nil
 }
 
 // syncPausedMarketplaceChannel prevents a paused marketplace channel from
@@ -304,26 +321,35 @@ func PauseAdminChannel(channelID string, paused bool) error {
 // Marketplace and gateway channels are stored separately, so the lifecycle
 // update must be reflected in the linked internal channel explicitly.
 func syncPausedMarketplaceChannel(channel *marketplaceschema.Channel, paused bool) error {
+	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		return syncPausedMarketplaceChannelWithDB(tx, channel, paused)
+	}); err != nil {
+		return err
+	}
+	gatewaystore.InitChannelCache()
+	gatewaystore.NotifyChannelCacheChanged()
+	return nil
+}
+
+func syncPausedMarketplaceChannelWithDB(tx *gorm.DB, channel *marketplaceschema.Channel, paused bool) error {
 	if channel == nil || channel.InternalChannelID == nil || *channel.InternalChannelID <= 0 {
 		return nil
 	}
 	targetStatus := constant.ChannelStatusEnabled
-	reason := "marketplace channel resumed"
 	if paused {
 		targetStatus = constant.ChannelStatusManuallyDisabled
-		reason = "marketplace channel paused by owner or administrator"
 	}
-	internal, err := gatewaystore.LoadChannelByID(*channel.InternalChannelID, true)
-	if err != nil {
+	var internal gatewayschema.Channel
+	if err := tx.First(&internal, *channel.InternalChannelID).Error; err != nil {
 		return err
 	}
-	if internal.Status == targetStatus {
-		return nil
+	if err := tx.Model(&internal).Update("status", targetStatus).Error; err != nil {
+		return err
 	}
-	if !gatewaystore.UpdateChannelStatus(internal.Id, "", targetStatus, reason) {
-		return fmt.Errorf("同步市场渠道 %s 的内部渠道状态失败", channel.ID)
-	}
-	return nil
+	internal.Status = targetStatus
+	// Rebuild missing abilities too: an enabled channel alone does not make
+	// its original group/model selectable after a pause or interrupted sync.
+	return gatewaystore.UpdateChannelAbilities(&internal, tx)
 }
 
 func SetChannelUserBlock(ownerUserID int, channelID string, targetUserID int, blocked bool) error {

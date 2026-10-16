@@ -419,6 +419,8 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 			summary.Quota = composeTieredTextQuota(relayInfo, summary, tieredQuota, tieredRes)
 		}
 	}
+	quotaBeforeServiceTier := summary.Quota
+	summary.Quota = relayInfo.ServiceTierQuota(summary.Quota)
 	discountDetail := calculateUsageConsumptionDiscount(relayInfo, summary.Quota)
 	summary.Quota = discountDetail.QuotaAfterDiscount
 
@@ -525,6 +527,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	}
 	appendTextBillingClassification(other, relayInfo, summary, usedFallbackUsage)
 	appendUsageConsumptionDiscountInfo(other, discountDetail)
+	appendServiceTierCalculation(other, relayInfo, quotaBeforeServiceTier, summary.Quota)
 	gatewayruntime.AttachRouteLogInfo(ctx, other)
 
 	auditapp.RecordConsumeLog(ctx, relayInfo.UserId, auditschema.RecordConsumeLogParams{

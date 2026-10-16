@@ -1,0 +1,228 @@
+common.invalid_params: 無効なパラメータ
+common.database_error: データベースエラー。管理者に連絡してください
+common.retry_later: 後でもう一度試してください
+common.generate_failed: 生成に失敗しました
+common.not_found: 見つかりません
+common.unauthorized: 無許可
+common.forbidden: 禁止
+common.invalid_id: 無効なID
+common.id_empty: IDが空です！
+common.feature_disabled: この機能は有効になっていません
+common.operation_success: 操作は成功しました
+common.operation_failed: 操作が失敗しました
+common.update_success: 更新に成功しました
+common.update_failed: アップデートに失敗しました
+common.create_success: 作成に成功しました
+common.create_failed: 作成に失敗しました
+common.delete_success: 削除に成功しました
+common.delete_failed: 削除に失敗しました
+common.already_exists: すでに存在します
+common.name_cannot_be_empty: 名前を空にすることはできません
+common.batch_too_many: バッチリクエストの項目が多すぎます。最大値は {{.Max}} です
+auth.not_logged_in: 無許可、ログインされておらず、アクセス権なし token が提供されました
+auth.access_token_invalid: 不正、無効なアクセス token
+auth.user_info_invalid: 許可されていない無効なユーザー情報
+auth.user_id_not_provided: 許可されていない、New-Api-User ヘッダーが提供されていません
+auth.user_id_format_error: 不正な New-Api-User ヘッダー フォーマット エラー
+auth.user_id_mismatch: 権限がありません。New-Api-User がログイン ユーザーと一致しません
+auth.user_banned: ユーザーが禁止されました
+auth.insufficient_privilege: 許可されていない、権限が不十分です
+token.name_too_long: Token 名が長すぎます
+token.quota_negative: クォータ値を負にすることはできません
+token.quota_exceed_max: クォータ値が有効範囲を超えています。最大値は {{.Max}} です
+token.generate_failed: tokenの生成に失敗しました
+token.get_info_failed: token 情報を取得できませんでした。後でもう一度お試しください。
+token.expired_cannot_enable: Token は有効期限が切れているため、有効にすることができません。有効期限を変更するか、有効期限が切れないように設定してください
+token.exhausted_cannot_enable: Token クォータが枯渇しているため、有効にできません。残りの割り当てを変更するか、無制限に設定してください
+token.invalid: 無効なtoken
+token.not_provided: Tokenは提供されません
+token.expired: この token は有効期限が切れています
+token.exhausted: この token クォータは使い果たされました TokenStatusExhausted[sk-{{.Prefix}}***{{.Suffix}}]
+token.status_unavailable: この token ステータスは利用できません
+token.db_error: 無効な token、データベース クエリ エラー。管理者に問い合わせてください。
+redemption.name_length: 引き換えコード名の長さは 1 ～ 20 でなければなりません
+redemption.count_positive: 引き換えコード数は 0 より大きくなければなりません
+redemption.count_max: 一度に最大 100 個の引き換えコードを生成できます
+redemption.create_failed: 引き換えコードの作成に失敗しました。後でもう一度お試しください。
+redemption.invalid: 無効な引き換えコード
+redemption.used: この引き換えコードは使用されました
+redemption.expired: この引き換えコードの有効期限が切れています
+redemption.busy: システムがビジー状態です。後でもう一度お試しください。
+redemption.failed: 引き換えに失敗しました。後でもう一度お試しください
+redemption.not_provided: 引き換えコードが提供されていません
+redemption.expire_time_invalid: 有効期限を現在時刻より早くすることはできません
+user.password_login_disabled: パスワードによるログインは管理者によって無効にされています
+user.register_disabled: 管理者により新規ユーザー登録が無効にされています
+user.password_register_disabled: パスワードの登録は管理者によって無効にされています。サードパーティのアカウント認証を使用してください。
+user.username_or_password_empty: ユーザー名またはパスワードが空です
+user.username_or_password_error: ユーザー名またはパスワードが間違っているか、ユーザーが禁止されています
+user.email_or_password_empty: メールアドレスまたはパスワードが空です!
+user.exists: ユーザー名はすでに存在するか削除されています
+user.not_exists: ユーザーが存在しません
+user.disabled: このユーザーは無効になっています
+user.session_save_failed: セッションを保存できませんでした。もう一度お試しください。
+user.require_2fa: 2要素認証コードを入力してください
+user.email_verification_required: メール認証が有効になっています。メールアドレスと認証コードを入力してください
+user.verification_code_error: 認証コードが間違っているか、有効期限が切れています
+user.input_invalid: 無効な入力 {{.Error}}
+user.no_permission_same_level: 同じレベル以上のユーザーにアクセスする権限はありません
+user.no_permission_higher_level: 同じまたはそれ以上の権限レベルのユーザーを更新する権限がありません
+user.cannot_create_higher_level: 自分と同じまたはそれ以上の権限レベルを持つユーザーを作成することはできません
+user.cannot_delete_root_user: スーパー管理者アカウントを削除できません
+user.cannot_disable_root_user: スーパー管理者ユーザーを無効にできません
+user.cannot_demote_root_user: スーパー管理者ユーザーを降格できません
+user.already_admin: このユーザーはすでに管理者です
+user.already_common: このユーザーはすでに一般ユーザーです
+user.admin_cannot_promote: 通常の管理者は他のユーザーを管理者に昇格させることはできません
+user.original_password_error: 元のパスワードが間違っています
+user.invite_quota_insufficient: 招待枠が足りません！
+user.transfer_quota_minimum: 最小転送割り当ては {{.Min}} です!
+user.transfer_success: 転送成功
+user.transfer_failed: 転送に失敗しました {{.Error}}
+user.topup_processing: 補充処理中です。後でもう一度お試しください。
+user.register_failed: ユーザー登録失敗、またはユーザーID取得失敗
+user.default_token_failed: デフォルトのtokenの生成に失敗しました
+user.aff_code_empty: アフィリエイトコードが空です!
+user.email_empty: メールが空です!
+user.github_id_empty: GitHub ID が空です!
+user.discord_id_empty: DiscordのIDが空です！
+user.oidc_id_empty: OIDC ID が空です!
+user.wechat_id_empty: WeChat ID が空です!
+user.telegram_id_empty: テレグラムIDが空です!
+user.telegram_not_bound: この Telegram アカウントはバインドされていません
+user.linux_do_id_empty: Linux DO ID が空です!
+user.quota_change_zero: クォータ変更量をゼロにすることはできません
+quota.negative: クォータを負の値にすることはできません。
+quota.exceed_max: クォータ値が有効範囲を超えています
+quota.insufficient: 割り当てが不十分です
+quota.warning_invalid: 無効な警告タイプです
+quota.threshold_gt_zero: 警告しきい値は 0 より大きくなければなりません
+subscription.not_enabled: サブスクリプションプランが有効になっていません
+subscription.title_empty: サブスクリプションプランのタイトルを空にすることはできません
+subscription.price_negative: 価格をマイナスにすることはできません
+subscription.price_max: 価格は9999を超えることはできません
+subscription.purchase_limit_negative: 購入制限をマイナスにすることはできません
+subscription.quota_negative: 合計クォータを負にすることはできません
+subscription.group_not_exists: アップグレードグループが存在しません
+subscription.reset_cycle_gt_zero: カスタム リセット サイクルは 0 秒より大きくなければなりません
+subscription.purchase_max: このプランの購入制限に達しました
+subscription.invalid_id: 無効なサブスクリプション ID
+subscription.invalid_user_id: 無効なユーザーID
+payment.not_configured: 支払い情報が管理者によって設定されていません
+payment.method_not_exists: 支払い方法が存在しません
+payment.callback_error: コールバック URL 構成エラー
+payment.create_failed: 注文の作成に失敗しました
+payment.start_failed: 支払いの開始に失敗しました
+payment.amount_too_low: プラン金額が低すぎる
+payment.stripe_not_configured: Stripe が設定されていないか、キーが無効です
+payment.webhook_not_configured: Webhook が設定されていません
+payment.price_id_not_configured: StripePriceId はこのプランに設定されていません
+payment.creem_not_configured: CreemProductId はこのプラン用に構成されていません
+payment.compliance_required: 支払い、引き換え、サブスクリプション、および招待特典の機能は無効になります。管理者は、有効にする前にコンプライアンス条件を確認する必要があります。
+topup.not_provided: 支払い注文番号が提供されていません
+topup.order_not_exists: チャージ注文は存在しません
+topup.order_status: チャージ注文ステータスエラー
+topup.failed: 補充に失敗しました。後でもう一度お試しください
+topup.invalid_quota: 無効な追加割り当て量
+channel.not_exists: チャンネルが存在しません
+channel.id_format_error: チャンネルIDフォーマットエラー
+channel.no_available_key: 利用可能なチャンネルキーがありません
+channel.get_list_failed: チャンネルリストを取得できませんでした。後でもう一度お試しください。
+channel.get_tags_failed: タグを取得できませんでした。後でもう一度お試しください。
+channel.get_key_failed: チャンネルキーの取得に失敗しました
+channel.get_ollama_failed: Ollama モデルの取得に失敗しました
+channel.query_failed: チャネルのクエリに失敗しました
+channel.no_valid_upstream: 有効なアップストリーム チャネルがありません
+channel.upstream_saturated: 現在のグループのアップストリーム負荷が飽和しています。後でもう一度試してください。
+channel.get_available_failed: グループ {{.Group}} の下のモデル {{.Model}} で使用可能なチャネルを取得できませんでした
+model.name_empty: モデル名を空にすることはできません
+model.name_exists: モデル名はすでに存在します
+model.id_missing: モデルIDがありません
+model.get_list_failed: モデルリストを取得できませんでした。後でもう一度お試しください。
+model.get_failed: 上流モデルの取得に失敗しました
+model.reset_success: モデル比率のリセットが成功しました
+vendor.name_empty: ベンダー名を空にすることはできません
+vendor.name_exists: ベンダー名はすでに存在します
+vendor.id_missing: ベンダーIDがありません
+group.name_type_empty: グループ名とタイプを空にすることはできません
+group.name_exists: グループ名はすでに存在します
+group.id_missing: グループIDがありません
+checkin.disabled: チェックイン機能が有効になっていません
+checkin.already_today: 今日はすでにチェックイン済みです
+checkin.failed: チェックインに失敗しました。後でもう一度お試しください
+checkin.quota_failed: 'チェックインに失敗しました: クォータ更新エラー'
+passkey.create_failed: パスキー認証情報を作成できません
+passkey.login_abnormal: パスキーログイン状態が異常です
+passkey.update_failed: パスキー認証情報の更新に失敗しました
+passkey.invalid_user_id: 無効なユーザーID
+passkey.verify_failed: パスキーの検証に失敗しました。再試行するか、管理者に連絡してください
+twofa.not_enabled: ユーザーは 2FA を有効にしていません
+twofa.user_id_empty: ユーザーIDを空にすることはできません
+twofa.already_exists: ユーザーはすでに 2FA を構成しています
+twofa.record_id_empty: 2FA レコード ID を空にすることはできません
+twofa.code_invalid: 認証コードまたはバックアップコードが間違っています
+rate_limit.reached: 'リクエスト制限に達しました: {{.Minutes}} 分で最大 {{.Max}} リクエスト'
+rate_limit.total_reached: '合計リクエスト制限に達しました: {{.Minutes}} 分間の最大 {{.Max}} リクエスト (失敗した試行を含む)'
+setting.invalid_type: 無効な警告タイプです
+setting.webhook_empty: Webhook URL を空にすることはできません
+setting.webhook_invalid: 無効な Webhook URL
+setting.email_invalid: 無効なメールアドレス
+setting.bark_url_empty: Bark プッシュ URL を空にすることはできません
+setting.bark_url_invalid: 無効な Bark プッシュ URL
+setting.gotify_url_empty: Gotify サーバーの URL を空にすることはできません
+setting.gotify_token_empty: Gotify token を空にすることはできません
+setting.gotify_url_invalid: 無効な Gotify サーバー URL
+setting.url_must_http: URL は http:// または https:// で始まる必要があります
+setting.saved: 設定が更新されました
+deployment.not_enabled: io.net モデルのデプロイメントが有効になっていない、または API キーがありません
+deployment.id_required: デプロイメント ID は必須です
+deployment.container_id_required: コンテナIDは必須です
+deployment.name_empty: デプロイメント名を空にすることはできません
+deployment.name_taken: デプロイ名は使用できません。別の名前を選択してください
+deployment.hardware_id_required: hardware_id パラメータは必須です
+deployment.hardware_invalid_id: 無効な hardware_id パラメータです
+deployment.api_key_required: api_key は必須です
+deployment.invalid_payload: 無効なリクエストペイロード
+deployment.not_found: コンテナの詳細が見つかりません
+performance.disk_cache_cleared: 非アクティブなディスクキャッシュがクリアされました
+performance.stats_reset: 統計がリセットされました
+performance.gc_executed: GCが実行されました
+ability.db_corrupted: データベースの一貫性が損なわれています
+ability.repair_running: 修復タスクはすでに実行中です。後でもう一度お試しください。
+oauth.invalid_code: 無効な認証コードです
+oauth.get_user_error: ユーザー情報の取得に失敗しました
+oauth.account_used: このアカウントは別のユーザーにバインドされています
+oauth.unknown_provider: 不明な OAuth プロバイダー
+oauth.state_invalid: 状態パラメータが空か不一致です
+oauth.not_enabled: '{{.Provider}} ログインと登録は管理者によって有効になっていません'
+oauth.user_deleted: ユーザーが削除されました
+oauth.user_banned: ユーザーが禁止されました
+oauth.bind_success: バインド成功
+oauth.already_bound: この {{.Provider}} アカウントはすでにバインドされています
+oauth.connect_failed: '{{.Provider}} サーバーに接続できません。後でもう一度試してください。'
+oauth.token_failed: '{{.Provider}} から token を取得できませんでした。設定を確認してください。'
+oauth.user_info_empty: '{{.Provider}} から空のユーザー情報が返されました。設定を確認してください。'
+oauth.trust_level_low: Linux DO 信頼レベルが管理者が要求する最小値を満たしていません
+redeem.failed: 引き換えに失敗しました。後でもう一度お試しください
+user.create_default_token_error: デフォルトのtokenの作成に失敗しました
+common.uuid_duplicate: 再試行してください。システムが重複した UUID を生成しました。
+common.invalid_input: 無効な入力
+distributor.invalid_request: '無効なリクエスト: {{.Error}}'
+distributor.invalid_channel_id: 無効なチャンネルIDです
+distributor.channel_disabled: このチャンネルは無効になっています
+distributor.affinity_channel_disabled: チャネル アフィニティによって選択されたチャネルが無効になり、ルールによって再試行が停止されました。管理者に連絡してください
+distributor.token_no_model_access: この token はどのモデルにもアクセスできません
+distributor.token_model_forbidden: この token はモデル {{.Model}} にアクセスできません
+distributor.model_name_required: モデル名が指定されていません。モデル名を空にすることはできません
+distributor.invalid_playground_request: '無効なプレイグラウンドリクエスト: {{.Error}}'
+distributor.group_access_denied: このグループにアクセスする権限がありません
+distributor.get_channel_failed: 'グループ {{.Group}} (ディストリビュータ) の下のモデル {{.Model}} で利用可能なチャネルを取得できませんでした: {{.Error}}'
+distributor.no_available_channel: グループ {{.Group}} (ディストリビュータ) の下にモデル {{.Model}} に使用可能なチャネルがありません
+distributor.invalid_request_parse_model: リクエストが無効です。モデルを解析できません
+custom_oauth.not_found: カスタム OAuth プロバイダーが見つかりません
+custom_oauth.slug_empty: スラグを空にすることはできません
+custom_oauth.slug_exists: スラッグはすでに存在します
+custom_oauth.name_empty: プロバイダー名を空にすることはできません
+custom_oauth.has_bindings: 既存のユーザー バインディングを持つプロバイダーは削除できません
+custom_oauth.binding_not_found: OAuth バインディングが見つかりません
+custom_oauth.provider_id_field_invalid: プロバイダーの応答からユーザー ID を抽出できませんでした

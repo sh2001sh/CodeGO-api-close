@@ -144,6 +144,8 @@ export function formatMessageForAPI(message: Message): ChatCompletionMessage {
 export function isValidMessage(message: Message): boolean {
   if (!message || !message.from || !message.versions.length) return false
 
+  if (message.from === 'assistant' && message.status === 'error') return false
+
   const content = message.versions[0]?.content
   if (content === undefined) return false
 
@@ -222,12 +224,9 @@ export function updateAssistantMessageWithError(
   errorCode?: string
 ): Message[] {
   return updateLastAssistantMessage(messages, (message) => {
-    const updatedMessage = updateCurrentVersionContent(
-      message,
-      `${ERROR_MESSAGES.API_REQUEST_ERROR}: ${errorMessage}`
-    )
     return {
-      ...updatedMessage,
+      ...message,
+      errorMessage,
       status: MESSAGE_STATUS.ERROR,
       isReasoningStreaming: false,
       errorCode: errorCode || null,
@@ -337,7 +336,7 @@ export function sanitizeMessagesOnLoad(messages: Message[]): Message[] {
     hasContent || hasReasoning
       ? {
           ...finalized,
-          status: MESSAGE_STATUS.COMPLETE,
+          status: 'cancelled',
           isReasoningStreaming: false,
         }
       : {

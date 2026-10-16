@@ -73,6 +73,9 @@ func usesLegacySubscriptionPeriodicQuota(plan *commerceschema.SubscriptionPlan, 
 	if plan == nil || sub == nil {
 		return false
 	}
+	if sub.CreditPackGrantedQuota > 0 {
+		return false
+	}
 	if commercedomain.NormalizeResetPeriod(plan.QuotaResetPeriod) == commerceschema.SubscriptionResetNever {
 		return false
 	}
@@ -80,6 +83,9 @@ func usesLegacySubscriptionPeriodicQuota(plan *commerceschema.SubscriptionPlan, 
 }
 
 func getSubscriptionPeriodAmount(plan *commerceschema.SubscriptionPlan, sub *commerceschema.UserSubscription) int64 {
+	if sub != nil && sub.CreditPackGrantedQuota > 0 {
+		return 0
+	}
 	if sub != nil && sub.PeriodAmount > 0 {
 		return sub.PeriodAmount
 	}
@@ -152,6 +158,9 @@ func applySubscriptionUsageDelta(plan *commerceschema.SubscriptionPlan, sub *com
 func maybeResetUserSubscriptionWithPlanTx(tx *gorm.DB, sub *commerceschema.UserSubscription, plan *commerceschema.SubscriptionPlan, now int64) error {
 	if tx == nil || sub == nil || plan == nil {
 		return errors.New("invalid reset args")
+	}
+	if sub.CreditPackGrantedQuota > 0 {
+		return nil
 	}
 	if commercedomain.NormalizeResetPeriod(plan.QuotaResetPeriod) == commerceschema.SubscriptionResetNever {
 		return nil

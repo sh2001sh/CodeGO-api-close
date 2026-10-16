@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -47,7 +47,9 @@ import { Switch } from '@/components/ui/switch'
 import { DateTimePicker } from '@/components/datetime-picker'
 import { deleteLogsBefore } from '../api'
 import { SettingsSection } from '../components/settings-section'
+import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
@@ -102,9 +104,7 @@ export function LogSettingsSection({
   const [isCleaning, setIsCleaning] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
-  useEffect(() => {
-    form.reset({ LogConsumeEnabled: defaultEnabled })
-  }, [defaultEnabled, form])
+  useResetForm(form, { LogConsumeEnabled: defaultEnabled })
 
   const purgeTimestamp = useMemo(() => {
     if (!purgeDate) return null
@@ -122,6 +122,7 @@ export function LogSettingsSection({
       key: 'LogConsumeEnabled',
       value: values.LogConsumeEnabled,
     })
+    form.reset(values)
   }
 
   const handleRequestCleanLogs = () => {
@@ -163,10 +164,13 @@ export function LogSettingsSection({
   return (
     <SettingsSection
       title={t('Log Maintenance')}
-      description={t('Control log retention and clean historical data.')}
+      description={t('Configure log consumption settings')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <FormField
             control={form.control}
             name='LogConsumeEnabled'
@@ -176,10 +180,8 @@ export function LogSettingsSection({
                   <FormLabel className='text-base'>
                     {t('Record quota usage')}
                   </FormLabel>
-                  <FormDescription>
-                    {t(
-                      'Track per-request consumption to power usage analytics. Keeping this on increases database writes.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('Per-request logging · Database writes')}
                   </FormDescription>
                 </div>
                 <FormControl>
@@ -196,10 +198,8 @@ export function LogSettingsSection({
           <div className='space-y-4 rounded-lg border p-4'>
             <div>
               <h4 className='text-sm font-medium'>{t('Clean history logs')}</h4>
-              <p className='text-muted-foreground text-sm'>
-                {t(
-                  'Remove all log entries created before the selected timestamp.'
-                )}
+              <p className='text-muted-foreground text-base'>
+                {t('Delete: time < selected timestamp')}
               </p>
             </div>
             <DateTimePicker value={purgeDate} onChange={setPurgeDate} />
@@ -225,13 +225,15 @@ export function LogSettingsSection({
             </div>
           </div>
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save log settings')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save log settings')}
+            </Button>
+          </div>
         </form>
       </Form>
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className='settings-dialog'>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('Confirm log cleanup')}</AlertDialogTitle>
             <AlertDialogDescription>

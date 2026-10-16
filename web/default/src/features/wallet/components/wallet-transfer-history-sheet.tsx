@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { getIntlLocale } from '@/i18n/format'
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -68,7 +69,7 @@ export function WalletTransferHistorySheet(props: {
 
   return (
     <Sheet open={props.open} onOpenChange={props.onOpenChange}>
-      <SheetContent className='w-[calc(100vw-1rem)] sm:max-w-xl'>
+      <SheetContent className='commerce-dialog w-[calc(100vw-1rem)] sm:max-w-xl'>
         <SheetHeader className='border-b px-5 py-4 pr-14'>
           <SheetTitle className='flex items-center gap-2'>
             <Send className='text-primary size-5' />
@@ -139,7 +140,9 @@ export function WalletTransferHistorySheet(props: {
                       </div>
                       <div className='text-muted-foreground mt-2 flex flex-wrap justify-between gap-2 text-xs'>
                         <span>
-                          {new Date(item.created_at * 1000).toLocaleString()}
+                          {new Date(item.created_at * 1000).toLocaleString(
+                            getIntlLocale()
+                          )}
                         </span>
                         <span>
                           {t('Balance after')} {formatQuota(item.balance_after)}

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { useMemo, useState } from 'react'
 import i18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import {
   Building2,
   CalendarDays,
@@ -82,14 +83,14 @@ function formatMoney(amount: number, currency: string) {
 
 function formatDate(timestamp: number) {
   return timestamp
-    ? new Intl.DateTimeFormat('zh-CN', {
+    ? new Intl.DateTimeFormat(getIntlLocale(), {
         dateStyle: 'medium',
       }).format(timestamp * 1000)
     : '-'
 }
 
 function getOrderSourceLabel(sourceType: InvoiceEligibleOrder['source_type']) {
-  return sourceType === 'subscription' ? '套餐订单' : '充值订单'
+  return sourceType === 'subscription' ? i18n.t('套餐订单') : i18n.t('充值订单')
 }
 
 export function InvoiceRequestDialog({
@@ -114,11 +115,11 @@ export function InvoiceRequestDialog({
     setSubmitting(true)
     try {
       await createInvoiceRequest(form)
-      toast.success('发票申请已提交')
+      toast.success(i18n.t('发票申请已提交'))
       onOpenChange(false)
       onSubmitted()
     } catch {
-      toast.error('提交失败，请核对信息后重试')
+      toast.error(i18n.t('提交失败，请核对信息后重试'))
     } finally {
       setSubmitting(false)
     }
@@ -144,7 +145,7 @@ export function InvoiceRequestDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-h-[calc(100vh-2rem)] overflow-y-auto p-0 sm:max-w-2xl'>
+      <DialogContent className='commerce-dialog max-h-[calc(100vh-2rem)] overflow-y-auto p-0 sm:max-w-2xl'>
         <DialogHeader className='border-b px-5 pt-5 pb-4 sm:px-6'>
           <DialogTitle>
             <Trans i18nKey={'申请电子发票'} />
@@ -296,7 +297,9 @@ export function InvoiceRequestDialog({
                 <Input
                   value={form.title}
                   onChange={(event) => update('title', event.target.value)}
-                  placeholder={isEnterprise ? '企业全称' : '个人姓名'}
+                  placeholder={
+                    isEnterprise ? i18n.t('企业全称') : i18n.t('个人姓名')
+                  }
                   maxLength={255}
                 />
               </label>

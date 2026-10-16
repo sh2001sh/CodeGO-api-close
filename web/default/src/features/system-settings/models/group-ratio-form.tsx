@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { handleSettingsAction } from '../utils/settings-action'
 import { GroupRatioVisualEditor } from './group-ratio-visual-editor'
 import { GroupSpecialUsableRulesEditor } from './group-special-usable-editor'
 import { SubscriptionGroupPolicyEditor } from './subscription-group-policy-editor'
@@ -151,10 +152,8 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                     <FormLabel className='text-base'>
                       {t('Default to auto groups')}
                     </FormLabel>
-                    <FormDescription>
-                      {t(
-                        'When enabled, newly created tokens start in the first auto group.'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('New API key → auto groups[0]')}
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -167,12 +166,18 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               )}
             />
 
-            <Button onClick={form.handleSubmit(onSave)} disabled={isSaving}>
+            <Button
+              onClick={handleSettingsAction(form.handleSubmit(onSave))}
+              disabled={isSaving}
+            >
               {isSaving ? t('Saving...') : t('Save group ratios')}
             </Button>
           </div>
         ) : (
-          <form onSubmit={form.handleSubmit(onSave)} className='space-y-6'>
+          <form
+            onSubmit={handleSettingsAction(form.handleSubmit(onSave))}
+            className='space-y-6'
+          >
             <FormField
               control={form.control}
               name='GroupRatio'
@@ -182,10 +187,8 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                   <FormControl>
                     <Textarea rows={8} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'JSON map of group → ratio applied when the user selects the group explicitly.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('JSON { group: ratio }')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -202,9 +205,7 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                     <Textarea rows={6} {...field} />
                   </FormControl>
                   <FormDescription>
-                    {t(
-                      'Optional multiplier per user group used when calculating recharge pricing. Provide a JSON object such as'
-                    )}
+                    {t('JSON { group: ratio }')}
                     {` { "default": 1, "vip": 1.2 }`}.
                   </FormDescription>
                   <FormMessage />
@@ -221,10 +222,8 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                   <FormControl>
                     <Textarea rows={6} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'JSON map of group → description exposed when users create API keys.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('JSON { group: description }')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -241,11 +240,8 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                     <Textarea rows={8} {...field} />
                   </FormControl>
                   <FormDescription>
-                    {t('Nested JSON: source group →')}{' '}
-                    {`{ targetGroup: ratio }`}{' '}
-                    {t(
-                      'to override billing when a user in one group uses a token of another group.'
-                    )}
+                    {t('JSON { sourceGroup:')} {`{ targetGroup: ratio }`}{' '}
+                    {t('}')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -261,10 +257,8 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                   <FormControl>
                     <Textarea rows={6} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'JSON array of group identifiers. When enabled below, new tokens rotate through this list.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('JSON [group] · New API key → auto group')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -280,10 +274,8 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                   <FormControl>
                     <Textarea rows={8} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Nested JSON defining per-group rules for adding (+:), removing (-:), or appending usable groups.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('JSON { group: rules } · +: / -:')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -299,10 +291,8 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                   <FormControl>
                     <Textarea rows={8} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'JSON map of billing group to subscription enablement and multiplier.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('JSON { group: { enabled, ratio } }')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -318,10 +308,8 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                     <FormLabel className='text-base'>
                       {t('Default to auto groups')}
                     </FormLabel>
-                    <FormDescription>
-                      {t(
-                        'When enabled, newly created tokens start in the first auto group.'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('New API key → auto groups[0]')}
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -334,9 +322,11 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               )}
             />
 
-            <Button type='submit' disabled={isSaving}>
-              {isSaving ? t('Saving...') : t('Save group ratios')}
-            </Button>
+            <div className='settings-save-bar'>
+              <Button type='submit' disabled={isSaving}>
+                {isSaving ? t('Saving...') : t('Save group ratios')}
+              </Button>
+            </div>
           </form>
         )}
       </Form>
@@ -362,7 +352,10 @@ function GroupPricingGuide({ open, onOpenChange }: GroupPricingGuideProps) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side='right' className='w-full gap-0 p-0 sm:max-w-2xl'>
+      <SheetContent
+        side='right'
+        className='settings-dialog w-full gap-0 p-0 sm:max-w-2xl'
+      >
         <SheetHeader className='border-b p-4'>
           <SheetTitle>{t('Group pricing usage guide')}</SheetTitle>
           <SheetDescription>
@@ -419,21 +412,14 @@ function GroupPricingGuide({ open, onOpenChange }: GroupPricingGuideProps) {
             <AccordionItem value='groups'>
               <AccordionTrigger>{t('Pricing group example')}</AccordionTrigger>
               <AccordionContent className='space-y-3'>
-                <p className='text-muted-foreground text-sm leading-6'>
-                  {t(
-                    'Use the pricing group table to manage the ratio and whether the group appears in the token creation dropdown.'
-                  )}
-                </p>
                 <GuideCodeBlock>
                   {`${t('Group name')}   ${t('Ratio')}   ${t('User selectable')}   ${t('Description')}
 standard     1.0     ${t('Yes')}               ${t('Standard price')}
 premium      0.5     ${t('Yes')}               ${t('Premium plan, half price')}
 vip          0.5     ${t('No')}                ${t('Assigned by administrator only')}`}
                 </GuideCodeBlock>
-                <p className='text-muted-foreground text-sm leading-6'>
-                  {t(
-                    'Users only see groups marked as user selectable. Non-selectable groups can still be assigned by administrators.'
-                  )}
+                <p className='text-muted-foreground text-base leading-6'>
+                  {t('User selectable: visible · Admin: all groups')}
                 </p>
               </AccordionContent>
             </AccordionItem>
@@ -441,16 +427,12 @@ vip          0.5     ${t('No')}                ${t('Assigned by administrator on
             <AccordionItem value='auto'>
               <AccordionTrigger>{t('Auto group behavior')}</AccordionTrigger>
               <AccordionContent className='space-y-3'>
-                <p className='text-muted-foreground text-sm leading-6'>
-                  {t(
-                    'When a token uses the auto group, the system tries groups from top to bottom until it finds an available group.'
-                  )}
+                <p className='text-muted-foreground text-base leading-6'>
+                  {t('auto: first available group, top → bottom')}
                 </p>
                 <GuideCodeBlock>{`["default", "vip"]`}</GuideCodeBlock>
-                <p className='text-muted-foreground text-sm leading-6'>
-                  {t(
-                    'If default auto group is enabled, newly created tokens start with auto instead of an empty group.'
-                  )}
+                <p className='text-muted-foreground text-base leading-6'>
+                  {t('Default auto group: new API key → auto')}
                 </p>
               </AccordionContent>
             </AccordionItem>
@@ -458,10 +440,8 @@ vip          0.5     ${t('No')}                ${t('Assigned by administrator on
             <AccordionItem value='special-ratio'>
               <AccordionTrigger>{t('Special ratio rules')}</AccordionTrigger>
               <AccordionContent className='space-y-3'>
-                <p className='text-muted-foreground text-sm leading-6'>
-                  {t(
-                    'Special ratios override the token group ratio for specific user group and token group combinations.'
-                  )}
+                <p className='text-muted-foreground text-base leading-6'>
+                  {t('User group × Token group → Special ratio')}
                 </p>
                 <GuideCodeBlock>{`{
   "vip": {
@@ -469,10 +449,8 @@ vip          0.5     ${t('No')}                ${t('Assigned by administrator on
     "premium": 0.3
   }
 }`}</GuideCodeBlock>
-                <p className='text-muted-foreground text-sm leading-6'>
-                  {t(
-                    'Only configured combinations are overridden. All other calls keep the token group base ratio.'
-                  )}
+                <p className='text-muted-foreground text-base leading-6'>
+                  {t('Other calls → Base ratio')}
                 </p>
               </AccordionContent>
             </AccordionItem>
@@ -482,10 +460,8 @@ vip          0.5     ${t('No')}                ${t('Assigned by administrator on
                 {t('Special usable group rules')}
               </AccordionTrigger>
               <AccordionContent className='space-y-3'>
-                <p className='text-muted-foreground text-sm leading-6'>
-                  {t(
-                    'Special usable group rules can add, remove, or append selectable token groups for a specific user group.'
-                  )}
+                <p className='text-muted-foreground text-base leading-6'>
+                  {t('User group → Selectable token groups')}
                 </p>
                 <GuideCodeBlock>{`{
   "vip": {
@@ -494,10 +470,8 @@ vip          0.5     ${t('No')}                ${t('Assigned by administrator on
     "special": "${t('Special group')}"
   }
 }`}</GuideCodeBlock>
-                <p className='text-muted-foreground text-sm leading-6'>
-                  {t(
-                    'Use +: to add a group, -: to remove a default selectable group, or no prefix to append a group.'
-                  )}
+                <p className='text-muted-foreground text-base leading-6'>
+                  {t('+: add · -: remove · No prefix: append')}
                 </p>
               </AccordionContent>
             </AccordionItem>

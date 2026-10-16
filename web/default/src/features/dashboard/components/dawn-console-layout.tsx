@@ -16,10 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import '@/components/layout/components/console-shell.css'
 import { AnimatedOutlet } from '@/components/page-transition'
+import { SkipToMain } from '@/components/skip-to-main'
 import { DawnConsoleSidebar } from './dawn-console-sidebar'
 import { DawnConsoleTopNav } from './dawn-console-topnav'
 
@@ -32,26 +41,52 @@ interface DawnConsoleLayoutProps {
  * 声明的 --dawn-* 变量与 .dawn-console-* 样式同时生效。
  */
 export function DawnConsoleLayout({ children }: DawnConsoleLayoutProps) {
+  const { t } = useTranslation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 769px)')
+    const closeOnDesktop = () => {
+      if (desktop.matches) setSidebarOpen(false)
+    }
+    desktop.addEventListener('change', closeOnDesktop)
+    return () => desktop.removeEventListener('change', closeOnDesktop)
+  }, [])
 
   return (
     <LayoutProvider>
       <SearchProvider>
         <div className='dawn dawn-console-layout'>
-          <DawnConsoleTopNav onMenuClick={() => setSidebarOpen(true)} />
+          <SkipToMain />
+          <DawnConsoleTopNav
+            menuOpen={sidebarOpen}
+            onMenuClick={() => setSidebarOpen(true)}
+          />
           <div className='dawn-console-body'>
-            <DawnConsoleSidebar
-              open={sidebarOpen}
-              collapsed={sidebarCollapsed}
-              onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
-              onNavigate={() => setSidebarOpen(false)}
-            />
-            <div
-              className={`dawn-console-scrim${sidebarOpen ? 'show' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-              aria-hidden
-            />
+            <div className='console-desktop-sidebar'>
+              <DawnConsoleSidebar
+                open={sidebarOpen}
+                collapsed={sidebarCollapsed}
+                onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+                onNavigate={() => setSidebarOpen(false)}
+              />
+            </div>
+            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+              <SheetContent
+                side='left'
+                className='dawn console-mobile-sidebar w-[min(320px,88vw)] gap-0 p-0'
+                aria-describedby={undefined}
+              >
+                <SheetHeader className='border-b pr-16'>
+                  <SheetTitle>{t('Navigation')}</SheetTitle>
+                </SheetHeader>
+                <DawnConsoleSidebar
+                  open
+                  onNavigate={() => setSidebarOpen(false)}
+                />
+              </SheetContent>
+            </Sheet>
             <div className='dawn-console-main @container/content'>
               {children ?? <AnimatedOutlet />}
             </div>

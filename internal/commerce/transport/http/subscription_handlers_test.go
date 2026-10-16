@@ -422,8 +422,15 @@ func TestCreateSubscriptionClaudeConversionConsumesQuota(t *testing.T) {
 		t.Fatalf("failed to reload user: %v", err)
 	}
 	expectedQuota := int(30 * 0.6 * platformruntime.QuotaPerUnit)
-	if reloaded.ClaudeQuota != expectedQuota {
-		t.Fatalf("expected unified quota %d, got %d", expectedQuota, reloaded.ClaudeQuota)
+	if reloaded.ClaudeQuota != 0 {
+		t.Fatalf("conversion must not credit the ordinary wallet, got %d", reloaded.ClaudeQuota)
+	}
+	var converted commerceschema.UserSubscription
+	if err := db.Where("user_id = ? AND credit_pack_granted_quota > 0", user.Id).First(&converted).Error; err != nil {
+		t.Fatalf("failed to load converted permanent package: %v", err)
+	}
+	if converted.CreditPackGrantedQuota != int64(expectedQuota) || converted.CreditPackPaidQuota != int64(expectedQuota) || converted.EndTime != 0 {
+		t.Fatalf("unexpected converted package: granted=%d paid=%d end_time=%d", converted.CreditPackGrantedQuota, converted.CreditPackPaidQuota, converted.EndTime)
 	}
 }
 

@@ -18,21 +18,15 @@ func I18n() gin.HandlerFunc {
 }
 
 // detectLanguage determines the language preference for the request
-// Priority: 1. User setting (if logged in) -> 2. Accept-Language header -> 3. Default language
+// Priority: explicit request language, saved user setting, default language.
 func detectLanguage(c *gin.Context) string {
+	if acceptLang := c.GetHeader("Accept-Language"); acceptLang != "" {
+		return i18n.ParseAcceptLanguage(acceptLang)
+	}
 	// 1. Try to get language from user setting (set by auth middleware)
 	if userSetting, ok := httpctx.GetContextKeyType[dto.UserSetting](c, constant.ContextKeyUserSetting); ok {
 		if userSetting.Language != "" && i18n.IsSupported(userSetting.Language) {
 			return userSetting.Language
-		}
-	}
-
-	// 2. Parse Accept-Language header
-	acceptLang := c.GetHeader("Accept-Language")
-	if acceptLang != "" {
-		lang := i18n.ParseAcceptLanguage(acceptLang)
-		if i18n.IsSupported(lang) {
-			return lang
 		}
 	}
 

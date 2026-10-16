@@ -70,8 +70,7 @@ function parsePaymentMethods(
         name: typeof item.name === 'string' ? item.name : '',
         type,
         color: typeof item.color === 'string' ? item.color : undefined,
-        currency:
-          typeof item.currency === 'string' ? item.currency : undefined,
+        currency: typeof item.currency === 'string' ? item.currency : undefined,
         min_topup:
           type === 'stripe' && normalizedMinTopup <= 0
             ? stripeMinTopup
@@ -167,6 +166,7 @@ export function useTopupInfo() {
   const [topupInfo, setTopupInfo] = useState<TopupInfo | null>(null)
   const [presetAmounts, setPresetAmounts] = useState<PresetAmount[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   const fetchTopupInfo = async () => {
     try {
@@ -175,6 +175,7 @@ export function useTopupInfo() {
       const response = await getTopupInfo()
 
       if (!response.success || !response.data) {
+        setError(true)
         // eslint-disable-next-line no-console
         console.error('Failed to fetch topup info:', response.message)
         return
@@ -195,6 +196,7 @@ export function useTopupInfo() {
       }
 
       setTopupInfo(processedData)
+      setError(false)
 
       if (processedData.amount_options.length > 0) {
         const customPresets = mergePresetAmounts(
@@ -208,6 +210,7 @@ export function useTopupInfo() {
         setPresetAmounts(defaultPresets)
       }
     } catch (err) {
+      setError(true)
       // eslint-disable-next-line no-console
       console.error('Failed to fetch topup info:', err)
     } finally {
@@ -223,6 +226,7 @@ export function useTopupInfo() {
     topupInfo,
     presetAmounts,
     loading,
+    error,
     refetch: fetchTopupInfo,
   }
 }

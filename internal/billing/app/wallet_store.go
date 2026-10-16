@@ -616,6 +616,11 @@ func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, user
 		ActualAmount:   delta,
 		IdempotencyKey: fmt.Sprintf("ledger-settlement:%s", operationID),
 	})
+	// A transfer, box purchase or conversion spends its original funding just
+	// like inference. Otherwise a spent top-up can still appear refundable.
+	if err == nil && account.AccountType == billingAccountTypeClaudeWallet && reasonCode != "payment_refund" && reasonCode != "ledger_sync_reconcile" && reasonCode != "marketplace_owner_reclaim" && tx.Migrator().HasTable(&billingschema.FundingAllocation{}) {
+		err = allocateSettledFundingFIFOTx(tx, ledgerSyncRequestID(operationID), account.AccountID, delta)
+	}
 	return err
 }
 

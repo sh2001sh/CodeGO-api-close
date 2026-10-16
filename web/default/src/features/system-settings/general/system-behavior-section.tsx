@@ -35,6 +35,7 @@ import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const behaviorSchema = z.object({
   RetryTimes: z.coerce.number().min(0).max(10),
@@ -70,6 +71,7 @@ export function SystemBehaviorSection({
     for (const [key, value] of updates) {
       await updateOption.mutateAsync({ key, value })
     }
+    form.reset(data)
   }
 
   return (
@@ -78,7 +80,10 @@ export function SystemBehaviorSection({
       description={t('Configure system-wide behavior and defaults')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <FormField
             control={form.control}
             name='RetryTimes'
@@ -97,8 +102,8 @@ export function SystemBehaviorSection({
                     ref={field.ref}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t('Number of times to retry failed requests (0-10)')}
+                <FormDescription className='settings-field-fact'>
+                  {t('0–10')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -114,9 +119,6 @@ export function SystemBehaviorSection({
                   <FormLabel className='text-base'>
                     {t('Default Collapse Sidebar')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Sidebar collapsed by default for new users')}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -137,9 +139,6 @@ export function SystemBehaviorSection({
                   <FormLabel className='text-base'>
                     {t('Demo Site Mode')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Enable demo mode with limited functionality')}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -160,9 +159,6 @@ export function SystemBehaviorSection({
                   <FormLabel className='text-base'>
                     {t('Self-Use Mode')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Optimize system for self-hosted single-user usage')}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -174,9 +170,11 @@ export function SystemBehaviorSection({
             )}
           />
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save Changes')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save Changes')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

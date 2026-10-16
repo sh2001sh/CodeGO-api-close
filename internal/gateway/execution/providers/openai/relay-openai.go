@@ -222,11 +222,12 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var usage = &dto.Usage{}
 	var streamItems []string // store stream items
 	var lastStreamData string
+	var lastStreamDataSent bool
 	var cyberPolicyErr *types.NewAPIError
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		if err := cyberPolicyAPIError([]byte(data), resp.StatusCode, resp.Header.Get("Content-Type")); err != nil {
-			if lastStreamData != "" {
+			if lastStreamData != "" && !lastStreamDataSent {
 				if writeErr := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); writeErr != nil {
 					sr.Stop(writeErr)
 					return
@@ -243,16 +244,18 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			return
 		}
 		var streamResponse dto.ChatCompletionsStreamResponse
+		var hasOutput bool
 		if err := platformencoding.UnmarshalString(data, &streamResponse); err == nil {
 			info.ObserveChatStreamOutput(streamResponse, sr.ReceivedAt())
 			for _, choice := range streamResponse.Choices {
 				if choice.Delta.GetContentString() != "" || choice.Delta.GetReasoningContent() != "" || len(choice.Delta.ToolCalls) > 0 {
+					hasOutput = true
 					sr.MarkProgress()
 					break
 				}
 			}
 		}
-		if lastStreamData != "" {
+		if lastStreamData != "" && !lastStreamDataSent {
 			if err := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
 				platformobservability.SysLog("error handling stream format: " + err.Error())
 				sr.Error(err)
@@ -260,7 +263,18 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 		if len(data) > 0 {
 			lastStreamData = data
+			lastStreamDataSent = false
 			streamItems = append(streamItems, data)
+			// Forward visible output immediately. Retain only control/usage frames
+			// for finalization; waiting for the next frame adds upstream token gaps
+			// to client first-token latency.
+			if hasOutput {
+				if err := HandleStreamFormat(c, info, data, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
+					sr.Stop(err)
+					return
+				}
+				lastStreamDataSent = true
+			}
 		}
 	})
 	if cyberPolicyErr != nil {
@@ -291,7 +305,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	}
 
 	if info.RelayFormat == types.RelayFormatOpenAI {
-		if shouldSendLastResp {
+		if shouldSendLastResp && !lastStreamDataSent {
 			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
 		}
 	}
@@ -319,7 +333,11 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 
 	applyUsagePostProcessing(info, usage, platformtext.StringToByteSlice(lastStreamData))
 
-	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
+	finalStreamData := lastStreamData
+	if lastStreamDataSent {
+		finalStreamData = ""
+	}
+	HandleFinalResponse(c, info, finalStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
 
 	return usage, nil
 }

@@ -36,7 +36,14 @@ func probeMarketplaceInferenceTimedContext(
 	parent context.Context,
 	provider, baseURL, apiKey, model string,
 ) (int64, error) {
-	endpoint, payload, err := inferenceProbeRequest(provider, baseURL, model)
+	prompt := "Reply with OK."
+	maxOutputTokens := marketplaceProbeOutputTokens
+	if probe, ok := parent.Value(presentationProbeKey{}).(*presentationProbe); ok && presentationProbeSupportsText(model) {
+		prompt = probe.Prompt
+		// Reasoning models need room for reasoning before returning AD or SAFE.
+		maxOutputTokens = 1024
+	}
+	endpoint, payload, err := inferenceProbeRequestWithPrompt(provider, baseURL, model, prompt, maxOutputTokens)
 	if err != nil {
 		return 0, err
 	}
@@ -87,7 +94,10 @@ func probeMarketplaceInferenceAttempt(
 		if readErr != nil {
 			return latencyMS, true, fmt.Errorf("读取上游响应失败: %w", readErr)
 		}
-		return latencyMS, false, validateMarketplaceProbeResponse(provider, model, responseBody)
+		if err := validateMarketplaceProbeResponse(provider, model, responseBody); err != nil {
+			return latencyMS, false, err
+		}
+		return latencyMS, false, validatePresentationProbeResponse(parent, provider, model, responseBody)
 	}
 	detail, _ := io.ReadAll(io.LimitReader(response.Body, 512))
 	message := strings.TrimSpace(string(detail))

@@ -85,9 +85,12 @@ export function useRedemption() {
         } else {
           const quotaText = formatQuota(result.quota || 0)
           toast.success(
-            i18next.t('Redemption successful! Added universal quota: {{quota}}', {
-              quota: quotaText,
-            })
+            i18next.t(
+              'Redemption successful! Added universal quota: {{quota}}',
+              {
+                quota: quotaText,
+              }
+            )
           )
         }
         await getSelf()

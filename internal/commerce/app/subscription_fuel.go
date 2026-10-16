@@ -172,6 +172,10 @@ func CreateSubscriptionFuelStripePayment(userID int, req SubscriptionFuelPurchas
 	if err != nil {
 		return nil, err
 	}
+	plan, err := GetSubscriptionPlanByID(quote.PlanID)
+	if err != nil {
+		return nil, err
+	}
 	if !strings.HasPrefix(commercestore.StripeApiSecret, "sk_") && !strings.HasPrefix(commercestore.StripeApiSecret, "rk_") {
 		return nil, errors.New("Stripe is not configured correctly")
 	}
@@ -184,7 +188,7 @@ func CreateSubscriptionFuelStripePayment(userID int, req SubscriptionFuelPurchas
 	if err != nil {
 		return nil, err
 	}
-	link, err := genStripeSubscriptionLink(referenceID, user.StripeCustomer, user.Email, "FUEL:"+quote.PlanTitle, order.Money)
+	link, err := genStripeSubscriptionLink(referenceID, user.StripeCustomer, user.Email, "FUEL:"+quote.PlanTitle, plan.Currency, order.Money)
 	if err != nil {
 		_ = ExpireSubscriptionOrder(referenceID, commerceschema.PaymentProviderStripe)
 		return nil, errors.New("failed to create payment")

@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { z } from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Dashboard } from '@/features/dashboard'
 import {
@@ -24,6 +25,9 @@ import {
 } from '@/features/dashboard/section-registry'
 
 export const Route = createFileRoute('/_authenticated/dashboard/$section')({
+  validateSearch: z.object({
+    range: z.enum(['24h', '7d', '30d']).optional().catch('24h'),
+  }),
   beforeLoad: ({ params }) => {
     const validSections = DASHBOARD_SECTION_IDS as unknown as string[]
     if (!validSections.includes(params.section)) {

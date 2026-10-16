@@ -36,7 +36,7 @@ import { queryRetryDelay, shouldRetryQuery } from '@/lib/query-retry'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { ThemeProvider } from './context/theme-provider'
-import './i18n/config'
+import { i18nReady } from './i18n/config'
 // Generated Routes
 import { routeTree } from './routeTree.gen'
 // Styles
@@ -109,10 +109,6 @@ declare module '@tanstack/react-router' {
 
 // Render the app
 const rootElement = document.getElementById('root')!
-const seoShellHero = document.getElementById('seo-shell-hero')
-if (seoShellHero) {
-  seoShellHero.remove()
-}
 // Set document.title and favicon from cached status.
 ;(function initSystemBranding() {
   try {
@@ -139,19 +135,41 @@ if (seoShellHero) {
     /* empty */
   }
 })()
-if (!rootElement.innerHTML) {
-  const root = ReactDOM.createRoot(rootElement)
-  root.render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <FontProvider>
-            <DirectionProvider>
-              <RouterProvider router={router} />
-            </DirectionProvider>
-          </FontProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
-    </StrictMode>
-  )
-}
+void i18nReady
+  .then(() => {
+    document.getElementById('seo-shell-hero')?.remove()
+    if (rootElement.innerHTML) return
+    const root = ReactDOM.createRoot(rootElement)
+    root.render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <FontProvider>
+              <DirectionProvider>
+                <RouterProvider router={router} />
+              </DirectionProvider>
+            </FontProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      </StrictMode>
+    )
+  })
+  .catch((error: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error('Interface language loading failed', error)
+    document.getElementById('seo-shell-hero')?.remove()
+    const alert = document.createElement('div')
+    alert.setAttribute('role', 'alert')
+    alert.className =
+      'flex min-h-screen flex-col items-center justify-center gap-6'
+    const message = document.createElement('p')
+    message.textContent =
+      error instanceof Error ? error.message : i18next.t('Failed to load')
+    const retry = document.createElement('button')
+    retry.type = 'button'
+    retry.className = 'rounded-full border px-6 py-3'
+    retry.textContent = i18next.t('Retry')
+    retry.addEventListener('click', () => window.location.reload())
+    alert.append(message, retry)
+    rootElement.replaceChildren(alert)
+  })

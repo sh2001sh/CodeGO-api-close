@@ -245,7 +245,6 @@ export function RatioSettingsCard({
   groupDefaults,
   toolPricesDefault,
   titleKey = 'Pricing Ratios',
-  descriptionKey = 'Configure model, caching, and group ratios used for billing',
   visibleTabs = ['models', 'groups', 'tool-prices', 'upstream-sync'],
 }: RatioSettingsCardProps) {
   const { t } = useTranslation()
@@ -340,6 +339,7 @@ export function RatioSettingsCard({
   })
 
   useEffect(() => {
+    if (modelForm.formState.isDirty || modelForm.formState.isSubmitting) return
     modelNormalizedDefaults.current = {
       ModelPrice: normalizeJsonString(modelDefaults.ModelPrice),
       ModelRatio: normalizeJsonString(modelDefaults.ModelRatio),
@@ -371,9 +371,15 @@ export function RatioSettingsCard({
       BillingMode: formatJsonForTextarea(modelDefaults.BillingMode),
       BillingExpr: formatJsonForTextarea(modelDefaults.BillingExpr),
     })
-  }, [modelDefaults, modelForm])
+  }, [
+    modelDefaults,
+    modelForm,
+    modelForm.formState.isDirty,
+    modelForm.formState.isSubmitting,
+  ])
 
   useEffect(() => {
+    if (groupForm.formState.isDirty || groupForm.formState.isSubmitting) return
     groupNormalizedDefaults.current = {
       GroupRatio: normalizeJsonString(groupDefaults.GroupRatio),
       TopupGroupRatio: normalizeJsonString(groupDefaults.TopupGroupRatio),
@@ -403,7 +409,12 @@ export function RatioSettingsCard({
         groupDefaults.SubscriptionGroupPolicy
       ),
     })
-  }, [groupDefaults, groupForm])
+  }, [
+    groupDefaults,
+    groupForm,
+    groupForm.formState.isDirty,
+    groupForm.formState.isSubmitting,
+  ])
 
   const saveModelRatios = useCallback(
     async (values: ModelFormValues) => {
@@ -436,8 +447,10 @@ export function RatioSettingsCard({
         const apiKey = apiKeyMap[key as string] || (key as string)
         await updateOption.mutateAsync({ key: apiKey, value: normalized[key] })
       }
+      modelNormalizedDefaults.current = normalized
+      modelForm.reset(values)
     },
-    [updateOption]
+    [updateOption, modelForm]
   )
 
   const saveGroupRatios = useCallback(
@@ -473,8 +486,10 @@ export function RatioSettingsCard({
         const apiKey = apiKeyMap[key] || key
         await updateOption.mutateAsync({ key: apiKey, value: normalized[key] })
       }
+      groupNormalizedDefaults.current = normalized
+      groupForm.reset(values)
     },
-    [updateOption]
+    [updateOption, groupForm]
   )
 
   const handleResetRatios = useCallback(() => {
@@ -544,7 +559,7 @@ export function RatioSettingsCard({
   }
 
   return (
-    <SettingsSection title={t(titleKey)} description={t(descriptionKey)}>
+    <SettingsSection title={t(titleKey)}>
       {visibleTabs.length === 1 ? (
         renderTabContent(defaultTab)
       ) : (
@@ -566,6 +581,7 @@ export function RatioSettingsCard({
       )}
 
       <ConfirmDialog
+        className='settings-dialog'
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={t('Reset all model prices?')}

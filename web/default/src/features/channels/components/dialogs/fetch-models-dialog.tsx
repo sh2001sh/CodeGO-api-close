@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import interfaceI18n from '@/i18n/config'
 import { Loader2, Search, Info, ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -89,9 +90,7 @@ export function FetchModelsDialog({
 
   // Parse existing models
   const existingModels = useMemo(
-    () =>
-      existingModelsOverride ??
-      parseModelsString(currentRow?.models || ''),
+    () => existingModelsOverride ?? parseModelsString(currentRow?.models || ''),
     [existingModelsOverride, currentRow?.models]
   )
 
@@ -321,7 +320,7 @@ export function FetchModelsDialog({
           <div className='flex items-center gap-2'>
             <span className='text-muted-foreground text-sm'>
               {categoryModels.filter((m) => selectedModels.includes(m)).length}{' '}
-              / {categoryModels.length} selected
+              / {categoryModels.length} {interfaceI18n.t('selected')}
             </span>
             <Checkbox
               checked={allSelected}
@@ -367,16 +366,18 @@ export function FetchModelsDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className='max-w-3xl'>
+      <DialogContent className='admin-editor channel-tool-dialog max-w-3xl'>
         <DialogHeader>
           <DialogTitle>{t('Fetch Models')}</DialogTitle>
           <DialogDescription>
-            {currentRow
-              ? <>
-                  {t('Fetch available models for:')}{' '}
-                  <strong>{currentRow.name}</strong>
-                </>
-              : t('Fetch available models from upstream')}
+            {currentRow ? (
+              <>
+                {t('Fetch available models for:')}{' '}
+                <strong>{currentRow.name}</strong>
+              </>
+            ) : (
+              t('Fetch available models from upstream')
+            )}
           </DialogDescription>
         </DialogHeader>
 

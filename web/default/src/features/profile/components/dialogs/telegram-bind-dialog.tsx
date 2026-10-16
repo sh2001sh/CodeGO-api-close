@@ -46,10 +46,10 @@ export function TelegramBindDialog({
   const { t } = useTranslation()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='profile-dialog sm:max-w-md'>
         <DialogHeader>
           <DialogTitle>{t('Bind Telegram Account')}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className='sr-only'>
             {t('Click the button below to bind your Telegram account')}
           </DialogDescription>
         </DialogHeader>

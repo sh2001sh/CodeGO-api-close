@@ -62,6 +62,7 @@ import { StatusBadge } from '@/components/status-badge'
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const perfSchema = z.object({
   'performance_setting.disk_cache_enabled': z.boolean(),
@@ -200,6 +201,7 @@ export function PerformanceSection(props: Props) {
         value: value as string | number | boolean,
       })
     }
+    form.reset(data)
     toast.success(t('Saved successfully'))
     fetchStats()
   }
@@ -296,20 +298,16 @@ export function PerformanceSection(props: Props) {
   return (
     <SettingsSection
       title={t('Performance Settings')}
-      description={t(
-        'Disk cache, system performance monitoring, and operation statistics'
-      )}
+      description={t('Disk cache, system monitoring and performance stats')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           {/* Disk Cache Settings */}
           <div>
             <h4 className='font-medium'>{t('Disk Cache Settings')}</h4>
-            <p className='text-muted-foreground mt-1 text-xs'>
-              {t(
-                'When enabled, large request bodies are temporarily stored on disk instead of memory, significantly reducing memory usage. SSD recommended.'
-              )}
-            </p>
           </div>
 
           <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
@@ -337,9 +335,6 @@ export function PerformanceSection(props: Props) {
                   <FormControl>
                     <Input type='number' {...field} disabled={!diskEnabled} />
                   </FormControl>
-                  <FormDescription>
-                    {t('Use disk cache when request body exceeds this size')}
-                  </FormDescription>
                 </FormItem>
               )}
             />
@@ -403,10 +398,8 @@ export function PerformanceSection(props: Props) {
             <h4 className='font-medium'>
               {t('System Performance Monitoring')}
             </h4>
-            <p className='text-muted-foreground mt-1 text-xs'>
-              {t(
-                'When performance monitoring is enabled and system resource usage exceeds the set threshold, new Relay requests will be rejected.'
-              )}
+            <p className='text-muted-foreground mt-1 text-base'>
+              {t('Resource threshold exceeded: reject new Relay requests')}
             </p>
           </div>
 
@@ -480,11 +473,6 @@ export function PerformanceSection(props: Props) {
 
           <div>
             <h4 className='font-medium'>{t('Model performance metrics')}</h4>
-            <p className='text-muted-foreground mt-1 text-xs'>
-              {t(
-                'Collect relay latency and success-rate metrics for the model square.'
-              )}
-            </p>
           </div>
 
           <div className='grid grid-cols-1 gap-4 md:grid-cols-4'>
@@ -566,17 +554,19 @@ export function PerformanceSection(props: Props) {
                       disabled={!perfMetricsEnabled}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('0 means data is kept permanently')}
+                  <FormDescription className='settings-field-fact'>
+                    {t('0 = permanent')}
                   </FormDescription>
                 </FormItem>
               )}
             />
           </div>
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save Changes')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save Changes')}
+            </Button>
+          </div>
         </form>
       </Form>
 
@@ -586,11 +576,6 @@ export function PerformanceSection(props: Props) {
       <div className='space-y-4'>
         <div>
           <h4 className='font-medium'>{t('Server Log Management')}</h4>
-          <p className='text-muted-foreground mt-1 text-xs'>
-            {t(
-              'Manage server log files. Log files accumulate over time; regular cleanup is recommended to free disk space.'
-            )}
-          </p>
         </div>
 
         {logInfo === null ? null : logInfo.enabled ? (
@@ -682,7 +667,7 @@ export function PerformanceSection(props: Props) {
                     ? t('Cleaning...')
                     : t('Clean Up Log Files')}
                 </AlertDialogTrigger>
-                <AlertDialogContent>
+                <AlertDialogContent className='settings-dialog'>
                   <AlertDialogHeader>
                     <AlertDialogTitle>
                       {t('Confirm log file cleanup?')}
@@ -737,7 +722,7 @@ export function PerformanceSection(props: Props) {
             <AlertDialogTrigger render={<Button variant='outline' size='sm' />}>
               {t('Clean up inactive cache')}
             </AlertDialogTrigger>
-            <AlertDialogContent>
+            <AlertDialogContent className='settings-dialog'>
               <AlertDialogHeader>
                 <AlertDialogTitle>
                   {t('Confirm cleanup of inactive disk cache?')}

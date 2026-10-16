@@ -70,10 +70,9 @@ export function DownloadPanel({
 
   const SelectedIcon = PLATFORM_ICONS[selectedCard.platform]
   const macCards = cards.filter((card) => card.platform === 'macos')
-  const isRecommended = recommendedCard?.key === selectedCard.key
 
   return (
-    <section className='border-border bg-card overflow-hidden rounded-2xl border shadow-sm'>
+    <section className='download-platform-panel border-border bg-card overflow-hidden rounded-[20px] border'>
       <div
         className='border-border flex overflow-x-auto border-b p-2'
         role='tablist'
@@ -116,11 +115,6 @@ export function DownloadPanel({
                   <h2 className='text-xl font-semibold'>
                     {selectedCard.title}
                   </h2>
-                  {isRecommended ? (
-                    <span className='text-primary text-xs font-medium'>
-                      {t('Recommended for this device')}
-                    </span>
-                  ) : null}
                 </div>
                 <p className='text-muted-foreground mt-0.5 text-sm'>
                   {[
@@ -142,7 +136,7 @@ export function DownloadPanel({
                     key={card.key}
                     type='button'
                     className={cn(
-                      'focus-visible:ring-ring rounded-full border px-3 py-1.5 text-xs font-medium focus-visible:ring-2 focus-visible:outline-none',
+                      'focus-visible:ring-ring rounded-lg border px-3 py-1.5 text-xs font-medium focus-visible:ring-2 focus-visible:outline-none',
                       card.key === selectedCard.key
                         ? 'border-primary bg-primary/8 text-primary'
                         : 'border-border text-muted-foreground hover:text-foreground'
@@ -174,10 +168,10 @@ export function DownloadPanel({
                 <ExternalLink className='size-4' />
               ) : null}
             </Button>
-            <p className='text-muted-foreground mt-2 text-center text-xs'>
+            <p className='text-muted-foreground mt-3 text-left text-base break-all'>
               {selectedCard.fileName
                 ? `${selectedCard.fileName} · ${formatFileSize(selectedCard.fileSize ?? 0)}`
-                : t('Opens the latest release page')}
+                : null}
             </p>
           </div>
         </div>
@@ -198,7 +192,7 @@ export function DownloadPanel({
                 <dt className='text-muted-foreground'>
                   {t('SHA256 checksum')}
                 </dt>
-                <dd className='mt-1 font-mono text-xs break-all'>
+                <dd className='mt-1 font-mono text-base break-all'>
                   {selectedCard.digest?.replace('sha256:', '') ||
                     t('Not provided')}
                 </dd>

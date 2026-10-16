@@ -19,9 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 'use client'
 
 import * as React from 'react'
-import { SearchIcon, Tick02Icon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
 import { Command as CommandPrimitive } from 'cmdk'
+import { Search, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
@@ -65,8 +64,7 @@ function CommandDialog({
 }) {
   const { t } = useTranslation()
   const resolvedTitle = title ?? t('Command Palette')
-  const resolvedDescription =
-    description ?? t('Search for a command to run...')
+  const resolvedDescription = description ?? t('Search for a command to run...')
 
   return (
     <Dialog {...props}>
@@ -103,11 +101,7 @@ function CommandInput({
           {...props}
         />
         <InputGroupAddon>
-          <HugeiconsIcon
-            icon={SearchIcon}
-            strokeWidth={2}
-            className='size-4 shrink-0 opacity-50'
-          />
+          <Search strokeWidth={2} className='size-4 shrink-0 opacity-50' />
         </InputGroupAddon>
       </InputGroup>
     </div>
@@ -187,8 +181,7 @@ function CommandItem({
       {...props}
     >
       {children}
-      <HugeiconsIcon
-        icon={Tick02Icon}
+      <Check
         strokeWidth={2}
         className='ml-auto opacity-0 group-has-data-[slot=command-shortcut]/command-item:hidden group-data-[checked=true]/command-item:opacity-100'
       />

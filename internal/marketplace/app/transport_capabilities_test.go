@@ -109,6 +109,36 @@ func TestMarketplaceCapabilityProbeSkipsSuspendedChannel(t *testing.T) {
 	require.Zero(t, probeCalls)
 }
 
+func TestMarketplaceCapabilityProbeHonorsDisabledSwitch(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
+	channel := marketplaceschema.Channel{ID: "disabled-capability", Status: marketplacedomain.LifecycleActive, AutoProbeEnabled: false}
+	require.NoError(t, db.Create(&channel).Error)
+	originalProbe := probeMarketplaceCandidates
+	probeMarketplaceCandidates = func(context.Context, []gatewaycapability.ProbeInput) gatewaycapability.ProbeResult {
+		t.Fatal("disabled automatic probes must not send capability requests")
+		return gatewaycapability.ProbeResult{}
+	}
+	t.Cleanup(func() { probeMarketplaceCandidates = originalProbe })
+	require.NoError(t, probeAndPersistMarketplaceCapabilities(context.Background(), channel.ID))
+}
+
+func TestMarketplaceCapabilityProbeDoesNotPersistStaleResult(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
+	channel := marketplaceschema.Channel{ID: "stale-capability", Status: marketplacedomain.LifecycleActive, AutoProbeEnabled: true}
+	require.NoError(t, db.Create(&channel).Error)
+	originalProbe := probeMarketplaceCandidates
+	probeMarketplaceCandidates = func(context.Context, []gatewaycapability.ProbeInput) gatewaycapability.ProbeResult {
+		require.NoError(t, db.Model(&marketplaceschema.Channel{}).Where("id = ?", channel.ID).Update("auto_probe_enabled", false).Error)
+		return gatewaycapability.ProbeResult{WebSocket: gatewayschema.CapabilityProbeState{Status: gatewayschema.CapabilityStatusSupported}}
+	}
+	t.Cleanup(func() { probeMarketplaceCandidates = originalProbe })
+	require.NoError(t, probeAndPersistMarketplaceCapabilities(context.Background(), channel.ID))
+	require.NoError(t, db.First(&channel, "id = ?", channel.ID).Error)
+	require.Empty(t, channel.TransportCapabilities, "a probe finishing after a configuration change must not overwrite current evidence")
+}
+
 func TestMarketplaceNativeProviderCapabilitiesAreNotApplicable(t *testing.T) {
 	channel := &marketplaceschema.Channel{ProviderType: "anthropic", DeclaredModels: `["claude-opus-4-6"]`}
 	candidates := marketplaceProbeCandidates(channel)

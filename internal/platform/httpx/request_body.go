@@ -179,6 +179,10 @@ func GetRequestBodySnapshot(c *gin.Context) (*RequestBodySnapshot, error) {
 		if err := fastjson.Unmarshal(raw, snapshot); err != nil {
 			return nil, err
 		}
+		// go-json strings alias its copied decode buffer. A tiny routing field
+		// must not pin another entire long-context body for the whole stream.
+		snapshot.Model = strings.Clone(snapshot.Model)
+		snapshot.PreviousResponseID = strings.Clone(snapshot.PreviousResponseID)
 	}
 	c.Set(KeyRequestBodySnapshot, snapshot)
 	return snapshot, nil

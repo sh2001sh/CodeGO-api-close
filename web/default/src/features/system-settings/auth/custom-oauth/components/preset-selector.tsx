@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { UseFormReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
@@ -39,6 +39,9 @@ export function PresetSelector(props: PresetSelectorProps) {
   const { t } = useTranslation()
   const [selectedPreset, setSelectedPreset] = useState<string>('')
   const [baseUrl, setBaseUrl] = useState<string>('')
+  const presetId = useId()
+  const baseUrlId = useId()
+  const currentPreset = OAUTH_PRESETS.find((p) => p.key === selectedPreset)
 
   const handlePresetChange = (presetKey: string) => {
     setSelectedPreset(presetKey)
@@ -65,10 +68,17 @@ export function PresetSelector(props: PresetSelectorProps) {
       shouldDirty: true,
     })
 
-    // Apply base URL if already entered
-    if (baseUrl) {
-      applyEndpoints(preset, baseUrl)
-    }
+    props.form.setValue('well_known', preset.well_known ?? '', {
+      shouldDirty: true,
+    })
+    props.form.setValue('auth_style', preset.auth_style ?? 0, {
+      shouldDirty: true,
+    })
+    props.form.setValue('access_policy', preset.access_policy ?? '', {
+      shouldDirty: true,
+    })
+    props.form.setValue('access_denied_message', '', { shouldDirty: true })
+    applyEndpoints(preset, baseUrl)
   }
 
   const handleBaseUrlChange = (url: string) => {
@@ -85,18 +95,24 @@ export function PresetSelector(props: PresetSelectorProps) {
     preset: (typeof OAUTH_PRESETS)[number],
     url: string
   ) => {
-    const cleanUrl = url.replace(/\/+$/, '')
+    const cleanUrl = preset.needsBaseUrl ? url.trim().replace(/\/+$/, '') : ''
+    const resolveEndpoint = (endpoint: string) =>
+      preset.needsBaseUrl && !cleanUrl ? '' : cleanUrl + endpoint
     props.form.setValue(
       'authorization_endpoint',
-      cleanUrl + preset.authorization_endpoint,
+      resolveEndpoint(preset.authorization_endpoint),
       { shouldDirty: true }
     )
-    props.form.setValue('token_endpoint', cleanUrl + preset.token_endpoint, {
-      shouldDirty: true,
-    })
+    props.form.setValue(
+      'token_endpoint',
+      resolveEndpoint(preset.token_endpoint),
+      {
+        shouldDirty: true,
+      }
+    )
     props.form.setValue(
       'user_info_endpoint',
-      cleanUrl + preset.user_info_endpoint,
+      resolveEndpoint(preset.user_info_endpoint),
       { shouldDirty: true }
     )
   }
@@ -106,7 +122,7 @@ export function PresetSelector(props: PresetSelectorProps) {
       <p className='text-sm font-medium'>{t('Quick Setup from Preset')}</p>
       <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
         <div className='space-y-1.5'>
-          <Label>{t('Preset Template')}</Label>
+          <Label htmlFor={presetId}>{t('Preset Template')}</Label>
           <Select
             items={[
               ...OAUTH_PRESETS.map((preset) => ({
@@ -117,8 +133,8 @@ export function PresetSelector(props: PresetSelectorProps) {
             value={selectedPreset}
             onValueChange={(v) => v !== null && handlePresetChange(v)}
           >
-            <SelectTrigger className='w-full'>
-              <SelectValue placeholder={t('Select a preset...')} />
+            <SelectTrigger id={presetId} className='w-full'>
+              <SelectValue />
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
               <SelectGroup>
@@ -131,14 +147,17 @@ export function PresetSelector(props: PresetSelectorProps) {
             </SelectContent>
           </Select>
         </div>
-        <div className='space-y-1.5'>
-          <Label>{t('Base URL')}</Label>
-          <Input
-            placeholder={t('https://your-server.example.com')}
-            value={baseUrl}
-            onChange={(e) => handleBaseUrlChange(e.target.value)}
-          />
-        </div>
+        {currentPreset?.needsBaseUrl !== false && (
+          <div className='space-y-1.5'>
+            <Label htmlFor={baseUrlId}>{t('Base URL')}</Label>
+            <Input
+              id={baseUrlId}
+              placeholder={t('https://your-server.example.com')}
+              value={baseUrl}
+              onChange={(e) => handleBaseUrlChange(e.target.value)}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

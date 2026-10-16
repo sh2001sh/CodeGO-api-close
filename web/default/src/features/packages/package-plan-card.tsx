@@ -1,13 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toIntlLocale } from '@/i18n/languages'
-import {
-  ArrowRight,
-  ChevronDown,
-  Clock3,
-  Gift,
-  Layers3,
-  Sparkles,
-} from 'lucide-react'
+import { ArrowRight, ChevronDown, Clock3, Gift, Layers3 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { getCurrencyLabel } from '@/lib/currency'
 import { cn } from '@/lib/utils'
@@ -50,11 +43,6 @@ export function PackagePlanCard(props: {
     groupBuyId?: number
   ) => void
   currentSubscription?: UserSubscriptionRecord
-  onFuel?: (
-    subscription: UserSubscriptionRecord,
-    title: string,
-    config: { minimumQuota: number; quotaStep: number }
-  ) => void
 }) {
   const { t, i18n } = useTranslation()
   const [now, setNow] = useState(() => Date.now())
@@ -65,18 +53,22 @@ export function PackagePlanCard(props: {
   const [showDetails, setShowDetails] = useState(false)
   const plan = props.record.plan
   const title = translatePlanTitle(plan.title, t)
-  const isRecommended = title.includes('Standard')
+  const isCreditPack = plan.plan_type === 'credit_pack'
   const groupBuyEnabled =
-    plan.group_buy_enabled === true && plan.plan_type !== 'daily'
+    plan.group_buy_enabled === true &&
+    plan.plan_type !== 'daily' &&
+    !isCreditPack
   const limit = Number(plan.max_purchase_per_user || 0)
   const limitReached = limit > 0 && props.purchaseCount >= limit
-  const actionLabel = translatePlanAction(props.record.action, t)
+  const actionLabel = isCreditPack
+    ? t('购买')
+    : translatePlanAction(props.record.action, t)
   const effectiveAmount =
     props.record.action === 'disabled'
       ? plan.price_amount
       : (props.record.amount_due ?? plan.price_amount)
   const firstPurchaseDiscountApplied =
-    props.record.first_purchase_discount_applied === true
+    !isCreditPack && props.record.first_purchase_discount_applied === true
   const firstPurchaseDiscount = Number(
     (props.record.first_purchase_discount_multiplier || 0) * 10
   )
@@ -84,16 +76,25 @@ export function PackagePlanCard(props: {
   const blockedReason =
     translateDisabledReason(props.record.disabled_reason, t) ||
     t('A higher active plan with remaining quota prevents downgrading.')
-  // surfaced to screen readers; visual chrome stays clean
   const tierRows = buildPackageQuotaTiers(plan, t)
+  let detailsText = t(
+    'This plan is not included in the Collective Benefit Program and is settled immediately after payment.'
+  )
+  if (isCreditPack) {
+    detailsText = t(
+      '新额度包永久有效、无周期重置，按钱包同价扣费；仅适用于已接入的渠道。'
+    )
+  } else if (groupBuyEnabled) {
+    detailsText = t(
+      'The base quota is available immediately. The collective bonus is settled by the final participation tier after five participants join or 48 hours pass.'
+    )
+  }
+  const bonusQuota =
+    isCreditPack && plan.currency === 'CNY' && plan.price_amount > 0
+      ? Math.max(0, baseQuota - plan.price_amount * 500_000)
+      : undefined
   const isCurrentPlan =
     props.currentSubscription?.subscription.plan_id === plan.id
-  const canFuel =
-    isCurrentPlan &&
-    props.currentSubscription?.subscription.status === 'active' &&
-    plan.fuel_enabled === true &&
-    Number(plan.fuel_min_quota || 0) > 0 &&
-    Number(plan.fuel_quota_step || 0) > 0
   const monthlyPassBenefit =
     plan.plan_type === 'monthly'
       ? monthlyPassBenefitKey[
@@ -129,47 +130,45 @@ export function PackagePlanCard(props: {
   return (
     <Card
       className={cn(
-        'border-border bg-card hover:border-primary/40 relative h-full overflow-hidden py-0 transition-colors duration-200',
-        // Keep the recommended card the same 1px geometry as its siblings;
-        // a 2px border made the first card visibly heavier and shifted its
-        // content compared with the other plans.
-        isRecommended &&
-          'border-primary/70 bg-primary/[0.035] ring-primary/20 ring-1'
+        'commerce-plan border-border bg-card relative h-full rounded-3xl shadow-sm transition-all',
+        isCurrentPlan && 'commerce-plan-current'
       )}
     >
-      <CardContent className='flex h-full flex-col gap-3 p-4'>
-        <div className='text-left'>
-          <div className='flex items-center'>
-            {isRecommended && (
-              <span className='text-primary inline-flex items-center gap-1 text-xs font-semibold'>
-                <Sparkles className='h-3.5 w-3.5' />
-                {t('Most popular')}
+      <CardContent className='flex h-full flex-col gap-3 p-5'>
+        <header className='commerce-plan-header'>
+          <div>
+            <h4 className='text-foreground mt-1 text-lg font-bold tracking-tight'>
+              {title}
+            </h4>
+            <div className='commerce-plan-identity'>
+              <span className='text-muted-foreground'>
+                {translatePlanSubtitle(plan, t)}
+              </span>
+              <code>#{plan.id}</code>
+            </div>
+          </div>
+          <div className='flex flex-wrap gap-2'>
+            {isCurrentPlan && (
+              <span className='inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400'>
+                <span className='size-1.5 animate-pulse rounded-full bg-emerald-500' />
+                {t('Currently active')}
               </span>
             )}
+            {firstPurchaseDiscountApplied ? (
+              <span className='inline-flex items-center rounded-full border border-orange-500/30 bg-orange-500/10 px-2.5 py-1 text-xs font-semibold text-orange-700 dark:text-orange-400'>
+                <Trans i18nKey={'套餐首购'} />{' '}
+                {Number(firstPurchaseDiscount.toFixed(1))}{' '}
+                <Trans i18nKey={'折'} />
+              </span>
+            ) : null}
           </div>
-          <div className='text-muted-foreground text-xs font-medium'>
-            {translatePlanSubtitle(plan, t)}
-          </div>
-          <h4 className='text-foreground mt-1 text-lg font-bold'>{title}</h4>
-          {isCurrentPlan && (
-            <span className='border-primary/25 bg-primary/10 text-primary mt-2 inline-flex rounded-md border px-2 py-1 text-xs font-semibold'>
-              {t('Currently active')}
-            </span>
-          )}
-          {firstPurchaseDiscountApplied ? (
-            <span className='border-warning/25 bg-warning/10 text-warning mt-2 ml-1 inline-flex rounded-md border px-2 py-1 text-xs font-semibold'>
-              <Trans i18nKey={'套餐首购'} />{' '}
-              {Number(firstPurchaseDiscount.toFixed(1))}{' '}
-              <Trans i18nKey={'折'} />
-            </span>
-          ) : null}
-        </div>
+        </header>
 
-        <div className='text-center'>
+        <div className='commerce-plan-price'>
           <div className='text-muted-foreground text-xs font-medium'>
             {t('Payment price')}
           </div>
-          <div className='text-primary flex items-baseline justify-center gap-1 text-3xl font-bold'>
+          <div className='text-foreground text-3xl tabular-nums'>
             {formatSubscriptionPlanPrice(effectiveAmount, plan.currency)}
           </div>
           {effectiveAmount !== plan.price_amount && (
@@ -179,10 +178,14 @@ export function PackagePlanCard(props: {
           )}
         </div>
 
-        <div className='space-y-2'>
+        <div className='commerce-plan-details'>
           <div className='flex items-center justify-between text-sm'>
             <span className='text-muted-foreground'>
-              {t('Base quota ({{currency}})', { currency: getCurrencyLabel() })}
+              {isCreditPack
+                ? t('到账额度')
+                : t('Base quota ({{currency}})', {
+                    currency: getCurrencyLabel(),
+                  })}
             </span>
             <span className='text-foreground font-semibold'>
               {formatSubscriptionQuotaAmount(baseQuota)}
@@ -194,8 +197,22 @@ export function PackagePlanCard(props: {
               {formatDuration(plan, t)}
             </span>
           </div>
+          {bonusQuota !== undefined && (
+            <div className='flex items-center justify-between text-sm'>
+              <span className='text-muted-foreground'>
+                {t('赠额')} ·{' '}
+                {(bonusQuota / (plan.price_amount * 500_000)).toLocaleString(
+                  toIntlLocale(i18n.language),
+                  { style: 'percent', maximumFractionDigits: 2 }
+                )}
+              </span>
+              <span className='text-primary font-semibold'>
+                +{formatSubscriptionQuotaAmount(bonusQuota)}
+              </span>
+            </div>
+          )}
           {monthlyPassBenefit && (
-            <div className='border-primary/20 bg-primary/[0.06] flex items-start gap-2 rounded-md border px-2.5 py-2'>
+            <div className='package-plan-benefit flex items-start gap-2'>
               <Gift className='text-primary mt-0.5 h-4 w-4 shrink-0' />
               <div className='min-w-0 text-xs'>
                 <div className='text-foreground font-semibold'>
@@ -208,7 +225,7 @@ export function PackagePlanCard(props: {
             </div>
           )}
           {groupBuyEnabled && (
-            <div className='border-primary/25 bg-primary/[0.04] space-y-3 rounded-lg border p-3'>
+            <div className='package-collective space-y-3'>
               <div className='flex flex-wrap items-center justify-between gap-2'>
                 <span className='text-foreground flex items-center gap-1.5 text-sm font-semibold'>
                   <Layers3 className='text-primary h-4 w-4' />
@@ -236,10 +253,8 @@ export function PackagePlanCard(props: {
                     <div
                       key={threshold}
                       className={cn(
-                        'min-w-0 rounded-md border px-1.5 py-2 text-center',
-                        current
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border bg-background/60'
+                        'package-collective-tier min-w-0 px-1.5 py-2 text-center',
+                        current ? 'bg-primary/5' : 'bg-transparent'
                       )}
                     >
                       <div className='text-sm font-semibold'>
@@ -306,7 +321,7 @@ export function PackagePlanCard(props: {
                     'Settles at 5 participants or the deadline. Only the final tier bonus applies.'
                   )}
                 </p>
-                {room?.joined && (
+                {groupBuyEnabled && room?.joined && (
                   <p className='text-primary font-medium'>{t('已参与本期')}</p>
                 )}
               </div>
@@ -315,7 +330,7 @@ export function PackagePlanCard(props: {
         </div>
 
         {showDetails && (
-          <div className='border-border space-y-2 rounded-lg border p-3'>
+          <div className='package-plan-expanded border-border space-y-2 border-t pt-3'>
             <div className='space-y-1.5 text-xs'>
               {tierRows.map((tier) => (
                 <div key={tier.label} className='flex justify-between'>
@@ -336,20 +351,14 @@ export function PackagePlanCard(props: {
               </div>
             )}
             <div className='text-muted-foreground text-xs leading-relaxed'>
-              {groupBuyEnabled
-                ? t(
-                    'The base quota is available immediately. The collective bonus is settled by the final participation tier after five participants join or 48 hours pass.'
-                  )
-                : t(
-                    'This plan is not included in the Collective Benefit Program and is settled immediately after payment.'
-                  )}
+              {detailsText}
             </div>
           </div>
         )}
 
         <Button
           type='button'
-          variant='outline'
+          variant='ghost'
           size='sm'
           onClick={() => setShowDetails(!showDetails)}
           className='min-h-11 w-full'
@@ -364,22 +373,9 @@ export function PackagePlanCard(props: {
           />
         </Button>
 
-        <div className='mt-auto space-y-2'>
-          {canFuel && props.currentSubscription && props.onFuel && (
-            <Button
-              className='w-full'
-              onClick={() =>
-                props.onFuel?.(props.currentSubscription!, title, {
-                  minimumQuota: Number(plan.fuel_min_quota || 0),
-                  quotaStep: Number(plan.fuel_quota_step || 0),
-                })
-              }
-            >
-              {t('Add quota to current plan')}
-            </Button>
-          )}
+        <div className='commerce-plan-cta space-y-2'>
           <Button
-            className='min-h-11 w-full whitespace-normal'
+            className='min-h-12 w-full justify-center gap-1.5 rounded-2xl text-[14.5px] font-semibold whitespace-normal'
             disabled={limitReached || props.record.action === 'disabled'}
             onClick={() =>
               props.onPurchase(
@@ -395,7 +391,7 @@ export function PackagePlanCard(props: {
                 : actionLabel}
             {!limitReached && <ArrowRight className='ml-1 h-4 w-4 shrink-0' />}
           </Button>
-          {room?.joined && (
+          {groupBuyEnabled && room?.joined && (
             <p className='text-muted-foreground text-center text-xs'>
               {t('Additional purchases do not join this round again.')}
             </p>
@@ -414,7 +410,9 @@ export function PackagePlanCard(props: {
             </div>
           )}
           {props.record.action === 'disabled' && (
-            <div className='sr-only'>{blockedReason}</div>
+            <div role='status' className='text-destructive text-base'>
+              {blockedReason}
+            </div>
           )}
         </div>
       </CardContent>

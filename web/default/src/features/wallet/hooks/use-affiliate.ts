@@ -35,7 +35,10 @@ export function useAffiliate() {
     queryKey: AFFILIATE_OVERVIEW_QUERY_KEY,
     queryFn: async () => {
       const response = await getAffiliateRewardsOverview()
-      return response.success ? (response.data ?? null) : null
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Affiliate overview unavailable')
+      }
+      return response.data
     },
     staleTime: 60 * 1000,
   })
@@ -61,6 +64,8 @@ export function useAffiliate() {
     affiliateCode,
     affiliateLink,
     loading: overviewQuery.isLoading,
+    isError: overviewQuery.isError,
+    refreshing: overviewQuery.isFetching,
     copyAffiliateCode,
     copyAffiliateLink,
     refetch: overviewQuery.refetch,

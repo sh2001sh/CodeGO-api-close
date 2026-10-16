@@ -41,6 +41,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { toIntlLocale } from '@/i18n/languages'
 import type { ChatStatus, FileUIPart } from 'ai'
 import {
   ImageIcon,
@@ -1109,6 +1110,7 @@ export const PromptInputSpeechButton = ({
   onTranscriptionChange,
   ...props
 }: PromptInputSpeechButtonProps) => {
+  const { i18n } = useTranslation()
   const [isListening, setIsListening] = useState(false)
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
@@ -1124,7 +1126,7 @@ export const PromptInputSpeechButton = ({
 
       speechRecognition.continuous = true
       speechRecognition.interimResults = true
-      speechRecognition.lang = 'en-US'
+      speechRecognition.lang = toIntlLocale(i18n.language)
 
       speechRecognition.onstart = () => {
         setIsListening(true)
@@ -1173,7 +1175,7 @@ export const PromptInputSpeechButton = ({
         recognitionRef.current.stop()
       }
     }
-  }, [textareaRef, onTranscriptionChange])
+  }, [textareaRef, onTranscriptionChange, i18n.language])
 
   const toggleListening = useCallback(() => {
     if (!recognition) {

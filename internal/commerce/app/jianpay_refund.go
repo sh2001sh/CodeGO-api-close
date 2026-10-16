@@ -35,6 +35,7 @@ type jianPayRefundResponse struct {
 type JianPayRefundResult struct {
 	RefundID     string
 	RefundNo     string
+	OrderID      string
 	RefundAmount int64
 	Status       int
 	StatusText   string
@@ -105,6 +106,7 @@ func callJianPayRefund(endpoint string, params map[string]any) (*JianPayRefundRe
 	}
 	return &JianPayRefundResult{
 		RefundID: payload.Data.RefundID, RefundNo: payload.Data.RefundNo,
+		OrderID:      payload.Data.OrderID,
 		RefundAmount: payload.Data.RefundAmount, Status: payload.Data.Status,
 		StatusText: payload.Data.StatusText, ErrorMessage: payload.Data.ErrorMessage,
 	}, nil

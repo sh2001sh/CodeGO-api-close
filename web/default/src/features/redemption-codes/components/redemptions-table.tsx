@@ -38,6 +38,7 @@ import {
   DISABLED_ROW_MOBILE,
   DataTablePage,
 } from '@/components/data-table'
+import { AdminTableStatus } from '@/features/channels/components/admin-table-status'
 import { getRedemptions, searchRedemptions } from '../api'
 import { REDEMPTION_STATUS, getRedemptionStatusOptions } from '../constants'
 import { isRedemptionExpired } from '../lib'
@@ -81,7 +82,7 @@ export function RedemptionsTable() {
   })
 
   // Fetch data with React Query
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: [
       'redemptions',
       pagination.pageIndex + 1,
@@ -99,6 +100,9 @@ export function RedemptionsTable() {
       const result = hasFilter
         ? await searchRedemptions({ ...params, keyword: globalFilter })
         : await getRedemptions(params)
+
+      if (!result.success)
+        throw new Error(result.message || 'Failed to load records')
 
       return {
         items: result.data?.items || [],
@@ -156,35 +160,47 @@ export function RedemptionsTable() {
   )
 
   return (
-    <DataTablePage
-      table={table}
-      columns={columns}
-      isLoading={isLoading}
-      isFetching={isFetching}
-      emptyTitle={t('No Redemption Codes Found')}
-      emptyDescription={t(
-        'No redemption codes available. Create your first redemption code to get started.'
-      )}
-      skeletonKeyPrefix='redemptions-skeleton'
-      toolbarProps={{
-        searchPlaceholder: t('Filter by name or ID...'),
-        filters: [
-          {
-            columnId: 'status',
-            title: t('Status'),
-            options: redemptionStatusOptions,
-            singleSelect: true,
-          },
-        ],
-      }}
-      getRowClassName={(row, { isMobile }) =>
-        isDisabledRedemptionRow(row.original)
-          ? isMobile
-            ? DISABLED_ROW_MOBILE
-            : DISABLED_ROW_DESKTOP
-          : undefined
-      }
-      bulkActions={<DataTableBulkActions table={table} />}
-    />
+    <>
+      <AdminTableStatus
+        title={t('Redemption Codes')}
+        total={data?.total}
+        selected={table.getSelectedRowModel().rows.length}
+        loading={isLoading}
+        fetching={isFetching}
+        failed={isError}
+        onRetry={() => void refetch()}
+      />
+      <DataTablePage
+        className='admin-records solaris-records'
+        tableClassName='solaris-record-table'
+        tableHeaderClassName='sticky top-0 z-10'
+        table={table}
+        columns={columns}
+        isLoading={isLoading}
+        isFetching={isFetching}
+        emptyTitle={t('No Redemption Codes Found')}
+        emptyDescription=''
+        skeletonKeyPrefix='redemptions-skeleton'
+        toolbarProps={{
+          searchPlaceholder: t('Filter by name or ID...'),
+          filters: [
+            {
+              columnId: 'status',
+              title: t('Status'),
+              options: redemptionStatusOptions,
+              singleSelect: true,
+            },
+          ],
+        }}
+        getRowClassName={(row, { isMobile }) =>
+          isDisabledRedemptionRow(row.original)
+            ? isMobile
+              ? DISABLED_ROW_MOBILE
+              : DISABLED_ROW_DESKTOP
+            : undefined
+        }
+        bulkActions={<DataTableBulkActions table={table} />}
+      />
+    </>
   )
 }

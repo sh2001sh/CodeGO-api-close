@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -47,7 +46,7 @@ export function BlindBoxPropGiftDialog(props: {
   const lookup = async () => {
     const normalized = externalId.trim().toUpperCase()
     if (normalized.length !== 6) {
-      toast.error('请输入有效的 6 位用户 ID')
+      toast.error(i18n.t('请输入有效的 6 位用户 ID'))
       return
     }
     setLookingUp(true)
@@ -55,12 +54,14 @@ export function BlindBoxPropGiftDialog(props: {
     try {
       const response = await lookupWalletTransferRecipient(normalized)
       if (!isApiSuccess(response) || !response.data) {
-        throw new Error(response.message || '未找到接收用户')
+        throw new Error(response.message || i18n.t('未找到接收用户'))
       }
       setExternalId(response.data.external_id)
       setRecipient(response.data)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '未找到接收用户')
+      toast.error(
+        error instanceof Error ? error.message : i18n.t('未找到接收用户')
+      )
     } finally {
       setLookingUp(false)
     }
@@ -76,13 +77,20 @@ export function BlindBoxPropGiftDialog(props: {
         recipient.external_id
       )
       if (!isApiSuccess(response) || !response.data) {
-        throw new Error(response.message || '道具赠送失败')
+        throw new Error(response.message || i18n.t('道具赠送失败'))
       }
-      toast.success(`已将 ${props.prop.title} 赠送给 ${recipient.external_id}`)
+      toast.success(
+        i18n.t('已将 {{param0}} 赠送给 {{param1}}', {
+          param0: props.prop.title,
+          param1: recipient.external_id,
+        })
+      )
       reset()
       await props.onGifted()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '道具赠送失败')
+      toast.error(
+        error instanceof Error ? error.message : i18n.t('道具赠送失败')
+      )
     } finally {
       setSubmitting(false)
     }
@@ -90,22 +98,20 @@ export function BlindBoxPropGiftDialog(props: {
 
   return (
     <Dialog open={props.open} onOpenChange={handleOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='commerce-dialog sm:max-w-md'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Gift className='text-primary size-4' />
             <Trans i18nKey={'赠送道具'} />
           </DialogTitle>
-          <DialogDescription>
-            {props.prop
-              ? i18n.t('将“{{param0}}”转移给其他用户。', {
-                  param0: props.prop.title,
-                })
-              : ''}
-          </DialogDescription>
         </DialogHeader>
 
         <div className='space-y-4'>
+          {props.prop ? (
+            <div className='bg-muted/45 rounded-xl p-3 text-sm font-medium'>
+              {props.prop.title}
+            </div>
+          ) : null}
           <div>
             <label
               htmlFor='prop-gift-recipient'
@@ -118,7 +124,6 @@ export function BlindBoxPropGiftDialog(props: {
                 id='prop-gift-recipient'
                 value={externalId}
                 maxLength={6}
-                placeholder={i18n.t('6 位用户 ID')}
                 onChange={(event) => {
                   setExternalId(event.target.value.toUpperCase())
                   setRecipient(null)

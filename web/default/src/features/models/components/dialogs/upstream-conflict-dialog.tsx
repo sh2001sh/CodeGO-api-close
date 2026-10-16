@@ -25,6 +25,7 @@ import {
   type ColumnDef,
   type RowSelectionState,
 } from '@tanstack/react-table'
+import interfaceI18n from '@/i18n/config'
 import {
   Search,
   Info,
@@ -220,7 +221,7 @@ export function UpstreamConflictDialog({
             <Checkbox
               checked={row.getIsSelected()}
               onCheckedChange={(value) => row.toggleSelected(!!value)}
-              aria-label='Select row'
+              aria-label={interfaceI18n.t('Select row')}
             />
           ) : null}
           <div className='space-y-1'>
@@ -264,7 +265,7 @@ export function UpstreamConflictDialog({
           <PopoverContent className='w-[min(90vw,24rem)] space-y-4 text-sm'>
             <div>
               <StatusBadge
-                label='Local'
+                label={interfaceI18n.t('Local')}
                 variant='neutral'
                 size='sm'
                 copyable={false}
@@ -276,7 +277,7 @@ export function UpstreamConflictDialog({
             </div>
             <div>
               <StatusBadge
-                label='Upstream'
+                label={interfaceI18n.t('Upstream')}
                 variant='info'
                 size='sm'
                 copyable={false}
@@ -303,14 +304,14 @@ export function UpstreamConflictDialog({
           checked={table.getIsAllPageRowsSelected()}
           indeterminate={table.getIsSomePageRowsSelected()}
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label='Select all'
+          aria-label={interfaceI18n.t('Select all')}
         />
       ),
       cell: ({ row }) => (
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label='Select row'
+          aria-label={interfaceI18n.t('Select row')}
         />
       ),
       enableSorting: false,
@@ -346,7 +347,7 @@ export function UpstreamConflictDialog({
         cell: ({ row }) => <ValuePreview value={row.original.upstreamValue} />,
       },
     ]
-  }, [isMobile])
+  }, [isMobile, interfaceI18n.language])
 
   const table = useReactTable({
     data: conflictRows,

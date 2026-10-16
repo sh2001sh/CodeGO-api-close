@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useNavigate } from '@tanstack/react-router'
 import i18n from 'i18next'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { cancelSelfRequests, getSelf } from '@/lib/api'
 import type { User } from '@/features/users/types'
@@ -105,7 +106,13 @@ export function useAuthRedirect() {
         // Restore saved language preference
         const savedLang = getSavedLanguage(user)
         if (savedLang && savedLang !== i18n.language) {
-          i18n.changeLanguage(savedLang)
+          try {
+            await i18n.changeLanguage(savedLang)
+          } catch (error) {
+            toast.error(
+              error instanceof Error ? error.message : i18n.t('Failed to load')
+            )
+          }
         }
       }
     } catch (error) {

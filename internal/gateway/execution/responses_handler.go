@@ -12,7 +12,6 @@ import (
 	gatewayproviders "github.com/sh2001sh/new-api/internal/gateway/execution/providers"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
-	platformcopy "github.com/sh2001sh/new-api/internal/platform/copyx"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
@@ -169,10 +168,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		shouldBridgeBeforeNative(info, bridgeResponsesToChat) {
-		request, err = platformcopy.DeepCopy(request)
-		if err != nil {
-			return types.NewError(fmt.Errorf("failed to copy request to OpenAIResponsesRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
-		}
+		request = request.Clone()
 		return executeResponsesToChatBridge(c, info, adaptor, request)
 	}
 
@@ -226,10 +222,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			info.FirstByteTrace.MarkRequestBodyFastPath()
 		}
 	} else {
-		request, err = platformcopy.DeepCopy(request)
-		if err != nil {
-			return types.NewError(fmt.Errorf("failed to copy request to OpenAIResponsesRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
-		}
+		request = request.Clone()
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
 		if err != nil {
 			if info.RelayMode == gatewaycontract.RelayModeResponses &&

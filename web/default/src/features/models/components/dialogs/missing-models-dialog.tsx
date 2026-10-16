@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import interfaceI18n from '@/i18n/config'
 import { ChevronLeft, ChevronRight, Loader2, Plus, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -25,13 +26,11 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
   Empty,
-  EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
@@ -122,9 +121,6 @@ export function MissingModelsDialog({
       >
         <DialogHeader className='flex-shrink-0 text-start'>
           <DialogTitle>{t('Missing Models')}</DialogTitle>
-          <DialogDescription>
-            {t('Models that are being used but not configured in the system')}
-          </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
@@ -134,9 +130,6 @@ export function MissingModelsDialog({
         ) : missingModels.length === 0 ? (
           <div className='text-muted-foreground py-12 text-center'>
             <p>{t('No missing models found.')}</p>
-            <p className='text-sm'>
-              {t('All models in use are properly configured.')}
-            </p>
           </div>
         ) : (
           <div className='flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto'>
@@ -167,9 +160,6 @@ export function MissingModelsDialog({
                     <Search className='h-5 w-5' />
                   </EmptyMedia>
                   <EmptyTitle>{t('No matches found')}</EmptyTitle>
-                  <EmptyDescription>
-                    {t('Try adjusting your search to locate a missing model.')}
-                  </EmptyDescription>
                 </EmptyHeader>
               </Empty>
             ) : (
@@ -193,7 +183,7 @@ export function MissingModelsDialog({
                         onClick={() => handleConfigureModel(modelName)}
                       >
                         <Plus className='h-4 w-4' />
-                        Configure
+                        {interfaceI18n.t('Configure')}
                       </Button>
                     </div>
                   ))}

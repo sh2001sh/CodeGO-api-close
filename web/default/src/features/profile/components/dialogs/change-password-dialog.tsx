@@ -116,7 +116,7 @@ export function ChangePasswordDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='profile-dialog sm:max-w-md'>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{t('Change Password')}</DialogTitle>

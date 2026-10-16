@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/dto"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
@@ -98,18 +99,29 @@ func OaiChatToResponsesStreamHandler(
 			result.Stop(streamErr)
 		}
 	})
-	if streamErr != nil {
-		return nil, streamErr
-	}
+	info.ConversationResponseText = state.UsageText()
 	if state.Usage() == nil || state.Usage().TotalTokens == 0 {
 		state.SetUsage(tokenx.ResponseText2Usage(c, state.UsageText(), info.UpstreamModelName, info.GetEstimatePromptTokens()))
 	}
+	if gatewaystream.IsClientGone(c) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
+		gatewaystream.MarkAttemptCompleted(c)
+		return state.Usage(), nil
+	}
+	if streamErr != nil {
+		return state.Usage(), streamErr
+	}
+	if info.StreamStatus != nil && info.StreamStatus.EndError != nil {
+		return state.Usage(), types.NewOpenAIError(info.StreamStatus.EndError, types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
+	if info.StreamStatus != nil && !info.StreamStatus.IsNormalEnd() {
+		return state.Usage(), types.NewOpenAIError(fmt.Errorf("chat stream interrupted: %s", info.StreamStatus.EndReason), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
 	events, usage, err := state.Finalize()
 	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		return state.Usage(), types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 	if err := writeResponsesBridgeEvents(c, events); err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+		return usage, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
 	return usage, nil
 }

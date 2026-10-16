@@ -7,12 +7,39 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	"github.com/sh2001sh/new-api/dto"
 	gatewayexecutionapp "github.com/sh2001sh/new-api/internal/gateway/execution/app"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	requestsettings "github.com/sh2001sh/new-api/internal/platform/requestsettings"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRetryRechecksSensitivePromptAfterCountingTextIsReleased(t *testing.T) {
+	originalCheck, originalPrompt := requestsettings.CheckSensitiveEnabled, requestsettings.CheckSensitiveOnPromptEnabled
+	originalStop, originalWords := requestsettings.StopOnSensitiveEnabled, requestsettings.SensitiveWords
+	t.Cleanup(func() {
+		requestsettings.CheckSensitiveEnabled, requestsettings.CheckSensitiveOnPromptEnabled = originalCheck, originalPrompt
+		requestsettings.StopOnSensitiveEnabled, requestsettings.SensitiveWords = originalStop, originalWords
+	})
+	requestsettings.CheckSensitiveEnabled, requestsettings.CheckSensitiveOnPromptEnabled = true, true
+	requestsettings.StopOnSensitiveEnabled = true
+	requestsettings.SensitiveWords = []string{"contains:blocked phrase"}
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	request := &dto.GeneralOpenAIRequest{Messages: []dto.Message{{Role: "user", Content: "a blocked phrase"}}}
+	meta := request.GetTokenCountMeta()
+	meta.MaxTokens = 1484
+	intercept := false
+	first := &gatewayschema.Channel{SensitiveWordInterceptionEnabled: &intercept}
+	require.Nil(t, checkPromptSensitiveRequestForChannel(ctx, types.RelayFormatOpenAI, first, request, meta, false))
+	require.Empty(t, meta.CombineText)
+	intercept = true
+	blocked := checkPromptSensitiveRequestForChannel(ctx, types.RelayFormatOpenAI, first, request, meta, true)
+	require.NotNil(t, blocked, "retry must rehydrate text when the next channel enables interception")
+	require.Equal(t, http.StatusForbidden, blocked.StatusCode)
+	require.Empty(t, meta.CombineText)
+	require.Equal(t, 1484, meta.MaxTokens, "pricing scalars must survive prompt release")
+}
 
 func TestShouldBlockSensitiveWordsHonorsStopOnSensitiveEnabled(t *testing.T) {
 	original := requestsettings.StopOnSensitiveEnabled

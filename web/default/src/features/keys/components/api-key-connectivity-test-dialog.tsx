@@ -50,13 +50,21 @@ export function ApiKeyConnectivityTestDialog(props: {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='api-key-dialog sm:max-w-md'>
         <DialogHeader>
           <DialogTitle>{t('测试 API Key 连通性')}</DialogTitle>
           <DialogDescription>
-            {t('使用该 Key 当前分组可路由的模型发起一次真实请求，并按正常模型调用计费。')}
+            {t(
+              '使用该 Key 当前分组可路由的模型发起一次真实请求，并按正常模型调用计费。'
+            )}
           </DialogDescription>
         </DialogHeader>
+        {props.apiKey && (
+          <div className='api-key-dialog-context'>
+            <span>{props.apiKey.name}</span>
+            <code>{props.apiKey.group}</code>
+          </div>
+        )}
         <div className='grid gap-2 py-2'>
           <label htmlFor='api-key-test-model' className='text-sm font-medium'>
             {t('测试模型')}

@@ -16,23 +16,35 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com.
 */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useSearch, useNavigate } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import {
   ArrowRight,
+  ArrowUpRight,
+  AudioLines,
+  Box,
+  ChevronLeft,
+  ChevronRight,
+  Image,
   LayoutGrid,
+  Search,
   SearchX,
   Store,
   Table2,
+  Video,
   Waypoints,
   X,
 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
+import { CopyButton } from '@/components/copy-button'
 import { SiteSeo } from '@/components/seo'
+import { SiteFooter } from '@/components/site-footer'
 import { useMarketplaceGroups } from '@/features/marketplace/hooks'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
+import { CodeSamplesSection } from '@/features/pricing/components/model-details-api'
 import {
   EXCLUDED_GROUPS,
   QUOTA_TYPE_VALUES,
@@ -43,6 +55,7 @@ import {
   getDynamicPricingTiers,
   isDynamicPricingModel,
 } from '@/features/pricing/lib/dynamic-price'
+import { countFreeModels } from '@/features/pricing/lib/free-models'
 import { availablePricingModels } from '@/features/pricing/lib/merge-pricing-models'
 import { formatPrice, formatGroupPrice } from '@/features/pricing/lib/price'
 import type {
@@ -53,6 +66,7 @@ import type {
 import { DawnModal } from '../components/dawn-modal'
 import { DawnNav } from '../components/dawn-nav'
 import { DawnQueryError } from '../components/query-error'
+import './directory.css'
 
 const VENDOR_RULES: Array<[RegExp, string]> = [
   [/^gpt|^o[134](-mini)?|^chatgpt/, 'OpenAI'],
@@ -76,6 +90,34 @@ const VENDOR_RULES: Array<[RegExp, string]> = [
   [/^whisper|^tts|^dall-e|^gpt-image|^sora/, 'OpenAI'],
 ]
 
+const MODALITIES = [
+  { value: 'all', label: 'gateway.all', icon: LayoutGrid },
+  { value: 'text', label: 'gateway.text', icon: Box },
+  { value: 'image', label: 'gateway.image', icon: Image },
+  { value: 'video', label: 'gateway.video', icon: Video },
+  { value: 'audio', label: 'gateway.audio', icon: AudioLines },
+]
+
+const PAGE_SIZE = 50
+
+function matchesModality(model: PricingModel, modality: string): boolean {
+  if (modality === 'all') return true
+  if (
+    model.output_modalities?.includes(
+      modality as 'text' | 'image' | 'video' | 'audio'
+    )
+  )
+    return true
+  const endpoints = model.supported_endpoint_types ?? []
+  const types: Record<string, string[]> = {
+    text: ['openai', 'openai-response', 'anthropic', 'gemini'],
+    image: ['image-generation'],
+    video: ['openai-video'],
+    audio: ['audio-speech', 'audio-transcription', 'audio-translation'],
+  }
+  return endpoints.some((endpoint) => types[modality]?.includes(endpoint))
+}
+
 function guessVendor(name: string): string {
   const lower = name.toLowerCase()
   for (const [pattern, vendor] of VENDOR_RULES) {
@@ -90,6 +132,8 @@ function displayVendor(name: string): string {
 
 export function DawnPlaza() {
   const { t } = useTranslation()
+  const searchParams = useSearch({ from: '/pricing/' })
+  const navigate = useNavigate({ from: '/pricing/' })
   const pricing = usePricingData()
   const marketplaceGroupsQuery = useMarketplaceGroups({
     search: '',
@@ -120,12 +164,36 @@ export function DawnPlaza() {
       ),
     [perfQuery.data]
   )
-  const [unit, setUnit] = useState<TokenUnit>('M')
-  const [view, setView] = useState<'table' | 'grid'>('table')
-  const [vendor, setVendor] = useState('全部厂家')
-  const [keyword, setKeyword] = useState('')
-  const [sort, setSort] = useState<'hot' | 'name' | 'price'>('hot')
+  const unit: TokenUnit = searchParams.tokenUnit ?? 'M'
+  const view = searchParams.view === 'card' ? 'grid' : 'table'
+  const vendor = searchParams.vendor ?? '全部厂家'
+  const keyword = searchParams.search ?? ''
+  const [searchDraft, setSearchDraft] = useState(keyword)
+  const sort = searchParams.sort ?? 'hot'
+  const modality = searchParams.endpointType ?? 'all'
+  const updateSearch = (patch: Partial<typeof searchParams>) => {
+    void navigate({
+      search: (previous) => ({ ...previous, ...patch }),
+      replace: true,
+    })
+  }
+  const setUnit = (tokenUnit: TokenUnit) => updateSearch({ tokenUnit })
+  const setView = (value: 'table' | 'grid') =>
+    updateSearch({ view: value === 'grid' ? 'card' : 'table' })
+  const setVendor = (value: string) =>
+    updateSearch({ vendor: value === '全部厂家' ? undefined : value })
+  const setKeyword = (value: string) =>
+    updateSearch({ search: value || undefined })
+  const setSort = (value: string) => updateSearch({ sort: value })
   const [detail, setDetail] = useState<string | null>(null)
+  const [pagination, setPagination] = useState({ scope: '', page: 1 })
+
+  useEffect(() => setSearchDraft(keyword), [keyword])
+  useEffect(() => {
+    if (searchDraft === keyword) return
+    const timer = window.setTimeout(() => setKeyword(searchDraft), 180)
+    return () => window.clearTimeout(timer)
+  }, [searchDraft, keyword])
 
   const models = useMemo(
     () =>
@@ -150,6 +218,14 @@ export function DawnPlaza() {
     [models]
   )
 
+  const vendorCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const model of models) {
+      counts.set(model.vendorName, (counts.get(model.vendorName) ?? 0) + 1)
+    }
+    return counts
+  }, [models])
+
   const groups = useMemo(
     () =>
       Object.entries(pricing.usableGroup)
@@ -164,17 +240,23 @@ export function DawnPlaza() {
 
   const marketplaceGroups = useMemo(
     () =>
-      (marketplaceGroupsQuery.data?.items ?? []).map((group) => ({
+      [
+        ...(marketplaceGroupsQuery.data?.official_items ?? []),
+        ...(marketplaceGroupsQuery.data?.items ?? []),
+      ].map((group) => ({
         name: group.system_display_name,
         ratio: group.multiplier ?? 1,
         desc: group.source_label || group.source_type,
         sourceLabel:
           group.source_label ||
-          (group.source_type === 'official' ? '官方' : '第三方'),
+          (group.source_type === 'official'
+            ? i18n.t('官方')
+            : i18n.t('第三方')),
         sourceType: group.source_type,
+        isSiteGroup: false,
         models: group.models,
       })),
-    [marketplaceGroupsQuery.data]
+    [marketplaceGroupsQuery.data, i18n.language]
   )
 
   const list = useMemo(() => {
@@ -182,12 +264,37 @@ export function DawnPlaza() {
     const filtered = models.filter(
       (model) =>
         (vendor === '全部厂家' || model.vendorName === vendor) &&
+        matchesModality(model, modality) &&
+        (!searchParams.group ||
+          model.enable_groups?.includes(searchParams.group)) &&
+        (!searchParams.quotaType ||
+          String(model.quota_type) === searchParams.quotaType) &&
+        (!searchParams.tag ||
+          model.tags?.split(/[,;|\s]+/).includes(searchParams.tag)) &&
         (!query ||
           model.model_name.toLowerCase().includes(query) ||
           model.vendorName.toLowerCase().includes(query))
     )
     if (sort === 'price') {
-      filtered.sort((a, b) => a.model_ratio - b.model_ratio)
+      filtered.sort((a, b) => {
+        const price = (model: PricingModel) => {
+          if (
+            model.pricing_available === false ||
+            model.quota_type === QUOTA_TYPE_VALUES.REQUEST
+          )
+            return Number.POSITIVE_INFINITY
+          if (isDynamicPricingModel(model)) {
+            const value = getDynamicPricingTiers(model)[0]?.inputPrice
+            return typeof value === 'number' && Number.isFinite(value)
+              ? value
+              : Number.POSITIVE_INFINITY
+          }
+          return Number.isFinite(model.model_ratio)
+            ? model.model_ratio * 2
+            : Number.POSITIVE_INFINITY
+        }
+        return price(a) - price(b) || a.model_name.localeCompare(b.model_name)
+      })
     } else if (sort === 'hot') {
       const coverage = (m: (typeof filtered)[number]) =>
         requestCounts.get(m.model_name) ?? 0
@@ -199,15 +306,47 @@ export function DawnPlaza() {
       filtered.sort((a, b) => a.model_name.localeCompare(b.model_name))
     }
     return filtered
-  }, [models, vendor, keyword, sort, requestCounts])
+  }, [
+    models,
+    vendor,
+    keyword,
+    sort,
+    requestCounts,
+    modality,
+    searchParams.group,
+    searchParams.quotaType,
+    searchParams.tag,
+  ])
 
-  const metered = models.filter(
-    (model) => model.quota_type === QUOTA_TYPE_VALUES.REQUEST
-  ).length
-  const free = models.filter(
-    (model) =>
-      model.quota_type === QUOTA_TYPE_VALUES.TOKEN && model.model_ratio === 0
-  ).length
+  const free = useMemo(
+    () => countFreeModels(models, pricing.groupRatio),
+    [models, pricing.groupRatio]
+  )
+  const pageScope = JSON.stringify([
+    vendor,
+    keyword,
+    sort,
+    modality,
+    searchParams.group,
+    searchParams.quotaType,
+    searchParams.tag,
+  ])
+  const pageCount = Math.max(1, Math.ceil(list.length / PAGE_SIZE))
+  const page = Math.min(
+    pagination.scope === pageScope ? pagination.page : 1,
+    pageCount
+  )
+  if (pagination.scope !== pageScope || pagination.page !== page) {
+    setPagination({ scope: pageScope, page })
+  }
+  const pageModels = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const setPage = (value: number) => {
+    if (!Number.isFinite(value)) return
+    setPagination({
+      scope: pageScope,
+      page: Math.max(1, Math.min(pageCount, Math.trunc(value))),
+    })
+  }
 
   const detailModel = detail
     ? models.find((model) => model.model_name === detail)
@@ -221,8 +360,9 @@ export function DawnPlaza() {
       .filter((group) => enabled.includes(group.name))
       .map((group) => ({
         ...group,
-        sourceLabel: '官方',
+        sourceLabel: i18n.t('官方'),
         sourceType: 'official' as const,
+        isSiteGroup: true,
       }))
     const marketplace = marketplaceGroups.filter((group) =>
       group.models.some(
@@ -234,40 +374,35 @@ export function DawnPlaza() {
       ...official,
       ...marketplace.filter((group) => !seen.has(group.name)),
     ]
-  }, [detailModel, groups, marketplaceGroups])
+  }, [detailModel, groups, marketplaceGroups, i18n.language])
 
   return (
-    <div className='dawn'>
+    <div className='dawn gateway-plaza'>
       <SiteSeo
         title={i18n.t('模型广场 | Code Go')}
         description={i18n.t('模型广场 · 输入输出价目')}
         canonicalPath='/pricing'
       />
       <DawnNav />
-      <main className='dawn-wrap'>
+      <main className='dawn-wrap' id='content' tabIndex={-1}>
         <div className='mhead'>
           <div>
-            <div className='kick'>
-              <span className='n'>D·01</span>
-              MODEL PLAZA
-            </div>
             <h1>
-              <Trans i18nKey={'模型广场，'} />
-              <em>
-                <Trans i18nKey={'皆有价签'} />
-              </em>
-              。
+              {t('Models')}
+              <span aria-hidden='true'>.</span>
             </h1>
           </div>
           <div className='seg'>
             <button
               className={unit === 'M' ? 'on' : ''}
+              aria-pressed={unit === 'M'}
               onClick={() => setUnit('M')}
             >
               /1M
             </button>
             <button
               className={unit === 'K' ? 'on' : ''}
+              aria-pressed={unit === 'K'}
               onClick={() => setUnit('K')}
             >
               /1K
@@ -275,220 +410,392 @@ export function DawnPlaza() {
           </div>
         </div>
 
-        <div className='statband'>
-          <div className='cell'>
+        <div className='gateway-directory-summary'>
+          <span>
             <b>{models.length}</b>
-            <span>
-              <Trans i18nKey={'在售模型'} />
-            </span>
-          </div>
-          <div className='cell'>
+            {t('Models')}
+          </span>
+          <span>
             <b>{vendors.length - 1}</b>
-            <span>
-              <Trans i18nKey={'模型厂家'} />
-            </span>
-          </div>
-          <div className='cell'>
-            <b className='c-ok'>{free}</b>
-            <span>
-              <Trans i18nKey={'免费模型'} />
-            </span>
-          </div>
-          <div className='cell'>
-            <b className='c-warn'>{metered}</b>
-            <span>
-              <Trans i18nKey={'按量计费'} />
-            </span>
-          </div>
-          <div className='cell'>
-            <b>{groups.length}</b>
-            <span>
-              <Trans i18nKey={'计费分组'} />
-            </span>
-          </div>
+            {t('gateway.providers')}
+          </span>
+          <span>
+            <b>{free}</b>
+            {t('Free models')}
+          </span>
         </div>
 
-        <div className='filters'>
-          <input
-            placeholder={i18n.t('搜索模型 / 厂家')}
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-          />
-          <div className='seg'>
-            {vendors.map((name) => (
-              <button
-                key={name}
-                className={vendor === name ? 'on' : ''}
-                onClick={() => setVendor(name)}
-              >
-                {displayVendor(name)}
-              </button>
-            ))}
-          </div>
-          <select
-            className='fsel'
-            value={sort}
-            onChange={(event) =>
-              setSort(event.target.value as 'hot' | 'name' | 'price')
-            }
+        <div className='gateway-directory-layout'>
+          <aside
+            className='gateway-sidebar'
+            aria-label={t('gateway.providers')}
           >
-            <option value='hot'>
-              <Trans i18nKey={'按热度'} />
-            </option>
-            <option value='name'>
-              <Trans i18nKey={'按名称'} />
-            </option>
-            <option value='price'>
-              <Trans i18nKey={'按输入价'} />
-            </option>
-          </select>
-          <div className='iconseg'>
-            <button
-              className={view === 'table' ? 'on' : ''}
-              onClick={() => setView('table')}
-              title={i18n.t('表格')}
-            >
-              <Table2 size={15} />
-            </button>
-            <button
-              className={view === 'grid' ? 'on' : ''}
-              onClick={() => setView('grid')}
-              title={i18n.t('卡片')}
-            >
-              <LayoutGrid size={15} />
-            </button>
-          </div>
-        </div>
-
-        {pricing.isLoading ? null : pricing.error ? (
-          <DawnQueryError
-            title={i18n.t('模型价格加载失败')}
-            description={i18n.t('暂时无法获取模型与计费信息，请稍后重试。')}
-            onRetry={() => void pricing.refetch()}
-          />
-        ) : list.length === 0 ? (
-          <div className='empty'>
-            <span className='eic'>
-              <SearchX size={20} />
-            </span>
-            <b>
-              <Trans i18nKey={'无匹配模型'} />
-            </b>
-          </div>
-        ) : view === 'table' ? (
-          <div className='gtable cache-prices' style={{ marginTop: 16 }}>
-            <div className='tr th'>
-              <span>
-                <Trans i18nKey={'模型'} />
-              </span>
-              <span>
-                <Trans i18nKey={'输入 /'} />
-                {unit}
-              </span>
-              <span>
-                <Trans i18nKey={'输出 /'} />
-                {unit}
-              </span>
-              <span>
-                {t('缓存写入')} /{unit}
-              </span>
-              <span>
-                {t('缓存读取')} /{unit}
-              </span>
-              <span>
-                <Trans i18nKey={'可用分组'} />
-              </span>
-              <span style={{ textAlign: 'right' }}>
-                <Trans i18nKey={'详情'} />
-              </span>
+            <h2>{t('gateway.providers')}</h2>
+            <div>
+              {vendors.map((name) => (
+                <button
+                  key={name}
+                  className={vendor === name ? 'on' : ''}
+                  aria-pressed={vendor === name}
+                  onClick={() => setVendor(name)}
+                >
+                  {name === '全部厂家'
+                    ? t('gateway.allProviders')
+                    : displayVendor(name)}
+                  <span>
+                    {name === '全部厂家'
+                      ? models.length
+                      : (vendorCounts.get(name) ?? 0)}
+                  </span>
+                </button>
+              ))}
             </div>
-            {list.map((model) => (
-              <ModelRow
-                key={model.model_name}
-                model={model}
-                unit={unit}
-                onOpen={() => setDetail(model.model_name)}
-                groups={groups.map((g) => g.name)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className='mgrid'>
-            {list.map((model) => (
-              <div
-                className='mcard'
-                key={model.model_name}
-                onClick={() => setDetail(model.model_name)}
+          </aside>
+          <div className='gateway-directory-content'>
+            <div className='filters'>
+              <div className='gateway-directory-search'>
+                <Search size={17} aria-hidden='true' />
+                <label className='sr-only' htmlFor='directory-search'>
+                  {t('Search models')}
+                </label>
+                <input
+                  id='directory-search'
+                  placeholder={i18n.t('搜索模型 / 厂家')}
+                  aria-label={t('Search models')}
+                  value={searchDraft}
+                  onChange={(event) => setSearchDraft(event.target.value)}
+                />
+                {keyword && (
+                  <button
+                    onClick={() => {
+                      setSearchDraft('')
+                      setKeyword('')
+                    }}
+                    aria-label={t('gateway.clearSearch')}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+              <select
+                className='fsel'
+                value={sort}
+                aria-label={t('gateway.sort')}
+                onChange={(event) =>
+                  setSort(event.target.value as 'hot' | 'name' | 'price')
+                }
               >
-                <div className='halo' />
-                <span
-                  className='mn'
-                  style={{
-                    fontFamily: 'var(--dawn-mono)',
-                    fontSize: 12.5,
-                    fontWeight: 700,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 9,
-                    overflow: 'hidden',
+                <option value='hot'>
+                  <Trans i18nKey={'按热度'} />
+                </option>
+                <option value='name'>
+                  <Trans i18nKey={'按名称'} />
+                </option>
+                <option value='price'>
+                  <Trans i18nKey={'按输入价'} />
+                </option>
+              </select>
+              <div className='iconseg'>
+                <button
+                  className={view === 'table' ? 'on' : ''}
+                  onClick={() => setView('table')}
+                  title={i18n.t('表格')}
+                  aria-label={i18n.t('表格')}
+                  aria-pressed={view === 'table'}
+                >
+                  <Table2 size={15} />
+                </button>
+                <button
+                  className={view === 'grid' ? 'on' : ''}
+                  onClick={() => setView('grid')}
+                  title={i18n.t('卡片')}
+                  aria-label={i18n.t('卡片')}
+                  aria-pressed={view === 'grid'}
+                >
+                  <LayoutGrid size={15} />
+                </button>
+              </div>
+            </div>
+            <div
+              className='gateway-directory-tabs'
+              role='group'
+              aria-label={t('gateway.modalities')}
+            >
+              {MODALITIES.map((item) => (
+                <button
+                  key={item.value}
+                  className={modality === item.value ? 'on' : ''}
+                  aria-pressed={modality === item.value}
+                  onClick={() =>
+                    updateSearch({
+                      endpointType:
+                        item.value === 'all' ? undefined : item.value,
+                    })
+                  }
+                >
+                  <item.icon size={15} />
+                  {t(item.label)}
+                </button>
+              ))}
+            </div>
+            <div className='directory-refine'>
+              <label>
+                <span>{t('Group')}</span>
+                <select
+                  value={searchParams.group ?? ''}
+                  onChange={(event) =>
+                    updateSearch({ group: event.target.value || undefined })
+                  }
+                >
+                  <option value=''>{t('All')}</option>
+                  {groups.map((group) => (
+                    <option key={group.name} value={group.name}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>{t('计费方式')}</span>
+                <select
+                  value={searchParams.quotaType ?? ''}
+                  onChange={(event) =>
+                    updateSearch({ quotaType: event.target.value || undefined })
+                  }
+                >
+                  <option value=''>{t('All')}</option>
+                  <option value='0'>{t('Token-based')}</option>
+                  <option value='1'>{t('Per Request')}</option>
+                </select>
+              </label>
+            </div>
+            <div className='gateway-result-count' aria-live='polite'>
+              <span>{t('gateway.results', { count: list.length })}</span>
+              {(keyword ||
+                vendor !== '全部厂家' ||
+                modality !== 'all' ||
+                searchParams.group ||
+                searchParams.quotaType ||
+                searchParams.tag) && (
+                <button
+                  onClick={() =>
+                    updateSearch({
+                      search: undefined,
+                      vendor: undefined,
+                      endpointType: undefined,
+                      group: undefined,
+                      quotaType: undefined,
+                      tag: undefined,
+                    })
+                  }
+                >
+                  <X size={12} />
+                  {t('gateway.resetFilters')}
+                </button>
+              )}
+            </div>
+
+            {!pricing.isLoading && !pricing.error && pageCount > 1 && (
+              <nav className='gateway-pagination' aria-label={t('pagination')}>
+                <button
+                  type='button'
+                  disabled={page === 1}
+                  onClick={() => setPage(page - 1)}
+                >
+                  <ChevronLeft size={16} aria-hidden='true' />
+                  {t('上一页')}
+                </button>
+                <label>
+                  <span>{t('Page')}</span>
+                  <input
+                    type='number'
+                    min={1}
+                    max={pageCount}
+                    value={page}
+                    aria-label={t('Page')}
+                    onChange={(event) => setPage(Number(event.target.value))}
+                  />
+                  <span>/ {pageCount.toLocaleString(getIntlLocale())}</span>
+                </label>
+                <button
+                  type='button'
+                  disabled={page === pageCount}
+                  onClick={() => setPage(page + 1)}
+                >
+                  {t('下一页')}
+                  <ChevronRight size={16} aria-hidden='true' />
+                </button>
+              </nav>
+            )}
+
+            {pricing.isLoading ? (
+              <div
+                className='gateway-skeleton'
+                aria-busy='true'
+                aria-label={t('Loading')}
+              />
+            ) : pricing.error ? (
+              <DawnQueryError
+                title={i18n.t('模型价格加载失败')}
+                onRetry={() => void pricing.refetch()}
+              />
+            ) : list.length === 0 ? (
+              <div className='empty'>
+                <span className='eic'>
+                  <SearchX size={20} />
+                </span>
+                <b>
+                  <Trans i18nKey={'无匹配模型'} />
+                </b>
+                <button
+                  className='btn'
+                  onClick={() => {
+                    setSearchDraft('')
+                    updateSearch({
+                      search: undefined,
+                      vendor: undefined,
+                      endpointType: undefined,
+                      group: undefined,
+                      quotaType: undefined,
+                      tag: undefined,
+                    })
                   }}
                 >
-                  <span
-                    style={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {model.model_name}
-                  </span>
-                  <span className='ven'>{displayVendor(model.vendorName)}</span>
-                  {model.quota_type === QUOTA_TYPE_VALUES.REQUEST && (
-                    <span className='btag'>
-                      <Trans i18nKey={'按量'} />
-                    </span>
-                  )}
-                </span>
-                <div className='pr'>
-                  <PriceText model={model} unit={unit} />
-                  <span>
-                    {' '}
-                    /{unit} <Trans i18nKey={'输入'} />
-                  </span>
-                </div>
-                <div className='sub'>
-                  {model.quota_type === QUOTA_TYPE_VALUES.REQUEST
-                    ? i18n.t('按量计费')
-                    : i18n.t('输出 {{param0}} /{{param1}}', {
-                        param0: formatPrice(model, 'output', unit),
-                        param1: unit,
-                      })}
-                </div>
-                {model.quota_type !== QUOTA_TYPE_VALUES.REQUEST && (
-                  <div className='sub'>
-                    {t('缓存写入')} {cacheText(model, unit, 'create_cache')} /
-                    {unit}
-                    <br />
-                    {t('缓存读取')} {cacheText(model, unit, 'cache')} /{unit}
-                  </div>
-                )}
-                <div className='gtags' style={{ marginTop: 12 }}>
-                  {groupsFor(
-                    model,
-                    groups.map((g) => g.name)
-                  )
-                    .slice(0, 3)
-                    .map((name) => (
-                      <span className='gtag' key={name}>
-                        {name}
-                      </span>
-                    ))}
-                </div>
+                  {t('gateway.resetFilters')}
+                </button>
+                <button className='btn' onClick={() => void pricing.refetch()}>
+                  {t('刷新')}
+                </button>
+                <Link className='btn' to='/docs'>
+                  {t('Docs')}
+                </Link>
               </div>
-            ))}
+            ) : view === 'table' ? (
+              <div className='gtable cache-prices' style={{ marginTop: 16 }}>
+                <div className='tr th'>
+                  <span>
+                    <Trans i18nKey={'模型'} />
+                  </span>
+                  <span>
+                    <Trans i18nKey={'输入 /'} />
+                    {unit}
+                  </span>
+                  <span>
+                    <Trans i18nKey={'输出 /'} />
+                    {unit}
+                  </span>
+                  <span>
+                    {t('缓存写入')} /{unit}
+                  </span>
+                  <span>
+                    {t('缓存读取')} /{unit}
+                  </span>
+                  <span>
+                    <Trans i18nKey={'可用分组'} />
+                  </span>
+                  <span style={{ textAlign: 'right' }}>
+                    <Trans i18nKey={'详情'} />
+                  </span>
+                </div>
+                {pageModels.map((model) => (
+                  <ModelRow
+                    key={model.model_name}
+                    model={model}
+                    unit={unit}
+                    onOpen={() => setDetail(model.model_name)}
+                    groups={groups.map((g) => g.name)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className='mgrid'>
+                {pageModels.map((model) => (
+                  <button
+                    className='mcard'
+                    key={model.model_name}
+                    onClick={() => setDetail(model.model_name)}
+                  >
+                    <span
+                      className='mn'
+                      style={{
+                        fontFamily: 'var(--dawn-mono)',
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 9,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <span
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {model.model_name}
+                      </span>
+                      <span className='ven'>
+                        {displayVendor(model.vendorName)}
+                      </span>
+                      {model.quota_type === QUOTA_TYPE_VALUES.REQUEST && (
+                        <span className='btag'>
+                          <Trans i18nKey={'按量'} />
+                        </span>
+                      )}
+                    </span>
+                    <div className='pr'>
+                      <PriceText model={model} unit={unit} />
+                      <span>
+                        {' '}
+                        {model.quota_type === QUOTA_TYPE_VALUES.REQUEST ? (
+                          t('gateway.perRequest')
+                        ) : (
+                          <>
+                            /{unit} <Trans i18nKey={'输入'} />
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    <div className='sub'>
+                      {model.quota_type === QUOTA_TYPE_VALUES.REQUEST
+                        ? i18n.t('按量计费')
+                        : i18n.t('输出 {{param0}} /{{param1}}', {
+                            param0: formatPrice(model, 'output', unit),
+                            param1: unit,
+                          })}
+                    </div>
+                    {model.quota_type !== QUOTA_TYPE_VALUES.REQUEST && (
+                      <div className='sub'>
+                        {t('缓存写入')} {cacheText(model, unit, 'create_cache')}{' '}
+                        /{unit}
+                        <br />
+                        {t('缓存读取')} {cacheText(model, unit, 'cache')} /
+                        {unit}
+                      </div>
+                    )}
+                    <div className='gtags' style={{ marginTop: 12 }}>
+                      {groupsFor(
+                        model,
+                        groups.map((g) => g.name)
+                      )
+                        .slice(0, 3)
+                        .map((name) => (
+                          <span className='gtag' key={name}>
+                            {name}
+                          </span>
+                        ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </main>
+
+      <SiteFooter />
 
       <DawnModal
         open={!!detailModel}
@@ -510,7 +817,11 @@ export function DawnPlaza() {
                 }}
               >
                 {detailModel.model_name}
-                <span className='ven' style={{ fontSize: 10 }}>
+                <CopyButton
+                  value={detailModel.model_name}
+                  aria-label={t('Copy model name')}
+                />
+                <span className='ven' style={{ fontSize: 12 }}>
                   {displayVendor(detailModel.vendorName)}
                 </span>
                 {detailModel.quota_type === QUOTA_TYPE_VALUES.REQUEST && (
@@ -583,7 +894,7 @@ export function DawnPlaza() {
                 <b>
                   {detailModel.quota_type === QUOTA_TYPE_VALUES.REQUEST
                     ? i18n.t('每次调用')
-                    : i18n.t('每 1M tokens')}
+                    : `1${unit} tokens`}
                 </b>
                 <Trans i18nKey={'计费粒度'} />
               </div>
@@ -604,11 +915,6 @@ export function DawnPlaza() {
               <Waypoints size={12} />
               <Trans i18nKey={'各分组价格（含分组倍率）'} />
             </div>
-            {isDynamicPricingModel(detailModel) && (
-              <p className='text-muted-foreground mb-3 text-xs'>
-                {t('概览和分组价格展示首档单价，完整阶梯价格如下。')}
-              </p>
-            )}
             {isDynamicPricingModel(detailModel) && (
               <div className='gtab cache-tiers' style={{ marginBottom: 12 }}>
                 <div className='gr gh'>
@@ -697,11 +1003,11 @@ export function DawnPlaza() {
                       {group.sourceLabel}
                     </small>
                   </span>
-                  <span className='num'>{group.ratio}×</span>
+                  <span className='num'>{Number(group.ratio.toFixed(4))}×</span>
                   {detailModel.quota_type === QUOTA_TYPE_VALUES.REQUEST ? (
                     <>
                       <span className='num'>
-                        <b>{formatPrice(detailModel, 'input', unit)}</b>
+                        <b>{meteredPrice(detailModel, group.ratio)}</b>
                       </span>
                       <span className='num'>
                         <Trans i18nKey={'按量'} />
@@ -713,7 +1019,7 @@ export function DawnPlaza() {
                     <>
                       <span className='num'>
                         <b>
-                          {group.sourceType === 'official'
+                          {group.isSiteGroup
                             ? formatGroupPrice(
                                 detailModel,
                                 group.name,
@@ -735,7 +1041,7 @@ export function DawnPlaza() {
                       </span>
                       <span className='num'>
                         <b>
-                          {group.sourceType === 'official'
+                          {group.isSiteGroup
                             ? formatGroupPrice(
                                 detailModel,
                                 group.name,
@@ -761,7 +1067,7 @@ export function DawnPlaza() {
                     (['create_cache', 'cache'] as const).map((type) => (
                       <span className='num' key={type}>
                         <b>
-                          {group.sourceType === 'official'
+                          {group.isSiteGroup
                             ? formatGroupPrice(
                                 detailModel,
                                 group.name,
@@ -784,16 +1090,50 @@ export function DawnPlaza() {
                   <Link
                     to='/market'
                     style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
                       color: 'var(--dawn-copper)',
                       fontWeight: 700,
-                      fontSize: 11,
+                      fontSize: 12,
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    <Trans i18nKey={'去使用 →'} />
+                    {t('gateway.useGroup')}
+                    <ArrowRight size={12} aria-hidden='true' />
                   </Link>
                 </div>
               ))}
+            </div>
+            <div className='gateway-detail-actions'>
+              <Link
+                className='btn'
+                to='/pricing/$modelId'
+                params={{ modelId: detailModel.model_name }}
+                search={searchParams}
+              >
+                {t('Model details')}
+                <ArrowUpRight size={15} />
+              </Link>
+              <Link
+                className='btn primary'
+                to='/playground'
+                search={{ model: detailModel.model_name }}
+              >
+                {t('gateway.playground')}
+                <ArrowUpRight size={15} />
+              </Link>
+              <Link className='btn' to='/keys'>
+                {t('gateway.apiKeys')}
+                <ArrowRight size={15} />
+              </Link>
+            </div>
+            <div className='gateway-detail-code'>
+              <CodeSamplesSection
+                key={detailModel.model_name}
+                model={detailModel}
+                endpointMap={pricing.endpointMap}
+              />
             </div>
             <div className='mfoot2'>
               <button className='btn' onClick={() => setDetail(null)}>
@@ -813,7 +1153,7 @@ export function DawnPlaza() {
 
 function groupsFor(model: PricingModel, allGroups: string[]): string[] {
   const enabled = Array.isArray(model.enable_groups) ? model.enable_groups : []
-  if (!enabled.length) return allGroups.slice(0, 3)
+  if (!enabled.length) return []
   return enabled.filter((name) => allGroups.includes(name))
 }
 
@@ -856,6 +1196,7 @@ function dynamicTierPrice(value: unknown, unit: TokenUnit): string {
 
 function PriceText({ model, unit }: { model: PricingModel; unit: TokenUnit }) {
   useTranslation()
+  if (model.pricing_available === false) return <>—</>
   if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
     return <>{meteredPrice(model)}</>
   }
@@ -869,10 +1210,12 @@ function PriceText({ model, unit }: { model: PricingModel; unit: TokenUnit }) {
 }
 
 /** 按量计费模型的每次单价。 */
-function meteredPrice(model: PricingModel): string {
+function meteredPrice(model: PricingModel, ratio = 1): string {
   const price = model.model_price
   if (price == null || !Number.isFinite(Number(price))) return '—'
-  return `$${Number(price) % 1 === 0 ? Number(price).toFixed(0) : Number(price).toFixed(2)}`
+  return `${new Intl.NumberFormat(getIntlLocale(), {
+    maximumFractionDigits: 8,
+  }).format(Number(price) * ratio)} credits`
 }
 
 function ModelRow(props: {
@@ -886,15 +1229,7 @@ function ModelRow(props: {
   const metered = model.quota_type === QUOTA_TYPE_VALUES.REQUEST
   const isFree = !metered && model.model_ratio === 0
   return (
-    <div
-      className='tr'
-      onClick={onOpen}
-      role='button'
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') onOpen()
-      }}
-    >
+    <button className='tr' type='button' onClick={onOpen}>
       <span
         className='mn'
         style={{
@@ -923,7 +1258,10 @@ function ModelRow(props: {
           </span>
         )}
       </span>
-      <span className={`price${isFree ? 'free' : ''}`}>
+      <span
+        data-label={i18n.t('Input')}
+        className={`price${isFree ? 'free' : ''}`}
+      >
         <b>
           {metered
             ? meteredPrice(model)
@@ -931,9 +1269,15 @@ function ModelRow(props: {
               ? i18n.t('免费')
               : formatPrice(model, 'input', unit)}
         </b>
-        <span className='u'> /{unit}</span>
+        <span className='u'>
+          {' '}
+          {metered ? i18n.t('gateway.perRequest') : `/${unit}`}
+        </span>
       </span>
-      <span className={`price${isFree ? 'free' : ''}`}>
+      <span
+        data-label={i18n.t('Output')}
+        className={`price${isFree ? 'free' : ''}`}
+      >
         <b>
           {metered
             ? i18n.t('按量')
@@ -943,10 +1287,10 @@ function ModelRow(props: {
         </b>
         <span className='u'>{metered ? '' : ` /${unit}`}</span>
       </span>
-      <span className='cw'>
+      <span className='cw' data-label={i18n.t('缓存写入')}>
         {metered ? '—' : cacheText(model, unit, 'create_cache')}
       </span>
-      <span className='cw'>
+      <span className='cw' data-label={i18n.t('缓存读取')}>
         {metered ? '—' : cacheText(model, unit, 'cache')}
       </span>
       <span className='gtags'>
@@ -963,7 +1307,7 @@ function ModelRow(props: {
           textAlign: 'right',
           color: 'var(--dawn-copper)',
           fontWeight: 700,
-          fontSize: 11,
+          fontSize: 12,
           display: 'inline-flex',
           alignItems: 'center',
           gap: 4,
@@ -971,6 +1315,6 @@ function ModelRow(props: {
       >
         <Trans i18nKey={'详情'} /> <ArrowRight size={12} />
       </span>
-    </div>
+    </button>
   )
 }

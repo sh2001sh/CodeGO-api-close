@@ -34,7 +34,7 @@ export function WalletTransferConfirmDialog(props: {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='max-h-[calc(100dvh-1.5rem)] overflow-y-auto max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'>
+      <DialogContent className='commerce-dialog max-h-[calc(100dvh-1.5rem)] overflow-y-auto max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Send className='text-primary size-5' />
@@ -46,27 +46,25 @@ export function WalletTransferConfirmDialog(props: {
         </DialogHeader>
 
         <div className='space-y-4 py-2'>
-          <div className='border-border bg-muted/35 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-md border p-3 text-sm'>
-            <span className='text-muted-foreground'>{t('Recipient')}</span>
-            <strong className='text-right font-medium'>
+          <dl className='commerce-transfer-review'>
+            <dt className='text-muted-foreground'>{t('Recipient')}</dt>
+            <dd className='text-right font-medium'>
               {props.recipient?.display_name_masked} ·{' '}
               {props.recipient?.external_id}
-            </strong>
-            <span className='text-muted-foreground'>
-              {t('Transfer amount')}
-            </span>
-            <strong className='text-right font-semibold tabular-nums'>
+            </dd>
+            <dt className='text-muted-foreground'>{t('Transfer amount')}</dt>
+            <dd className='text-right font-semibold tabular-nums'>
               {props.amountLabel}
-            </strong>
-            <span className='text-muted-foreground'>{t('手续费（1%）')}</span>
-            <strong className='text-right font-medium tabular-nums'>
+            </dd>
+            <dt className='text-muted-foreground'>{t('手续费（1%）')}</dt>
+            <dd className='text-right font-medium tabular-nums'>
               {props.feeLabel}
-            </strong>
-            <span className='text-muted-foreground'>{t('通用额度总扣除')}</span>
-            <strong className='text-right font-semibold tabular-nums'>
+            </dd>
+            <dt className='text-muted-foreground'>{t('通用额度总扣除')}</dt>
+            <dd className='text-right font-semibold tabular-nums'>
               {props.totalDebitLabel}
-            </strong>
-          </div>
+            </dd>
+          </dl>
 
           <div className='space-y-2'>
             <Label htmlFor='transfer-payment-password' className='flex gap-2'>
@@ -96,6 +94,7 @@ export function WalletTransferConfirmDialog(props: {
           </Button>
           <Button
             type='button'
+            className='commerce-transfer-submit'
             disabled={props.submitting || !paymentPassword}
             onClick={() => void props.onConfirm(paymentPassword)}
           >

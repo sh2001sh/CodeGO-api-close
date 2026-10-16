@@ -22,7 +22,7 @@ func TestMarketListingKeepsOfficialOnFirstPageAndSearchesBothSources(t *testing.
 	t.Cleanup(func() {
 		platformdb.LogDB = oldLogDB
 		require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(oldGroups))
-		marketplaceListCache.result = nil
+		marketplaceListCache.entries = nil
 	})
 	require.NoError(t, gatewaygroups.UpdateUserUsableGroupsByJSONString(`{"official-list":"Official"}`))
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}, &marketplaceschema.Channel{}, &marketplaceschema.GroupAccess{}, &marketplaceschema.RankingSnapshot{}, &marketplaceschema.ChannelFeedback{}, &gatewayschema.Ability{}, &gatewayschema.Channel{}))
@@ -59,6 +59,32 @@ func TestMarketListingKeepsOfficialOnFirstPageAndSearchesBothSources(t *testing.
 		require.Len(t, result.Items, tc.total)
 		require.Empty(t, result.OfficialItems)
 	}
+	reads := 0
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:cached_market_pages", func(_ *gorm.DB) { reads++ }))
+	for _, page := range []int{1, 2, 1, 2} {
+		result, err := ListMarketplaceGroups(GroupQuery{SeparateOfficial: true, Page: page})
+		require.NoError(t, err)
+		require.Equal(t, 25, result.Total)
+	}
+	require.Zero(t, reads, "switching pages must not evict other cached pages")
+}
+
+func TestPublicDiscoveryIncludesGroupsBeyondTheFormerThousandRowCap(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}))
+	groups := make([]marketplaceschema.Group, 1501)
+	for i := range groups {
+		id := fmt.Sprintf("large-group-%04d", i)
+		groups[i] = marketplaceschema.Group{ID: id, ChannelID: id, PublicSlug: id, InternalGroupName: id, VerificationStatus: "passed", LifecycleStatus: "active", Visibility: "public"}
+	}
+	require.NoError(t, db.CreateInBatches(groups, 100).Error)
+	rows, err := loadPublicGroupRows(GroupQuery{})
+	require.NoError(t, err)
+	require.Len(t, rows, 1501)
+	require.NoError(t, db.Model(&marketplaceschema.Group{}).Where("id = ?", groups[1500].ID).Update("visibility", "private").Error)
+	rows, err = loadPublicGroupRows(GroupQuery{})
+	require.NoError(t, err)
+	require.Len(t, rows, 1500, "removing the cap must preserve visibility restrictions")
 }
 
 func TestMarketMultiplierLookupIsBatchedAndIsolatedByViewer(t *testing.T) {
@@ -94,6 +120,26 @@ func TestMarketMultiplierLookupIsBatchedAndIsolatedByViewer(t *testing.T) {
 	require.Equal(t, 0.25, prices["channel-0"])
 	require.Equal(t, 1.0, prices["channel-1"], "another viewer's price must remain private")
 	require.Equal(t, 1.0, prices["channel-2"], "owners retain the listed price")
+	prepared := make(map[string]GroupListItem, len(groups))
+	for _, group := range groups {
+		prepared[group.ID] = groupListItem(group, channels[group.ChannelID], nil, marketplaceschema.RankingSnapshot{}, nil)
+	}
+	for _, viewer := range []int{10, 11, 10} {
+		rows, e := filterAndSortGroups(groups, channels, nil, nil, GroupQuery{ViewerUserID: viewer}, prepared)
+		require.NoError(t, e)
+		actual := make(map[string]float64, len(rows))
+		for _, row := range rows {
+			actual[row.ID] = row.Multiplier
+		}
+		if viewer == 10 {
+			require.Equal(t, 0.25, actual["channel-0"])
+			require.Equal(t, 1.0, actual["channel-1"])
+		} else {
+			require.Equal(t, 1.0, actual["channel-0"])
+			require.Equal(t, 0.1, actual["channel-1"])
+		}
+		require.Equal(t, 1.0, prepared["channel-0"].Multiplier, "personal prices must not mutate the shared base")
+	}
 	require.NoError(t, db.Migrator().DropTable(&marketplaceschema.UserMultiplier{}))
 	_, err = filterAndSortGroups(groups, channels, nil, nil, GroupQuery{ViewerUserID: 10})
 	require.Error(t, err, "database errors must not silently replace negotiated prices")

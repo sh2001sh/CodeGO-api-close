@@ -55,7 +55,7 @@ func runDueMarketplaceAutoProbes() {
 		return
 	}
 	var channels []marketplaceschema.Channel
-	err := platformdb.DB.Where(
+	err := platformdb.DB.Select("id", "auto_probe_interval_minutes", "auto_probe_last_at").Where(
 		"auto_probe_enabled = ? AND status IN ?",
 		true,
 		[]string{marketplacedomain.LifecycleActive, marketplacedomain.LifecycleDegraded},
@@ -170,6 +170,13 @@ func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
 		return
 	}
 	channel = &current
+	probeCtx, finish, ok := beginMarketplaceBackgroundProbe(context.Background(), channel, "auto")
+	if !ok {
+		return
+	}
+	defer finish()
+	var moderationErr error
+	probeCtx, moderationErr = preparePresentationProbe(probeCtx, channel)
 
 	status := marketplacedomain.VerificationFailed
 	var failure error
@@ -181,6 +188,8 @@ func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
 	baseURL, baseErr := platformsecurity.DecryptSecret(channel.BaseURLCiphertext)
 	credential, credentialErr := platformsecurity.DecryptSecret(channel.CredentialCiphertext)
 	switch {
+	case moderationErr != nil:
+		failure = moderationErr
 	case baseErr != nil:
 		failure = baseErr
 	case credentialErr != nil:
@@ -188,11 +197,10 @@ func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
 	case !containsFold(models, model):
 		failure = fmt.Errorf("探针模型 %s 不在声明模型中", model)
 	default:
-		upstream, err := fetchUpstreamModels(channel.ProviderType, baseURL, credential)
+		upstream, err := fetchUpstreamModelsContext(probeCtx, channel.ProviderType, baseURL, credential)
 		if err != nil {
 			failure = err
 		} else {
-			probeCtx, cancel := context.WithTimeout(context.Background(), autoProbeLeaseTTL)
 			results, probeErr := probeDeclaredModels(
 				probeCtx,
 				channel.ProviderType,
@@ -202,7 +210,6 @@ func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
 				upstream,
 				nil,
 			)
-			cancel()
 			if probeErr == nil && len(results) == 1 && results[0].Status == marketplacedomain.ModelVerificationPassed {
 				status = marketplacedomain.VerificationPassed
 			} else if probeErr != nil {
@@ -214,6 +221,9 @@ func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
 			}
 		}
 	}
+	if probeCtx.Err() != nil {
+		return
+	}
 	if failure != nil {
 		platformobservability.SysLog(fmt.Sprintf(
 			"marketplace auto probe failed: channel_id=%s model=%s error=%v",
@@ -221,10 +231,13 @@ func runMarketplaceModelProbe(channel *marketplaceschema.Channel) {
 		))
 	}
 	now := time.Now().UTC()
-	if err := platformdb.DB.Model(&marketplaceschema.Channel{}).Where("id = ?", channel.ID).Updates(map[string]any{
-		"auto_probe_last_status": status,
-		"auto_probe_last_at":     now,
-	}).Error; err != nil {
+	if err := platformdb.DB.Model(&marketplaceschema.Channel{}).
+		Where("id = ? AND auto_probe_enabled = ? AND status IN ? AND updated_at = ?", channel.ID, true,
+			[]string{marketplacedomain.LifecycleActive, marketplacedomain.LifecycleDegraded}, channel.UpdatedAt).
+		Updates(map[string]any{
+			"auto_probe_last_status": status,
+			"auto_probe_last_at":     now,
+		}).Error; err != nil {
 		platformobservability.SysError("update marketplace auto probe: " + err.Error())
 	}
 }

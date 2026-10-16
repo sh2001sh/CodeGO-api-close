@@ -35,6 +35,18 @@ func marketplaceUserConcurrencyLimit(c *gin.Context, configuredLimit int) int {
 	return configuredLimit
 }
 
+func retryCreditPackUnsupportedChannel(c *gin.Context, apiErr *types.NewAPIError, remaining int) bool {
+	if !errors.Is(apiErr, billingapp.ErrCreditPackChannelUnsupported) {
+		return false
+	}
+	relaycommon.ExcludeRouteDecisionCandidate(c, "credit_pack_unsupported")
+	if remaining <= 0 {
+		return false
+	}
+	relaycommon.RecordRouteDecisionRetry(c)
+	return true
+}
+
 func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 	requestID := c.GetString(constant.RequestIdKey)
 	firstByteTrace := traceFromContext(c)
@@ -180,6 +192,12 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeCountTokenFailed)
 		return
 	}
+	// Pricing only needs the scalar estimates after media token counting.
+	// Keep prompt text until the channel-specific sensitive check below.
+	meta.Files = nil
+	if !needSensitiveCheck {
+		meta.CombineText = ""
+	}
 	relayInfo.SetEstimatePromptTokens(tokens)
 	relaycommon.MarkLongContextRequestWithContinuation(c, relayInfo.OriginModelName, tokens, relaycommon.IsResponsesConversationRequest(request))
 	requestProfile := relaycommon.RefineRequestProfile(c, relayFormat, request, tokens)
@@ -255,7 +273,7 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.InitChannelMeta(c)
 		relayInfo.FirstByteTrace.MarkChannelMetaDone()
 		relayInfo.FirstByteTrace.MarkPromptSensitiveStarted()
-		sensitiveErr := checkPromptSensitiveForChannel(c, relayFormat, channel, meta)
+		sensitiveErr := checkPromptSensitiveRequestForChannel(c, relayFormat, channel, request, meta, retryParam.GetRetry() > 0)
 		relayInfo.FirstByteTrace.MarkPromptSensitiveDone()
 		if sensitiveErr != nil {
 			newAPIError = sensitiveErr
@@ -393,6 +411,9 @@ func relayRequest(c *gin.Context, relayFormat types.RelayFormat) {
 			if newAPIError != nil {
 				releaseChannelConcurrency()
 				releaseFaultDomainSlot(true, 0)
+				if retryCreditPackUnsupportedChannel(c, newAPIError, retryTimes-retryParam.GetRetry()) {
+					continue
+				}
 				break
 			}
 		}

@@ -59,7 +59,7 @@ export function RedemptionsDeleteDialog() {
       open={open === 'delete'}
       onOpenChange={(open) => !open && setOpen(null)}
     >
-      <AlertDialogContent>
+      <AlertDialogContent className='solaris-admin-dialog'>
         <AlertDialogHeader>
           <AlertDialogTitle>{t('Are you sure?')}</AlertDialogTitle>
           <AlertDialogDescription>

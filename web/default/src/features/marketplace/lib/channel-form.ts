@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import interfaceI18n from '@/i18n/config'
 import type { MarketplaceChannel } from '../types'
 
 export const MARKETPLACE_SOURCE_OPTIONS = [
@@ -31,7 +32,7 @@ export const channelModelPriceSchema = z
         context.addIssue({
           code: 'custom',
           path: ['price_per_call'],
-          message: '每次请求价格必须大于 0',
+          message: interfaceI18n.t('每次请求价格必须大于 0'),
         })
       }
       return
@@ -40,7 +41,7 @@ export const channelModelPriceSchema = z
       context.addIssue({
         code: 'custom',
         path: ['input_price_per_million'],
-        message: '输入价格必须大于 0',
+        message: interfaceI18n.t('输入价格必须大于 0'),
       })
     }
     if (
@@ -50,12 +51,17 @@ export const channelModelPriceSchema = z
       context.addIssue({
         code: 'custom',
         path: ['output_price_per_million'],
-        message: '输出价格必须大于 0',
+        message: interfaceI18n.t('输出价格必须大于 0'),
       })
     }
   })
 
 export const channelFormSchema = z.object({
+  custom_name: z.string().max(20, {
+    error: () => interfaceI18n.t('标题最多 20 字，详细说明请填写下方备注'),
+  }),
+  description: z.string().max(300),
+  tags: z.array(z.string().min(1).max(16)).max(6),
   provider_type: z.enum([
     'openai_compatible',
     'codex',
@@ -81,6 +87,7 @@ export const channelFormSchema = z.object({
   sensitive_word_interception_enabled: z.boolean(),
   multiplier_card_supported: z.boolean(),
   multiplier_card_user_enabled: z.boolean(),
+  credit_pack_supported: z.boolean(),
   auto_probe_enabled: z.boolean(),
   auto_probe_interval_minutes: z.number().int().min(1).max(1440),
   auto_probe_model: z.string().max(128),
@@ -100,6 +107,9 @@ export const channelEditFormSchema = channelFormSchema.extend({
 })
 
 export const channelFormDefaults: ChannelFormInput = {
+  custom_name: '',
+  description: '',
+  tags: [],
   provider_type: 'openai_compatible',
   source_label: 'Codex Plus',
   base_url: '',
@@ -115,6 +125,7 @@ export const channelFormDefaults: ChannelFormInput = {
   sensitive_word_interception_enabled: true,
   multiplier_card_supported: false,
   multiplier_card_user_enabled: false,
+  credit_pack_supported: false,
   auto_probe_enabled: false,
   auto_probe_interval_minutes: 10,
   auto_probe_model: '',
@@ -131,6 +142,9 @@ export function channelFormDefaultsForEdit(
     : 'CC其它'
   const declaredModels = channel.declared_models ?? []
   return {
+    custom_name: channel.custom_name ?? '',
+    description: channel.description ?? '',
+    tags: channel.tags ?? [],
     provider_type: (channel.provider_type ||
       channelFormDefaults.provider_type) as ChannelFormInput['provider_type'],
     source_label: source,
@@ -154,6 +168,7 @@ export function channelFormDefaultsForEdit(
       channelFormDefaults.sensitive_word_interception_enabled,
     multiplier_card_supported: channel.multiplier_card_supported ?? false,
     multiplier_card_user_enabled: channel.multiplier_card_user_enabled ?? false,
+    credit_pack_supported: channel.credit_pack_supported ?? false,
     auto_probe_enabled:
       channel.auto_probe_enabled ?? channelFormDefaults.auto_probe_enabled,
     auto_probe_interval_minutes:

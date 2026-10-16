@@ -20,8 +20,8 @@ import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { formatLogQuota } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getLogStats, getUserLogStats } from '../api'
 import { DEFAULT_LOG_STATS } from '../constants'
@@ -30,14 +30,9 @@ import { useUsageLogsContext } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
-function StatBadge(props: {
-  label: string
-  value: string | number
-  accent: string
-}) {
+function StatBadge(props: { label: string; value: string | number }) {
   return (
-    <span className='border-border/60 bg-muted/25 inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs shadow-xs'>
-      <span className={cn('h-3.5 w-0.5 rounded-full', props.accent)} />
+    <span className='solaris-log-stat'>
       <span className='text-muted-foreground'>{props.label}</span>
       <span className='text-foreground/85 font-mono font-semibold tabular-nums'>
         {props.value}
@@ -53,13 +48,19 @@ export function CommonLogsStats() {
   const statsFilters = { ...searchParams, page: undefined, pageSize: undefined }
   const { sensitiveVisible } = useUsageLogsContext()
 
-  const { data: stats, isLoading } = useQuery({
+  const {
+    data: stats,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: ['usage-logs-stats', isAdmin, statsFilters],
     queryFn: async () => {
       const params = buildApiParams({
         page: 1,
         pageSize: 1,
-        searchParams,
+        searchParams: statsFilters,
         columnFilters: [],
         isAdmin,
       })
@@ -68,9 +69,9 @@ export function CommonLogsStats() {
         ? await getLogStats(params)
         : await getUserLogStats(params)
 
-      return result.success
-        ? result.data || DEFAULT_LOG_STATS
-        : DEFAULT_LOG_STATS
+      if (!result.success)
+        throw new Error(result.message || 'Failed to load logs')
+      return result.data || DEFAULT_LOG_STATS
     },
     placeholderData: (previousData) => previousData,
     staleTime: 30_000,
@@ -88,22 +89,28 @@ export function CommonLogsStats() {
   }
 
   return (
-    <div className='flex flex-wrap items-center gap-2'>
+    <div className='solaris-log-stats' aria-live='polite'>
+      {isError && (
+        <Button
+          variant='outline'
+          disabled={isFetching}
+          onClick={() => void refetch()}
+        >
+          {t('Retry')}
+        </Button>
+      )}
       <StatBadge
         label={t('Usage')}
-        value={sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••'}
-        accent='bg-muted-foreground/70'
+        value={
+          sensitiveVisible
+            ? stats
+              ? formatLogQuota(stats.quota)
+              : '—'
+            : '••••'
+        }
       />
-      <StatBadge
-        label={t('RPM')}
-        value={stats?.rpm || 0}
-        accent='bg-muted-foreground/50'
-      />
-      <StatBadge
-        label={t('TPM')}
-        value={stats?.tpm || 0}
-        accent='bg-muted-foreground/30'
-      />
+      <StatBadge label={t('RPM')} value={stats?.rpm ?? '—'} />
+      <StatBadge label={t('TPM')} value={stats?.tpm ?? '—'} />
     </div>
   )
 }

@@ -15,9 +15,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 */
-import { createFileRoute } from '@tanstack/react-router'
-import { Invoices } from '@/features/invoices'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authenticated/invoices/')({
-  component: Invoices,
+  beforeLoad: () => {
+    throw redirect({
+      to: '/wallet',
+      search: { section: 'invoices' },
+      replace: true,
+    })
+  },
 })

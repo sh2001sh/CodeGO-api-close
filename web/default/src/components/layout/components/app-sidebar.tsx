@@ -24,8 +24,8 @@ import { useLayout } from '@/context/layout-provider'
 import { useSidebarConfig } from '@/hooks/use-sidebar-config'
 import { useSidebarData } from '@/hooks/use-sidebar-data'
 import { Sidebar, SidebarContent, SidebarRail } from '@/components/ui/sidebar'
-import { getNavGroupsForPath } from '../lib/workspace-registry'
 import { filterNavGroupsByRole } from '../lib/filter-nav-groups'
+import { getNavGroupsForPath } from '../lib/workspace-registry'
 import { NavGroup } from './nav-group'
 
 /**

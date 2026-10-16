@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestSavedPoolsPrunePreviouslySuspendedAndDeletedGroups(t *testing.T) {
+func TestSavedPoolsPreserveSuspendedGroupsAndPruneDeletedGroups(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}, &marketplaceschema.AutoRoutePoolMember{},
 		&marketplaceschema.RoutePool{}, &marketplaceschema.RoutePoolMember{}))
@@ -25,11 +25,11 @@ func TestSavedPoolsPrunePreviouslySuspendedAndDeletedGroups(t *testing.T) {
 
 	selected, err := loadAutoRoutePoolSelection(20)
 	require.NoError(t, err)
-	require.Equal(t, map[string]int{"active": 3}, selected)
+	require.Equal(t, map[string]int{"active": 3, "suspended": 1}, selected)
 	_, named, err := loadRoutePool(20, "saved")
 	require.NoError(t, err)
-	require.Equal(t, map[string]int{"active": 3}, named)
-	for _, id := range []string{"suspended", "deleted"} {
+	require.Equal(t, map[string]int{"active": 3, "suspended": 1}, named)
+	for _, id := range []string{"deleted"} {
 		require.ErrorIs(t, db.First(&marketplaceschema.AutoRoutePoolMember{}, "group_id = ?", id).Error, gorm.ErrRecordNotFound)
 		require.ErrorIs(t, db.First(&marketplaceschema.RoutePoolMember{}, "group_id = ?", id).Error, gorm.ErrRecordNotFound)
 	}

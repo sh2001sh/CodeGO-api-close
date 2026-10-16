@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import i18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import { Crown, RefreshCw } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -17,6 +18,8 @@ import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/
 import {
   formatSubscriptionQuotaAmount,
   isDayPassPlan,
+  isActiveUserSubscription,
+  isCreditPackSubscription,
   isMonthlyCardPlan,
   normalizeSubscriptionText,
 } from '@/features/subscriptions/lib'
@@ -256,7 +259,7 @@ export function SubscriptionPlansCard({
                   const subscription = record.subscription
                   const title =
                     planTitleMap.get(subscription.plan_id) ||
-                    `订阅 #${subscription.id}`
+                    i18n.t('订阅 #{{param0}}', { param0: subscription.id })
                   const relatedPlanRecord = planRecordMap.get(
                     subscription.plan_id
                   )
@@ -279,9 +282,8 @@ export function SubscriptionPlansCard({
                     periodAmount
                   )
                   const remainDays = getRemainingDays(record)
-                  const active =
-                    subscription.status === 'active' &&
-                    subscription.end_time > now
+                  const creditPack = isCreditPackSubscription(subscription)
+                  const active = isActiveUserSubscription(subscription, now)
                   const totalExhausted = totalAmount > 0 && totalRemain <= 0
                   const periodExhausted =
                     !isMonthlyPlan &&
@@ -290,21 +292,21 @@ export function SubscriptionPlansCard({
                     totalRemain > 0
                   const statusLabel = active
                     ? totalExhausted
-                      ? '额度已用完'
+                      ? i18n.t('额度已用完')
                       : periodExhausted
-                        ? '等待下次重置'
-                        : '生效中'
+                        ? i18n.t('等待下次重置')
+                        : i18n.t('生效中')
                     : subscription.status === 'cancelled'
-                      ? '已取消'
-                      : '已过期'
+                      ? i18n.t('已取消')
+                      : i18n.t('已过期')
                   const scopedUsageLabel = isMonthlyPlan
-                    ? '本月可用额度'
-                    : '周期额度'
+                    ? i18n.t('本月可用额度')
+                    : i18n.t('周期额度')
                   const totalUsageLabel = isMonthlyPlan
-                    ? '本月可用额度'
+                    ? i18n.t('本月可用额度')
                     : isDayPass
-                      ? '日卡额度'
-                      : '总额度'
+                      ? i18n.t('日卡额度')
+                      : i18n.t('总额度')
 
                   return (
                     <CardStaggerItem key={subscription.id} className='h-full'>
@@ -321,15 +323,23 @@ export function SubscriptionPlansCard({
                                 </span>
                               </div>
                               <p className='text-muted-foreground mt-1 text-xs'>
-                                {active
-                                  ? i18n.t('剩余 {{param0}} 天', {
-                                      param0: remainDays,
-                                    })
-                                  : i18n.t('该订阅已结束')}{' '}
-                                <Trans i18nKey={'· 到期时间'} />{' '}
-                                {new Date(
-                                  subscription.end_time * 1000
-                                ).toLocaleString()}
+                                {creditPack ? (
+                                  <>
+                                    {i18n.t('长期有效')} · {i18n.t('钱包同价')}
+                                  </>
+                                ) : (
+                                  <>
+                                    {active
+                                      ? i18n.t('剩余 {{param0}} 天', {
+                                          param0: remainDays,
+                                        })
+                                      : i18n.t('该订阅已结束')}{' '}
+                                    <Trans i18nKey={'· 到期时间'} />{' '}
+                                    {new Date(
+                                      subscription.end_time * 1000
+                                    ).toLocaleString(getIntlLocale())}
+                                  </>
+                                )}
                               </p>
                             </div>
                           </div>
@@ -362,7 +372,7 @@ export function SubscriptionPlansCard({
                                   subscription.next_reset_time
                                     ? new Date(
                                         subscription.next_reset_time * 1000
-                                      ).toLocaleString()
+                                      ).toLocaleString(getIntlLocale())
                                     : '--'
                                 }
                               />
@@ -371,10 +381,10 @@ export function SubscriptionPlansCard({
                               label={i18n.t('订阅状态')}
                               value={
                                 active
-                                  ? '生效中'
+                                  ? i18n.t('生效中')
                                   : subscription.status === 'cancelled'
-                                    ? '已取消'
-                                    : '已过期'
+                                    ? i18n.t('已取消')
+                                    : i18n.t('已过期')
                               }
                             />
                           </div>

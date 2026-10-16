@@ -8,6 +8,7 @@ import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
 import { Button } from '@/components/ui/button'
 import { PublicLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
+import '@/features/docs/reading.css'
 import { DownloadPanel } from './download-panel'
 import {
   detectDesktopArchitecture,
@@ -110,16 +111,20 @@ export function DownloadPage() {
   return (
     <PublicLayout showMainContainer={false}>
       <SiteSeo {...downloadSeo} canonicalPath={downloadSeo.path} />
-      <main className='bg-background min-h-screen pt-28 pb-20'>
+      <main
+        id='content'
+        tabIndex={-1}
+        className='market-reading min-h-screen pt-8 pb-24 md:pt-16'
+      >
         <motion.div
-          className='mx-auto w-full max-w-5xl px-4 md:px-6'
-          initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+          className='market-download mx-auto w-full px-5 md:px-8'
+          initial={reduceMotion ? false : { opacity: 1, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         >
           <header className='mx-auto max-w-3xl text-center'>
             <h1 className='mt-3 text-4xl font-semibold tracking-tight text-balance md:text-5xl'>
-              {t('Your AI tools, configured locally.')}
+              {t('Download')}
             </h1>
           </header>
 
@@ -148,7 +153,7 @@ export function DownloadPage() {
             <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
               <div>
                 <h2 className='mt-2 text-2xl font-semibold tracking-tight'>
-                  {t('Ready in a few minutes')}
+                  {t('Installation')}
                 </h2>
               </div>
               <Button

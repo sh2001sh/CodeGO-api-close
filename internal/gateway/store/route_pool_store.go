@@ -32,6 +32,7 @@ type SelectableRoutePool struct {
 }
 
 const routePoolCacheTTL = 15 * time.Second
+const routePoolMissCacheTTL = time.Second
 
 type routePoolCacheEntry struct {
 	detail    *RoutePoolDetail
@@ -52,12 +53,24 @@ func ListRoutePools() ([]RoutePoolDetail, error) {
 		return nil, err
 	}
 	details := make([]RoutePoolDetail, 0, len(pools))
+	if len(pools) == 0 {
+		return details, nil
+	}
+	var members []gatewayschema.RoutePoolMember
+	livePools := platformdb.DB.Model(&gatewayschema.RoutePool{}).Select("id")
+	if err := platformdb.DB.Where("route_pool_id IN (?)", livePools).Order("channel_id asc").Find(&members).Error; err != nil {
+		return nil, err
+	}
+	byPool := make(map[int64][]gatewayschema.RoutePoolMember, len(pools))
+	for _, member := range members {
+		byPool[member.RoutePoolID] = append(byPool[member.RoutePoolID], member)
+	}
 	for _, pool := range pools {
-		members, err := listRoutePoolMembers(pool.ID)
-		if err != nil {
-			return nil, err
+		items := byPool[pool.ID]
+		if items == nil {
+			items = []gatewayschema.RoutePoolMember{}
 		}
-		details = append(details, RoutePoolDetail{Pool: pool, Members: members})
+		details = append(details, RoutePoolDetail{Pool: pool, Members: items})
 	}
 	return details, nil
 }
@@ -109,13 +122,14 @@ func LoadEnabledRoutePool(group string) (*RoutePoolDetail, error) {
 	routePoolCache.RLock()
 	cached, found := routePoolCache.byGroup[group]
 	routePoolCache.RUnlock()
-	if found && cached.detail != nil && now.Before(cached.expiresAt) {
+	if found && now.Before(cached.expiresAt) {
 		return cloneRoutePoolDetail(cached.detail), nil
 	}
 
 	var pool gatewayschema.RoutePool
 	err := platformdb.DB.Where(routePoolGroupColumn()+" = ? AND enabled = ?", group, true).Order("id desc").First(&pool).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
+		cacheRoutePoolDetail(group, nil, now.Add(routePoolMissCacheTTL))
 		return nil, nil
 	}
 	if isRoutePoolTableMissing(err) {
@@ -129,16 +143,29 @@ func LoadEnabledRoutePool(group string) (*RoutePoolDetail, error) {
 		return nil, err
 	}
 	detail := &RoutePoolDetail{Pool: pool, Members: members}
+	cacheRoutePoolDetail(group, detail, now.Add(routePoolCacheTTL))
+	return cloneRoutePoolDetail(detail), nil
+}
+
+func cacheRoutePoolDetail(group string, detail *RoutePoolDetail, expiresAt time.Time) {
 	routePoolCache.Lock()
+	defer routePoolCache.Unlock()
 	if routePoolCache.byGroup == nil {
 		routePoolCache.byGroup = make(map[string]routePoolCacheEntry)
 	}
+	// Group names can be numerous; expired negative entries must not grow
+	// indefinitely in long-lived gateway processes.
+	if len(routePoolCache.byGroup) >= 4096 {
+		for key, entry := range routePoolCache.byGroup {
+			if time.Now().After(entry.expiresAt) {
+				delete(routePoolCache.byGroup, key)
+			}
+		}
+	}
 	routePoolCache.byGroup[group] = routePoolCacheEntry{
 		detail:    detail,
-		expiresAt: now.Add(routePoolCacheTTL),
+		expiresAt: expiresAt,
 	}
-	routePoolCache.Unlock()
-	return cloneRoutePoolDetail(detail), nil
 }
 
 // ResolveEnabledRoutePoolAlias resolves a user-facing route-pool name to its
@@ -415,6 +442,9 @@ func LoadRoutePoolCandidates(group, modelName string, detail *RoutePoolDetail) (
 	if detail == nil || !detail.Pool.Enabled {
 		return nil, nil
 	}
+	if platformconfig.MemoryCacheEnabled {
+		return loadCachedRoutePoolCandidates(group, modelName, detail), nil
+	}
 	members := detail.Members
 	if detail.Pool.AutoDiscover {
 		var err error
@@ -423,19 +453,79 @@ func LoadRoutePoolCandidates(group, modelName string, detail *RoutePoolDetail) (
 			return nil, err
 		}
 	}
+	ids := make([]int, 0, len(members))
+	for _, member := range members {
+		if member.Enabled {
+			ids = append(ids, member.ChannelID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	models := []string{modelName}
+	if normalized := FormatMatchingModelName(modelName); normalized != "" && normalized != modelName {
+		models = append(models, normalized)
+	}
+	eligible := platformdb.DB.Model(&gatewayschema.Ability{}).Select("channel_id").
+		Where(routePoolGroupColumn()+" = ? AND model IN ? AND enabled = ? AND channel_id IN ?", group, models, true, ids)
+	var channels []*gatewayschema.Channel
+	if err := platformdb.DB.Where("id IN (?) AND status = ?", eligible, constant.ChannelStatusEnabled).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	byID := make(map[int]*gatewayschema.Channel, len(channels))
+	for _, channel := range channels {
+		byID[channel.Id] = channel
+	}
 	candidates := make([]RoutePoolCandidate, 0, len(members))
 	for _, member := range members {
-		if !member.Enabled || !IsChannelEnabledForGroupModel(group, modelName, member.ChannelID) {
+		if !member.Enabled {
 			continue
 		}
-		channel, err := GetCachedChannel(member.ChannelID)
-		if err != nil || channel == nil || channel.Status != constant.ChannelStatusEnabled {
+		channel := byID[member.ChannelID]
+		if channel == nil || channel.Status != constant.ChannelStatusEnabled {
 			continue
 		}
 		candidates = append(candidates, RoutePoolCandidate{Channel: channel, Member: member})
 	}
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Channel.Id < candidates[j].Channel.Id })
 	return candidates, nil
+}
+
+// Use the existing group/model index once. Repeated membership scans were
+// quadratic in pool size, and auto-discovery also scanned unrelated channels.
+func loadCachedRoutePoolCandidates(group, model string, detail *RoutePoolDetail) []RoutePoolCandidate {
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+	configured := make(map[int]gatewayschema.RoutePoolMember, len(detail.Members))
+	for _, member := range detail.Members {
+		configured[member.ChannelID] = member
+	}
+	ids := group2model2channels[group][model]
+	normalized := FormatMatchingModelName(model)
+	if normalized != "" && normalized != model {
+		ids = append(append([]int(nil), ids...), group2model2channels[group][normalized]...)
+	}
+	candidates := make([]RoutePoolCandidate, 0, len(ids))
+	seen := make(map[int]bool, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		member, exists := configured[id]
+		if !exists {
+			if !detail.Pool.AutoDiscover {
+				continue
+			}
+			member = gatewayschema.RoutePoolMember{ChannelID: id, CostMultiplier: 1, ModelCostOverrides: "{}", Enabled: true}
+		}
+		channel := channelsIDM[id]
+		if member.Enabled && channel != nil && channel.Status == constant.ChannelStatusEnabled {
+			candidates = append(candidates, RoutePoolCandidate{Channel: channel, Member: member})
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Channel.Id < candidates[j].Channel.Id })
+	return candidates
 }
 
 // ExpandRoutePoolMembers adds group-assigned channels that have no explicit
@@ -488,7 +578,7 @@ func listChannelsAssignedToGroup(group string) ([]*gatewayschema.Channel, error)
 	}
 
 	var allChannels []*gatewayschema.Channel
-	if err := platformdb.DB.Omit("key").Find(&allChannels).Error; err != nil {
+	if err := ApplyChannelGroupFilter(platformdb.DB.Omit("key"), group).Find(&allChannels).Error; err != nil {
 		return nil, err
 	}
 	channels := make([]*gatewayschema.Channel, 0)

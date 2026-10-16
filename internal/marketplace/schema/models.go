@@ -46,6 +46,7 @@ type Channel struct {
 	MaintenanceWindow                string         `json:"maintenance_window" gorm:"column:maintenance_window;size:255"`
 	SensitiveWordInterceptionEnabled *bool          `json:"sensitive_word_interception_enabled" gorm:"column:sensitive_word_interception_enabled;default:true"`
 	MultiplierCardSupported          bool           `json:"multiplier_card_supported" gorm:"column:multiplier_card_supported;not null;default:false"`
+	CreditPackSupported              bool           `json:"credit_pack_supported" gorm:"column:credit_pack_supported;not null;default:false"`
 	MultiplierCardUserEnabled        bool           `json:"multiplier_card_user_enabled" gorm:"column:multiplier_card_user_enabled;not null;default:false"`
 	Status                           string         `json:"status" gorm:"column:status;size:24;index;not null"`
 	InternalChannelID                *int           `json:"internal_channel_id" gorm:"column:internal_channel_id;index"`
@@ -74,25 +75,31 @@ func (channel *Channel) BeforeCreate(_ *gorm.DB) error {
 }
 
 type Group struct {
-	ID                 string         `json:"id" gorm:"column:id;primaryKey;size:64"`
-	ChannelID          string         `json:"channel_id" gorm:"column:channel_id;size:64;uniqueIndex;not null"`
-	OwnerUserID        int            `json:"owner_user_id" gorm:"column:owner_user_id;index;not null"`
-	PublicSlug         string         `json:"public_slug" gorm:"column:public_slug;size:80;uniqueIndex;not null"`
-	SystemDisplayName  string         `json:"system_display_name" gorm:"column:system_display_name;size:128;index;not null"`
-	InternalGroupName  string         `json:"-" gorm:"column:internal_group_name;size:64;uniqueIndex;not null"`
-	OwnerDisplayName   string         `json:"owner_display_name" gorm:"column:owner_display_name;size:128;index"`
-	SourceType         string         `json:"source_type" gorm:"column:source_type;size:32;not null"`
-	CreditPoolPolicy   string         `json:"credit_pool_policy" gorm:"column:credit_pool_policy;size:40;not null"`
-	Multiplier         float64        `json:"multiplier" gorm:"column:multiplier;not null"`
-	RoutingVersion     int            `json:"routing_version" gorm:"column:routing_version;not null;default:1"`
-	LifecycleStatus    string         `json:"lifecycle_status" gorm:"column:lifecycle_status;size:24;index;not null"`
-	VerificationStatus string         `json:"verification_status" gorm:"column:verification_status;size:24;index;not null"`
-	Visibility         string         `json:"visibility" gorm:"column:visibility;size:16;index;not null"`
-	PublishedAt        *time.Time     `json:"published_at" gorm:"column:published_at;index"`
-	VerificationDueAt  *time.Time     `json:"verification_due_at" gorm:"column:verification_due_at;index"`
-	CreatedAt          time.Time      `json:"created_at" gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt          time.Time      `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
-	DeletedAt          gorm.DeletedAt `json:"-" gorm:"column:deleted_at;index"`
+	CustomName          string         `json:"custom_name" gorm:"size:80"`
+	Description         string         `json:"description" gorm:"size:500"`
+	Tags                string         `json:"-" gorm:"type:text"`
+	ModerationStatus    string         `json:"moderation_status" gorm:"size:24"`
+	ModerationReason    string         `json:"moderation_reason" gorm:"size:500"`
+	ModerationCheckedAt *time.Time     `json:"moderation_checked_at"`
+	ID                  string         `json:"id" gorm:"column:id;primaryKey;size:64"`
+	ChannelID           string         `json:"channel_id" gorm:"column:channel_id;size:64;uniqueIndex;not null"`
+	OwnerUserID         int            `json:"owner_user_id" gorm:"column:owner_user_id;index;not null"`
+	PublicSlug          string         `json:"public_slug" gorm:"column:public_slug;size:80;uniqueIndex;not null"`
+	SystemDisplayName   string         `json:"system_display_name" gorm:"column:system_display_name;size:128;index;not null"`
+	InternalGroupName   string         `json:"-" gorm:"column:internal_group_name;size:64;uniqueIndex;not null"`
+	OwnerDisplayName    string         `json:"owner_display_name" gorm:"column:owner_display_name;size:128;index"`
+	SourceType          string         `json:"source_type" gorm:"column:source_type;size:32;not null"`
+	CreditPoolPolicy    string         `json:"credit_pool_policy" gorm:"column:credit_pool_policy;size:40;not null"`
+	Multiplier          float64        `json:"multiplier" gorm:"column:multiplier;not null"`
+	RoutingVersion      int            `json:"routing_version" gorm:"column:routing_version;not null;default:1"`
+	LifecycleStatus     string         `json:"lifecycle_status" gorm:"column:lifecycle_status;size:24;index;not null"`
+	VerificationStatus  string         `json:"verification_status" gorm:"column:verification_status;size:24;index;not null"`
+	Visibility          string         `json:"visibility" gorm:"column:visibility;size:16;index;not null"`
+	PublishedAt         *time.Time     `json:"published_at" gorm:"column:published_at;index"`
+	VerificationDueAt   *time.Time     `json:"verification_due_at" gorm:"column:verification_due_at;index"`
+	CreatedAt           time.Time      `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt           time.Time      `json:"updated_at" gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
+	DeletedAt           gorm.DeletedAt `json:"-" gorm:"column:deleted_at;index"`
 }
 
 func (Group) TableName() string { return tableName("groups") }
@@ -265,34 +272,41 @@ func (ChannelFeedback) TableName() string {
 }
 
 type Settlement struct {
-	ID                     string     `json:"id" gorm:"column:id;primaryKey;size:64"`
-	RequestID              string     `json:"request_id" gorm:"column:request_id;size:64;uniqueIndex;not null"`
-	GroupID                string     `json:"group_id" gorm:"column:group_id;size:64;index;index:idx_marketplace_settlements_owner_group_created,priority:2;not null"`
-	OwnerUserID            int        `json:"owner_user_id" gorm:"column:owner_user_id;index;index:idx_marketplace_settlements_owner_group_created,priority:1;not null"`
-	ConsumerUserID         int        `json:"consumer_user_id" gorm:"column:consumer_user_id;index;not null"`
-	BillingSource          string     `json:"billing_source" gorm:"column:billing_source;size:24;not null;default:wallet"`
-	ConsumerAmount         int64      `json:"consumer_amount" gorm:"column:consumer_amount;not null"`
-	SettlementGrossAmount  int64      `json:"settlement_gross_amount" gorm:"column:settlement_gross_amount;not null;default:0"`
-	PlatformCommission     int64      `json:"platform_commission" gorm:"column:platform_commission;not null"`
-	TransactionFee         int64      `json:"transaction_fee" gorm:"column:transaction_fee;not null"`
-	OwnerNetAmount         int64      `json:"owner_net_amount" gorm:"column:owner_net_amount;not null"`
-	ReclaimedAmount        int64      `json:"reclaimed_amount" gorm:"column:reclaimed_amount;not null;default:0"`
-	Multiplier             float64    `json:"multiplier" gorm:"column:multiplier;not null"`
-	SubscriptionMultiplier float64    `json:"subscription_multiplier" gorm:"column:subscription_multiplier;not null;default:0"`
-	Status                 string     `json:"status" gorm:"column:status;size:24;index;not null"`
-	PendingAccountID       string     `json:"-" gorm:"column:pending_account_id;size:64"`
-	AvailableAt            time.Time  `json:"available_at" gorm:"column:available_at;index"`
-	ReleasedAt             *time.Time `json:"released_at" gorm:"column:released_at"`
-	ReclaimedAt            *time.Time `json:"reclaimed_at" gorm:"column:reclaimed_at"`
-	ForfeitedAt            *time.Time `json:"forfeited_at" gorm:"column:forfeited_at"`
-	CreatedAt              time.Time  `json:"created_at" gorm:"column:created_at;index:idx_marketplace_settlements_owner_group_created,priority:3;autoCreateTime"`
+	ID                              string     `json:"id" gorm:"column:id;primaryKey;size:64"`
+	RequestID                       string     `json:"request_id" gorm:"column:request_id;size:64;uniqueIndex;not null"`
+	GroupID                         string     `json:"group_id" gorm:"column:group_id;size:64;index;index:idx_marketplace_settlements_owner_group_created,priority:2;not null"`
+	OwnerUserID                     int        `json:"owner_user_id" gorm:"column:owner_user_id;index;index:idx_marketplace_settlements_owner_group_created,priority:1;not null"`
+	ConsumerUserID                  int        `json:"consumer_user_id" gorm:"column:consumer_user_id;index;not null"`
+	BillingSource                   string     `json:"billing_source" gorm:"column:billing_source;size:24;not null;default:wallet"`
+	ConsumerAmount                  int64      `json:"consumer_amount" gorm:"column:consumer_amount;not null"`
+	SettlementGrossAmount           int64      `json:"settlement_gross_amount" gorm:"column:settlement_gross_amount;not null;default:0"`
+	PlatformCommission              int64      `json:"platform_commission" gorm:"column:platform_commission;not null"`
+	TransactionFee                  int64      `json:"transaction_fee" gorm:"column:transaction_fee;not null"`
+	ReferralRebateAmount            int64      `json:"referral_rebate_amount" gorm:"column:referral_rebate_amount;not null;default:0"`
+	ReferralRebatePending           bool       `json:"referral_rebate_pending" gorm:"column:referral_rebate_pending;not null;default:false"`
+	CreditPackGrantedQuota          int64      `json:"credit_pack_granted_quota" gorm:"column:credit_pack_granted_quota;not null;default:0"`
+	CreditPackPaidQuota             int64      `json:"credit_pack_paid_quota" gorm:"column:credit_pack_paid_quota;not null;default:0"`
+	CreditPackChannelShareBPS       int64      `json:"credit_pack_channel_share_bps" gorm:"column:credit_pack_channel_share_bps;not null;default:0"`
+	CreditPackDiscountAmount        int64      `json:"credit_pack_discount_amount" gorm:"column:credit_pack_discount_amount;not null;default:0"`
+	CreditPackPlatformSubsidyAmount int64      `json:"credit_pack_platform_subsidy_amount" gorm:"column:credit_pack_platform_subsidy_amount;not null;default:0"`
+	OwnerNetAmount                  int64      `json:"owner_net_amount" gorm:"column:owner_net_amount;not null"`
+	ReclaimedAmount                 int64      `json:"reclaimed_amount" gorm:"column:reclaimed_amount;not null;default:0"`
+	Multiplier                      float64    `json:"multiplier" gorm:"column:multiplier;not null"`
+	SubscriptionMultiplier          float64    `json:"subscription_multiplier" gorm:"column:subscription_multiplier;not null;default:0"`
+	Status                          string     `json:"status" gorm:"column:status;size:24;index;not null"`
+	PendingAccountID                string     `json:"-" gorm:"column:pending_account_id;size:64"`
+	AvailableAt                     time.Time  `json:"available_at" gorm:"column:available_at;index"`
+	ReleasedAt                      *time.Time `json:"released_at" gorm:"column:released_at"`
+	ReclaimedAt                     *time.Time `json:"reclaimed_at" gorm:"column:reclaimed_at"`
+	ForfeitedAt                     *time.Time `json:"forfeited_at" gorm:"column:forfeited_at"`
+	CreatedAt                       time.Time  `json:"created_at" gorm:"column:created_at;index:idx_marketplace_settlements_owner_group_created,priority:3;autoCreateTime"`
 }
 
 func (Settlement) TableName() string { return tableName("settlements") }
 
-// IncomeReclaim records a reclaim task and its committed progress. Each batch
-// commits its settlement changes and wallet transfer together, allowing a task
-// to resume safely after a worker or request interruption.
+// IncomeReclaim records a reclaim task and its committed progress. PostgreSQL
+// commits all settlement changes and per-owner totals atomically; legacy stores
+// may have committed batches that a resumed worker must preserve.
 type IncomeReclaim struct {
 	ID           string    `gorm:"primaryKey;size:64"`
 	Fingerprint  string    `gorm:"size:64;not null"`
@@ -396,6 +410,7 @@ type RoutePool struct {
 	CreatedAt               time.Time  `json:"created_at;autoCreateTime"`
 	UpdatedAt               time.Time  `json:"updated_at;autoUpdateTime"`
 	AutoBuildEnabled        bool       `json:"auto_build_enabled" gorm:"column:auto_build_enabled;not null;default:false"`
+	AutoBuildCreditPackOnly bool       `json:"auto_build_credit_pack_only" gorm:"column:auto_build_credit_pack_only;not null;default:false"`
 	AutoBuildSchedule       string     `json:"auto_build_schedule" gorm:"column:auto_build_schedule;size:16;not null;default:interval"`
 	AutoBuildInterval       int        `json:"auto_build_interval" gorm:"column:auto_build_interval;not null;default:60"`
 	AutoBuildDailyTime      string     `json:"auto_build_daily_time" gorm:"column:auto_build_daily_time;size:5;not null;default:03:00"`

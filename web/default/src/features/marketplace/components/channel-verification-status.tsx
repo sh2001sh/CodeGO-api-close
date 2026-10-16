@@ -1,3 +1,4 @@
+import { getIntlLocale } from '@/i18n/format'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useMarketplaceFailedModelRemoval } from '../hooks'
@@ -59,11 +60,14 @@ function RecentModelStatus(props: {
   return (
     <details className='border-border bg-muted/10 mt-3 rounded-md border px-3 py-2'>
       <summary className='cursor-pointer text-xs font-medium'>
-        {t('渠道模型近期状态')} · {t('{{count}} 个模型', { count: props.models.length })}
+        {t('渠道模型近期状态')} ·{' '}
+        {t('{{count}} 个模型', { count: props.models.length })}
       </summary>
       <div className='text-muted-foreground mt-2 mb-2 text-[11px]'>
         {props.checkedAt
-          ? t('最近检测 {{time}}', { time: new Date(props.checkedAt).toLocaleString() })
+          ? t('最近检测 {{time}}', {
+              time: new Date(props.checkedAt).toLocaleString(getIntlLocale()),
+            })
           : t('尚未完成连通性检测')}
       </div>
       <div className='grid gap-1.5 sm:grid-cols-2'>
@@ -72,9 +76,22 @@ function RecentModelStatus(props: {
           const passed = result?.status === 'passed' && result.listed
           const running = !result && props.checkedAt == null
           return (
-            <div key={model} className='border-border/70 flex items-center justify-between gap-2 rounded border px-2.5 py-2 text-xs'>
-              <span className='min-w-0 truncate font-medium' title={model}>{model}</span>
-              <span className={passed ? 'text-success shrink-0' : running ? 'text-primary shrink-0' : 'text-destructive shrink-0'}>
+            <div
+              key={model}
+              className='border-border/70 flex items-center justify-between gap-2 rounded border px-2.5 py-2 text-xs'
+            >
+              <span className='min-w-0 truncate font-medium' title={model}>
+                {model}
+              </span>
+              <span
+                className={
+                  passed
+                    ? 'text-success shrink-0'
+                    : running
+                      ? 'text-primary shrink-0'
+                      : 'text-destructive shrink-0'
+                }
+              >
                 {passed ? t('正常') : running ? t('待检测') : t('异常')}
                 {result?.latency_ms ? ` · ${result.latency_ms}ms` : ''}
               </span>

@@ -26,67 +26,36 @@ interface TermsFooterProps {
   status?: SystemStatus | null
 }
 
-export function TermsFooter({
-  variant = 'sign-in',
-  className,
-  status,
-}: TermsFooterProps) {
+export function TermsFooter(props: TermsFooterProps) {
   const { t } = useTranslation()
-  const text =
-    variant === 'sign-in'
-      ? t('By clicking sign in, you agree to our')
-      : t('By creating an account, you agree to our')
-
-  const hasUserAgreement = Boolean(status?.user_agreement_enabled)
-  const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
-
-  if (!hasUserAgreement && !hasPrivacyPolicy) {
+  if (
+    !props.status?.user_agreement_enabled &&
+    !props.status?.privacy_policy_enabled
+  )
     return null
-  }
-
-  const agreementLink = {
-    label: t('User Agreement'),
-    href: '/user-agreement',
-  }
-  const privacyLink = {
-    label: t('Privacy Policy'),
-    href: '/privacy-policy',
-  }
-
-  const activeLinks =
-    hasUserAgreement || hasPrivacyPolicy
-      ? ([
-          hasUserAgreement ? agreementLink : null,
-          hasPrivacyPolicy ? privacyLink : null,
-        ].filter(Boolean) as Array<{ label: string; href: string }>)
-      : [agreementLink, privacyLink]
-
-  const [firstLink, secondLink] = activeLinks
-
   return (
-    <p className={cn('text-muted-foreground text-center text-xs', className)}>
-      {text}{' '}
-      {firstLink && (
+    <nav
+      className={cn(
+        'text-muted-foreground flex flex-wrap justify-center gap-x-6 gap-y-3 text-base',
+        props.className
+      )}
+    >
+      {props.status.user_agreement_enabled && (
         <a
-          href={firstLink.href}
+          href='/user-agreement'
           className='hover:text-primary underline underline-offset-4'
         >
-          {firstLink.label}
+          {t('User Agreement')}
         </a>
       )}
-      {secondLink && (
-        <>
-          {' '}
-          {t('and')}{' '}
-          <a
-            href={secondLink.href}
-            className='hover:text-primary underline underline-offset-4'
-          >
-            {secondLink.label}
-          </a>
-        </>
+      {props.status.privacy_policy_enabled && (
+        <a
+          href='/privacy-policy'
+          className='hover:text-primary underline underline-offset-4'
+        >
+          {t('Privacy Policy')}
+        </a>
       )}
-      .
-    </p>
+    </nav>
   )
 }

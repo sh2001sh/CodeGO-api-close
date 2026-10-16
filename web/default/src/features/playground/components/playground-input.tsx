@@ -16,230 +16,108 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
-import {
-  PaperclipIcon,
-  FileIcon,
-  ImageIcon,
-  ScreenShareIcon,
-  CameraIcon,
-  GlobeIcon,
-  SendIcon,
-  SquareIcon,
-  BarChartIcon,
-  BoxIcon,
-  NotepadTextIcon,
-  CodeSquareIcon,
-  GraduationCapIcon,
-} from 'lucide-react'
+import { ArrowUp, Paperclip, Square, ArrowUpRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  PromptInput,
-  PromptInputButton,
-  PromptInputFooter,
-  PromptInputTextarea,
-  PromptInputTools,
-  type PromptInputMessage,
-} from '@/components/ai-elements/prompt-input'
-import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
-import { ModelGroupSelector } from '@/components/model-group-selector'
-import type { ModelOption, GroupOption } from '../types'
 
 interface PlaygroundInputProps {
   onSubmit: (text: string) => void
-  onStop?: () => void
+  onStop: () => void
   disabled?: boolean
-  isGenerating?: boolean
-  models: ModelOption[]
-  modelValue: string
-  onModelChange: (value: string) => void
-  isModelLoading?: boolean
-  groups: GroupOption[]
-  groupValue: string
-  onGroupChange: (value: string) => void
+  isGenerating: boolean
+  value: string
+  onChange: (value: string) => void
+  empty: boolean
 }
 
-export function PlaygroundInput({
-  onSubmit,
-  onStop,
-  disabled,
-  isGenerating,
-  models,
-  modelValue,
-  onModelChange,
-  isModelLoading = false,
-  groups,
-  groupValue,
-  onGroupChange,
-}: PlaygroundInputProps) {
+export function PlaygroundInput(props: PlaygroundInputProps) {
   const { t } = useTranslation()
-  const [text, setText] = useState('')
-  const suggestions = [
-    { icon: BarChartIcon, text: t('Analyze data'), color: 'var(--chart-1)' },
-    { icon: BoxIcon, text: t('Surprise me'), color: 'var(--chart-2)' },
-    {
-      icon: NotepadTextIcon,
-      text: t('Summarize text'),
-      color: 'var(--chart-3)',
-    },
-    { icon: CodeSquareIcon, text: t('Code'), color: 'var(--chart-4)' },
-    { icon: GraduationCapIcon, text: t('Get advice'), color: 'var(--chart-1)' },
-    { icon: null, text: t('More') },
-  ]
-
-  const isModelSelectDisabled =
-    disabled || isModelLoading || models.length === 0
-  const isGroupSelectDisabled = disabled || groups.length === 0
-
-  const handleSubmit = (message: PromptInputMessage) => {
-    if (!message.text?.trim() || disabled) return
-    onSubmit(message.text)
-    setText('')
+  const send = () => {
+    if (!props.value.trim() || props.disabled || props.isGenerating) return
+    props.onSubmit(props.value)
+    props.onChange('')
   }
-
-  const handleFileAction = (action: string) => {
-    toast.info(t('Feature in development'), {
-      description: action,
-    })
-  }
-
-  const handleSuggestionClick = (suggestion: string) => {
-    onSubmit(suggestion)
-  }
-
   return (
-    <div className='codego-playground-input grid shrink-0 gap-4 px-1 md:pb-4'>
-      <PromptInput
-        groupClassName='codego-prompt-shell rounded-xl'
-        onSubmit={handleSubmit}
+    <div className='pg-composer-area'>
+      {props.empty && (
+        <div className='pg-suggestions'>
+          {[
+            'Analyze data',
+            'Surprise me',
+            'Summarize text',
+            'Code',
+            'Get advice',
+            'More',
+          ].map((suggestion) => (
+            <button
+              key={suggestion}
+              type='button'
+              disabled={props.disabled || props.isGenerating}
+              onClick={() => props.onChange(t(suggestion))}
+            >
+              {t(suggestion)}
+              <ArrowUpRight size={15} aria-hidden='true' />
+            </button>
+          ))}
+        </div>
+      )}
+      <form
+        className='pg-composer'
+        onSubmit={(event) => {
+          event.preventDefault()
+          send()
+        }}
       >
-        <PromptInputTextarea
+        <label htmlFor='pg-message' className='pg-composer-label'>
+          {t('消息')}
+        </label>
+        <textarea
+          id='pg-message'
+          value={props.value}
+          rows={3}
           autoComplete='off'
           autoCorrect='off'
           autoCapitalize='off'
           spellCheck={false}
-          className='px-5 md:text-base'
-          disabled={disabled}
-          onChange={(event) => setText(event.target.value)}
-          placeholder={t('Ask anything')}
-          value={text}
+          onChange={(event) => props.onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (
+              event.key === 'Enter' &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault()
+              send()
+            }
+          }}
         />
-
-        <PromptInputFooter className='p-2.5'>
-          <PromptInputTools>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <PromptInputButton
-                    className='border font-medium'
-                    disabled={disabled}
-                    variant='outline'
-                  />
-                }
-              >
-                <PaperclipIcon size={16} />
-                <span className='hidden sm:inline'>{t('Attach')}</span>
-                <span className='sr-only sm:hidden'>{t('Attach')}</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='start'>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('upload-file')}
-                >
-                  <FileIcon className='mr-2' size={16} />
-                  {t('Upload file')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('upload-photo')}
-                >
-                  <ImageIcon className='mr-2' size={16} />
-                  {t('Upload photo')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('take-screenshot')}
-                >
-                  <ScreenShareIcon className='mr-2' size={16} />
-                  {t('Take screenshot')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('take-photo')}
-                >
-                  <CameraIcon className='mr-2' size={16} />
-                  {t('Take photo')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <PromptInputButton
-              className='border font-medium'
-              disabled={disabled}
-              onClick={() => toast.info(t('Search feature in development'))}
-              variant='outline'
-            >
-              <GlobeIcon size={16} />
-              <span className='hidden sm:inline'>{t('Search')}</span>
-              <span className='sr-only sm:hidden'>{t('Search')}</span>
-            </PromptInputButton>
-          </PromptInputTools>
-
-          <div className='flex items-center gap-1.5 md:gap-2'>
-            <ModelGroupSelector
-              selectedModel={modelValue}
-              models={models}
-              onModelChange={onModelChange}
-              selectedGroup={groupValue}
-              groups={groups}
-              onGroupChange={onGroupChange}
-              disabled={isModelSelectDisabled || isGroupSelectDisabled}
-            />
-
-            {isGenerating && onStop ? (
-              <PromptInputButton
-                className='text-foreground font-medium'
-                onClick={onStop}
-                variant='secondary'
-              >
-                <SquareIcon className='fill-current' size={16} />
-                <span className='hidden sm:inline'>{t('Stop')}</span>
-                <span className='sr-only sm:hidden'>{t('Stop')}</span>
-              </PromptInputButton>
-            ) : (
-              <PromptInputButton
-                className='text-foreground font-medium'
-                disabled={disabled || !text.trim()}
-                type='submit'
-                variant='secondary'
-              >
-                <SendIcon size={16} />
-                <span className='hidden sm:inline'>{t('Send')}</span>
-                <span className='sr-only sm:hidden'>{t('Send')}</span>
-              </PromptInputButton>
-            )}
-          </div>
-        </PromptInputFooter>
-      </PromptInput>
-
-      <Suggestions className='codego-suggestions'>
-        {suggestions.map(({ icon: Icon, text, color }) => (
-          <Suggestion
-            className={`codego-suggestion text-xs font-normal sm:text-sm ${
-              text === t('More') ? 'hidden sm:flex' : ''
-            }`}
-            key={text}
-            onClick={() => handleSuggestionClick(text)}
-            suggestion={text}
+        <div className='pg-composer-controls'>
+          <button
+            className='pg-attachment'
+            type='button'
+            disabled
+            aria-label={t('附件 · 待接入')}
           >
-            {Icon && <Icon size={16} style={{ color }} />}
-            {text}
-          </Suggestion>
-        ))}
-      </Suggestions>
+            <Paperclip size={19} aria-hidden='true' />
+            <span>{t('附件')}</span>
+            <span>{t('待接入')}</span>
+          </button>
+          {props.isGenerating ? (
+            <button className='pg-send' type='button' onClick={props.onStop}>
+              <Square size={17} aria-hidden='true' />
+              {t('Stop')}
+            </button>
+          ) : (
+            <button
+              className='pg-send'
+              type='submit'
+              disabled={props.disabled || !props.value.trim()}
+            >
+              <ArrowUp size={20} aria-hidden='true' />
+              {t('Send')}
+            </button>
+          )}
+        </div>
+      </form>
     </div>
   )
 }

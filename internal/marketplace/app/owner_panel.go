@@ -295,21 +295,19 @@ func ListOwnerBargainRequests(owner int, q map[string]string, page, size int) (m
 }
 
 func listBargainRequests(q map[string]string, page, size int, owner *int) (map[string]any, error) {
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 {
+		size = 20
+	} else if size > 200 {
+		size = 200
+	}
 	var rs []marketplaceschema.BargainRequest
-	db := platformdb.DB.Order("created_at desc")
+	db := platformdb.DB.Model(&marketplaceschema.BargainRequest{})
 	if owner != nil {
-		var groups []marketplaceschema.Group
-		if err := platformdb.DB.Where("owner_user_id=?", *owner).Find(&groups).Error; err != nil {
-			return nil, err
-		}
-		ids := make([]string, len(groups))
-		for i := range groups {
-			ids[i] = groups[i].ID
-		}
-		if len(ids) == 0 {
-			return map[string]any{"items": []BargainRequestItem{}, "total": 0, "page": page, "page_size": size}, nil
-		}
-		db = db.Where("group_id IN ?", ids)
+		groups := platformdb.DB.Model(&marketplaceschema.Group{}).Select("id").Where("owner_user_id = ?", *owner)
+		db = db.Where("group_id IN (?)", groups)
 	}
 	if q["status"] != "" {
 		db = db.Where("status=?", q["status"])
@@ -318,9 +316,14 @@ func listBargainRequests(q map[string]string, page, size int, owner *int) (map[s
 		db = db.Where("group_id=?", q["group_id"])
 	}
 	var total int64
-	db.Model(&marketplaceschema.BargainRequest{}).Count(&total)
-	if err := db.Offset((page - 1) * size).Limit(size).Find(&rs).Error; err != nil {
+	if err := db.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		return nil, err
+	}
+	if err := db.Order("created_at DESC, id DESC").Offset((page - 1) * size).Limit(size).Find(&rs).Error; err != nil {
+		return nil, err
+	}
+	if len(rs) == 0 {
+		return map[string]any{"items": []BargainRequestItem{}, "total": total, "page": page, "page_size": size}, nil
 	}
 	groupIDs, userIDs := make([]string, 0, len(rs)), make([]int, 0, len(rs))
 	for _, r := range rs {
@@ -329,8 +332,12 @@ func listBargainRequests(q map[string]string, page, size int, owner *int) (map[s
 	}
 	var groups []marketplaceschema.Group
 	var users []identityschema.User
-	platformdb.DB.Where("id IN ?", groupIDs).Find(&groups)
-	platformdb.DB.Where("id IN ?", userIDs).Find(&users)
+	if err := platformdb.DB.Select("id, system_display_name").Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+		return nil, err
+	}
+	if err := platformdb.DB.Select("id, external_id").Where("id IN ?", userIDs).Find(&users).Error; err != nil {
+		return nil, err
+	}
 	groupNames, userExternalIDs := map[string]string{}, map[int]string{}
 	for _, group := range groups {
 		groupNames[group.ID] = group.SystemDisplayName

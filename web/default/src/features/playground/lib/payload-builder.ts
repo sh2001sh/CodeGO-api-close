@@ -37,11 +37,16 @@ export function buildChatCompletionPayload(
     .filter(isValidMessage)
     .map(formatMessageForAPI)
 
+  if (config.systemPrompt?.trim()) {
+    processedMessages.unshift({ role: 'system', content: config.systemPrompt })
+  }
+
   const payload: ChatCompletionRequest = {
     model: config.model,
     group: config.group,
     messages: processedMessages,
     stream: config.stream,
+    ...(config.stream ? { stream_options: { include_usage: true } } : {}),
   }
 
   // Add enabled parameters

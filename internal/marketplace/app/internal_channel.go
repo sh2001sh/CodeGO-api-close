@@ -31,16 +31,18 @@ func syncInternalChannel(channel *marketplaceschema.Channel, group *marketplaces
 	internal.MarketplaceUserMaxConcurrency = channel.UserMaxConcurrency
 	internal.SensitiveWordInterceptionEnabled = channel.SensitiveWordInterceptionEnabled
 	internal.MultiplierCardSupported = channel.MultiplierCardSupported
+	internal.CreditPackSupported = channel.CreditPackSupported
 	internal.MultiplierCardUserEnabled = channel.MultiplierCardUserEnabled
 	internal.ChannelInfo.ResponsesCapabilities = decodeMarketplaceCapabilities(channel.TransportCapabilities)
 	if err := gatewaystore.UpdateChannel(internal); err != nil {
 		return err
 	}
-	// The generic partial update skips zero values. Marketplace limits are
-	// authoritative, and zero explicitly removes a previously configured cap.
+	// The generic partial update skips zero values. Marketplace limits and
+	// credit-pack opt-in are authoritative, including zero caps and false.
 	if err := platformdb.DB.Model(internal).Updates(map[string]interface{}{
 		"marketplace_max_concurrency":      channel.MaxConcurrency,
 		"marketplace_user_max_concurrency": channel.UserMaxConcurrency,
+		"credit_pack_supported":            channel.CreditPackSupported,
 	}).Error; err != nil {
 		return err
 	}
@@ -48,6 +50,7 @@ func syncInternalChannel(channel *marketplaceschema.Channel, group *marketplaces
 	// the gateway's in-memory routing snapshot. Refresh it before the next
 	// request so replacing A with B cannot keep sending A from channelsIDM.
 	gatewaystore.InitChannelCache()
+	gatewaystore.NotifyChannelCacheChanged()
 	platformhttpx.ResetProxyClientCache()
 	gatewayruntime.InvalidateChannelAffinityForChannel(internal.Id)
 	return nil

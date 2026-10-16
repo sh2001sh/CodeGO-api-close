@@ -18,7 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState } from 'react'
 import {
-  ChevronRight,
   ExternalLink,
   Gauge,
   KeyRound,
@@ -46,9 +45,7 @@ import {
   CodeBlockCopyButton,
 } from '@/components/ai-elements/code-block'
 import {
-  buildRateLimits,
   buildSupportedParameters,
-  formatRateLimit,
   type SupportedParameter,
 } from '../lib/mock-stats'
 import { replaceModelInPath } from '../lib/model-helpers'
@@ -446,7 +443,7 @@ function buildSample(
 // Code samples section
 // ---------------------------------------------------------------------------
 
-function CodeSamplesSection(props: {
+export function CodeSamplesSection(props: {
   model: PricingModel
   endpointMap: Record<string, { path?: string; method?: string }>
 }) {
@@ -467,7 +464,16 @@ function CodeSamplesSection(props: {
   }, [status])
 
   const endpoints = useMemo(() => {
-    const types = props.model.supported_endpoint_types || []
+    const types = (props.model.supported_endpoint_types || []).filter((type) =>
+      [
+        'openai',
+        'openai-response',
+        'anthropic',
+        'gemini',
+        'embeddings',
+        'image-generation',
+      ].includes(type)
+    )
     return types
       .map((type) => {
         const info = props.endpointMap[type] || {}
@@ -539,17 +545,9 @@ function CodeSamplesSection(props: {
 
       <div className='mt-3'>
         <CodeBlock code={code} language={LANG_HIGHLIGHT[lang]}>
-          <CodeBlockCopyButton />
+          <CodeBlockCopyButton aria-label={t('Copy code')} />
         </CodeBlock>
       </div>
-
-      <p className='text-muted-foreground mt-2 text-xs'>
-        {t('Replace')}{' '}
-        <code className='bg-muted rounded px-1 py-0.5 font-mono text-[11px]'>
-          {'<YOUR_API_KEY>'}
-        </code>{' '}
-        {t('with the API key from your token settings.')}
-      </p>
     </section>
   )
 }
@@ -581,7 +579,7 @@ function SupportedParametersSection(props: { model: PricingModel }) {
               <TableHead className='h-9 w-32 text-xs'>
                 {t('Default / range')}
               </TableHead>
-              <TableHead className='h-9 text-xs'>{t('Description')}</TableHead>
+              <TableHead className='h-9 text-xs'>{t('状态')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -595,7 +593,7 @@ function SupportedParametersSection(props: { model: PricingModel }) {
                     {p.required && (
                       <Badge
                         variant='outline'
-                        className='h-4 border-destructive/40 px-1 text-[9px] text-destructive'
+                        className='border-destructive/40 text-destructive h-4 px-1 text-[9px]'
                       >
                         {t('required')}
                       </Badge>
@@ -614,7 +612,7 @@ function SupportedParametersSection(props: { model: PricingModel }) {
                   <ParamRangeCell param={p} />
                 </TableCell>
                 <TableCell className='text-muted-foreground py-2 align-top text-xs'>
-                  {t(p.descriptionKey)}
+                  {t('待核验')}
                 </TableCell>
               </TableRow>
             ))}
@@ -670,7 +668,7 @@ function ParamRangeCell(props: { param: SupportedParameter }) {
 
 function RateLimitsSection(props: { model: PricingModel }) {
   const { t } = useTranslation()
-  const limits = useMemo(() => buildRateLimits(props.model), [props.model])
+  const limits = props.model.enable_groups ?? []
 
   if (limits.length === 0) return null
 
@@ -688,30 +686,25 @@ function RateLimitsSection(props: { model: PricingModel }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {limits.map((l) => (
-              <TableRow key={l.group} className='hover:bg-muted/20'>
+            {limits.map((group) => (
+              <TableRow key={group} className='hover:bg-muted/20'>
                 <TableCell className='py-2 font-mono text-xs'>
-                  {l.group}
+                  {group}
                 </TableCell>
                 <TableCell className='py-2 text-right font-mono text-xs'>
-                  {formatRateLimit(l.rpm)}
+                  {t('待核验')}
                 </TableCell>
                 <TableCell className='py-2 text-right font-mono text-xs'>
-                  {formatRateLimit(l.tpm)}
+                  {t('待核验')}
                 </TableCell>
                 <TableCell className='py-2 text-right font-mono text-xs'>
-                  {formatRateLimit(l.rpd)}
+                  {t('待核验')}
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-      <p className='text-muted-foreground mt-2 text-[11px] leading-relaxed'>
-        {t(
-          'RPM = requests per minute, TPM = tokens per minute, RPD = requests per day. Limits apply per token group.'
-        )}
-      </p>
     </section>
   )
 }
@@ -737,6 +730,9 @@ export function ModelDetailsProviderInfo(props: { model: PricingModel }) {
         <InfoCell label={t('Provider')}>
           <div className='flex items-center gap-1.5'>
             <span className='text-sm font-medium'>{info.vendor_label}</span>
+            {!props.model.vendor_name && (
+              <span className='text-muted-foreground text-sm'>{t('推断')}</span>
+            )}
             {info.homepage && (
               <a
                 href={info.homepage}
@@ -753,7 +749,7 @@ export function ModelDetailsProviderInfo(props: { model: PricingModel }) {
 
         <InfoCell label={t('Tokenizer')}>
           <div className='flex flex-col gap-0.5'>
-            <code className='font-mono text-xs'>{info.tokenizer}</code>
+            <code className='font-mono text-xs'>{t(info.tokenizer)}</code>
             {info.tokenizer_note && (
               <span className='text-muted-foreground text-[10px]'>
                 {info.tokenizer_note}
@@ -764,7 +760,7 @@ export function ModelDetailsProviderInfo(props: { model: PricingModel }) {
 
         <InfoCell label={t('License')}>
           <div className='flex flex-col gap-1'>
-            <span className='text-sm'>{info.license}</span>
+            <span className='text-sm'>{t(info.license)}</span>
             <Badge
               variant='outline'
               className={cn(
@@ -790,15 +786,13 @@ export function ModelDetailsProviderInfo(props: { model: PricingModel }) {
 
         <InfoCell label={t('Data retention')}>
           <span className='text-sm'>
-            {info.data_retention_days === 0
-              ? t('Zero retention')
+            {info.data_retention_days == null
+              ? t('待核验')
               : `${info.data_retention_days} ${t('days')}`}
           </span>
-          <span className='text-muted-foreground text-[10px]'>
-            {info.training_opt_out
-              ? t('Not used for upstream training by default')
-              : t('May be used for training by upstream provider')}
-          </span>
+        </InfoCell>
+        <InfoCell label={t('Training')}>
+          <span>{t('待核验')}</span>
         </InfoCell>
       </div>
     </section>
@@ -825,26 +819,9 @@ function AuthSection() {
   return (
     <section>
       <SectionTitle icon={KeyRound}>{t('Authentication')}</SectionTitle>
-      <div className='border-border/60 bg-muted/20 flex items-start gap-2 rounded-lg border p-3'>
-        <ChevronRight className='text-muted-foreground mt-0.5 size-3.5 shrink-0' />
-        <div className='space-y-1.5 text-xs leading-relaxed'>
-          <p>
-            {t('All requests must include')}{' '}
-            <code className='bg-muted rounded px-1 py-0.5 font-mono text-[11px]'>
-              Authorization: Bearer &lt;TOKEN&gt;
-            </code>{' '}
-            {t('header. Anthropic-formatted endpoints accept the')}{' '}
-            <code className='bg-muted rounded px-1 py-0.5 font-mono text-[11px]'>
-              x-api-key
-            </code>{' '}
-            {t('header instead.')}
-          </p>
-          <p className='text-muted-foreground'>
-            {t(
-              'Generate tokens from the Tokens page; you can scope them to specific models, groups, IPs, and rate-limits.'
-            )}
-          </p>
-        </div>
+      <div className='model-auth-fields'>
+        <code>Authorization: Bearer &lt;TOKEN&gt;</code>
+        <code>x-api-key: &lt;TOKEN&gt;</code>
       </div>
     </section>
   )

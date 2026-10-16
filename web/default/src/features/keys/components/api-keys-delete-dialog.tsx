@@ -63,7 +63,7 @@ export function ApiKeysDeleteDialog() {
       open={open === 'delete'}
       onOpenChange={(open) => !open && setOpen(null)}
     >
-      <AlertDialogContent>
+      <AlertDialogContent className='api-key-dialog'>
         <AlertDialogHeader>
           <AlertDialogTitle>{t('Are you sure?')}</AlertDialogTitle>
           <AlertDialogDescription>

@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
+import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SiteSeo } from '@/components/seo'
 import { AuthLayout } from '../auth-layout'
@@ -25,6 +26,7 @@ import { ForgotPasswordForm } from './components/forgot-password-form'
 
 export function ForgotPassword() {
   const { t } = useTranslation()
+
   return (
     <AuthLayout>
       <SiteSeo
@@ -35,29 +37,29 @@ export function ForgotPassword() {
         canonicalPath='/forgot-password'
         robots='noindex,follow'
       />
-      <div className='w-full space-y-8'>
-        <div className='space-y-3'>
-          <h2 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
-            {t('Forgot password')}
-          </h2>
-          <p className='text-muted-foreground text-left text-sm sm:text-base'>
-            {t(
-              'Enter your registered email and we will send you a link to reset your password.'
-            )}
-          </p>
-          <p className='text-muted-foreground text-left text-sm sm:text-base'>
-            {t("Don't have an account?")}{' '}
-            <Link
-              to='/sign-up'
-              className='hover:text-primary font-medium underline underline-offset-4'
-            >
-              {t('Sign up')}
-            </Link>
-            .
-          </p>
+      <div className='w-full'>
+        {/* Top Brand Logo & Title */}
+        <div className='market-auth-header'>
+          <div className='market-auth-brand-emblem' aria-hidden='true'>
+            <img
+              src='/code-go-logo.svg'
+              alt=''
+              width='32'
+              height='32'
+              className='size-8 object-contain'
+            />
+          </div>
+          <h1 className='market-auth-title'>{t('Forgot password')}</h1>
         </div>
 
         <ForgotPasswordForm className='space-y-0' />
+
+        <div className='market-auth-switch-row'>
+          <Link to='/sign-in' className='market-auth-switch-link'>
+            <ArrowLeft className='mr-1 inline-block size-3' />
+            {t('Back to sign in')}
+          </Link>
+        </div>
       </div>
     </AuthLayout>
   )

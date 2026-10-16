@@ -38,7 +38,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -111,6 +110,7 @@ export function FAQSection({ enabled, data }: FAQSectionProps) {
   })
 
   useEffect(() => {
+    if (hasChanges) return
     try {
       const parsed = JSON.parse(data || '[]')
       if (Array.isArray(parsed)) {
@@ -124,7 +124,7 @@ export function FAQSection({ enabled, data }: FAQSectionProps) {
     } catch {
       setFaqList([])
     }
-  }, [data])
+  }, [data, hasChanges])
 
   useEffect(() => {
     setIsEnabled(enabled)
@@ -240,9 +240,7 @@ export function FAQSection({ enabled, data }: FAQSectionProps) {
   return (
     <SettingsSection
       title={t('FAQ')}
-      description={t(
-        'Maintain a list of common questions for the dashboard help panel'
-      )}
+      description={t('Configure frequently asked questions')}
     >
       <div className='space-y-4'>
         <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -354,14 +352,11 @@ export function FAQSection({ enabled, data }: FAQSectionProps) {
       </div>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className='max-w-2xl'>
+        <DialogContent className='settings-dialog max-w-2xl'>
           <DialogHeader>
             <DialogTitle>
               {editingFaq ? t('Edit FAQ') : t('Add FAQ')}
             </DialogTitle>
-            <DialogDescription>
-              {t('Create or update frequently asked questions for users')}
-            </DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form
@@ -380,8 +375,8 @@ export function FAQSection({ enabled, data }: FAQSectionProps) {
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Maximum 200 characters')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('≤ 200')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -402,10 +397,8 @@ export function FAQSection({ enabled, data }: FAQSectionProps) {
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'Maximum 1000 characters. Supports Markdown and HTML.'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('≤ 1000 · Markdown / HTML')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -429,7 +422,7 @@ export function FAQSection({ enabled, data }: FAQSectionProps) {
       </Dialog>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className='settings-dialog'>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('Are you sure?')}</AlertDialogTitle>
             <AlertDialogDescription>

@@ -27,7 +27,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from '@/components/ui/dialog'
 import {
   Form,
@@ -50,6 +49,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { useSystemOptions } from '../../../hooks/use-system-options'
 import {
   useCreateProvider,
   useUpdateProvider,
@@ -74,6 +74,7 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
   const isEditing = !!props.provider
   const createProvider = useCreateProvider()
   const updateProvider = useUpdateProvider()
+  const { data: options } = useSystemOptions()
 
   const form = useForm<CustomOAuthFormValues>({
     resolver: zodResolver(
@@ -148,6 +149,16 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
   }, [props.open, props.provider, form])
 
   const onSubmit = async (values: CustomOAuthFormValues) => {
+    if (
+      !isEditing &&
+      values.slug === 'google' &&
+      !values.client_secret.trim()
+    ) {
+      form.setError('client_secret', {
+        message: t('Google Client Secret is required'),
+      })
+      return
+    }
     if (isEditing && props.provider) {
       const res = await updateProvider.mutateAsync({
         id: props.provider.id,
@@ -167,21 +178,21 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
   }
 
   const isPending = createProvider.isPending || updateProvider.isPending
+  const slug = form.watch('slug')
+  const serverAddress = options?.data
+    ?.find((option) => option.key === 'ServerAddress')
+    ?.value?.trim()
+    .replace(/\/+$/, '')
+  const callbackUrl =
+    serverAddress && slug ? `${serverAddress}/oauth/${slug}` : ''
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='max-h-[85vh] overflow-y-auto sm:max-w-2xl'>
+      <DialogContent className='settings-dialog max-h-[85vh] overflow-y-auto sm:max-w-2xl'>
         <DialogHeader>
           <DialogTitle>
             {isEditing ? t('Edit OAuth Provider') : t('Add OAuth Provider')}
           </DialogTitle>
-          <DialogDescription>
-            {isEditing
-              ? t('Update the configuration for this custom OAuth provider.')
-              : t(
-                  'Configure a new custom OAuth provider for user authentication.'
-                )}
-          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -202,9 +213,6 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
                       <FormLabel className='text-base'>
                         {t('Enabled')}
                       </FormLabel>
-                      <FormDescription>
-                        {t('Allow users to sign in with this provider')}
-                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch
@@ -240,13 +248,27 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
                       <FormControl>
                         <Input placeholder={t('e.g. my-gitlab')} {...field} />
                       </FormControl>
-                      <FormDescription>
-                        {t('Used in URLs and API routes')}
-                      </FormDescription>
+
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+              </div>
+
+              <div className='bg-muted space-y-2 rounded-lg p-3'>
+                <p className='text-sm font-medium'>{t('OAuth callback URL')}</p>
+                {callbackUrl ? (
+                  <p className='text-sm break-all select-all'>{callbackUrl}</p>
+                ) : (
+                  <p className='text-muted-foreground text-base'>
+                    {t('Server address / Provider slug: required')}
+                  </p>
+                )}
+                <p className='text-muted-foreground text-base'>
+                  {t(
+                    'Callback URL = Provider console URL · Server domain = Sign-in domain'
+                  )}
+                </p>
               </div>
 
               <FormField
@@ -261,9 +283,7 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Optional icon identifier for the login button')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -348,11 +368,7 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <FormDescription>
-                      {t(
-                        'How client credentials are sent to the token endpoint'
-                      )}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -382,11 +398,7 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'OIDC discovery URL. Click "Auto-discover" to fetch endpoints automatically.'
-                      )}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -455,8 +467,8 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Space-separated OAuth scopes')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('openid profile email')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -469,10 +481,8 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
             {/* Field Mapping */}
             <div className='space-y-4'>
               <h4 className='text-sm font-medium'>{t('Field Mapping')}</h4>
-              <FormDescription>
-                {t(
-                  'Map fields from the user info response to local user attributes. Supports nested paths (e.g. ocs.data.id).'
-                )}
+              <FormDescription className='settings-field-fact'>
+                {t('User info → Local attributes · ocs.data.id')}
               </FormDescription>
 
               <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
@@ -555,10 +565,8 @@ export function ProviderFormDialog(props: ProviderFormDialogProps) {
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'JSON-based access control rules. Leave empty to allow all users.'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('JSON {} · Empty: allow all')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

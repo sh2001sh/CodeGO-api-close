@@ -22,6 +22,7 @@ import { Wallet } from '@/features/wallet'
 
 const walletSearchSchema = z.object({
   show_history: z.boolean().optional(),
+  section: z.enum(['funding', 'transfer', 'billing', 'invoices']).optional(),
 })
 
 export const Route = createFileRoute('/_authenticated/wallet/')({
@@ -30,6 +31,17 @@ export const Route = createFileRoute('/_authenticated/wallet/')({
 })
 
 function RouteComponent() {
-  const { show_history } = Route.useSearch()
-  return <Wallet initialShowHistory={show_history} />
+  const { show_history, section } = Route.useSearch()
+  const navigate = Route.useNavigate()
+  return (
+    <Wallet
+      initialShowHistory={show_history}
+      initialSection={section}
+      onSectionChange={(value) => {
+        void navigate({
+          search: (previous) => ({ ...previous, section: value }),
+        })
+      }}
+    />
+  )
 }

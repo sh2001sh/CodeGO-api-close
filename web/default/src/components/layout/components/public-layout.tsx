@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { SiteFooter } from '@/components/site-footer'
+import { SkipToMain } from '@/components/skip-to-main'
 import type { TopNavLink } from '../types'
 import { PublicHeader, type PublicHeaderProps } from './public-header'
 
@@ -34,7 +36,8 @@ type PublicLayoutProps = {
 
 export function PublicLayout(props: PublicLayoutProps) {
   return (
-    <div className='bg-background text-foreground relative min-h-svh overflow-x-clip'>
+    <div className='bg-background text-foreground relative flex min-h-svh flex-col overflow-x-clip'>
+      <SkipToMain />
       <PublicHeader
         navContent={props.navContent}
         navLinks={props.navLinks}
@@ -47,12 +50,17 @@ export function PublicLayout(props: PublicLayoutProps) {
       />
 
       {props.showMainContainer !== false ? (
-        <main className='container px-4 py-6 pt-20 md:px-4'>
+        <main
+          id='content'
+          tabIndex={-1}
+          className='mx-auto w-full max-w-[1184px] px-5 py-10 md:px-8 md:py-14'
+        >
           {props.children}
         </main>
       ) : (
         props.children
       )}
+      <SiteFooter />
     </div>
   )
 }

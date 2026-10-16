@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useMemo } from 'react'
+import { getIntlLocale } from '@/i18n/format'
 import { Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -173,12 +174,12 @@ export function RateLimitVisualEditor({
                     <span className='font-mono'>
                       {limit.maxRequests === 0
                         ? t('Unlimited')
-                        : limit.maxRequests.toLocaleString()}
+                        : limit.maxRequests.toLocaleString(getIntlLocale())}
                     </span>
                   </TableCell>
                   <TableCell className='text-right'>
                     <span className='font-mono'>
-                      {limit.maxSuccess.toLocaleString()}
+                      {limit.maxSuccess.toLocaleString(getIntlLocale())}
                     </span>
                   </TableCell>
                   <TableCell className='text-right'>

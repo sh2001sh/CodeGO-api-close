@@ -19,6 +19,7 @@ import { api } from '@/lib/api'
 import type {
   CreateInvoiceRequestPayload,
   InvoiceEligibleOrder,
+  InvoiceEligibleOrdersPage,
   InvoicePage,
   InvoiceRequest,
   InvoiceStatus,
@@ -36,10 +37,40 @@ export async function getInvoiceEligibleOrders(): Promise<
   return response.data.data
 }
 
-export async function getInvoiceRequests(): Promise<InvoicePage> {
+export async function getInvoiceEligibleOrdersPage(
+  page: number,
+  keyword: string,
+  signal?: AbortSignal
+): Promise<InvoiceEligibleOrdersPage> {
+  const config = {
+    params: { p: page, page_size: 50, keyword },
+    signal,
+    skipErrorHandler: true,
+    // React Query owns deduplication and cancellation for this user-scoped read.
+    disableDuplicate: true,
+  }
+  const response = await api.get<ApiResponse<InvoiceEligibleOrdersPage>>(
+    '/api/invoices/eligible-orders',
+    config
+  )
+  if (!response.data.success) {
+    throw new Error(response.data.message || 'invoice.ordersFailed')
+  }
+  return response.data.data
+}
+
+export async function getInvoiceRequests(
+  signal?: AbortSignal
+): Promise<InvoicePage> {
+  const config = {
+    params: { p: 1, page_size: 100 },
+    signal,
+    skipErrorHandler: true,
+    disableDuplicate: true,
+  }
   const response = await api.get<ApiResponse<InvoicePage>>(
     '/api/invoices/requests',
-    { params: { p: 1, page_size: 100 } }
+    config
   )
   return response.data.data
 }

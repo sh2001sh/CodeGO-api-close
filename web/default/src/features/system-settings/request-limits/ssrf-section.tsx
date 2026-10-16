@@ -45,6 +45,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const ssrfSchema = z.object({
   fetch_setting: z.object({
@@ -168,9 +169,10 @@ export function SSRFSection({ defaultValues }: SSRFSectionProps) {
   })
 
   useEffect(() => {
+    if (form.formState.isDirty || form.formState.isSubmitting) return
     baselineRef.current = normalizeDefaults(defaultValues)
     form.reset(buildFormDefaults(defaultValues))
-  }, [defaultValues, form])
+  }, [defaultValues, form, form.formState.isDirty, form.formState.isSubmitting])
 
   const onSubmit = async (data: SSRFFormValues) => {
     const normalized = normalizeFormValues(data)
@@ -192,6 +194,7 @@ export function SSRFSection({ defaultValues }: SSRFSectionProps) {
     }
 
     baselineRef.current = normalized
+    form.reset(form.getValues())
   }
 
   const domainFilterMode = form.watch('fetch_setting.domain_filter_mode')
@@ -200,12 +203,13 @@ export function SSRFSection({ defaultValues }: SSRFSectionProps) {
   return (
     <SettingsSection
       title={t('SSRF Protection')}
-      description={t(
-        'Prevent server-side request forgery attacks by controlling outbound requests.'
-      )}
+      description={t('Configure SSRF (Server-Side Request Forgery) protection')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <FormField
             control={form.control}
             name='fetch_setting.enable_ssrf_protection'
@@ -215,9 +219,6 @@ export function SSRFSection({ defaultValues }: SSRFSectionProps) {
                   <FormLabel className='text-base'>
                     {t('Enable SSRF Protection')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Prevent server-side request forgery attacks')}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -238,10 +239,8 @@ export function SSRFSection({ defaultValues }: SSRFSectionProps) {
                   <FormLabel className='text-base'>
                     {t('Allow Private IPs')}
                   </FormLabel>
-                  <FormDescription>
-                    {t(
-                      'Allow requests to private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('10.0.0.0/8 · 172.16.0.0/12 · 192.168.0.0/16')}
                   </FormDescription>
                 </div>
                 <FormControl>
@@ -290,9 +289,6 @@ export function SSRFSection({ defaultValues }: SSRFSectionProps) {
                     </SelectGroup>
                   </SelectContent>
                 </Select>
-                <FormDescription>
-                  {t('Choose how to filter domains')}
-                </FormDescription>
               </FormItem>
             )}
           />
@@ -355,9 +351,6 @@ export function SSRFSection({ defaultValues }: SSRFSectionProps) {
                     </SelectGroup>
                   </SelectContent>
                 </Select>
-                <FormDescription>
-                  {t('Choose how to filter IP addresses')}
-                </FormDescription>
               </FormItem>
             )}
           />
@@ -394,10 +387,8 @@ export function SSRFSection({ defaultValues }: SSRFSectionProps) {
                 <FormControl>
                   <Input placeholder={t('80,443,8080')} {...field} />
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'Comma-separated list of allowed ports (empty = all ports)'
-                  )}
+                <FormDescription className='settings-field-fact'>
+                  {t('80, 443 · Empty: all ports')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -413,10 +404,8 @@ export function SSRFSection({ defaultValues }: SSRFSectionProps) {
                   <FormLabel className='text-base'>
                     {t('Apply IP Filter to Resolved Domains')}
                   </FormLabel>
-                  <FormDescription>
-                    {t(
-                      'Check resolved IPs against IP filters even when accessing by domain'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('DNS → IP filter')}
                   </FormDescription>
                 </div>
                 <FormControl>
@@ -429,9 +418,13 @@ export function SSRFSection({ defaultValues }: SSRFSectionProps) {
             )}
           />
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save SSRF settings')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending
+                ? t('Saving...')
+                : t('Save SSRF settings')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

@@ -204,10 +204,28 @@ func CanFallbackToHTTP(err error) bool {
 }
 
 func (s *Session) forwardResponse(ctx context.Context, conn *websocket.Conn, writer *io.PipeWriter) {
-	defer func() {
+	// Closing a turn must unblock ReadMessage even when the provider produces
+	// no further frames. A cancelled socket cannot carry the next response.
+	cancelDone := make(chan struct{})
+	stopCancel := context.AfterFunc(ctx, func() {
+		defer close(cancelDone)
 		s.mu.Lock()
+		s.closeConnectionIfCurrentLocked(conn)
 		s.inFlight = false
 		s.mu.Unlock()
+		_ = writer.CloseWithError(ctx.Err())
+	})
+	var forwardErr error
+	defer func() {
+		if !stopCancel() {
+			<-cancelDone
+		}
+		s.mu.Lock()
+		if s.conn == nil || s.conn == conn {
+			s.inFlight = false
+		}
+		s.mu.Unlock()
+		_ = writer.CloseWithError(forwardErr)
 	}()
 	stopKeepAlive := startResponsesWebSocketKeepAlive(ctx, conn)
 	defer stopKeepAlive()
@@ -215,24 +233,23 @@ func (s *Session) forwardResponse(ctx context.Context, conn *websocket.Conn, wri
 		_, eventPayload, err := conn.ReadMessage()
 		if err != nil {
 			s.mu.Lock()
-			s.replayForbidden = true
+			s.replayForbidden = ctx.Err() == nil
 			s.closeConnectionIfCurrentLocked(conn)
 			if shouldDisableNative(err) {
 				s.nativeDisabled = true
 			}
 			s.mu.Unlock()
-			_ = writer.CloseWithError(err)
+			forwardErr = err
 			return
 		}
 		if _, err := writer.Write(ssePayload(eventPayload)); err != nil {
 			s.mu.Lock()
-			s.closeConnectionLocked()
+			s.closeConnectionIfCurrentLocked(conn)
 			s.mu.Unlock()
-			_ = writer.CloseWithError(err)
+			forwardErr = err
 			return
 		}
 		if terminalWebSocketEvent(eventPayload) {
-			_ = writer.Close()
 			return
 		}
 	}
@@ -305,7 +322,7 @@ func terminalWebSocketEvent(payload []byte) bool {
 		return false
 	}
 	switch event.Type {
-	case "response.completed", "response.failed", "response.incomplete", "error":
+	case "response.completed", "response.failed", "response.incomplete", "response.cancelled", "response.canceled", "error":
 		return true
 	default:
 		return false

@@ -38,7 +38,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -120,6 +119,7 @@ export function UptimeKumaSection({ enabled, data }: UptimeKumaSectionProps) {
   })
 
   useEffect(() => {
+    if (hasChanges) return
     try {
       const parsed = JSON.parse(data || '[]')
       if (Array.isArray(parsed)) {
@@ -133,7 +133,7 @@ export function UptimeKumaSection({ enabled, data }: UptimeKumaSectionProps) {
     } catch {
       setGroups([])
     }
-  }, [data])
+  }, [data, hasChanges])
 
   useEffect(() => {
     setIsEnabled(enabled)
@@ -249,9 +249,7 @@ export function UptimeKumaSection({ enabled, data }: UptimeKumaSectionProps) {
   return (
     <SettingsSection
       title={t('Uptime Kuma')}
-      description={t(
-        'Expose grouped Uptime Kuma status pages directly on the dashboard'
-      )}
+      description={t('Configure Uptime Kuma monitoring integration')}
     >
       <div className='space-y-4'>
         <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -365,16 +363,13 @@ export function UptimeKumaSection({ enabled, data }: UptimeKumaSectionProps) {
       </div>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
+        <DialogContent className='settings-dialog'>
           <DialogHeader>
             <DialogTitle>
               {editingGroup
                 ? t('Edit Uptime Kuma Group')
                 : t('Add Uptime Kuma Group')}
             </DialogTitle>
-            <DialogDescription>
-              {t('Configure monitoring status page groups for the dashboard')}
-            </DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form
@@ -393,10 +388,8 @@ export function UptimeKumaSection({ enabled, data }: UptimeKumaSectionProps) {
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'Display name for this monitoring group (max 50 characters)'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('≤ 50')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -414,9 +407,7 @@ export function UptimeKumaSection({ enabled, data }: UptimeKumaSectionProps) {
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Base URL of your Uptime Kuma instance')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -430,11 +421,7 @@ export function UptimeKumaSection({ enabled, data }: UptimeKumaSectionProps) {
                     <FormControl>
                       <Input placeholder={t('my-status')} {...field} />
                     </FormControl>
-                    <FormDescription>
-                      {t('The slug is appended to the URL:')} {'{url}'}
-                      {t('/status/')}
-                      {'{slug}'}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -457,7 +444,7 @@ export function UptimeKumaSection({ enabled, data }: UptimeKumaSectionProps) {
       </Dialog>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className='settings-dialog'>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('Are you sure?')}</AlertDialogTitle>
             <AlertDialogDescription>

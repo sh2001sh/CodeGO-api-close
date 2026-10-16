@@ -1,12 +1,6 @@
 import i18n from '@/i18n/config'
 import { useTranslation, Trans } from 'react-i18next'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { RoutePoolGroup, RoutePoolMetrics } from '../types'
@@ -34,29 +28,24 @@ export function RoutePoolInsights({
 }: RoutePoolInsightsProps) {
   useTranslation()
   return (
-    <Card>
+    <Card className='route-pool-insights'>
       <CardHeader>
         <CardTitle>
           <Trans i18nKey={'路由算法验证'} />
         </CardTitle>
-        <CardDescription>
-          <Trans
-            i18nKey={
-              '这里显示服务端实际使用的候选评分。只有“算法已接管”的分组会忽略旧优先级和权重。'
-            }
-          />
-        </CardDescription>
       </CardHeader>
       <CardContent className='space-y-3'>
         <Input
           value={model}
-          placeholder={i18n.t('输入模型，例如 gpt-5.6-luna')}
+          placeholder={i18n.t('模型')}
+          aria-label={i18n.t('模型')}
           onChange={(event) => onModelChange(event.target.value)}
         />
-        <div className='flex flex-wrap gap-2'>
+        <div className='route-insight-groups flex flex-wrap gap-2'>
           {groups.map((group) => (
             <button
               key={group.group}
+              aria-pressed={selectedGroup === group.group}
               className={
                 selectedGroup === group.group
                   ? 'bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-sm'
@@ -69,7 +58,7 @@ export function RoutePoolInsights({
           ))}
         </div>
         {!algorithmActive && selectedGroup && (
-          <div className='rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm'>
+          <div className='route-insight-notice'>
             <Trans
               i18nKey={
                 '当前分组仍使用旧优先级 / 权重路由。启用该分组的自动路由并保存后，才会使用成本、成功率、冷却和首字评分。'
@@ -77,16 +66,13 @@ export function RoutePoolInsights({
             />
           </div>
         )}
-        {algorithmActive && !model && (
-          <p className='text-muted-foreground text-sm'>
-            <Trans
-              i18nKey={'输入模型后查看该模型的实际候选、健康度和路由评分。'}
-            />
-          </p>
-        )}
         {metricsLoading && <Skeleton className='h-20' />}
         {metrics?.members.map((member) => (
-          <div key={member.channel_id} className='border-b py-2 last:border-0'>
+          <div
+            key={member.channel_id}
+            className='route-insight-member border-b py-2 last:border-0'
+            data-eligible={member.eligible}
+          >
             <div className='flex justify-between gap-2'>
               <span className='truncate font-medium'>
                 {member.channel_name ||

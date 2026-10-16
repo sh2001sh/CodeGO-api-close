@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef } from '@tanstack/react-table'
+import interfaceI18n from '@/i18n/config'
 import {
   AlertTriangle,
   ChevronDown,
@@ -344,7 +345,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           checked={table.getIsAllPageRowsSelected()}
           indeterminate={table.getIsSomePageRowsSelected()}
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label='Select all'
+          aria-label={interfaceI18n.t('Select all')}
         />
       ),
       cell: ({ row }) => {
@@ -359,7 +360,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label='Select row'
+            aria-label={interfaceI18n.t('Select row')}
           />
         )
       },
@@ -423,7 +424,10 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                 )}
               </Button>
               <div className='flex items-center gap-1.5'>
-                <span className='font-semibold'>Tag：{tag}</span>
+                <span className='font-semibold'>
+                  {interfaceI18n.t('Tag：')}
+                  {tag}
+                </span>
                 <StatusBadge
                   label={`${childrenCount} channels`}
                   variant='blue'

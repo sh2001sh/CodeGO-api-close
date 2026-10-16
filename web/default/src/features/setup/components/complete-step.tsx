@@ -57,11 +57,6 @@ export function CompleteStep({ status, values }: CompleteStepProps) {
         <h2 className='text-2xl font-semibold tracking-tight'>
           {t('Ready to initialize')}
         </h2>
-        <p className='text-muted-foreground max-w-lg text-sm sm:text-base'>
-          {t(
-            'Double check the configuration below. Your system will be locked until initialization is complete.'
-          )}
-        </p>
       </div>
 
       <div className='bg-card w-full rounded-xl border p-6 text-left shadow-sm sm:p-8'>

@@ -338,6 +338,27 @@ func buildTestRequest(modelName string, endpointType string, channel *gatewaysch
 	return testRequest
 }
 
+func applyChannelTestPrompt(request dto.Request, prompt string) {
+	if prompt == "" {
+		return
+	}
+	switch req := request.(type) {
+	case *dto.GeneralOpenAIRequest:
+		req.Messages = []dto.Message{{Role: "user", Content: prompt}}
+		if req.MaxCompletionTokens != nil {
+			req.MaxCompletionTokens = lo.ToPtr(uint(1024))
+			req.MaxTokens = nil
+		} else if req.MaxTokens == nil || *req.MaxTokens < 1024 {
+			req.MaxTokens = lo.ToPtr(uint(1024))
+		}
+	case *dto.OpenAIResponsesRequest:
+		req.Input, _ = json.Marshal(prompt)
+		req.MaxOutputTokens = lo.ToPtr(uint(1024))
+	case *dto.OpenAIResponsesCompactionRequest:
+		req.Input, _ = json.Marshal([]dto.Message{{Role: "user", Content: prompt}})
+	}
+}
+
 func normalizeChannelTestModel(channel *gatewayschema.Channel, testModel string) string {
 	testModel = strings.TrimSpace(testModel)
 	if testModel != "" {

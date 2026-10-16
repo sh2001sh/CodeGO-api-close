@@ -94,13 +94,13 @@ export function ProfileSecurityCard({
         description={t('Manage your security settings and account access')}
         icon={<Shield className='h-4 w-4' />}
       >
-        <div className='grid grid-cols-1 gap-2.5 sm:gap-3 md:grid-cols-3'>
+        <div className='profile-security-actions'>
           {securityActions.map((item) => (
             <button
               key={item.title}
               type='button'
               onClick={item.action}
-              className={`hover:bg-muted/50 flex items-center gap-3 rounded-lg border p-3 text-left transition-colors md:flex-col md:gap-2 md:p-4 md:text-center ${
+              className={`profile-security-action ${
                 item.variant === 'destructive'
                   ? 'border-destructive/30 hover:border-destructive/50 hover:bg-destructive/5'
                   : ''
@@ -117,9 +117,6 @@ export function ProfileSecurityCard({
               </div>
               <div className='min-w-0 md:contents'>
                 <p className='text-sm font-medium'>{item.title}</p>
-                <p className='text-muted-foreground line-clamp-1 text-xs md:line-clamp-none'>
-                  {item.description}
-                </p>
               </div>
             </button>
           ))}

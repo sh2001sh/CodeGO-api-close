@@ -10,6 +10,7 @@ import (
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 )
 
 const routeHealthRequestCacheKey = "gateway_route_health_request_cache"
@@ -22,6 +23,18 @@ type routeHealthCacheEntry struct {
 type routeHealthRequestCache struct {
 	channels map[string]routeHealthCacheEntry
 	domains  map[string]routeHealthCacheEntry
+	prefetch *routeHealthPrefetch
+}
+
+// A round owns its snapshot. Reuse its maps instead of copying every large
+// ChannelHealth into another per-candidate cache entry; membership sets also
+// retain negative lookups without treating unrequested IDs as cache misses.
+type routeHealthPrefetch struct {
+	model       string
+	requestType gatewayruntime.RequestType
+	channels    map[int]struct{}
+	domains     map[string]struct{}
+	snapshot    gatewayruntime.RouteHealthSnapshot
 }
 
 // resetRouteHealthRequestCache starts a fresh advisory-health view for a new
@@ -70,9 +83,8 @@ func buildRoutePoolCandidateSets(
 	requestType gatewayruntime.RequestType,
 	now time.Time, pools ...gatewayschema.RoutePool,
 ) (healthy, probes, lastResort []scoredRoutePoolCandidate) {
+	prefetchRoutePoolHealth(c, candidates, modelName, requestType)
 	healthy = make([]scoredRoutePoolCandidate, 0, len(candidates))
-	probes = make([]scoredRoutePoolCandidate, 0, len(candidates))
-	lastResort = make([]scoredRoutePoolCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		var pool *gatewayschema.RoutePool
 		if len(pools) > 0 {
@@ -147,7 +159,9 @@ func classifyRoutePoolCandidate(
 		gatewayruntime.ExcludeRouteDecisionCandidate(c, "failed_fault_domain")
 		return scoredRoutePoolCandidate{}, routePoolCandidateSkip
 	}
-	if gatewayruntime.IsChannelCredentialCooling(candidate.Channel.Id) {
+	credentialHealth, credentialFound := routePoolCredentialHealth(c, candidate.Channel.Id)
+	credentialCircuit := credentialFound && (credentialHealth.State == gatewayruntime.ChannelHealthCooling || credentialHealth.State == gatewayruntime.ChannelHealthHalfOpen)
+	if credentialCircuit && (credentialHealth.CoolingUntil.After(now) || credentialHealth.RecoveryProbeUntil.After(now)) {
 		gatewayruntime.ExcludeRouteDecisionCandidate(c, "channel_credential_cooling")
 		return scoredRoutePoolCandidate{}, routePoolCandidateSkip
 	}
@@ -156,13 +170,14 @@ func classifyRoutePoolCandidate(
 	domainHealth, domainFound := routePoolFaultDomainHealth(c, faultDomain, modelName, requestType)
 	channelCooling := activeRoutePoolCircuit(health, found, now)
 	domainCooling := activeRoutePoolCircuit(domainHealth, domainFound, now)
-	score := effectiveRoutePoolCostForPool(candidate.Member, modelName, health, pool)
+	cost := routePoolModelCost(candidate.Member, modelName)
+	score := effectiveRoutePoolCostValueForPool(cost, health, pool)
 	if compactionRank > 0 {
 		score += routePoolUnknownCompactionPenalty
 	}
 	scored := scoredRoutePoolCandidate{
 		channel: candidate.Channel, score: score, compactionCapabilityRank: compactionRank,
-		cost: routePoolModelCost(candidate.Member, modelName), health: health, faultDomain: faultDomain,
+		cost: cost, health: health, faultDomain: faultDomain,
 	}
 	if channelCooling || domainCooling {
 		scored.channelProbe = channelCooling
@@ -170,7 +185,7 @@ func classifyRoutePoolCandidate(
 		return scored, routePoolCandidateLastResort
 	}
 
-	scored.credentialProbe = gatewayruntime.NeedsChannelCredentialRecoveryProbe(candidate.Channel.Id)
+	scored.credentialProbe = credentialCircuit && !credentialHealth.CoolingUntil.After(now) && !credentialHealth.RecoveryProbeUntil.After(now)
 	scored.channelProbe = found && (health.State == gatewayruntime.ChannelHealthCooling || health.State == gatewayruntime.ChannelHealthHalfOpen)
 	scored.domainProbe = domainFound && (domainHealth.State == gatewayruntime.ChannelHealthCooling || domainHealth.State == gatewayruntime.ChannelHealthHalfOpen)
 	if scored.channelProbe || scored.credentialProbe || scored.domainProbe {
@@ -178,6 +193,47 @@ func classifyRoutePoolCandidate(
 		return scored, routePoolCandidateProbe
 	}
 	return scored, routePoolCandidateHealthy
+}
+
+func prefetchRoutePoolHealth(c *gin.Context, candidates []gatewaystore.RoutePoolCandidate, model string, requestType gatewayruntime.RequestType) {
+	if c == nil || len(candidates) == 0 {
+		return
+	}
+	ids := make([]int, 0, len(candidates))
+	domains := make([]string, 0, len(candidates))
+	channelSet := make(map[int]struct{}, len(candidates))
+	domainSet := make(map[string]struct{})
+	for _, candidate := range candidates {
+		id := candidate.Channel.Id
+		if _, exists := channelSet[id]; !exists {
+			ids = append(ids, id)
+			channelSet[id] = struct{}{}
+		}
+		domain := routePoolFaultDomain(candidate.Member, candidate.Channel)
+		if _, exists := domainSet[domain]; !exists {
+			domains = append(domains, domain)
+			domainSet[domain] = struct{}{}
+		}
+	}
+	snapshot, err := gatewayruntime.LoadRouteHealthSnapshot(c, ids, domains, model, requestType)
+	if err != nil {
+		platformobservability.SysError("load route pool advisory health: " + err.Error())
+	}
+	cache := getRouteHealthRequestCache(c)
+	cache.prefetch = &routeHealthPrefetch{model: model, requestType: requestType,
+		channels: channelSet, domains: domainSet, snapshot: snapshot}
+}
+
+func routePoolCredentialHealth(c *gin.Context, channelID int) (gatewayruntime.ChannelHealth, bool) {
+	if cache := getRouteHealthRequestCache(c); cache != nil {
+		if prefetch := cache.prefetch; prefetch != nil {
+			if _, requested := prefetch.channels[channelID]; requested {
+				health, found := prefetch.snapshot.Credentials[channelID]
+				return health, found
+			}
+		}
+	}
+	return gatewayruntime.GetChannelHealth(channelID, "__channel_credentials__")
 }
 
 // routePoolChannelHealth overlays user-scoped transient state on shared
@@ -191,6 +247,15 @@ func routePoolChannelHealth(
 	requestType gatewayruntime.RequestType,
 ) (gatewayruntime.ChannelHealth, bool) {
 	cache := getRouteHealthRequestCache(c)
+	if cache != nil && cache.prefetch != nil {
+		prefetch := cache.prefetch
+		if prefetch.model == modelName && prefetch.requestType == requestType {
+			if _, requested := prefetch.channels[channelID]; requested {
+				health, found := prefetch.snapshot.Channels[channelID]
+				return health, found
+			}
+		}
+	}
 	cacheKey := strings.Join([]string{"channel", strconv.Itoa(channelID), modelName, string(requestType)}, "\x00")
 	if cache != nil {
 		if cached, ok := cache.channels[cacheKey]; ok {
@@ -256,6 +321,15 @@ func routePoolFaultDomainHealth(
 	requestType gatewayruntime.RequestType,
 ) (gatewayruntime.ChannelHealth, bool) {
 	cache := getRouteHealthRequestCache(c)
+	if cache != nil && cache.prefetch != nil {
+		prefetch := cache.prefetch
+		if prefetch.model == modelName && prefetch.requestType == requestType {
+			if _, requested := prefetch.domains[domain]; requested {
+				health, found := prefetch.snapshot.Domains[domain]
+				return health, found
+			}
+		}
+	}
 	cacheKey := strings.Join([]string{"domain", domain, modelName, string(requestType)}, "\x00")
 	if cache != nil {
 		if cached, ok := cache.domains[cacheKey]; ok {

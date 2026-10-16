@@ -166,5 +166,7 @@ func openMarketplaceAppTestDB(t *testing.T) *gorm.DB {
 	platformdb.DB = db
 	platformdb.UsingSQLite = true
 	platformdb.UsingPostgreSQL = false
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.UserMultiplier{}))
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}, &marketplaceschema.Shop{}, &marketplaceschema.ShopRating{}, &marketplaceschema.MarketReport{}))
 	return db
 }

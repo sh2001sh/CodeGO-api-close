@@ -58,7 +58,7 @@ export function WalletTransferPasswordDialog(
   const form = usePasswordDialogForm(props)
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='max-h-[calc(100dvh-1.5rem)] overflow-y-auto max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'>
+      <DialogContent className='commerce-dialog max-h-[calc(100dvh-1.5rem)] overflow-y-auto max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <ShieldCheck className='text-primary size-5' />

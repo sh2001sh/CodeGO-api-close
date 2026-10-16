@@ -37,6 +37,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 import {
   formatJsonForTextarea,
   normalizeJsonString,
@@ -128,6 +129,7 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
   })
 
   useEffect(() => {
+    if (form.formState.isDirty || form.formState.isSubmitting) return
     normalizedDefaultsRef.current = {
       'claude.model_headers_settings': normalizeJsonString(
         defaultValues.claude.model_headers_settings
@@ -143,7 +145,7 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
     }
 
     form.reset(buildFormDefaults(defaultValues))
-  }, [defaultValues, form])
+  }, [defaultValues, form, form.formState.isDirty, form.formState.isSubmitting])
 
   const onSubmit = async (values: ClaudeSettingsFormValues) => {
     const normalized: FlatClaudeSettings = {
@@ -170,18 +172,22 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
     for (const key of updates) {
       await updateOption.mutateAsync({ key, value: normalized[key] })
     }
+    normalizedDefaultsRef.current = normalized
+    form.reset(form.getValues())
   }
 
   return (
     <SettingsSection
       title={t('Claude')}
-      description={t(
-        'Override Anthropic headers, defaults, and thinking adapter behavior'
-      )}
+      description={t('Configure Claude model settings')}
     >
       <Form {...form}>
-        {/* eslint-disable-next-line react-hooks/refs */}
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={(event) =>
+            handleSettingsAction(form.handleSubmit(onSubmit))(event)
+          }
+          className='space-y-6'
+        >
           <FormField
             control={form.control}
             name='claude.model_headers_settings'
@@ -191,10 +197,8 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
                 <FormControl>
                   <Textarea rows={8} {...field} />
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'Provide per-model header overrides as JSON. Useful for enabling beta features such as expanded context windows.'
-                  )}
+                <FormDescription className='settings-field-fact'>
+                  {t('JSON { model: headers }')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -229,10 +233,8 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
                     <FormLabel className='text-base'>
                       {t('Thinking Adapter')}
                     </FormLabel>
-                    <FormDescription>
-                      {t(
-                        'Translate `-thinking` suffixes into Anthropic native thinking models while keeping pricing predictable.'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('-thinking → Anthropic thinking')}
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -258,10 +260,8 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
                       onChange={(event) => field.onChange(event.target.value)}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Budget tokens = max tokens × ratio. Accepts a decimal between 0.1 and 1.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('Budget = max_tokens × ratio · 0.1–1')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -269,9 +269,11 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
             />
           </div>
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save Changes')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save Changes')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

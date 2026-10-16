@@ -29,7 +29,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import '../../auth.css'
 import type {
   SecureVerificationState,
   VerificationMethod,
@@ -74,12 +76,6 @@ export function SecureVerificationDialog({
       ? 'Additional verification required'
       : 'Verification unavailable')
 
-  const description =
-    state.description ??
-    (availableTabs.length
-      ? 'Confirm your identity before accessing this sensitive action.'
-      : 'Enable Two-factor Authentication or Passkey in your profile settings to continue.')
-
   const handleVerify = () => {
     if (!activeMethod) return
     const payload = activeMethod === '2fa' ? state.code : undefined
@@ -93,7 +89,7 @@ export function SecureVerificationDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className='top-[8vh] max-w-[calc(100%-1.5rem)] translate-y-0 gap-0 overflow-hidden border-none p-0 shadow-xl sm:top-1/2 sm:max-w-md sm:translate-y-[-50%] sm:rounded-xl'
+        className='market-verification top-[8vh] max-w-[calc(100%-1.5rem)] translate-y-0 gap-0 overflow-hidden border-none p-0 shadow-xl sm:top-1/2 sm:max-w-md sm:translate-y-[-50%] sm:rounded-xl'
         showCloseButton={!state.loading}
       >
         <div className='bg-background flex max-h-[calc(100dvh-2rem)] flex-col'>
@@ -102,9 +98,11 @@ export function SecureVerificationDialog({
               <ShieldCheck className='text-primary h-5 w-5' />
               {title}
             </DialogTitle>
-            <DialogDescription className='text-left'>
-              {description}
-            </DialogDescription>
+            {state.description && (
+              <DialogDescription className='text-left'>
+                {state.description}
+              </DialogDescription>
+            )}
           </DialogHeader>
 
           <div className='flex-1 overflow-y-auto px-6 py-5'>
@@ -139,13 +137,12 @@ export function SecureVerificationDialog({
                 </TabsList>
 
                 <TabsContent value='2fa' className='space-y-3'>
-                  <p className='text-muted-foreground text-sm'>
-                    {t(
-                      'Enter the 6-digit Time-based One-Time Password or 8-character backup code from your authenticator app.'
-                    )}
-                  </p>
+                  <Label htmlFor='secure-verification-code'>
+                    {t('Verification code')}
+                  </Label>
                   <Input
-                    inputMode='numeric'
+                    id='secure-verification-code'
+                    autoComplete='one-time-code'
                     maxLength={8}
                     value={state.code}
                     onChange={(event) => onCodeChange(event.target.value)}
@@ -168,11 +165,6 @@ export function SecureVerificationDialog({
                       <div className='text-left text-sm'>
                         <p className='text-foreground font-medium'>
                           {t('Use your Passkey')}
-                        </p>
-                        <p>
-                          {t(
-                            'We will prompt your device to confirm using biometrics or your hardware key.'
-                          )}
                         </p>
                       </div>
                     </div>

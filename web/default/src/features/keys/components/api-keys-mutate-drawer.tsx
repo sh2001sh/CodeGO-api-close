@@ -31,7 +31,6 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
-  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -92,25 +91,48 @@ export function ApiKeysMutateDrawer({
     defaultValues: getApiKeyFormDefaultValues(defaultUseAutoGroup),
   })
 
-  // Load existing data when updating
+  const detailsQuery = useQuery({
+    queryKey: ['api-key-edit-details', currentRow?.id],
+    queryFn: async () => {
+      const result = await getApiKey(currentRow!.id)
+      if (!result.success || !result.data) {
+        throw new Error(result.message || 'Failed to load API key')
+      }
+      return result.data
+    },
+    enabled: open && isUpdate,
+    gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
+  const detailsReady =
+    !isUpdate ||
+    (!!detailsQuery.data && !detailsQuery.isFetching && !detailsQuery.isError)
+
   useEffect(() => {
-    if (open && isUpdate && currentRow) {
-      getApiKey(currentRow.id).then((result) => {
-        if (result.success && result.data) {
-          form.reset(transformApiKeyToFormDefaults(result.data))
-        }
-      })
-    } else if (open && !isUpdate) {
+    if (!open) return
+    if (isUpdate && detailsQuery.data && !detailsQuery.isFetching) {
+      form.reset(transformApiKeyToFormDefaults(detailsQuery.data))
+    } else if (!isUpdate && !form.formState.isDirty) {
       form.reset(
         getApiKeyFormDefaultValues(defaultUseAutoGroup && backendHasAuto)
       )
     }
-  }, [open, isUpdate, currentRow, form, defaultUseAutoGroup, backendHasAuto])
+  }, [
+    open,
+    isUpdate,
+    detailsQuery.data,
+    detailsQuery.isFetching,
+    form,
+    defaultUseAutoGroup,
+    backendHasAuto,
+  ])
 
   // Keep the saved group even when metadata is still loading or has become
   // unavailable. Changing groups must be an explicit user action.
 
   const onSubmit = async (data: ApiKeyFormValues) => {
+    if (!detailsReady) return
     setIsSubmitting(true)
     try {
       const basePayload = transformFormDataToPayload(data)
@@ -189,18 +211,12 @@ export function ApiKeysMutateDrawer({
     >
       <SheetContent
         side={side}
-        className='bg-background flex !h-dvh !w-screen max-w-none gap-0 overflow-hidden p-0 sm:!w-full sm:!max-w-[620px]'
+        className='api-key-sheet bg-background flex !h-dvh !w-screen max-w-none gap-0 overflow-hidden p-0 sm:!w-full sm:!max-w-[560px]'
       >
         <SheetHeader className='bg-background border-b px-4 py-3 text-start sm:px-5 sm:py-4'>
           <SheetTitle className='text-base sm:text-lg'>
             {isUpdate ? t('Update API Key') : t('Create API Key')}
           </SheetTitle>
-          <SheetDescription className='pr-6 text-xs sm:text-sm'>
-            {isUpdate
-              ? t('Update the API key by providing necessary info.')
-              : t('Add a new API key by providing necessary info.')}{' '}
-            {t("Click save when you're done.")}
-          </SheetDescription>
         </SheetHeader>
         {groupsLoading && (
           <p role='status' className='text-muted-foreground px-4 py-2 text-sm'>
@@ -223,20 +239,43 @@ export function ApiKeysMutateDrawer({
             </Button>
           </div>
         )}
-        <Form {...form}>
-          <ApiKeyFormContent
-            form={form}
-            groups={groups}
-            models={models}
-            isUpdate={isUpdate}
-            quotaLabel={quotaLabel}
-            quotaPlaceholder={quotaPlaceholder}
-            currencyLabel={currencyLabel}
-            tokensOnly={tokensOnly}
-            onSubmit={onSubmit}
-            onInvalid={onInvalid}
-          />
-        </Form>
+        {isUpdate && !detailsReady && (
+          <div
+            className='px-4 py-6'
+            role={detailsQuery.isError ? 'alert' : 'status'}
+          >
+            <p>
+              {detailsQuery.isError
+                ? t(detailsQuery.error.message)
+                : t('Loading...')}
+            </p>
+            {detailsQuery.isError && (
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => void detailsQuery.refetch()}
+              >
+                {t('Retry')}
+              </Button>
+            )}
+          </div>
+        )}
+        {detailsReady && (
+          <Form {...form}>
+            <ApiKeyFormContent
+              form={form}
+              groups={groups}
+              models={models}
+              isUpdate={isUpdate}
+              quotaLabel={quotaLabel}
+              quotaPlaceholder={quotaPlaceholder}
+              currencyLabel={currencyLabel}
+              tokensOnly={tokensOnly}
+              onSubmit={onSubmit}
+              onInvalid={onInvalid}
+            />
+          </Form>
+        )}
         <SheetFooter className='bg-background grid grid-cols-2 gap-2 border-t px-3 py-3 sm:flex sm:flex-row sm:justify-end sm:px-5 sm:py-4'>
           <SheetClose
             render={<Button variant='outline' className='w-full sm:w-auto' />}
@@ -246,7 +285,7 @@ export function ApiKeysMutateDrawer({
           <Button
             form='api-key-form'
             type='submit'
-            disabled={isSubmitting}
+            disabled={isSubmitting || !detailsReady}
             className='w-full sm:w-auto'
           >
             {isSubmitting ? t('Saving...') : t('Save changes')}

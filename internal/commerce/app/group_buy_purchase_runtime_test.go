@@ -35,7 +35,7 @@ func TestValidateGroupBuyPurchaseRejectsDayPass(t *testing.T) {
 	assert.ErrorIs(t, err, ErrGroupBuyPlanNotEnabled)
 }
 
-func TestNormalizeSubscriptionPurchaseAutomaticallyJoinsEligibleGroupBuy(t *testing.T) {
+func TestNormalizeSubscriptionPurchaseKeepsNormalAfterGroupBuyRetirement(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	plan := &commerceschema.SubscriptionPlan{
 		Id:              9798,
@@ -50,7 +50,7 @@ func TestNormalizeSubscriptionPurchaseAutomaticallyJoinsEligibleGroupBuy(t *test
 
 	purchaseType, groupBuyID, err := NormalizeSubscriptionPurchaseFields(97990, SubscriptionPurchaseFields{PlanID: plan.Id})
 	require.NoError(t, err)
-	assert.Equal(t, commerceschema.SubscriptionPurchaseTypeGroupBuy, purchaseType)
+	assert.Equal(t, commerceschema.SubscriptionPurchaseTypeNormal, purchaseType)
 	assert.Zero(t, groupBuyID)
 }
 

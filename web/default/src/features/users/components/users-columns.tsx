@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { type ColumnDef } from '@tanstack/react-table'
+import interfaceI18n from '@/i18n/config'
+import { getIntlLocale } from '@/i18n/format'
 import { Trans, useTranslation } from 'react-i18next'
 import { formatQuota, formatTimestamp } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -45,7 +47,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
           checked={table.getIsAllPageRowsSelected()}
           indeterminate={table.getIsSomePageRowsSelected()}
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label='Select all'
+          aria-label={interfaceI18n.t('Select all')}
           className='translate-y-[2px]'
         />
       ),
@@ -53,7 +55,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label='Select row'
+          aria-label={interfaceI18n.t('Select row')}
           className='translate-y-[2px]'
         />
       ),
@@ -64,7 +66,10 @@ export function useUsersColumns(): ColumnDef<User>[] {
     {
       accessorKey: 'external_id',
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='用户 ID' />
+        <DataTableColumnHeader
+          column={column}
+          title={interfaceI18n.t('用户 ID')}
+        />
       ),
       cell: ({ row }) => {
         const externalID = row.getValue('external_id') as string
@@ -78,7 +83,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
           />
         )
       },
-      meta: { label: '用户 ID', mobileHidden: true },
+      meta: { label: interfaceI18n.t('用户 ID'), mobileHidden: true },
     },
     {
       accessorKey: 'username',
@@ -151,7 +156,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
             </TooltipTrigger>
             <TooltipContent>
               <p className='text-xs'>
-                {t('Requests:')} {requestCount.toLocaleString()}
+                {t('Requests:')} {requestCount.toLocaleString(getIntlLocale())}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -166,7 +171,10 @@ export function useUsersColumns(): ColumnDef<User>[] {
     {
       id: 'current_subscription',
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='当前订阅' />
+        <DataTableColumnHeader
+          column={column}
+          title={interfaceI18n.t('当前订阅')}
+        />
       ),
       cell: ({ row }) => {
         const user = row.original
@@ -176,14 +184,21 @@ export function useUsersColumns(): ColumnDef<User>[] {
 
         if (!hasActiveSubscription) {
           return (
-            <StatusBadge label='无订阅' variant='neutral' copyable={false} />
+            <StatusBadge
+              label={interfaceI18n.t('无订阅')}
+              variant='neutral'
+              copyable={false}
+            />
           )
         }
 
         return (
           <div className='min-w-[180px] space-y-1'>
             <StatusBadge
-              label={user.current_subscription_plan_title || '生效中'}
+              label={
+                user.current_subscription_plan_title ||
+                interfaceI18n.t('生效中')
+              }
               variant='success'
               showDot
               copyable={false}
@@ -196,7 +211,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
         )
       },
       enableSorting: false,
-      meta: { label: '当前订阅' },
+      meta: { label: interfaceI18n.t('当前订阅') },
     },
     ...createUserQuotaColumns(t),
     {
@@ -313,7 +328,9 @@ export function useUsersColumns(): ColumnDef<User>[] {
                   <TooltipContent>
                     <p className='text-xs'>
                       {inviterExternalId
-                        ? `邀请人公开 ID：${inviterExternalId}`
+                        ? interfaceI18n.t('邀请人公开 ID：{{param0}}', {
+                            param0: inviterExternalId,
+                          })
                         : `${t('Invited by user ID')} ${inviterId}`}
                     </p>
                   </TooltipContent>

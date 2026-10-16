@@ -320,7 +320,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         open={disableConfirmOpen}
         onOpenChange={setDisableConfirmOpen}
         title={i18n.t('全局禁用')}
-        desc={`停止“${channel.name}”的所有新请求。该操作不会改变分组内自动路由开关或成本倍率。`}
+        desc={i18n.t(
+          '停止“{{param0}}”的所有新请求。该操作不会改变分组内自动路由开关或成本倍率。',
+          { param0: channel.name }
+        )}
         confirmText={i18n.t('确认禁用')}
         destructive
         handleConfirm={() => {
@@ -332,7 +335,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         open={recoverConfirmOpen}
         onOpenChange={setRecoverConfirmOpen}
         title={i18n.t('解除全局禁用')}
-        desc={`恢复“${channel.name}”的全局渠道状态。该操作不会改变分组内自动路由开关或成本倍率。`}
+        desc={i18n.t(
+          '恢复“{{param0}}”的全局渠道状态。该操作不会改变分组内自动路由开关或成本倍率。',
+          { param0: channel.name }
+        )}
         confirmText={i18n.t('确认恢复')}
         handleConfirm={() => {
           void handleEnableChannel(channel.id, queryClient)

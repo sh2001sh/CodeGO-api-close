@@ -55,12 +55,12 @@ func TestRemoveDisabledFieldsKeepsBodyWhenNoControlledFields(t *testing.T) {
 }
 
 func TestRemoveDisabledFieldsRemovesConfiguredFields(t *testing.T) {
-	body := []byte(`{"model":"gpt-5","service_tier":"priority","store":true}`)
+	body := []byte(`{"model":"gpt-5","service_tier":"flex","store":true}`)
 	result, err := RemoveDisabledFields(body, dto.ChannelOtherSettings{DisableStore: true}, false)
 	require.NoError(t, err)
 	require.NotContains(t, string(result), `"service_tier"`)
 	require.NotContains(t, string(result), `"store"`)
-	escaped, err := RemoveDisabledFields([]byte(`{"\u0073ervice_tier":"priority"}`), dto.ChannelOtherSettings{}, false)
+	escaped, err := RemoveDisabledFields([]byte(`{"\u0073ervice_tier":"flex"}`), dto.ChannelOtherSettings{}, false)
 	require.NoError(t, err)
 	require.NotContains(t, string(escaped), "service_tier")
 }

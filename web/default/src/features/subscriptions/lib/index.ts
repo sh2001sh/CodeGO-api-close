@@ -44,4 +44,6 @@ export {
 export {
   EMPTY_SUBSCRIPTIONS,
   getOrderedSubscriptions,
+  isCreditPackSubscription,
+  isActiveUserSubscription,
 } from './self-subscription'

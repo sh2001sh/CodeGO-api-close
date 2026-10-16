@@ -55,7 +55,7 @@ export function ImageDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className='sm:max-w-3xl'>
+      <DialogContent className='solaris-log-details sm:max-w-3xl'>
         <DialogHeader>
           <DialogTitle>{t('Image Preview')}</DialogTitle>
           <DialogDescription>

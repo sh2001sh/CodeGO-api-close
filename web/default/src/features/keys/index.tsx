@@ -35,11 +35,8 @@ export function ApiKeys() {
         canonicalPath='/keys'
         robots='noindex,follow'
       />
-      <SectionPageLayout>
+      <SectionPageLayout kicker=''>
         <SectionPageLayout.Title>{t('API Keys')}</SectionPageLayout.Title>
-        <SectionPageLayout.Description>
-          {t('Manage your API keys for accessing the service')}
-        </SectionPageLayout.Description>
         <SectionPageLayout.Content>
           <ApiKeysTable />
         </SectionPageLayout.Content>

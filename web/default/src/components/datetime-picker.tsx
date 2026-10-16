@@ -17,8 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import * as React from 'react'
+import interfaceI18n from '@/i18n/config'
 import { ChevronDownIcon } from 'lucide-react'
-import { enUS, fr, ja, ru, vi, zhCN } from 'react-day-picker/locale'
+import { enUS, fr, ja, ru, vi, zhCN, zhHK } from 'react-day-picker/locale'
 import { useTranslation } from 'react-i18next'
 import dayjs from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
@@ -34,6 +35,7 @@ import {
 const calendarLocales = {
   en: enUS,
   zh: zhCN,
+  'zh-TW': zhHK,
   fr,
   ru,
   ja,
@@ -198,7 +200,7 @@ export function DateTimePicker({
           size='icon'
           onClick={handleClear}
           className='shrink-0'
-          aria-label='Clear'
+          aria-label={interfaceI18n.t('Clear')}
         >
           <span aria-hidden='true'>✕</span>
         </Button>

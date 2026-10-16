@@ -32,6 +32,9 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 	if req.MultiplierCardSupported != nil {
 		channel.MultiplierCardSupported = *req.MultiplierCardSupported
 	}
+	if req.CreditPackSupported != nil {
+		channel.CreditPackSupported = *req.CreditPackSupported
+	}
 	if req.MultiplierCardUserEnabled != nil {
 		channel.MultiplierCardUserEnabled = *req.MultiplierCardUserEnabled
 		channel.MultiplierCardSupported = channel.MultiplierCardUserEnabled
@@ -101,6 +104,9 @@ func applyChannelModelUpdate(channel *marketplaceschema.Channel, req UpdateChann
 }
 
 func applyChannelPresentationUpdate(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest) (bool, error) {
+	if err := applyPublicPresentation(group, req.CustomName, req.Description, req.Tags); err != nil {
+		return false, err
+	}
 	if req.Multiplier != nil {
 		if err := applyMultiplierChange(group, channel.ID, channel.SubmittedSourceLabel, *req.Multiplier); err != nil {
 			return false, err

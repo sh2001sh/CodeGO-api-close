@@ -64,7 +64,7 @@ export function PaymentConfirmDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className='max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'>
+      <AlertDialogContent className='commerce-dialog max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'>
         <AlertDialogHeader>
           <AlertDialogTitle className='text-xl font-semibold'>
             {t('Confirm Payment')}
@@ -79,7 +79,7 @@ export function PaymentConfirmDialog({
             <span className='text-muted-foreground text-sm'>
               {t('Recharge quota (USD)')}
             </span>
-            <span className='text-lg font-semibold'>
+            <span className='font-mono text-lg font-semibold tabular-nums'>
               {formatUsdAmount(topupAmount)}
             </span>
           </div>
@@ -94,7 +94,7 @@ export function PaymentConfirmDialog({
               <Skeleton className='h-6 w-24' />
             ) : (
               <div className='flex items-baseline gap-2'>
-                <span className='text-2xl font-semibold'>
+                <span className='font-mono text-2xl font-semibold tabular-nums'>
                   {formatPaymentAmount(paymentAmount)}
                 </span>
                 {hasDiscount && (

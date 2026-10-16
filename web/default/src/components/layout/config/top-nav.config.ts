@@ -18,25 +18,19 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { type TopNavLink } from '../types'
 
-/**
- * Default top navigation links
- *
- * In practice, navigation links are dynamically fetched from backend.
- * Priority: Backend dynamic links > Provided navLinks > defaultTopNavLinks
- *
- * This is intentionally empty to encourage backend configuration.
- * If you need fallback links, add them here.
- */
+/** The same destinations and order are used by every public and console header. */
 export const defaultTopNavLinks: TopNavLink[] = [
   { title: 'Home', href: '/' },
+  { title: 'Models', href: '/pricing' },
   { title: 'Market', href: '/market' },
+  { title: 'Docs', href: '/docs' },
   {
     title: 'Community',
     href: 'https://community.codegoai.com',
     external: true,
   },
-  { title: 'Models', href: '/pricing' },
-  { title: 'Docs', href: '/docs' },
-  { title: 'Console', href: '/dashboard', requiresAuth: true },
-  { title: 'Status', href: '/group-status' },
+  { title: 'Rankings', href: '/rankings' },
+  { title: 'Console', href: '/dashboard/overview', requiresAuth: true },
+  { title: 'Status', href: '/group-status', secondary: true },
+  { title: 'Chat', href: '/playground', secondary: true },
 ]

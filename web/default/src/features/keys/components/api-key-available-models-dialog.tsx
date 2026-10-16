@@ -61,18 +61,14 @@ export function ApiKeyAvailableModelsDialog(props: {
         <Boxes className='size-4' />
         {t('可用模型')}
       </Button>
-      <DialogContent className='flex max-h-[82dvh] !max-w-2xl flex-col gap-0 overflow-hidden p-0'>
+      <DialogContent className='api-key-dialog api-key-model-dialog flex max-h-[82dvh] !max-w-2xl flex-col gap-0 overflow-hidden p-0'>
         <DialogHeader className='border-b px-5 py-4 pr-12'>
           <div className='flex items-center gap-2'>
             <DialogTitle>{t('可用模型')}</DialogTitle>
             <Badge variant='secondary'>{models.length}</Badge>
           </div>
           <DialogDescription>
-            {props.option
-              ? t('{{group}} 当前可以调用的模型', {
-                  group: props.option.label,
-                })
-              : t('请先选择分组')}
+            {props.option ? props.option.label : t('请先选择分组')}
           </DialogDescription>
         </DialogHeader>
         <div className='border-b p-4'>
@@ -102,7 +98,7 @@ export function ApiKeyAvailableModelsDialog(props: {
               {filteredModels.map((model) => (
                 <div
                   key={model}
-                  className='bg-muted/30 border-border min-w-0 rounded-lg border px-3 py-2.5 font-mono text-xs break-all'
+                  className='api-key-model-id min-w-0 font-mono text-xs break-all'
                 >
                   {model}
                 </div>

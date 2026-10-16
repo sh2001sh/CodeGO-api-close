@@ -27,7 +27,6 @@ import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -46,7 +45,6 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
-  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -77,8 +75,8 @@ function getPlanCurrencyPrefix(currency?: string) {
   const normalized = (currency || '').toUpperCase()
   if (normalized === 'CNY') return 'RMB '
   if (normalized === 'EUR') return 'EUR '
-  if (normalized === 'USD') return '$'
-  return normalized ? `${normalized} ` : '$'
+  if (normalized === 'USD') return 'credits '
+  return normalized ? `${normalized} ` : 'credits '
 }
 
 function trimToMaxRunes(value: string, maxRunes = 20) {
@@ -273,21 +271,16 @@ export function RedemptionsMutateDrawer({
         }
       }}
     >
-      <SheetContent className='flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]'>
+      <SheetContent
+        aria-describedby={undefined}
+        className='admin-editor solaris-admin-dialog flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]'
+      >
         <SheetHeader className='border-b px-4 py-3 text-start sm:px-6 sm:py-4'>
           <SheetTitle>
             {isUpdate
               ? t('Update Redemption Code')
               : t('Create Redemption Code')}
           </SheetTitle>
-          <SheetDescription>
-            {isUpdate
-              ? t('Update the redemption code by providing necessary info.')
-              : t(
-                  'Add new redemption code(s) for quota top-up, subscription activation, or blind box grants.'
-                )}{' '}
-            {t('Click save when you&apos;re done.')}
-          </SheetDescription>
         </SheetHeader>
         <Form {...form}>
           <form
@@ -307,11 +300,7 @@ export function RedemptionsMutateDrawer({
                       placeholder={t('Leave empty to auto-generate')}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Optional. Leave empty to auto-generate a name (max 20 characters)'
-                    )}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -373,11 +362,7 @@ export function RedemptionsMutateDrawer({
                       </SelectGroup>
                     </SelectContent>
                   </Select>
-                  <FormDescription>
-                    {t(
-                      'Choose whether this code adds quota, activates a subscription plan, or grants blind box chances'
-                    )}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -401,16 +386,7 @@ export function RedemptionsMutateDrawer({
                         }
                       />
                     </FormControl>
-                    <FormDescription>
-                      {tokensOnly
-                        ? t(
-                            'Redeeming this code adds the entered tokens to universal credit'
-                          )
-                        : t(
-                            'Redeeming this code adds the entered {{currency}} amount to universal credit',
-                            { currency: currencyLabel }
-                          )}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -446,11 +422,7 @@ export function RedemptionsMutateDrawer({
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <FormDescription>
-                      {t(
-                        'The redeemed user will receive this subscription immediately'
-                      )}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -474,11 +446,7 @@ export function RedemptionsMutateDrawer({
                         }
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'The redeemed user will receive this many blind box chances immediately'
-                      )}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -534,9 +502,7 @@ export function RedemptionsMutateDrawer({
                       </Button>
                     </div>
                   </div>
-                  <FormDescription>
-                    {t('Leave empty for never expires')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -561,9 +527,7 @@ export function RedemptionsMutateDrawer({
                         }
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Create multiple redemption codes at once (1-100)')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}

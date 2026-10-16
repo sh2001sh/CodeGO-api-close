@@ -107,7 +107,7 @@ func ResetDueSubscriptions(limit int) (int, error) {
 
 	now := commercestore.GetDBTimestamp()
 	var subs []commerceschema.UserSubscription
-	if err := platformdb.DB.Where("next_reset_time > 0 AND next_reset_time <= ? AND status = ?", now, "active").
+	if err := platformdb.DB.Where("next_reset_time > 0 AND next_reset_time <= ? AND status = ? AND credit_pack_granted_quota = 0", now, "active").
 		Order("next_reset_time asc").
 		Limit(limit).
 		Find(&subs).Error; err != nil {

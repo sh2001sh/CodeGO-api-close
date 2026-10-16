@@ -28,7 +28,6 @@ import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -39,6 +38,7 @@ import { Switch } from '@/components/ui/switch'
 import { testDeploymentConnectionWithKey } from '@/features/models/api'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const schema = z.object({
   enabled: z.boolean(),
@@ -131,11 +131,11 @@ export function IoNetDeploymentSettingsSection({
   return (
     <SettingsSection
       title={t('io.net Deployments')}
-      description={t('Configure io.net API key for model deployments')}
+      description={t('Configure model deployment provider settings')}
     >
       <Form {...form}>
         <form
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
           autoComplete='off'
           className='space-y-6'
         >
@@ -148,9 +148,6 @@ export function IoNetDeploymentSettingsSection({
                   <FormLabel className='text-base'>
                     {t('Enable io.net deployments')}
                   </FormLabel>
-                  <FormDescription>
-                    {t('Enable io.net model deployment service in console')}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -173,12 +170,7 @@ export function IoNetDeploymentSettingsSection({
                     <FormLabel>{t('io.net API Key')}</FormLabel>
                     <div className='flex gap-2'>
                       <FormControl>
-                        <Input
-                          type='password'
-                          placeholder={t('Enter API Key')}
-                          autoComplete='off'
-                          {...field}
-                        />
+                        <Input type='password' autoComplete='off' {...field} />
                       </FormControl>
                       <Button
                         type='button'
@@ -193,9 +185,7 @@ export function IoNetDeploymentSettingsSection({
                         {t('Test Connection')}
                       </Button>
                     </div>
-                    <FormDescription>
-                      {t('Used to authenticate with io.net deployment API')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -254,14 +244,16 @@ export function IoNetDeploymentSettingsSection({
             </>
           ) : null}
 
-          <Button
-            type='submit'
-            disabled={!isDirty || updateOption.isPending || isSubmitting}
-          >
-            {updateOption.isPending || isSubmitting
-              ? t('Saving...')
-              : t('Save io.net settings')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button
+              type='submit'
+              disabled={!isDirty || updateOption.isPending || isSubmitting}
+            >
+              {updateOption.isPending || isSubmitting
+                ? t('Saving...')
+                : t('Save io.net settings')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

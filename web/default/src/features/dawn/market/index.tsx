@@ -18,16 +18,19 @@ For commercial licensing, please contact support@quantumnous.com.
 */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
 import {
+  ChevronDown,
   ChevronsUpDown,
   Sparkles,
+  SlidersHorizontal,
   Store,
-  User,
   Waypoints,
   X,
 } from 'lucide-react'
+import { motion, useReducedMotion } from 'motion/react'
+import { createPortal } from 'react-dom'
 import { useTranslation, Trans } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
@@ -45,6 +48,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { SiteSeo } from '@/components/seo'
+import { SiteFooter } from '@/components/site-footer'
 import {
   acceptMarketplaceGroupInvite,
   bindMarketplaceToken,
@@ -70,7 +74,6 @@ import {
 } from '@/features/marketplace/lib/active-route-pool'
 import { MARKETPLACE_SOURCE_OPTIONS } from '@/features/marketplace/lib/channel-form'
 import { localizedSourceLabel } from '@/features/marketplace/lib/localized-group-name'
-import { MOCK_MARKETPLACE_GROUPS } from '@/features/marketplace/lib/mock-data'
 import type {
   GroupFilters,
   MarketplaceBatchTest,
@@ -86,8 +89,9 @@ import { DawnModal, ModalHead } from '../components/dawn-modal'
 import { DawnNav } from '../components/dawn-nav'
 import { DawnQueryError } from '../components/query-error'
 import { MarketGroupCard } from './group-card'
-import { OwnerView } from './owner-view'
+import './market.css'
 import { PoolWorkbench, type PoolPanelMode } from './pool-workbench'
+import { ShopBrowser } from './shop-browser'
 
 const DEFAULT_FILTERS: GroupFilters = {
   search: '',
@@ -95,7 +99,7 @@ const DEFAULT_FILTERS: GroupFilters = {
   models: [],
   source: '',
   provider: '',
-  multiplier_card: '',
+  credit_pack: '',
   status: '',
   verification: '',
   sort: 'score',
@@ -105,7 +109,24 @@ const DEFAULT_FILTERS: GroupFilters = {
   page_size: 20,
 }
 
-type Perspective = 'user' | 'owner'
+function readMarketFilters(): GroupFilters {
+  const params = new URLSearchParams(window.location.search)
+  const hours = Number(params.get('window_hours'))
+  return {
+    ...DEFAULT_FILTERS,
+    search: params.get('search') ?? '',
+    models: params.getAll('models'),
+    source: params.get('source') ?? '',
+    tag: params.get('tag') ?? '',
+    shop_id: Number(params.get('shop_id')) || undefined,
+    sort: params.get('sort') || 'score',
+    direction: params.get('direction') === 'asc' ? 'asc' : 'desc',
+    credit_pack: (params.get('credit_pack') ||
+      '') as GroupFilters['credit_pack'],
+    window_hours: [24, 168, 720].includes(hours) ? hours : 24,
+    page: Math.max(1, Number(params.get('page')) || 1),
+  }
+}
 
 function ModelMultiSelect(props: {
   models: string[]
@@ -190,26 +211,39 @@ function ModelMultiSelect(props: {
 }
 
 export function DawnMarket() {
-  useTranslation()
+  const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const authed = !!user
   const multiplierNotices = useMarketplaceMultiplierNotices(authed)
-  const readMultiplierNotice = useReadMarketplaceMultiplierNotice()
+  const { mutate: readMultiplierNotice } = useReadMarketplaceMultiplierNotice()
   useEffect(() => {
     for (const notice of multiplierNotices.data ?? []) {
       toast.info(
         notice.cleared
-          ? `专属倍率已清除：${notice.channel_name}`
-          : `专属倍率已更新：${notice.channel_name} · ${notice.multiplier}×`
+          ? i18n.t('专属倍率已清除：{{param0}}', {
+              param0: notice.channel_name,
+            })
+          : i18n.t('专属倍率已更新：{{param0}} · {{param1}}×', {
+              param0: notice.channel_name,
+              param1: notice.multiplier,
+            })
       )
-      void readMultiplierNotice.mutateAsync(notice.id)
+      readMultiplierNotice(notice.id)
     }
-  }, [multiplierNotices.data])
+  }, [multiplierNotices.data, readMultiplierNotice])
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [perspective, setPerspective] = useState<Perspective>('user')
-  const [filters, setFilters] = useState<GroupFilters>(DEFAULT_FILTERS)
-  const [search, setSearch] = useState('')
+  const [browseBy, setBrowseBy] = useState<'products' | 'shops'>(() =>
+    new URLSearchParams(window.location.search).get('browse') === 'shops'
+      ? 'shops'
+      : 'products'
+  )
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [activeShopName, setActiveShopName] = useState(
+    () => new URLSearchParams(window.location.search).get('shop_name') ?? ''
+  )
+  const [filters, setFilters] = useState<GroupFilters>(readMarketFilters)
+  const [search, setSearch] = useState(() => readMarketFilters().search)
   const [activePoolID, setActivePoolID] = useState(readActiveRoutePoolID)
   const [poolPanelMode, setPoolPanelMode] = useState<PoolPanelMode>('pool')
   const [selected, setSelected] = useState<string | null>(null)
@@ -219,20 +253,61 @@ export function DawnMarket() {
     null
   )
   const [testGroup, setTestGroup] = useState<MarketplaceGroup | null>(null)
-  const [mockMode, setMockMode] = useState(
-    () => new URLSearchParams(window.location.search).get('mock') === '1'
-  )
   const inviteHandledRef = useRef(false)
   const marketListRef = useRef<HTMLDivElement>(null)
+  const [workbenchOpen, setWorkbenchOpen] = useState(false)
+  const workbenchToggle = useRef<HTMLButtonElement>(null)
+  const joiningRef = useRef(false)
+  const [joiningGroupId, setJoiningGroupId] = useState('')
+  const reducedMotion = useReducedMotion()
+  const [joinFlight, setJoinFlight] = useState<{
+    key: number
+    name: string
+    x: number
+    y: number
+    endX: number
+    endY: number
+  } | null>(null)
 
   useEffect(() => {
     persistActiveRoutePoolID(activePoolID)
   }, [activePoolID])
 
   useEffect(() => {
+    const url = new URL(window.location.href)
+    const values: Record<string, string> = {
+      search: filters.search,
+      source: filters.source,
+      tag: filters.tag ?? '',
+      shop_id: filters.shop_id ? String(filters.shop_id) : '',
+      shop_name: activeShopName,
+      sort: filters.sort,
+      direction: filters.direction,
+      credit_pack: filters.credit_pack ?? '',
+      window_hours: String(filters.window_hours),
+      page: String(filters.page),
+      browse: browseBy,
+    }
+    for (const [key, value] of Object.entries(values)) {
+      if (value) url.searchParams.set(key, value)
+      else url.searchParams.delete(key)
+    }
+    url.searchParams.delete('models')
+    for (const model of filters.models ?? [])
+      url.searchParams.append('models', model)
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${url.pathname}${url.search}${url.hash}`
+    )
+  }, [filters, browseBy, activeShopName])
+
+  useEffect(() => {
     if (filters.page <= 1) return
     marketListRef.current?.scrollIntoView({
-      behavior: 'smooth',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'instant'
+        : 'smooth',
       block: 'start',
     })
   }, [filters.page])
@@ -240,7 +315,7 @@ export function DawnMarket() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setFilters((current) => ({ ...current, search: search.trim(), page: 1 }))
-    }, 300)
+    }, 180)
     return () => window.clearTimeout(timer)
   }, [search])
 
@@ -267,11 +342,17 @@ export function DawnMarket() {
           '',
           `${url.pathname}${url.search}${url.hash}`
         )
-        toast.success(`已获得分组访问权限：${result.group_name}`)
+        toast.success(
+          i18n.t('已获得分组访问权限：{{param0}}', {
+            param0: result.group_name,
+          })
+        )
         void queryClient.invalidateQueries({ queryKey: ['marketplace-groups'] })
       })
       .catch((error) => {
-        toast.error(error instanceof Error ? error.message : '邀请链接无效')
+        toast.error(
+          error instanceof Error ? error.message : i18n.t('邀请链接无效')
+        )
       })
   }, [authed, navigate, queryClient])
 
@@ -279,20 +360,24 @@ export function DawnMarket() {
     filters.search.trim() ||
     filters.models?.length ||
     filters.source ||
-    filters.multiplier_card
+    filters.tag ||
+    filters.shop_id ||
+    filters.credit_pack
   )
   const groupsQuery = useMarketplaceGroups(
     { ...filters, separate_official: !hasListFilter },
-    { enabled: !mockMode && perspective === 'user', live: true }
+    {
+      enabled: browseBy === 'products',
+      live: true,
+    }
   )
   const marketplaceModels = useMarketplaceModels()
   const groups = useMemo(() => {
-    if (mockMode) return MOCK_MARKETPLACE_GROUPS
     return [
       ...(groupsQuery.data?.official_items ?? []),
       ...(groupsQuery.data?.items ?? []),
     ]
-  }, [groupsQuery.data, mockMode])
+  }, [groupsQuery.data])
   const pricing = usePricingData()
 
   const filterModels = useMemo(() => {
@@ -325,7 +410,7 @@ export function DawnMarket() {
       .toFixed(digits)
       .replace(/(\.\d*?)0+$/, '$1')
       .replace(/\.$/, '')
-    return `$${out}`
+    return `${out} credits`
   }
 
   /** 每模型完整计费：输入 / 输出 / 缓存写读（已乘分组倍率）。 */
@@ -407,10 +492,10 @@ export function DawnMarket() {
         ) {
           map[name] = {
             mode: 'free',
-            input: '免费',
-            output: '免费',
-            cacheWrite: model.create_cache_ratio != null ? '免费' : '—',
-            cacheRead: model.cache_ratio != null ? '免费' : '—',
+            input: t('免费'),
+            output: t('免费'),
+            cacheWrite: model.create_cache_ratio != null ? t('免费') : '—',
+            cacheRead: model.cache_ratio != null ? t('免费') : '—',
             tiered: false,
           }
           return
@@ -420,7 +505,7 @@ export function DawnMarket() {
           map[name] = {
             mode: 'percall',
             input: fmtUsd(price),
-            output: '按量',
+            output: t('按量'),
             cacheWrite: '—',
             cacheRead: '—',
             tiered: false,
@@ -443,7 +528,7 @@ export function DawnMarket() {
       result.set(group.id, map)
     })
     return result
-  }, [groups, modelsByName])
+  }, [groups, modelsByName, t])
 
   const groupPrices = useMemo(() => {
     const byName = modelsByName
@@ -480,7 +565,7 @@ export function DawnMarket() {
       })
     })
     return result
-  }, [groups, pricing.models, pricing.pricedModelDetails])
+  }, [groups, modelsByName])
 
   const modelPrices = useMemo(() => {
     const result = new Map<string, Record<string, string>>()
@@ -489,12 +574,15 @@ export function DawnMarket() {
       group.models.forEach((name) => {
         const fee = modelFees.get(group.id)?.[name]
         if (fee)
-          map[name] = fee.mode === 'percall' ? `${fee.input}/次` : fee.input
+          map[name] =
+            fee.mode === 'percall'
+              ? t('{{param0}}/次', { param0: fee.input })
+              : fee.input
       })
       result.set(group.id, map)
     })
     return result
-  }, [groups, modelFees])
+  }, [groups, modelFees, t])
 
   const pools = useQuery({
     queryKey: ['marketplace-route-pools'],
@@ -526,22 +614,29 @@ export function DawnMarket() {
   }, [isAutoPool, autoPool.data, poolDetail.data])
 
   const activePoolName = useMemo(() => {
-    if (isAutoPool) return 'AUTO 池'
+    if (isAutoPool) return t('AUTO 池')
     const pool = (pools.data ?? []).find((item) => item.id === activePoolID)
     return pool?.name
-  }, [isAutoPool, pools.data, activePoolID])
+  }, [isAutoPool, pools.data, activePoolID, t])
 
   const updatePool = useMarketplaceRoutePoolUpdate()
   const updateAutoPool = useMarketplaceAutoRoutePoolUpdate()
 
   const joinPool = async (group: MarketplaceGroup) => {
+    if (joiningRef.current) return
+    if (!authed || group.lifecycle_status !== 'active') {
+      toast.error(t(!authed ? '登录后才能添加到路由池' : '已暂停'))
+      return
+    }
     if (!activePoolID) {
-      toast.error('先创建或选择一个路由池')
+      toast.error(t('先创建或选择一个路由池'))
       return
     }
     const currentIDs = [...poolMemberIDs]
     if (currentIDs.includes(group.id)) return
     const nextIDs = [...currentIDs, group.id]
+    joiningRef.current = true
+    setJoiningGroupId(group.id)
     try {
       if (isAutoPool) {
         await updateAutoPool.mutateAsync({
@@ -555,9 +650,45 @@ export function DawnMarket() {
           config: poolDetail.data?.config,
         })
       }
-      toast.success(`已加入路由池（${activePoolName ?? '当前池'}）`)
+      if (!reducedMotion) {
+        const source = [
+          ...document.querySelectorAll<HTMLElement>('[data-market-join]'),
+        ].find((element) => element.dataset.marketJoin === group.id)
+        const target = document.getElementById('market-route-workbench')
+        const sourceRect = source?.getBoundingClientRect()
+        let targetRect = target?.getBoundingClientRect()
+        if (!targetRect?.width)
+          targetRect = workbenchToggle.current?.getBoundingClientRect()
+        if (
+          sourceRect &&
+          targetRect &&
+          sourceRect.top < window.innerHeight &&
+          sourceRect.bottom > 0
+        ) {
+          setJoinFlight({
+            key: performance.now(),
+            name:
+              source
+                ?.closest('article')
+                ?.querySelector('h3')
+                ?.textContent?.trim() || group.system_display_name,
+            x: sourceRect.x + sourceRect.width / 2,
+            y: sourceRect.y + sourceRect.height / 2,
+            endX: targetRect.x + targetRect.width / 2,
+            endY: targetRect.y + Math.min(targetRect.height / 2, 160),
+          })
+        }
+      }
+      toast.success(
+        t('已加入路由池（{{param0}}）', {
+          param0: activePoolName ?? t('当前池'),
+        })
+      )
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加入失败')
+      toast.error(error instanceof Error ? error.message : t('加入失败'))
+    } finally {
+      joiningRef.current = false
+      setJoiningGroupId('')
     }
   }
 
@@ -567,113 +698,199 @@ export function DawnMarket() {
   )
 
   return (
-    <div className='dawn'>
+    <div className='dawn exchange-market'>
       <SiteSeo
-        title={i18n.t('分组市场 | Code Go')}
-        description={i18n.t('分组市场 · 倍率与实时指标')}
+        title={t('分组市场 | Code Go')}
+        description={t('分组市场 · 倍率与实时指标')}
         canonicalPath='/market'
       />
       <DawnNav />
-      <main className='dawn-wrap'>
+      <main className='dawn-wrap' id='content' tabIndex={-1}>
         <div className='mhead'>
           <div>
-            <div className='kick'>
-              <span className='n'>M·01</span>
-              AI RESOURCES MARKET
-            </div>
             <h1>
-              <Trans i18nKey={'万象，'} />
-              <em>
-                <Trans i18nKey={'明码标价'} />
-              </em>
-              <Trans i18nKey={'。'} />
+              {t('Market')}
+              <span aria-hidden='true'>.</span>
             </h1>
           </div>
-          <div className='seg'>
-            <button
-              className={perspective === 'user' ? 'on' : ''}
-              onClick={() => setPerspective('user')}
-            >
-              <User size={14} />
-              <Trans i18nKey={'使用者'} />
-            </button>
-            <button
-              className={perspective === 'owner' ? 'on' : ''}
-              onClick={() => {
-                if (!authed) {
-                  toast.error('登录后管理渠道')
-                  return
-                }
-                setPerspective('owner')
-              }}
-            >
-              <Store size={14} />
-              <Trans i18nKey={'渠道主'} />
-            </button>
-          </div>
+          <Link to='/channel-workbench' className='btn'>
+            <Store size={14} aria-hidden='true' />
+            <Trans i18nKey={'进入工作台'} />
+          </Link>
         </div>
 
-        {perspective === 'user' ? (
-          <div className='cols'>
-            <div
-              ref={marketListRef}
-              style={{ gridColumn: '1 / -1', scrollMarginTop: 20 }}
-            >
-              <div className='filters'>
-                <input
-                  placeholder={i18n.t('输入模型 ID，如 gpt-6-astra')}
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-                <select
-                  className='fbtn'
-                  value={`${filters.sort}:${filters.direction}`}
-                  aria-label={i18n.t('市场排序')}
-                  onChange={(event) => {
-                    const [sort, direction] = event.target.value.split(':')
+        <div className='cols'>
+          <div ref={marketListRef} className='market-main'>
+            <div className='filters'>
+              <div
+                className='seg'
+                data-browse={browseBy}
+                role='group'
+                aria-label={t('市场浏览方式')}
+              >
+                <button
+                  type='button'
+                  className={browseBy === 'products' ? 'on' : ''}
+                  aria-pressed={browseBy === 'products'}
+                  onClick={() => {
+                    setBrowseBy('products')
                     setFilters((current) => ({
                       ...current,
-                      sort,
-                      direction,
                       page: 1,
+                      sort: 'score',
+                      direction: 'desc',
                     }))
                   }}
                 >
-                  <option value='score:desc'>
-                    <Trans i18nKey={'综合评分'} />
-                  </option>
-                  <option value='consumer_amount:asc'>
-                    <Trans i18nKey={'综合实扣最低'} />
-                  </option>
-                  <option value='consumer_amount:desc'>
-                    <Trans i18nKey={'综合实扣最高'} />
-                  </option>
-                  {(filters.models?.length ?? 0) > 0 && (
-                    <option value='model_consumer_amount:asc'>
-                      <Trans i18nKey={'所选模型实扣最低'} />
+                  <span>{t('看商品')}</span>
+                </button>
+                <button
+                  type='button'
+                  className={browseBy === 'shops' ? 'on' : ''}
+                  aria-pressed={browseBy === 'shops'}
+                  onClick={() => {
+                    setBrowseBy('shops')
+                    setActiveShopName('')
+                    setFilters((current) => ({
+                      ...current,
+                      shop_id: undefined,
+                      page: 1,
+                      sort: 'rating',
+                      direction: 'desc',
+                    }))
+                  }}
+                >
+                  <span>{t('逛店铺')}</span>
+                </button>
+              </div>
+              <button
+                type='button'
+                className='market-filter-toggle'
+                aria-expanded={filtersOpen}
+                aria-controls='market-advanced-filters'
+                onClick={() => setFiltersOpen((current) => !current)}
+              >
+                <SlidersHorizontal size={16} aria-hidden='true' />
+                {t('筛选')}
+              </button>
+              <label className='market-search-field'>
+                <span>{t('搜索')}</span>
+                <input
+                  aria-label={t('搜索商品、店铺、模型或标签')}
+                  placeholder={t('搜索商品、店铺、模型或标签')}
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </label>
+              <div
+                id='market-advanced-filters'
+                className='market-advanced-filters'
+                data-open={filtersOpen}
+              >
+                <label className='market-tag-field'>
+                  <span>{t('标签')}</span>
+                  <input
+                    aria-label={t('按标签筛选')}
+                    placeholder={t('按标签筛选')}
+                    value={filters.tag ?? ''}
+                    maxLength={16}
+                    onChange={(event) =>
+                      setFilters((current) => ({
+                        ...current,
+                        tag: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+                <label className='market-window-field'>
+                  <span>{t('时间')}</span>
+                  <select
+                    className='fsel'
+                    value={filters.window_hours}
+                    onChange={(event) =>
+                      setFilters((current) => ({
+                        ...current,
+                        window_hours: Number(event.target.value),
+                        page: 1,
+                      }))
+                    }
+                  >
+                    <option value={24}>24H</option>
+                    <option value={168}>7D</option>
+                    <option value={720}>30D</option>
+                  </select>
+                </label>
+                {browseBy === 'shops' ? (
+                  <select
+                    className='fbtn'
+                    aria-label={t('店铺排序')}
+                    value={`${filters.sort}:${filters.direction}`}
+                    onChange={(event) => {
+                      const [sort, direction] = event.target.value.split(':')
+                      setFilters((current) => ({
+                        ...current,
+                        sort,
+                        direction,
+                        page: 1,
+                      }))
+                    }}
+                  >
+                    <option value='rating:desc'>{t('店铺评分最高')}</option>
+                    <option value='multiplier:asc'>{t('起售倍率最低')}</option>
+                    <option value='multiplier:desc'>{t('起售倍率最高')}</option>
+                  </select>
+                ) : (
+                  <select
+                    className='fbtn'
+                    value={`${filters.sort}:${filters.direction}`}
+                    aria-label={t('市场排序')}
+                    onChange={(event) => {
+                      const [sort, direction] = event.target.value.split(':')
+                      setFilters((current) => ({
+                        ...current,
+                        sort,
+                        direction,
+                        page: 1,
+                      }))
+                    }}
+                  >
+                    <option value='score:desc'>
+                      <Trans i18nKey={'综合评分'} />
                     </option>
-                  )}
-                  {(filters.models?.length ?? 0) > 0 && (
-                    <option value='model_consumer_amount:desc'>
-                      <Trans i18nKey={'所选模型实扣最高'} />
+                    <option value='consumer_amount:asc'>
+                      <Trans i18nKey={'综合实扣最低'} />
                     </option>
-                  )}
-                  <option value='success_rate:desc'>
-                    <Trans i18nKey={'成功率最高'} />
-                  </option>
-                  <option value='success_rate:asc'>
-                    <Trans i18nKey={'成功率最低'} />
-                  </option>
-                  <option value='ttft:asc'>
-                    <Trans i18nKey={'首字最快'} />
-                  </option>
-                  <option value='requests:desc'>
-                    <Trans i18nKey={'调用次数最多'} />
-                  </option>
-                  <option value='name:asc'>
-                    <Trans i18nKey={'名称首字母'} />
-                  </option>
-                </select>
+                    <option value='consumer_amount:desc'>
+                      <Trans i18nKey={'综合实扣最高'} />
+                    </option>
+                    {(filters.models?.length ?? 0) > 0 && (
+                      <option value='model_consumer_amount:asc'>
+                        <Trans i18nKey={'所选模型实扣最低'} />
+                      </option>
+                    )}
+                    {(filters.models?.length ?? 0) > 0 && (
+                      <option value='model_consumer_amount:desc'>
+                        <Trans i18nKey={'所选模型实扣最高'} />
+                      </option>
+                    )}
+                    <option value='success_rate:desc'>
+                      <Trans i18nKey={'成功率最高'} />
+                    </option>
+                    <option value='success_rate:asc'>
+                      <Trans i18nKey={'成功率最低'} />
+                    </option>
+                    <option value='ttft:asc'>
+                      <Trans i18nKey={'首字最快'} />
+                    </option>
+                    <option value='requests:desc'>
+                      <Trans i18nKey={'调用次数最多'} />
+                    </option>
+                    <option value='name:asc'>
+                      <Trans i18nKey={'名称首字母'} />
+                    </option>
+                  </select>
+                )}
                 <ModelMultiSelect
                   models={filterModels}
                   selected={filters.models ?? []}
@@ -693,7 +910,7 @@ export function DawnMarket() {
                 <select
                   className='fsel market-source-filter'
                   value={filters.source}
-                  aria-label={i18n.t('市场来源')}
+                  aria-label={t('市场来源')}
                   onChange={(event) =>
                     setFilters((current) => ({
                       ...current,
@@ -716,12 +933,12 @@ export function DawnMarket() {
                 </select>
                 <select
                   className='fsel'
-                  value={filters.multiplier_card ?? ''}
-                  aria-label={i18n.t('倍率卡支持')}
+                  value={filters.credit_pack ?? ''}
+                  aria-label={t('套餐支持')}
                   onChange={(event) =>
                     setFilters((current) => ({
                       ...current,
-                      multiplier_card: event.target.value as
+                      credit_pack: event.target.value as
                         | ''
                         | 'supported'
                         | 'unsupported',
@@ -730,32 +947,24 @@ export function DawnMarket() {
                   }
                 >
                   <option value=''>
-                    <Trans i18nKey={'倍率卡：全部'} />
+                    <Trans i18nKey={'套餐：全部'} />
                   </option>
                   <option value='supported'>
-                    <Trans i18nKey={'支持倍率卡'} />
+                    <Trans i18nKey={'支持套餐'} />
                   </option>
                   <option value='unsupported'>
-                    <Trans i18nKey={'不支持倍率卡'} />
+                    <Trans i18nKey={'不支持套餐'} />
                   </option>
                 </select>
                 <div className='market-actions'>
-                  {import.meta.env.DEV && (
-                    <button
-                      className={mockMode ? 'fbtn on' : 'fbtn'}
-                      onClick={() => setMockMode((current) => !current)}
-                    >
-                      {mockMode ? i18n.t('示例数据：开') : i18n.t('示例数据')}
-                    </button>
-                  )}
                   <button
-                    className='btn primary'
+                    className='btn'
                     onClick={() => {
                       if (!authed) {
-                        toast.error('登录后管理路由池')
+                        toast.error(t('登录后管理路由池'))
                         return
                       }
-                      setPerspective('user')
+                      setWorkbenchOpen(true)
                       setPoolPanelMode('create')
                     }}
                   >
@@ -766,10 +975,10 @@ export function DawnMarket() {
                     className='btn'
                     onClick={() => {
                       if (!authed) {
-                        toast.error('登录后管理路由池')
+                        toast.error(t('登录后管理路由池'))
                         return
                       }
-                      setPerspective('user')
+                      setWorkbenchOpen(true)
                       setPoolPanelMode('autobuild')
                     }}
                   >
@@ -780,246 +989,359 @@ export function DawnMarket() {
               </div>
             </div>
 
-            <div className='min-w-0'>
-              {hasListFilter &&
-                !groupsQuery.isLoading &&
-                (!groupsQuery.isError || mockMode) && (
-                  <div className='market-search-status' role='status'>
-                    {filters.search
-                      ? i18n.t('搜索“{{param0}}”', { param0: filters.search })
-                      : i18n.t('当前筛选')}
-                    {(filters.models?.length ?? 0) > 0
-                      ? i18n.t(' · {{param0}} 个模型', {
-                          param0: filters.models?.length,
-                        })
-                      : ''}
-                    {filters.source ? ` · ${filters.source}` : ''}
-                    {filters.multiplier_card === 'supported'
-                      ? i18n.t(' · 支持倍率卡')
-                      : filters.multiplier_card === 'unsupported'
-                        ? i18n.t(' · 不支持倍率卡')
-                        : ''}
-                    {i18n.t(' · 找到 ')}
-                    {groupsQuery.data?.total ?? groups.length}{' '}
-                    <Trans i18nKey={'个分组'} />
-                    <button
-                      className='btn mini'
-                      onClick={() => {
-                        setSearch('')
-                        setFilters((current) => ({
-                          ...current,
-                          search: '',
-                          models: [],
-                          source: '',
-                          multiplier_card: '',
-                          page: 1,
-                        }))
-                      }}
-                    >
-                      <Trans i18nKey={'清除筛选'} />
-                    </button>
-                  </div>
-                )}
-              {groupsQuery.isLoading ? (
-                <div className='empty'>
-                  <span className='eic'>
-                    <Store size={20} className='animate-pulse' />
-                  </span>
-                  <b>
-                    <Trans i18nKey={'市场加载中'} />
-                  </b>
-                </div>
-              ) : groupsQuery.isError && !mockMode ? (
-                <DawnQueryError
-                  title={i18n.t('市场数据加载失败')}
-                  description={i18n.t('请检查网络连接后重试。')}
-                  onRetry={() => void groupsQuery.refetch()}
-                  retrying={groupsQuery.isFetching}
+            <div className='market-results min-w-0'>
+              {browseBy === 'shops' ? (
+                <ShopBrowser
+                  filters={filters}
+                  authed={authed}
+                  onVisit={(shop) => {
+                    setBrowseBy('products')
+                    setActiveShopName(shop.name)
+                    setFilters((current) => ({
+                      ...current,
+                      shop_id: shop.id,
+                      page: 1,
+                      sort: 'score',
+                      direction: 'desc',
+                    }))
+                  }}
+                  onTag={(tag) =>
+                    setFilters((current) => ({ ...current, tag, page: 1 }))
+                  }
+                  onPage={(page) =>
+                    setFilters((current) => ({ ...current, page }))
+                  }
                 />
-              ) : groups.length ? (
+              ) : (
                 <>
-                  {(() => {
-                    const official = groups.filter(
-                      (group) => group.source_type === 'official'
-                    )
-                    const thirdParty = groups.filter(
-                      (group) => group.source_type !== 'official'
-                    )
-                    // 搜索/筛选时只显示匹配结果，避免固定官方区块把结果推到首屏以下。
-                    const sections = hasListFilter
-                      ? [
-                          {
-                            key: 'results',
-                            title: i18n.t('筛选结果'),
-                            items: groups,
-                          },
-                        ]
-                      : [
-                          {
-                            key: 'official',
-                            title: i18n.t('官方分组'),
-                            items: official,
-                          },
-                          {
-                            key: 'third-party',
-                            title: i18n.t('第三方分组'),
-                            items: thirdParty,
-                          },
-                        ]
-                    return sections.map((section) =>
-                      section.items.length ? (
-                        <section
-                          key={section.key}
-                          className='market-group-section'
-                          aria-labelledby={`market-section-${section.key}`}
-                        >
-                          <div className='market-group-section-head'>
-                            <h2 id={`market-section-${section.key}`}>
-                              {section.title}
-                            </h2>
-                            <span>
-                              {section.items.length}{' '}
-                              <Trans i18nKey={'个分组'} />
-                            </span>
-                          </div>
-                          {section.items.map((group) => (
-                            <MarketGroupCard
-                              key={group.id}
-                              group={group}
-                              selected={selected === group.id}
-                              inPool={poolMemberIDs.has(group.id)}
-                              poolName={activePoolName}
-                              authed={authed}
-                              expanded={expanded.has(group.id)}
-                              selectedModels={filters.models ?? []}
-                              onToggleSelect={() =>
-                                setSelected((current) =>
-                                  current === group.id ? null : group.id
-                                )
-                              }
-                              onToggleExpand={() =>
-                                setExpanded((current) => {
-                                  const next = new Set(current)
-                                  if (next.has(group.id)) next.delete(group.id)
-                                  else next.add(group.id)
-                                  return next
-                                })
-                              }
-                              onUse={(target) => setUseGroup(target)}
-                              onBindKey={(target) => setUseGroup(target)}
-                              onTest={(target) => setTestGroup(target)}
-                              onBargain={(target) => setBargainGroup(target)}
-                              onJoinPool={(target) => void joinPool(target)}
-                              priceInfo={groupPrices.get(group.id)}
-                              modelPrices={modelPrices.get(group.id)}
-                              modelFees={modelFees.get(group.id)}
-                            />
-                          ))}
-                        </section>
-                      ) : null
-                    )
-                  })()}
-                  {totalPages > 1 && (
-                    <div
-                      className='gtable'
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '12px 18px',
-                      }}
-                    >
-                      <span
-                        className='num'
-                        style={{ color: 'var(--dawn-ink2)' }}
+                  {filters.shop_id && (
+                    <div className='border-border mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-3'>
+                      <h2 className='flex min-w-0 items-center gap-2 font-semibold'>
+                        <Store size={18} aria-hidden='true' />
+                        <span className='break-words'>
+                          {activeShopName || t('店铺商品')}
+                        </span>
+                        <span className='text-muted-foreground shrink-0 text-xs font-normal tabular-nums'>
+                          ID {filters.shop_id}
+                        </span>
+                      </h2>
+                      <button
+                        type='button'
+                        className='btn mini'
+                        onClick={() => {
+                          setBrowseBy('shops')
+                          setActiveShopName('')
+                          setFilters((current) => ({
+                            ...current,
+                            shop_id: undefined,
+                            page: 1,
+                            sort: 'rating',
+                            direction: 'desc',
+                          }))
+                        }}
                       >
-                        <Trans i18nKey={'第'} /> {filters.page} / {totalPages}{' '}
-                        <Trans i18nKey={'页'} />
-                      </span>
-                      <span style={{ display: 'flex', gap: 8 }}>
-                        <input
-                          className='page-jump'
-                          type='number'
-                          min={1}
-                          max={totalPages}
-                          value={filters.page}
-                          aria-label={i18n.t('跳转页码')}
-                          onChange={(event) => {
-                            const page = Math.max(
-                              1,
-                              Math.min(
-                                totalPages,
-                                Number(event.target.value) || 1
-                              )
-                            )
-                            setFilters((current) => ({ ...current, page }))
+                        {t('返回店铺列表')}
+                      </button>
+                    </div>
+                  )}
+                  {hasListFilter &&
+                    !groupsQuery.isLoading &&
+                    !groupsQuery.isError && (
+                      <div className='market-search-status' role='status'>
+                        {filters.search
+                          ? t('搜索“{{param0}}”', {
+                              param0: filters.search,
+                            })
+                          : t('当前筛选')}
+                        {(filters.models?.length ?? 0) > 0
+                          ? t(' · {{param0}} 个模型', {
+                              param0: filters.models?.length,
+                            })
+                          : ''}
+                        {filters.source ? ` · ${filters.source}` : ''}
+                        {filters.credit_pack === 'supported' &&
+                          ` · ${t('支持套餐')}`}
+                        {filters.credit_pack === 'unsupported' &&
+                          ` · ${t('不支持套餐')}`}
+                        {t(' · 找到 ')}
+                        {groupsQuery.data?.total ?? groups.length}{' '}
+                        <Trans i18nKey={'个分组'} />
+                        <button
+                          className='btn mini'
+                          onClick={() => {
+                            setSearch('')
+                            setFilters((current) => ({
+                              ...current,
+                              search: '',
+                              models: [],
+                              source: '',
+                              credit_pack: '',
+                              tag: '',
+                              shop_id: undefined,
+                              page: 1,
+                            }))
                           }}
-                        />
-                        <button
-                          className='btn mini'
-                          disabled={filters.page <= 1}
-                          onClick={() =>
-                            setFilters((current) => ({
-                              ...current,
-                              page: current.page - 1,
-                            }))
-                          }
                         >
-                          <Trans i18nKey={'上一页'} />
+                          <Trans i18nKey={'清除筛选'} />
                         </button>
-                        <button
-                          className='btn mini'
-                          disabled={filters.page >= totalPages}
-                          onClick={() =>
-                            setFilters((current) => ({
-                              ...current,
-                              page: current.page + 1,
-                            }))
-                          }
+                      </div>
+                    )}
+                  {groupsQuery.isLoading ? (
+                    <div
+                      className='market-skeleton'
+                      aria-busy='true'
+                      aria-label={t('市场加载中')}
+                    >
+                      {Array.from({ length: 3 }, (_, index) => (
+                        <div key={index} />
+                      ))}
+                    </div>
+                  ) : groupsQuery.isError ? (
+                    <DawnQueryError
+                      title={t('市场数据加载失败')}
+                      description={t('请检查网络连接后重试。')}
+                      onRetry={() => void groupsQuery.refetch()}
+                      retrying={groupsQuery.isFetching}
+                    />
+                  ) : groups.length ? (
+                    <>
+                      {(() => {
+                        const official = groups.filter(
+                          (group) => group.source_type === 'official'
+                        )
+                        const thirdParty = groups.filter(
+                          (group) => group.source_type !== 'official'
+                        )
+                        // 搜索/筛选时只显示匹配结果，避免固定官方区块把结果推到首屏以下。
+                        const sections = hasListFilter
+                          ? [
+                              {
+                                key: 'results',
+                                title: t('筛选结果'),
+                                items: groups,
+                              },
+                            ]
+                          : [
+                              {
+                                key: 'official',
+                                title: t('官方分组'),
+                                items: official,
+                              },
+                              {
+                                key: 'third-party',
+                                title: t('第三方分组'),
+                                items: thirdParty,
+                              },
+                            ]
+                        return sections.map((section) =>
+                          section.items.length ? (
+                            <section
+                              key={section.key}
+                              className='market-group-section'
+                              aria-labelledby={`market-section-${section.key}`}
+                            >
+                              <div className='market-group-section-head'>
+                                <h2 id={`market-section-${section.key}`}>
+                                  {section.title}
+                                </h2>
+                                <span>
+                                  {section.items.length}{' '}
+                                  <Trans i18nKey={'个分组'} />
+                                </span>
+                              </div>
+                              <div className='market-shelf'>
+                                {section.items.map((group) => (
+                                  <MarketGroupCard
+                                    key={group.id}
+                                    group={group}
+                                    windowHours={filters.window_hours}
+                                    selected={selected === group.id}
+                                    inPool={poolMemberIDs.has(group.id)}
+                                    poolName={activePoolName}
+                                    authed={authed}
+                                    joining={joiningGroupId === group.id}
+                                    joinDisabled={!!joiningGroupId}
+                                    expanded={expanded.has(group.id)}
+                                    selectedModels={filters.models ?? []}
+                                    onToggleSelect={() =>
+                                      setSelected((current) =>
+                                        current === group.id ? null : group.id
+                                      )
+                                    }
+                                    onToggleExpand={() =>
+                                      setExpanded((current) => {
+                                        const next = new Set(current)
+                                        if (next.has(group.id))
+                                          next.delete(group.id)
+                                        else next.add(group.id)
+                                        return next
+                                      })
+                                    }
+                                    onUse={(target) => setUseGroup(target)}
+                                    onBindKey={(target) => setUseGroup(target)}
+                                    onTest={(target) => setTestGroup(target)}
+                                    onBargain={(target) =>
+                                      setBargainGroup(target)
+                                    }
+                                    onJoinPool={(target) =>
+                                      void joinPool(target)
+                                    }
+                                    onVisitShop={(group) => {
+                                      setActiveShopName(group.shop_name ?? '')
+                                      setFilters((current) => ({
+                                        ...current,
+                                        shop_id: group.shop_id,
+                                        page: 1,
+                                      }))
+                                    }}
+                                    onTag={(tag) =>
+                                      setFilters((current) => ({
+                                        ...current,
+                                        tag,
+                                        page: 1,
+                                      }))
+                                    }
+                                    priceInfo={groupPrices.get(group.id)}
+                                    modelPrices={modelPrices.get(group.id)}
+                                    modelFees={modelFees.get(group.id)}
+                                  />
+                                ))}
+                              </div>
+                            </section>
+                          ) : null
+                        )
+                      })()}
+                      {totalPages > 1 && (
+                        <div
+                          className='gtable'
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 18px',
+                          }}
                         >
-                          <Trans i18nKey={'下一页'} />
-                        </button>
+                          <span
+                            className='num'
+                            style={{ color: 'var(--dawn-ink2)' }}
+                          >
+                            <Trans i18nKey={'第'} /> {filters.page} /{' '}
+                            {totalPages} <Trans i18nKey={'页'} />
+                          </span>
+                          <span style={{ display: 'flex', gap: 8 }}>
+                            <input
+                              className='page-jump'
+                              type='number'
+                              min={1}
+                              max={totalPages}
+                              value={filters.page}
+                              aria-label={t('跳转页码')}
+                              onChange={(event) => {
+                                const page = Math.max(
+                                  1,
+                                  Math.min(
+                                    totalPages,
+                                    Number(event.target.value) || 1
+                                  )
+                                )
+                                setFilters((current) => ({ ...current, page }))
+                              }}
+                            />
+                            <button
+                              className='btn mini'
+                              disabled={filters.page <= 1}
+                              onClick={() =>
+                                setFilters((current) => ({
+                                  ...current,
+                                  page: current.page - 1,
+                                }))
+                              }
+                            >
+                              <Trans i18nKey={'上一页'} />
+                            </button>
+                            <button
+                              className='btn mini'
+                              disabled={filters.page >= totalPages}
+                              onClick={() =>
+                                setFilters((current) => ({
+                                  ...current,
+                                  page: current.page + 1,
+                                }))
+                              }
+                            >
+                              <Trans i18nKey={'下一页'} />
+                            </button>
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className='empty'>
+                      <span className='eic'>
+                        <Store size={20} />
                       </span>
+                      <b>
+                        {hasListFilter
+                          ? t('没有找到符合当前筛选的分组')
+                          : t('市场分组上架中')}
+                      </b>
+                      <button
+                        className='btn'
+                        onClick={() => void groupsQuery.refetch()}
+                      >
+                        {t('刷新')}
+                      </button>
+                      {hasListFilter && (
+                        <button
+                          className='btn mini'
+                          onClick={() => {
+                            setSearch('')
+                            setFilters((current) => ({
+                              ...current,
+                              search: '',
+                              models: [],
+                              source: '',
+                              credit_pack: '',
+                              tag: '',
+                              shop_id: undefined,
+                              page: 1,
+                            }))
+                          }}
+                        >
+                          <Trans i18nKey={'清除筛选'} />
+                        </button>
+                      )}
                     </div>
                   )}
                 </>
-              ) : (
-                <div className='empty'>
-                  <span className='eic'>
-                    <Store size={20} />
-                  </span>
-                  <b>
-                    {hasListFilter
-                      ? i18n.t('没有找到符合当前筛选的分组')
-                      : i18n.t('市场分组上架中')}
-                  </b>
-                  <span>
-                    {hasListFilter
-                      ? i18n.t('请尝试其他关键词或清除搜索条件')
-                      : i18n.t('渠道检测通过后自动上架')}
-                  </span>
-                  {hasListFilter && (
-                    <button
-                      className='btn mini'
-                      onClick={() => {
-                        setSearch('')
-                        setFilters((current) => ({
-                          ...current,
-                          search: '',
-                          models: [],
-                          source: '',
-                          multiplier_card: '',
-                          page: 1,
-                        }))
-                      }}
-                    >
-                      <Trans i18nKey={'清除筛选'} />
-                    </button>
-                  )}
-                </div>
               )}
             </div>
-
+          </div>
+          <div
+            className='market-workbench-shell'
+            data-open={workbenchOpen}
+            data-receiving={joinFlight !== null}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && workbenchOpen) {
+                setWorkbenchOpen(false)
+                workbenchToggle.current?.focus()
+              }
+            }}
+          >
+            <button
+              ref={workbenchToggle}
+              id='market-workbench-toggle'
+              type='button'
+              className='market-workbench-toggle'
+              aria-expanded={workbenchOpen}
+              aria-controls='market-route-workbench'
+              onClick={() => setWorkbenchOpen((open) => !open)}
+            >
+              <Waypoints size={18} aria-hidden='true' />
+              <span>{t('路由池')}</span>
+              <b>{poolMemberIDs.size}</b>
+              <ChevronDown size={18} aria-hidden='true' />
+            </button>
             <PoolWorkbench
               authed={authed}
               groups={groups}
@@ -1029,11 +1351,45 @@ export function DawnMarket() {
               onModeChange={setPoolPanelMode}
             />
           </div>
-        ) : (
-          <OwnerView />
-        )}
+        </div>
       </main>
 
+      <SiteFooter />
+
+      {joinFlight &&
+        createPortal(
+          <motion.span
+            key={joinFlight.key}
+            className='market-join-flight'
+            aria-hidden='true'
+            initial={{
+              x: joinFlight.x,
+              y: joinFlight.y,
+              opacity: 0,
+              scale: 0.8,
+            }}
+            animate={{
+              x: [
+                joinFlight.x,
+                (joinFlight.x + joinFlight.endX) / 2,
+                joinFlight.endX,
+              ],
+              y: [
+                joinFlight.y,
+                Math.min(joinFlight.y, joinFlight.endY) - 80,
+                joinFlight.endY,
+              ],
+              opacity: [0, 1, 1, 0],
+              scale: [0.8, 1, 0.3],
+            }}
+            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+            onAnimationComplete={() => setJoinFlight(null)}
+          >
+            <Waypoints size={14} aria-hidden='true' />
+            {joinFlight.name}
+          </motion.span>,
+          document.body
+        )}
       {useGroup && (
         <UseDialog group={useGroup} onClose={() => setUseGroup(null)} />
       )}
@@ -1055,7 +1411,7 @@ export function DawnMarket() {
 
 /** 绑定令牌使用分组。 */
 function UseDialog(props: { group: MarketplaceGroup; onClose: () => void }) {
-  useTranslation()
+  const { t } = useTranslation()
   const { group } = props
   const tokens = useMarketplaceTokens()
   const [tokenId, setTokenId] = useState<string>('')
@@ -1074,7 +1430,9 @@ function UseDialog(props: { group: MarketplaceGroup; onClose: () => void }) {
     >
       <div className='m-main'>
         <ModalHead
-          title={`使用 · ${group.system_display_name}`}
+          title={i18n.t('使用 · {{param0}}', {
+            param0: group.system_display_name,
+          })}
           onClose={props.onClose}
         />
         <div className='kv'>
@@ -1105,6 +1463,25 @@ function UseDialog(props: { group: MarketplaceGroup; onClose: () => void }) {
               </option>
             ))}
           </select>
+          {(tokens.hasNextPage || tokens.isFetchNextPageError) && (
+            <button
+              className='btn'
+              disabled={tokens.isFetching}
+              onClick={() => void tokens.fetchNextPage()}
+            >
+              {tokens.isFetchNextPageError ? t('重试') : t('加载更多')}
+            </button>
+          )}
+          {tokens.isError && (
+            <p role='alert'>
+              {t('加载失败，请重试')}
+              {!tokens.data && (
+                <button className='btn' onClick={() => void tokens.refetch()}>
+                  {t('重试')}
+                </button>
+              )}
+            </p>
+          )}
         </div>
         <div className='m-foot'>
           <button className='btn' onClick={props.onClose}>
@@ -1117,10 +1494,12 @@ function UseDialog(props: { group: MarketplaceGroup; onClose: () => void }) {
               setBusy(true)
               try {
                 await bindMarketplaceToken(group.id, Number(tokenId))
-                toast.success('已绑定令牌')
+                toast.success(i18n.t('已绑定令牌'))
                 props.onClose()
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : '绑定失败')
+                toast.error(
+                  error instanceof Error ? error.message : i18n.t('绑定失败')
+                )
               } finally {
                 setBusy(false)
               }
@@ -1154,7 +1533,9 @@ function BargainDialog(props: {
     >
       <div className='m-main'>
         <ModalHead
-          title={`发起砍价 · ${group.system_display_name}`}
+          title={i18n.t('发起砍价 · {{param0}}', {
+            param0: group.system_display_name,
+          })}
           onClose={props.onClose}
         />
         <div className='kv'>
@@ -1201,10 +1582,12 @@ function BargainDialog(props: {
                   proposedMultiplier: Number(rate) || group.multiplier,
                   reason,
                 })
-                toast.success('砍价申请已提交')
+                toast.success(i18n.t('砍价申请已提交'))
                 props.onClose()
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : '提交失败')
+                toast.error(
+                  error instanceof Error ? error.message : i18n.t('提交失败')
+                )
               } finally {
                 setBusy(false)
               }
@@ -1240,9 +1623,10 @@ function ConnectivityDialog(props: {
           window.clearInterval(timer)
           setRunning(false)
         }
-      } catch {
+      } catch (error) {
         window.clearInterval(timer)
         setRunning(false)
+        toast.error(error instanceof Error ? error.message : i18n.t('测试失败'))
       }
     }, 2000)
     return () => window.clearInterval(timer)
@@ -1257,7 +1641,9 @@ function ConnectivityDialog(props: {
     >
       <div className='m-main'>
         <ModalHead
-          title={`连通性测试 · ${group.system_display_name}`}
+          title={i18n.t('连通性测试 · {{param0}}', {
+            param0: group.system_display_name,
+          })}
           onClose={props.onClose}
         />
         <div className='field'>
@@ -1343,7 +1729,9 @@ function ConnectivityDialog(props: {
                 })
                 setResult(test)
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : '测试失败')
+                toast.error(
+                  error instanceof Error ? error.message : i18n.t('测试失败')
+                )
                 setRunning(false)
               }
             }}

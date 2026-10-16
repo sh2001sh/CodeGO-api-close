@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { UseFormReturn } from 'react-hook-form'
+import interfaceI18n from '@/i18n/config'
 import {
   Bot,
   GitCompareArrows,
@@ -34,11 +35,7 @@ export function ChannelModelsSection(props: {
 }) {
   const { t } = useTranslation()
   return (
-    <FormSection
-      icon={Bot}
-      title={t('模型能力')}
-      description={t('从上游同步，或补充需要发布的模型。')}
-    >
+    <FormSection icon={Bot} title={t('模型能力')}>
       <ModelToolbar {...props} />
       {props.syncDiff && <ModelSyncSummary {...props} diff={props.syncDiff} />}
       {props.form.formState.errors.declared_models?.message && (
@@ -70,7 +67,9 @@ function ModelToolbar(props: {
         variant='outline'
         onClick={props.onFetch}
         disabled={props.fetching}
-        title={t('编辑已有渠道时，API 地址留空会保留原地址；同步模型时仍需填写有效的 HTTPS 地址')}
+        title={t(
+          '编辑已有渠道时，API 地址留空会保留原地址；同步模型时仍需填写有效的 HTTPS 地址'
+        )}
       >
         {props.fetching ? <Loader2 className='animate-spin' /> : <RefreshCcw />}
         {t('同步上游模型')}
@@ -265,7 +264,7 @@ function EmptyModelList() {
   const { t } = useTranslation()
   return (
     <div className='border-border text-muted-foreground rounded-md border border-dashed px-4 py-6 text-center text-sm'>
-      {t('模型列表将在这里显示')}
+      {t('No models found')}
     </div>
   )
 }
@@ -282,7 +281,7 @@ function buildModelGroups(
     return [
       {
         key: 'models',
-        label: '已选择与可用模型',
+        label: interfaceI18n.t('已选择与可用模型'),
         tone: 'normal' as const,
         models: visible(models),
       },
@@ -292,13 +291,13 @@ function buildModelGroups(
   return [
     {
       key: 'added',
-      label: '上游新增',
+      label: interfaceI18n.t('上游新增'),
       tone: 'added' as const,
       models: visible(models.filter((model) => addedKeys.has(modelKey(model)))),
     },
     {
       key: 'available',
-      label: '上游可用',
+      label: interfaceI18n.t('上游可用'),
       tone: 'normal' as const,
       models: visible(
         models.filter(
@@ -309,7 +308,7 @@ function buildModelGroups(
     },
     {
       key: 'removed',
-      label: '上游未返回（勾选可保留）',
+      label: interfaceI18n.t('上游未返回（勾选可保留）'),
       tone: 'removed' as const,
       models: visible(
         models.filter((model) => removedKeys.has(modelKey(model)))

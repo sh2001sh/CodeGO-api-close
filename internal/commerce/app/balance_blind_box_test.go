@@ -46,7 +46,7 @@ func TestBalanceBlindBoxPurchaseCreatesSealedInventoryAndDebitsOnce(t *testing.T
 	}
 }
 
-func TestBalanceBlindBoxOpenUsesInventoryWithoutDebitAndIssuesLuckyNumber(t *testing.T) {
+func TestBalanceBlindBoxPurchaseAndOpenWithoutLuckyNumberTables(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	setBalanceBlindBoxTestSetting(t, 10)
 	user := createBalanceBlindBoxTestUser(t, db, 8892, "BBX002", 100)
@@ -58,9 +58,6 @@ func TestBalanceBlindBoxOpenUsesInventoryWithoutDebitAndIssuesLuckyNumber(t *tes
 	if opened.Record.RewardType != commerceschema.BlindBoxRewardTypeProp {
 		require.GreaterOrEqual(t, opened.Record.RewardUSD, 1.0)
 	}
-	require.Regexp(t, `^\d{4}$`, opened.Record.LuckyNumber)
-	require.NotEmpty(t, opened.Record.LuckyDrawDate)
-	require.Greater(t, opened.Record.LuckyExpiresAt, time.Now().Unix())
 	require.GreaterOrEqual(t, opened.BalanceUSD, 97.5)
 	require.Zero(t, opened.Overview.InventoryCount)
 
@@ -69,9 +66,14 @@ func TestBalanceBlindBoxOpenUsesInventoryWithoutDebitAndIssuesLuckyNumber(t *tes
 	require.Equal(t, opened.Record.Id, replayed.Record.Id)
 	require.InDelta(t, opened.BalanceUSD, replayed.BalanceUSD, 0.000001)
 
-	var luckyCount int64
-	require.NoError(t, db.Model(&commerceschema.BlindBoxDailyLuckyNumber{}).Count(&luckyCount).Error)
-	require.Equal(t, int64(1), luckyCount)
+	require.False(t, db.Migrator().HasTable(&commerceschema.BlindBoxDailyLuckyNumber{}))
+	require.False(t, db.Migrator().HasTable(&commerceschema.SubscriptionLuckyNumber{}))
+	overview, err := GetBlindBoxOverview(user.Id, 10)
+	require.NoError(t, err)
+	require.NotEmpty(t, overview.RecentRecords)
+	history, err := ListBlindBoxHistory(user.Id, 1, 10)
+	require.NoError(t, err)
+	require.NotEmpty(t, history.Records)
 }
 
 func TestBalanceBlindBoxPurchaseEnforcesDailyLimit(t *testing.T) {

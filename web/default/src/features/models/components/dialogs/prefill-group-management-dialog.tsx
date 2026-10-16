@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import interfaceI18n from '@/i18n/config'
 import {
   Layers3,
   Loader2,
@@ -314,7 +315,7 @@ export function PrefillGroupManagementDialog({
                                 </CardDescription>
                               ) : (
                                 <CardDescription className='text-muted-foreground italic'>
-                                  No description provided
+                                  {interfaceI18n.t('No description provided')}
                                 </CardDescription>
                               )}
                             </div>
@@ -326,7 +327,9 @@ export function PrefillGroupManagementDialog({
                                 onClick={() => onEditGroup(group)}
                               >
                                 <Pencil className='h-4 w-4' />
-                                <span className='sr-only'>Edit group</span>
+                                <span className='sr-only'>
+                                  {interfaceI18n.t('Edit group')}
+                                </span>
                               </Button>
                               <Button
                                 size='icon'
@@ -335,13 +338,15 @@ export function PrefillGroupManagementDialog({
                                 onClick={() => handleDeleteClick(group)}
                               >
                                 <Trash2 className='h-4 w-4' />
-                                <span className='sr-only'>Delete group</span>
+                                <span className='sr-only'>
+                                  {interfaceI18n.t('Delete group')}
+                                </span>
                               </Button>
                             </div>
                           </CardHeader>
                           <CardContent className='space-y-3'>
                             <div className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs font-medium tracking-wide uppercase'>
-                              <span>Items</span>
+                              <span>{interfaceI18n.t('Items')}</span>
                               <StatusBadge
                                 label={`${parsedItems.length} item${parsedItems.length === 1 ? '' : 's'}`}
                                 variant='neutral'
@@ -419,7 +424,9 @@ export function PrefillGroupManagementDialog({
                                         </p>
                                       ) : (
                                         <p className='text-muted-foreground text-xs italic'>
-                                          No description provided
+                                          {interfaceI18n.t(
+                                            'No description provided'
+                                          )}
                                         </p>
                                       )}
                                     </div>
@@ -464,7 +471,8 @@ export function PrefillGroupManagementDialog({
                                       )}
                                     </div>
                                     <div className='text-muted-foreground mt-2 text-xs font-medium tracking-wide uppercase'>
-                                      {parsedItems.length} item
+                                      {parsedItems.length}{' '}
+                                      {interfaceI18n.t('item')}
                                       {parsedItems.length === 1 ? '' : 's'}
                                     </div>
                                   </TableCell>
@@ -477,7 +485,7 @@ export function PrefillGroupManagementDialog({
                                       >
                                         <Pencil className='h-4 w-4' />
                                         <span className='sr-only'>
-                                          Edit group
+                                          {interfaceI18n.t('Edit group')}
                                         </span>
                                       </Button>
                                       <Button
@@ -488,7 +496,7 @@ export function PrefillGroupManagementDialog({
                                       >
                                         <Trash2 className='h-4 w-4' />
                                         <span className='sr-only'>
-                                          Delete group
+                                          {interfaceI18n.t('Delete group')}
                                         </span>
                                       </Button>
                                     </div>

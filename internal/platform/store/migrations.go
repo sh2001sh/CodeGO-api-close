@@ -133,6 +133,7 @@ func V2MigrationIDs() []string {
 		"20260724_gateway_route_pool_auto_discovery",
 		"20260724_billing_funding_attribution",
 		"20260801_daily_lucky_number",
+		"20261015_credit_pack_order_snapshot",
 		"20260802_gateway_route_pool_fault_domains",
 		"20260804_daily_lucky_reward_notifications",
 		"20260805_billing_outbox_pending_lookup",
@@ -220,6 +221,11 @@ func V2MigrationIDs() []string {
 		"20260922_marketplace_settlement_created_index",
 		"20260922_billing_hot_path_indexes",
 		"20260923_billing_outbox_autovacuum_repair",
+		"20261015_marketplace_shops_and_presentation",
+		"20261015_credit_pack_funding_policy",
+		"20261015_route_pool_credit_pack_filter",
+		"20261015_referral_consumption_rebate",
+		"20261016_referral_channel_funding",
 	}
 }
 
@@ -323,6 +329,12 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&billingschema.FundingSourcePolicy{}, &billingschema.FundingLot{}, &billingschema.FundingAllocation{}, &billingschema.RequestEconomics{})
 		}},
 		{ID: "20260801_daily_lucky_number", Run: migrateDailyLuckyNumber},
+		{ID: "20261015_credit_pack_order_snapshot", Run: func(tx *gorm.DB) error {
+			if tx.Migrator().HasColumn(&commerceschema.SubscriptionOrder{}, "CreditPackQuota") {
+				return nil
+			}
+			return tx.Migrator().AddColumn(&commerceschema.SubscriptionOrder{}, "CreditPackQuota")
+		}},
 		{ID: "20260802_gateway_route_pool_fault_domains", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&gatewayschema.RoutePoolMember{})
 		}},
@@ -397,6 +409,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20260922_marketplace_settlement_created_index", RunOutsideTx: migrateMarketplaceSettlementCreatedIndex},
 		{ID: "20260922_billing_hot_path_indexes", RunOutsideTx: migrateBillingHotPathIndexes},
 		{ID: "20260923_billing_outbox_autovacuum_repair", Run: migrateBillingOutboxAutovacuumRepair},
+		{ID: "20261015_marketplace_shops_and_presentation", Run: migrateMarketplacePresentation},
 		{ID: "20260915_marketplace_pelican_artifacts", Run: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.PelicanArtifact{})
 		}},
@@ -522,6 +535,10 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 			return tx.AutoMigrate(&communityschema.ChannelRating{})
 		}},
 		{ID: "20260921_database_pressure_indexes", RunOutsideTx: migrateDatabasePressureIndexes},
+		{ID: "20261015_credit_pack_funding_policy", Run: migrateCreditPackFundingPolicy},
+		{ID: "20261015_route_pool_credit_pack_filter", Run: migrateRoutePoolCreditPackFilter},
+		{ID: "20261015_referral_consumption_rebate", Run: migrateReferralConsumptionRebate},
+		{ID: "20261016_referral_channel_funding", Run: migrateReferralChannelFunding},
 	}
 	for _, step := range steps {
 		var applied schemaMigration

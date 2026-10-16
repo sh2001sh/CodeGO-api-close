@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import interfaceI18n from '@/i18n/config'
 import {
   Activity,
   BellRing,
   ChevronLeft,
   ChevronRight,
   Download,
+  Copy,
   ExternalLink,
   RefreshCw,
   Search,
@@ -40,6 +42,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { BoundedSelect } from '@/components/bounded-select'
 import { exportSecurityAuditEvents } from '@/features/marketplace/api'
 import {
   useSecurityAuditEvents,
@@ -47,7 +50,7 @@ import {
   useMarketplaceMutations,
 } from '@/features/marketplace/hooks'
 import type {
-  MarketplaceChannel,
+  OwnerChannelOption,
   SecurityAuditEvent,
   SecurityAuditEventFilters,
   SecurityAuditNotificationStatus,
@@ -55,6 +58,7 @@ import type {
   SecurityAuditSeverity,
 } from '@/features/marketplace/types'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
+import '@/features/users/admin.css'
 
 type DateRange = { start?: Date; end?: Date }
 
@@ -86,12 +90,14 @@ const notificationLabels: Record<SecurityAuditNotificationStatus, string> = {
 }
 
 function notificationLabel(status: SecurityAuditEvent['notification_status']) {
-  return status ? notificationLabels[status] : '历史事件未记录'
+  return status
+    ? interfaceI18n.t(notificationLabels[status])
+    : interfaceI18n.t('历史事件未记录')
 }
 
 interface SecurityAuditPanelProps {
   admin?: boolean
-  channels?: MarketplaceChannel[]
+  channels?: OwnerChannelOption[]
   onInspectUser?: (event: SecurityAuditEvent) => void
   onInspectLogs?: (event: SecurityAuditEvent) => void
 }
@@ -103,6 +109,19 @@ export function SecurityAuditPanel({
   onInspectLogs,
 }: SecurityAuditPanelProps) {
   const { t } = useTranslation()
+  const channelOptions = useMemo(
+    () => [
+      { value: '', label: t('全部渠道') },
+      ...channels.map((channel) => ({
+        value: channel.id,
+        label:
+          channel.system_display_name ||
+          channel.submitted_source_label ||
+          channel.id,
+      })),
+    ],
+    [channels, t]
+  )
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [searchDraft, setSearchDraft] = useState('')
@@ -292,15 +311,13 @@ export function SecurityAuditPanel({
   }
 
   return (
-    <section className='border-border bg-card overflow-hidden rounded-lg border'>
+    <section
+      className='admin-ledger-panel solaris-audit-panel'
+      aria-busy={events.isFetching}
+    >
       <header className='flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4'>
         <div>
           <h2 className='font-semibold'>{t('风险事件')}</h2>
-          <p className='text-muted-foreground mt-1 text-xs'>
-            {admin
-              ? t('查看全站 Prompt Guard 与上游安全策略阻断事件。')
-              : t('查看与你的市场渠道相关的安全策略阻断事件。')}
-          </p>
         </div>
         <div className='flex items-center gap-2'>
           {!admin && (
@@ -326,31 +343,26 @@ export function SecurityAuditPanel({
         </div>
       </header>
 
-      <div className='grid grid-cols-2 border-b sm:grid-cols-3 lg:grid-cols-5'>
+      <div className='solaris-audit-summary grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'>
         {metrics.map(([label, value]) => (
-          <div className='border-r px-4 py-3 last:border-r-0' key={label}>
+          <div className='solaris-audit-stat' key={label}>
             <p className='text-muted-foreground text-xs'>{t(String(label))}</p>
-            <p className='mt-1 text-xl font-semibold tabular-nums'>{value}</p>
+            <p className='mt-2 text-2xl font-medium tabular-nums'>
+              {events.isLoading || events.isError ? '—' : value}
+            </p>
           </div>
         ))}
       </div>
 
       <div className='bg-muted/20 flex flex-col gap-2 border-b px-4 py-3 text-xs sm:flex-row sm:items-center sm:justify-between'>
         <div className='flex items-start gap-2'>
-          {data?.summary.unreviewed ? (
+          {!data || data.summary.unreviewed ? (
             <ShieldAlert className='text-destructive mt-0.5 size-4 shrink-0' />
           ) : (
             <ShieldCheck className='text-success mt-0.5 size-4 shrink-0' />
           )}
           <span className='text-muted-foreground'>
-            {data?.summary.unreviewed
-              ? t(
-                  '当前有 {{count}} 条事件等待复核，优先检查重复触发的用户与 Key。',
-                  {
-                    count: data.summary.unreviewed,
-                  }
-                )
-              : t('当前筛选范围内没有待处理事件。')}
+            {t('待处理')} {data ? data.summary.unreviewed : '—'}
           </span>
         </div>
         <div className='flex flex-wrap gap-x-4 gap-y-1 tabular-nums'>
@@ -367,7 +379,7 @@ export function SecurityAuditPanel({
         </div>
       </div>
 
-      <div className='flex flex-wrap gap-2 border-b p-3'>
+      <div className='solaris-audit-filters'>
         <form
           className='flex min-w-56 flex-1 gap-2'
           onSubmit={(event) => {
@@ -380,6 +392,7 @@ export function SecurityAuditPanel({
             value={searchDraft}
             onChange={(event) => setSearchDraft(event.target.value)}
             placeholder={t('搜索请求 ID、Key、用户或错误')}
+            aria-label={t('搜索请求 ID、Key、用户或错误')}
           />
           <Button
             type='submit'
@@ -392,6 +405,7 @@ export function SecurityAuditPanel({
         </form>
         <NativeSelect
           value={source}
+          aria-label={t('来源')}
           onChange={(event) => {
             setPage(1)
             setSource(event.target.value)
@@ -407,6 +421,7 @@ export function SecurityAuditPanel({
         </NativeSelect>
         <NativeSelect
           value={reviewStatus}
+          aria-label={t('状态')}
           onChange={(event) => {
             setPage(1)
             setReviewStatus(event.target.value)
@@ -428,27 +443,19 @@ export function SecurityAuditPanel({
               setChannelId(event.target.value)
             }}
             placeholder={t('渠道 ID')}
+            aria-label={t('渠道 ID')}
           />
         ) : (
-          <NativeSelect
+          <BoundedSelect
             className='w-full sm:w-56'
             value={channelId}
+            options={channelOptions}
             aria-label={t('选择渠道')}
-            onChange={(event) => {
+            onValueChange={(value) => {
               setPage(1)
-              setChannelId(event.target.value)
+              setChannelId(value)
             }}
-          >
-            <NativeSelectOption value=''>{t('全部渠道')}</NativeSelectOption>
-            {channels.map((channel) => (
-              <NativeSelectOption key={channel.id} value={channel.id}>
-                {channel.system_display_name ||
-                  channel.approved_source_label ||
-                  channel.submitted_source_label ||
-                  channel.id}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+          />
         )}
         <Input
           className='w-40'
@@ -458,6 +465,7 @@ export function SecurityAuditPanel({
             setModel(event.target.value)
           }}
           placeholder={t('模型')}
+          aria-label={t('模型')}
         />
         <CompactDateTimeRangePicker
           className='w-auto max-w-72 min-w-44'
@@ -475,9 +483,6 @@ export function SecurityAuditPanel({
           <ShieldAlert className='text-destructive size-8' />
           <div>
             <p className='font-medium'>{t('安全审计事件加载失败')}</p>
-            <p className='text-muted-foreground mt-1 text-xs'>
-              {t('请检查网络或服务状态后重试。')}
-            </p>
           </div>
           <Button variant='outline' size='sm' onClick={() => events.refetch()}>
             <RefreshCw />
@@ -492,22 +497,26 @@ export function SecurityAuditPanel({
         </div>
       ) : (data?.items.length ?? 0) === 0 ? (
         <div className='flex flex-col items-center p-10 text-center'>
-          <ShieldCheck className='text-success size-9' />
+          <Search className='text-muted-foreground size-9' aria-hidden='true' />
           <p className='mt-3 font-medium'>
             {t('当前筛选条件下没有安全审计事件')}
           </p>
-          <p className='text-muted-foreground mt-1 max-w-md text-xs'>
-            {search ||
-            source ||
-            reviewStatus ||
-            channelId ||
-            model ||
-            range.start
-              ? t('调整或清除筛选条件后可查看其他事件。')
-              : t(
-                  '发生 Prompt Guard 阻断或上游安全策略拒绝后，事件会显示在这里。'
-                )}
-          </p>
+          <Button
+            variant='outline'
+            className='mt-4'
+            onClick={() => {
+              setSearch('')
+              setSearchDraft('')
+              setSource('')
+              setReviewStatus('')
+              setChannelId('')
+              setModel('')
+              setRange({})
+              setPage(1)
+            }}
+          >
+            {t('重置')}
+          </Button>
         </div>
       ) : (
         <>
@@ -533,15 +542,17 @@ export function SecurityAuditPanel({
                     tabIndex={0}
                     onClick={() => openEvent(item)}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ')
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
                         openEvent(item)
+                      }
                     }}
                   >
                     <TableCell className='text-xs whitespace-nowrap'>
-                      {dayjs(item.created_at).format('MM-DD HH:mm:ss')}
+                      {dayjs(item.created_at).format('YYYY-MM-DD HH:mm:ss Z')}
                     </TableCell>
                     <TableCell>
-                      {sourceLabels[item.source] ?? item.source}
+                      {t(sourceLabels[item.source] ?? item.source)}
                     </TableCell>
                     <TableCell className='font-mono text-xs'>
                       {item.marketplace_channel_id || item.channel_id || '-'}
@@ -550,7 +561,7 @@ export function SecurityAuditPanel({
                       <div className='flex items-center gap-1'>
                         <span>{item.user_external_id || '-'}</span>
                         {item.user_blocked && (
-                          <Badge variant='destructive' className='text-[10px]'>
+                          <Badge variant='destructive' className='text-xs'>
                             {t('已拉黑')}
                           </Badge>
                         )}
@@ -603,6 +614,7 @@ export function SecurityAuditPanel({
           <Button
             variant='outline'
             size='icon-sm'
+            aria-label={t('上一页')}
             disabled={page <= 1}
             onClick={() => setPage((value) => value - 1)}
           >
@@ -614,6 +626,7 @@ export function SecurityAuditPanel({
           <Button
             variant='outline'
             size='icon-sm'
+            aria-label={t('下一页')}
             disabled={page >= totalPages}
             onClick={() => setPage((value) => value + 1)}
           >
@@ -626,7 +639,7 @@ export function SecurityAuditPanel({
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
       >
-        <SheetContent className='w-full overflow-y-auto sm:max-w-2xl'>
+        <SheetContent className='solaris-admin-dialog solaris-audit-detail w-full overflow-y-auto sm:max-w-2xl'>
           {selected && (
             <>
               <SheetHeader className='border-b'>
@@ -643,6 +656,22 @@ export function SecurityAuditPanel({
                   <ReviewStatusBadge event={selected} />
                 </div>
                 <DetailGrid event={selected} />
+                {selected.request_id && (
+                  <Button
+                    variant='outline'
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(selected.request_id)
+                        toast.success(t('复制成功'))
+                      } catch {
+                        toast.error(t('复制失败'))
+                      }
+                    }}
+                  >
+                    <Copy aria-hidden='true' />
+                    {t('复制请求 ID')}
+                  </Button>
+                )}
                 <div className='bg-muted/30 flex flex-wrap gap-2 rounded-md border p-3'>
                   <Button
                     variant='outline'
@@ -753,9 +782,10 @@ export function SecurityAuditPanel({
 }
 
 function DetailGrid({ event }: { event: SecurityAuditEvent }) {
+  const { t } = useTranslation()
   const items = [
-    ['来源', sourceLabels[event.source] ?? event.source],
-    ['触发时间', dayjs(event.created_at).format('YYYY-MM-DD HH:mm:ss')],
+    ['来源', t(sourceLabels[event.source] ?? event.source)],
+    ['触发时间', dayjs(event.created_at).format('YYYY-MM-DD HH:mm:ss Z')],
     ['用户内部 ID', String(event.user_id || '-')],
     ['用户外部 ID', event.user_external_id || '-'],
     ['Key', event.token_name || `#${event.token_id}`],
@@ -772,15 +802,15 @@ function DetailGrid({ event }: { event: SecurityAuditEvent }) {
     [
       '复核人 / 时间',
       event.reviewed_by
-        ? `${event.reviewed_by} · ${event.reviewed_at ? dayjs(event.reviewed_at).format('YYYY-MM-DD HH:mm:ss') : '-'}`
+        ? `${event.reviewed_by} · ${event.reviewed_at ? dayjs(event.reviewed_at).format('YYYY-MM-DD HH:mm:ss Z') : '-'}`
         : '-',
     ],
   ]
   return (
-    <dl className='grid gap-x-6 gap-y-3 sm:grid-cols-2'>
+    <dl className='solaris-audit-detail-grid grid gap-x-6 gap-y-3 sm:grid-cols-2'>
       {items.map(([label, value]) => (
         <div key={label}>
-          <dt className='text-muted-foreground text-xs'>{label}</dt>
+          <dt className='text-muted-foreground text-xs'>{t(label)}</dt>
           <dd className='mt-1 text-sm break-all'>{value}</dd>
         </div>
       ))}
@@ -789,6 +819,7 @@ function DetailGrid({ event }: { event: SecurityAuditEvent }) {
 }
 
 function RiskBadge({ event }: { event: SecurityAuditEvent }) {
+  const { t } = useTranslation()
   const severity: SecurityAuditSeverity = event.severity || 'high'
   const tone: Record<SecurityAuditSeverity, string> = {
     low: 'border-info/20 bg-info/10 text-info',
@@ -798,7 +829,7 @@ function RiskBadge({ event }: { event: SecurityAuditEvent }) {
   }
   return (
     <Badge variant='outline' className={tone[severity]}>
-      {severityLabels[severity]}
+      {t(severityLabels[severity])}
       <span className='max-w-44 truncate font-normal'>{event.risk_code}</span>
     </Badge>
   )
@@ -836,13 +867,14 @@ function NotificationBadge({ event }: { event: SecurityAuditEvent }) {
 }
 
 function ReviewStatusBadge({ event }: { event: SecurityAuditEvent }) {
+  const { t } = useTranslation()
   return (
     <Badge
       variant={
         event.review_status === 'unreviewed' ? 'destructive' : 'secondary'
       }
     >
-      {statusLabels[event.review_status]}
+      {t(statusLabels[event.review_status])}
     </Badge>
   )
 }
@@ -858,7 +890,7 @@ function AuditEventCard({
   return (
     <button
       type='button'
-      className='hover:bg-muted/30 focus-visible:ring-ring w-full space-y-3 p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none'
+      className='solaris-audit-event hover:bg-muted/30 focus-visible:ring-ring w-full space-y-3 p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none'
       onClick={() => onOpen(event)}
     >
       <div className='flex items-start justify-between gap-3'>
@@ -890,7 +922,7 @@ function AuditEventCard({
             {event.user_external_id || '-'} ·{' '}
             {event.token_name || `#${event.token_id}`}
           </p>
-          <p className='text-muted-foreground mt-0.5 truncate text-[11px]'>
+          <p className='text-muted-foreground mt-0.5 truncate text-xs'>
             ID {event.user_id || '-'}
             {event.user_blocked ? ` · ${t('已拉黑')}` : ''}
           </p>
@@ -900,7 +932,7 @@ function AuditEventCard({
             <Trans i18nKey={'来源'} />
           </span>
           <p className='mt-0.5 truncate'>
-            {sourceLabels[event.source] ?? event.source}
+            {t(sourceLabels[event.source] ?? event.source)}
           </p>
         </div>
         <div>

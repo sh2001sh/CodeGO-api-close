@@ -249,9 +249,6 @@ export function PaymentMethodsVisualEditor({
             </PopoverTrigger>
             <PopoverContent className='w-60'>
               <div className='space-y-2'>
-                <p className='text-muted-foreground text-xs'>
-                  {t('Quick insert common payment methods')}
-                </p>
                 <div className='space-y-1'>
                   {PAYMENT_TEMPLATES.map((item) => (
                     <Button

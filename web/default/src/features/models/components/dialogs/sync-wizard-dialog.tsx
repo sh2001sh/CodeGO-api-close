@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import interfaceI18n from '@/i18n/config'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -182,7 +183,7 @@ export function SyncWizardDialog({
                           <span className='font-medium'>{option.label}</span>
                           {option.value === 'official' && (
                             <StatusBadge
-                              label='Default'
+                              label={interfaceI18n.t('Default')}
                               variant='neutral'
                               copyable={false}
                             />

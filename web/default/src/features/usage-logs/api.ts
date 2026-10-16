@@ -1,3 +1,4 @@
+import interfaceI18n from '@/i18n/config'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -83,7 +84,7 @@ export async function getAllUserLogs(
   const pageSize = 100
   const first = await getUserLogs({ ...params, p: 1, page_size: pageSize })
   if (!first.success || !first.data) {
-    throw new Error(first.message || '用量记录加载失败')
+    throw new Error(first.message || interfaceI18n.t('用量记录加载失败'))
   }
 
   const items = [...(first.data.items as UsageLog[])]
@@ -95,7 +96,10 @@ export async function getAllUserLogs(
       page_size: pageSize,
     })
     if (!response.success || !response.data) {
-      throw new Error(response.message || `用量记录第 ${page} 页加载失败`)
+      throw new Error(
+        response.message ||
+          interfaceI18n.t('用量记录第 {{param0}} 页加载失败', { param0: page })
+      )
     }
     items.push(...(response.data.items as UsageLog[]))
   }

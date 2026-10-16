@@ -40,7 +40,6 @@ func startLedgerWorkerBackgroundTasks() {
 	startOptionSyncLoop()
 	billingapp.StartLedgerWorker(context.Background())
 	billingapp.StartOperationalSLOMonitor(context.Background())
-	commerceapp.StartDailyLuckyNumberTask()
 	auditprojection.StartReadModelWorker(context.Background())
 	startDataArchiveMaintenance(context.Background())
 	commerceapp.StartSubscriptionMaintenanceTask()

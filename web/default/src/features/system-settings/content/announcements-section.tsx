@@ -39,7 +39,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -165,6 +164,7 @@ export function AnnouncementsSection({
   })
 
   useEffect(() => {
+    if (hasChanges) return
     try {
       const parsed = JSON.parse(data || '[]')
       if (Array.isArray(parsed)) {
@@ -178,7 +178,7 @@ export function AnnouncementsSection({
     } catch {
       setAnnouncements([])
     }
-  }, [data])
+  }, [data, hasChanges])
 
   useEffect(() => {
     setIsEnabled(enabled)
@@ -321,7 +321,7 @@ export function AnnouncementsSection({
   return (
     <SettingsSection
       title={t('Announcements')}
-      description={t('Broadcast short system notices on the dashboard')}
+      description={t('Configure system announcements')}
     >
       <div className='space-y-4'>
         <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -464,16 +464,13 @@ export function AnnouncementsSection({
       </div>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className='max-w-2xl'>
+        <DialogContent className='settings-dialog max-w-2xl'>
           <DialogHeader>
             <DialogTitle>
               {editingAnnouncement
                 ? t('Edit Announcement')
                 : t('Add Announcement')}
             </DialogTitle>
-            <DialogDescription>
-              {t('Create or update system announcements for the dashboard')}
-            </DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form
@@ -487,16 +484,10 @@ export function AnnouncementsSection({
                   <FormItem>
                     <FormLabel>{t('Content')}</FormLabel>
                     <FormControl>
-                      <Textarea
-                        placeholder={t(
-                          'Enter announcement content (supports Markdown/HTML)'
-                        )}
-                        rows={4}
-                        {...field}
-                      />
+                      <Textarea rows={4} {...field} />
                     </FormControl>
-                    <FormDescription>
-                      {t('Maximum 500 characters. Supports Markdown and HTML.')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('≤ 500 · Markdown / HTML')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -514,14 +505,9 @@ export function AnnouncementsSection({
                         onChange={(date) =>
                           field.onChange(date ? date.toISOString() : '')
                         }
-                        placeholder={t('Select publish date')}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'Date and time when this announcement should be displayed'
-                      )}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -551,9 +537,7 @@ export function AnnouncementsSection({
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue
-                            placeholder={t('Select announcement type')}
-                          />
+                          <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent alignItemWithTrigger={false}>
@@ -587,10 +571,8 @@ export function AnnouncementsSection({
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'Optional supplementary information (max 100 characters)'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('≤ 100')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -614,7 +596,7 @@ export function AnnouncementsSection({
       </Dialog>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className='settings-dialog'>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('Are you sure?')}</AlertDialogTitle>
             <AlertDialogDescription>

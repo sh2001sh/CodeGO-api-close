@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import interfaceI18n from '@/i18n/config'
 import { CircleDollarSign, Save, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -185,6 +186,8 @@ function OptionalCachePrice(props: {
   onEnabledChange: (enabled: boolean) => void
   onValueChange: (value: string) => void
 }) {
+  useTranslation()
+
   return (
     <div className='border-border rounded-md border px-3 py-2.5'>
       <div className='flex items-start justify-between gap-3'>
@@ -203,7 +206,9 @@ function OptionalCachePrice(props: {
       {props.enabled && (
         <div className='mt-2 max-w-xs'>
           <PriceInput
-            label={`${props.label} / 百万 Token`}
+            label={interfaceI18n.t('{{param0}} / 百万 Token', {
+              param0: props.label,
+            })}
             value={props.value}
             allowZero
             onChange={props.onValueChange}

@@ -2,8 +2,11 @@ package translation
 
 import (
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/sh2001sh/new-api/dto"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
@@ -15,6 +18,9 @@ func (s *ChatToResponsesStreamState) addToolDelta(call dto.ToolCallResponse) ([]
 	index := 0
 	if call.Index != nil {
 		index = *call.Index
+	}
+	if index < 0 {
+		return nil, errors.New("chat completions tool call index must be non-negative")
 	}
 	tool := s.tools[index]
 	if tool == nil {
@@ -31,7 +37,7 @@ func (s *ChatToResponsesStreamState) addToolDelta(call dto.ToolCallResponse) ([]
 	if argumentDelta != "" {
 		tool.arguments.WriteString(argumentDelta)
 	}
-	if !tool.opened && tool.name != "" {
+	if !tool.opened && tool.name != "" && tool.callID != "" {
 		events = append(events, s.openTool(tool)...)
 		if tool.arguments.Len() > 0 {
 			events = append(events, s.toolArgumentDelta(tool, tool.arguments.String())...)
@@ -65,7 +71,15 @@ func (s *ChatToResponsesStreamState) toolArgumentDelta(tool *chatResponsesToolSt
 	}
 	switch tool.itemType {
 	case "custom_tool_call":
-		base.Delta = unwrapCustomToolArguments(delta)
+		input, ok := customToolInputPrefix(tool.arguments.String())
+		if !ok || !strings.HasPrefix(input, tool.emittedInput) {
+			return nil
+		}
+		base.Delta = strings.TrimPrefix(input, tool.emittedInput)
+		tool.emittedInput = input
+		if base.Delta == "" {
+			return nil
+		}
 		return []ResponsesBridgeEvent{s.event("response.custom_tool_call_input.delta", base)}
 	case "tool_search_call":
 		return nil
@@ -76,7 +90,12 @@ func (s *ChatToResponsesStreamState) toolArgumentDelta(tool *chatResponsesToolSt
 
 func (s *ChatToResponsesStreamState) closeTools() ([]ResponsesBridgeEvent, error) {
 	var events []ResponsesBridgeEvent
-	for index := 0; index < len(s.tools); index++ {
+	indexes := make([]int, 0, len(s.tools))
+	for index := range s.tools {
+		indexes = append(indexes, index)
+	}
+	sort.Ints(indexes)
+	for _, index := range indexes {
 		tool := s.tools[index]
 		if tool == nil {
 			continue
@@ -102,8 +121,14 @@ func (s *ChatToResponsesStreamState) closeToolEvents(tool *chatResponsesToolStat
 	var events []ResponsesBridgeEvent
 	switch tool.itemType {
 	case "custom_tool_call":
+		input := unwrapCustomToolArguments(arguments)
+		if strings.HasPrefix(input, tool.emittedInput) && input != tool.emittedInput {
+			events = append(events, s.event("response.custom_tool_call_input.delta", ResponsesBridgeEvent{
+				ItemID: tool.itemID, OutputIndex: intPointer(tool.outputIndex), Delta: strings.TrimPrefix(input, tool.emittedInput),
+			}))
+		}
 		events = append(events, s.event("response.custom_tool_call_input.done", ResponsesBridgeEvent{
-			ItemID: tool.itemID, OutputIndex: intPointer(tool.outputIndex), Input: unwrapCustomToolArguments(arguments),
+			ItemID: tool.itemID, OutputIndex: intPointer(tool.outputIndex), Input: input,
 		}))
 	case "tool_search_call":
 	default:
@@ -114,6 +139,86 @@ func (s *ChatToResponsesStreamState) closeToolEvents(tool *chatResponsesToolStat
 	return append(events, s.event("response.output_item.done", ResponsesBridgeEvent{
 		OutputIndex: intPointer(tool.outputIndex), Item: &item,
 	}))
+}
+
+// Decode the complete prefix of a JSON-wrapped custom-tool string, keeping
+// partial escapes for the next chunk instead of leaking JSON syntax to clients.
+func customToolInputPrefix(arguments string) (string, bool) {
+	value := strings.TrimSpace(arguments)
+	if !strings.HasPrefix(value, "{") {
+		return "", false
+	}
+	value = strings.TrimSpace(value[1:])
+	if !strings.HasPrefix(value, `"input"`) {
+		return "", false
+	}
+	value = strings.TrimSpace(value[len(`"input"`):])
+	if !strings.HasPrefix(value, ":") {
+		return "", false
+	}
+	value = strings.TrimSpace(value[1:])
+	if !strings.HasPrefix(value, `"`) {
+		return "", false
+	}
+	var decoded strings.Builder
+	for index := 1; index < len(value); {
+		if value[index] == '"' {
+			return decoded.String(), true
+		}
+		if value[index] != '\\' {
+			r, size := utf8.DecodeRuneInString(value[index:])
+			if r == utf8.RuneError && size == 1 {
+				return decoded.String(), true
+			}
+			decoded.WriteRune(r)
+			index += size
+			continue
+		}
+		if index+1 >= len(value) {
+			break
+		}
+		if value[index+1] == 'u' {
+			if index+6 > len(value) {
+				break
+			}
+			n, err := strconv.ParseUint(value[index+2:index+6], 16, 16)
+			if err != nil {
+				return "", false
+			}
+			r := rune(n)
+			index += 6
+			if r >= 0xd800 && r <= 0xdbff {
+				if index+6 > len(value) {
+					break
+				}
+				if value[index:index+2] != `\u` {
+					return "", false
+				}
+				low, err := strconv.ParseUint(value[index+2:index+6], 16, 16)
+				if err != nil || low < 0xdc00 || low > 0xdfff {
+					return "", false
+				}
+				r = utf16.DecodeRune(r, rune(low))
+				index += 6
+			} else if r >= 0xdc00 && r <= 0xdfff {
+				return "", false
+			}
+			decoded.WriteRune(r)
+			continue
+		}
+		escaped := value[index : index+2]
+		if escaped == `\/` {
+			decoded.WriteByte('/')
+		} else {
+			var unescaped string
+			if err := platformencoding.Unmarshal([]byte(`"`+escaped+`"`), &unescaped); err != nil {
+				return "", false
+			}
+			decoded.WriteString(unescaped)
+		}
+		index += 2
+	}
+	return decoded.String(), true
 }
 
 func (s *ChatToResponsesStreamState) classifyTool(name string) (itemType, originalName, namespace string) {

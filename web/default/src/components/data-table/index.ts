@@ -30,5 +30,4 @@ export { DataTablePage, type DataTablePageProps } from './data-table-page'
 export const DISABLED_ROW_DESKTOP =
   'bg-muted/85 text-muted-foreground hover:bg-muted/95'
 
-export const DISABLED_ROW_MOBILE =
-  'bg-muted/85 text-muted-foreground'
+export const DISABLED_ROW_MOBILE = 'bg-muted/85 text-muted-foreground'

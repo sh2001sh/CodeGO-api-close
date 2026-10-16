@@ -67,8 +67,8 @@ func TestAwardReferralSubscriptionResetOpportunityTx_MonthCardAwardedOnce(t *tes
 
 	summary, err := GetUserSubscriptionResetOpportunity(7101)
 	require.NoError(t, err)
-	assert.Equal(t, 1, summary.AvailableCount)
-	assert.Equal(t, 1, summary.EarnedTotal)
+	assert.Zero(t, summary.AvailableCount)
+	assert.Zero(t, summary.EarnedTotal)
 	assert.Equal(t, 0, summary.UsedTotal)
 
 	err = db.Transaction(func(tx *gorm.DB) error {
@@ -84,8 +84,8 @@ func TestAwardReferralSubscriptionResetOpportunityTx_MonthCardAwardedOnce(t *tes
 
 	summary, err = GetUserSubscriptionResetOpportunity(7101)
 	require.NoError(t, err)
-	assert.Equal(t, 1, summary.AvailableCount)
-	assert.Equal(t, 1, summary.EarnedTotal)
+	assert.Zero(t, summary.AvailableCount)
+	assert.Zero(t, summary.EarnedTotal)
 }
 
 func TestAwardReferralSubscriptionResetOpportunityTx_ExcludesCurrentSuccessfulOrder(t *testing.T) {
@@ -116,8 +116,8 @@ func TestAwardReferralSubscriptionResetOpportunityTx_ExcludesCurrentSuccessfulOr
 
 	summary, err := GetUserSubscriptionResetOpportunity(7111)
 	require.NoError(t, err)
-	assert.Equal(t, 1, summary.AvailableCount)
-	assert.Equal(t, 1, summary.EarnedTotal)
+	assert.Zero(t, summary.AvailableCount)
+	assert.Zero(t, summary.EarnedTotal)
 }
 
 func TestAwardReferralSubscriptionResetOpportunityTx_AllowsFirstMonthCardAfterDayPass(t *testing.T) {
@@ -166,7 +166,7 @@ func TestAwardReferralSubscriptionResetOpportunityTx_AllowsFirstMonthCardAfterDa
 
 	summary, err := GetUserSubscriptionResetOpportunity(7131)
 	require.NoError(t, err)
-	assert.Equal(t, 1, summary.AvailableCount)
+	assert.Zero(t, summary.AvailableCount)
 }
 
 func TestAwardReferralSubscriptionResetOpportunityTx_RejectsLaterMonthCardPurchases(t *testing.T) {

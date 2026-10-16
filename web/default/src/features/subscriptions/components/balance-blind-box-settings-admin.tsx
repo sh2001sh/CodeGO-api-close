@@ -48,14 +48,14 @@ const schema = z.object({
     if (!parsed) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: '请输入合法的奖池 JSON 数组',
+        message: i18n.t('请输入合法的奖池 JSON 数组'),
       })
       return
     }
     if (parsed.some((tier) => tier.max_usd < tier.min_usd)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: '奖励区间最大值不能小于最小值',
+        message: i18n.t('奖励区间最大值不能小于最小值'),
       })
       return
     }
@@ -63,7 +63,9 @@ const schema = z.object({
     if (Math.abs(probability - 1) > 0.000001) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `奖池概率合计必须为 100%，当前为 ${(probability * 100).toFixed(4)}%`,
+        message: i18n.t('奖池概率合计必须为 100%，当前为 {{param0}}%', {
+          param0: (probability * 100).toFixed(4),
+        }),
       })
     }
   }),
@@ -100,7 +102,7 @@ export function BalanceBlindBoxSettingsAdmin() {
     const normalizedTiers = JSON.stringify(parseBlindBoxTiers(values.tiers))
     const updates = buildUpdates(values, settings, normalizedTiers)
     if (updates.length === 0) {
-      toast.info('没有需要保存的统一盲盒变更')
+      toast.info(i18n.t('没有需要保存的统一盲盒变更'))
       return
     }
     for (const update of updates) {
@@ -121,13 +123,6 @@ export function BalanceBlindBoxSettingsAdmin() {
           <h3 className='text-sm font-semibold'>
             <Trans i18nKey={'统一盲盒管理'} />
           </h3>
-          <p className='text-muted-foreground mt-1 text-sm leading-6'>
-            <Trans
-              i18nKey={
-                '控制统一盲盒售价、单用户每日购买数量与普通高方差奖池。人民币和统一额度入口使用同一库存与概率表，首购和大小保底使用独立有界奖池。'
-              }
-            />
-          </p>
         </div>
       </div>
 
@@ -226,13 +221,6 @@ export function BalanceBlindBoxSettingsAdmin() {
               }
             />
           </div>
-          <p className='text-muted-foreground text-xs leading-5'>
-            <Trans
-              i18nKey={
-                '普通池静态数据不作为用户收益承诺；实际累计收益率以模拟抽盒结果为准，并纳入“再来一抽”、首抽、小保底和大保底。'
-              }
-            />
-          </p>
 
           <FormField
             control={form.control}

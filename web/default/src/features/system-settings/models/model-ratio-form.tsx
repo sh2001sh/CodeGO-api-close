@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/form'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { handleSettingsAction } from '../utils/settings-action'
 import {
   ModelRatioVisualEditor,
   type ModelRatioVisualEditorHandle,
@@ -146,10 +147,8 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                     <FormLabel className='text-base'>
                       {t('Expose ratio API')}
                     </FormLabel>
-                    <FormDescription>
-                      {t(
-                        'Allow clients to query configured ratios via `/api/ratio`.'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('GET /api/ratio')}
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -163,7 +162,10 @@ export const ModelRatioForm = memo(function ModelRatioForm({
             />
 
             <div className='flex flex-wrap gap-4'>
-              <Button onClick={handleSave} disabled={isSaving}>
+              <Button
+                onClick={() => handleSettingsAction(handleSave)()}
+                disabled={isSaving}
+              >
                 {isSaving ? t('Saving...') : t('Save model prices')}
               </Button>
               <Button
@@ -177,7 +179,10 @@ export const ModelRatioForm = memo(function ModelRatioForm({
             </div>
           </div>
         ) : (
-          <form onSubmit={form.handleSubmit(onSave)} className='space-y-6'>
+          <form
+            onSubmit={handleSettingsAction(form.handleSubmit(onSave))}
+            className='space-y-6'
+          >
             <FormField
               control={form.control}
               name='ModelPrice'
@@ -187,10 +192,8 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormControl>
                     <Textarea rows={8} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'JSON map of model → USD cost per request. Takes precedence over ratio based billing.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('JSON { model: USD/request } · Priority: fixed price')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -206,10 +209,8 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormControl>
                     <Textarea rows={8} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'JSON map of model → multiplier applied to quota billing.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('JSON { model: ratio }')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -225,9 +226,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormControl>
                     <Textarea rows={8} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t('Optional ratio used when upstream cache hits occur.')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -242,11 +241,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormControl>
                     <Textarea rows={8} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Ratio applied when creating cache entries for supported models.'
-                    )}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -261,10 +256,8 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormControl>
                     <Textarea rows={8} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Applies to custom completion endpoints. JSON map of model → ratio.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('JSON { model: ratio }')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -280,11 +273,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormControl>
                     <Textarea rows={6} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Configure per-model ratio for image inputs or outputs.'
-                    )}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -299,11 +288,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormControl>
                     <Textarea rows={6} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Ratio applied to audio inputs where supported by the upstream model.'
-                    )}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -318,11 +303,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormControl>
                     <Textarea rows={6} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Ratio applied to audio completions for streaming models.'
-                    )}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -337,10 +318,8 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                     <FormLabel className='text-base'>
                       {t('Expose ratio API')}
                     </FormLabel>
-                    <FormDescription>
-                      {t(
-                        'Allow clients to query configured ratios via `/api/ratio`.'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('GET /api/ratio')}
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -353,7 +332,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
               )}
             />
 
-            <div className='flex flex-wrap gap-4'>
+            <div className='settings-save-bar flex flex-wrap gap-4'>
               <Button type='submit' disabled={isSaving}>
                 {isSaving ? t('Saving...') : t('Save model prices')}
               </Button>

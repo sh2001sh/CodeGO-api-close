@@ -121,7 +121,7 @@ export function UpstreamUpdateDialog(props: UpstreamUpdateDialogProps) {
   return (
     <>
       <Dialog open={props.open} onOpenChange={(v) => !v && props.onCancel()}>
-        <DialogContent className='sm:max-w-lg'>
+        <DialogContent className='admin-editor channel-tool-dialog sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle>{t('Upstream Model Updates')}</DialogTitle>
           </DialogHeader>

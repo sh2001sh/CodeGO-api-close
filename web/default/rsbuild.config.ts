@@ -73,7 +73,10 @@ export default defineConfig(({ envMode }) => {
     server: {
       host: '0.0.0.0',
       port: frontendPort,
-      historyApiFallback: true,
+      historyApiFallback: {
+        // Model IDs can contain periods; their detail URLs remain SPA routes.
+        rewrites: [{ from: /^\/pricing\/[^/]+\/?$/, to: '/index.html' }],
+      },
       proxy: devProxy,
     },
     output: {

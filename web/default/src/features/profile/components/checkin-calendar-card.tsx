@@ -254,7 +254,7 @@ export function CheckinCalendarCard({
           }
         }}
       >
-        <DialogContent className='sm:max-w-md'>
+        <DialogContent className='profile-dialog sm:max-w-md'>
           <DialogHeader>
             <DialogTitle>{t('Security Check')}</DialogTitle>
           </DialogHeader>
@@ -298,7 +298,7 @@ export function CheckinCalendarCard({
                     {t('Daily Check-in')}
                   </h3>
                   {checkedToday && (
-                    <div className='inline-flex items-center gap-1 rounded-md bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success sm:gap-1.5 sm:px-2.5 sm:text-xs'>
+                    <div className='bg-success/10 text-success inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium sm:gap-1.5 sm:px-2.5 sm:text-xs'>
                       <Sparkles className='h-2.5 w-2.5 sm:h-3 sm:w-3' />
                       {t('Checked in')}
                     </div>
@@ -435,7 +435,7 @@ export function CheckinCalendarCard({
                       >
                         <span className='tabular-nums'>{dayNum}</span>
                         {isCheckedIn && !isToday && (
-                          <span className='absolute bottom-0.5 h-1 w-1 rounded-full bg-success sm:bottom-1' />
+                          <span className='bg-success absolute bottom-0.5 h-1 w-1 rounded-full sm:bottom-1' />
                         )}
                       </Button>
                     )

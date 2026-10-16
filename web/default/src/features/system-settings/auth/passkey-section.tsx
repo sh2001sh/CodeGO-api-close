@@ -45,6 +45,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 
 const passkeySchema = z.object({
   'passkey.enabled': z.boolean(),
@@ -153,6 +154,7 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
     for (const update of updates) {
       await updateOption.mutateAsync(update)
     }
+    form.reset(form.getValues())
   }
 
   return (
@@ -161,7 +163,10 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
       description={t('Configure Passkey (WebAuthn) login settings')}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
+          className='space-y-6'
+        >
           <FormField
             control={form.control}
             name='passkey.enabled'
@@ -171,11 +176,6 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
                   <FormLabel className='text-base'>
                     {t('Enable Passkey')}
                   </FormLabel>
-                  <FormDescription>
-                    {t(
-                      'Allow users to register and sign in with Passkey (WebAuthn)'
-                    )}
-                  </FormDescription>
                 </div>
                 <FormControl>
                   <Switch
@@ -200,11 +200,7 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
                     value={field.value ?? ''}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'Human-readable name shown to users during Passkey prompts.'
-                  )}
-                </FormDescription>
+
                 <FormMessage />
               </FormItem>
             )}
@@ -223,10 +219,8 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
                     value={field.value ?? ''}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'The effective domain for Passkey registration. Must match the current domain or be its parent domain.'
-                  )}
+                <FormDescription className='settings-field-fact'>
+                  {t('RP ID = current domain or parent domain')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -250,7 +244,7 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
                     onValueChange={field.onChange}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={t('Select requirement')} />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent alignItemWithTrigger={false}>
                       <SelectGroup>
@@ -267,11 +261,7 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
                     </SelectContent>
                   </Select>
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'Controls whether user verification (biometrics/PIN) is required during Passkey flows.'
-                  )}
-                </FormDescription>
+
                 <FormMessage />
               </FormItem>
             )}
@@ -309,10 +299,8 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
                     </SelectContent>
                   </Select>
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'Built-in: phone fingerprint/face, or Windows Hello; External: USB security key'
-                  )}
+                <FormDescription className='settings-field-fact'>
+                  {t('Platform / USB security key')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -328,10 +316,8 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
                   <FormLabel className='text-base'>
                     {t('Allow Insecure Origins')}
                   </FormLabel>
-                  <FormDescription>
-                    {t(
-                      'Permit Passkey registration on non-HTTPS origins (only recommended for development)'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('HTTP · Development only')}
                   </FormDescription>
                 </div>
                 <FormControl>
@@ -358,17 +344,17 @@ export function PasskeySection({ defaultValues }: PasskeySectionProps) {
                     value={field.value ?? ''}
                   />
                 </FormControl>
-                <FormDescription>
-                  {t(
-                    'List of origins (one per line) allowed for Passkey registration and authentication.'
-                  )}
+                <FormDescription className='settings-field-fact'>
+                  {t('One origin per line')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <Button type='submit'>{t('Save Changes')}</Button>
+          <div className='settings-save-bar'>
+            <Button type='submit'>{t('Save Changes')}</Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

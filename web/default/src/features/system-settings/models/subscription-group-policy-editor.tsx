@@ -112,9 +112,12 @@ export function SubscriptionGroupPolicyEditor({
                                 enabled: checked === true,
                               })
                             }
-                            aria-label={t('Allow subscription quota for {{group}}', {
-                              group,
-                            })}
+                            aria-label={t(
+                              'Allow subscription quota for {{group}}',
+                              {
+                                group,
+                              }
+                            )}
                           />
                         </div>
                       </TableCell>

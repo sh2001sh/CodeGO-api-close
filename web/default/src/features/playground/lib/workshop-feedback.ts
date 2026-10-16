@@ -1,3 +1,4 @@
+import interfaceI18n from '@/i18n/config'
 import { toast } from 'sonner'
 
 const SUCCESS_STREAK_KEY = 'workshop:success-streak'
@@ -29,7 +30,7 @@ export function maybeShowNightWorkshopToast() {
   const todayKey = `${NIGHT_TRAINING_KEY}:${getTodayToken()}`
   if (window.localStorage.getItem(todayKey) === '1') return
   window.localStorage.setItem(todayKey, '1')
-  toast.info('深夜特训开始了，今晚的第一声召唤格外清醒')
+  toast.info(interfaceI18n.t('深夜特训开始了，今晚的第一声召唤格外清醒'))
 }
 
 export function recordWorkshopCallSuccess() {
@@ -37,7 +38,7 @@ export function recordWorkshopCallSuccess() {
   writeCounter(SUCCESS_STREAK_KEY, nextSuccessCount)
   writeCounter(FAILURE_STREAK_KEY, 0)
   if (nextSuccessCount === 5) {
-    toast.success('精灵连击已触发，连续 5 次召唤成功')
+    toast.success(interfaceI18n.t('精灵连击已触发，连续 5 次召唤成功'))
   }
 }
 
@@ -46,6 +47,6 @@ export function recordWorkshopCallFailure() {
   writeCounter(FAILURE_STREAK_KEY, nextFailureCount)
   writeCounter(SUCCESS_STREAK_KEY, 0)
   if (nextFailureCount === 3) {
-    toast.error('精灵有点累了，稍后再试一次')
+    toast.error(interfaceI18n.t('精灵有点累了，稍后再试一次'))
   }
 }

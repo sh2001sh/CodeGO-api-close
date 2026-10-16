@@ -44,10 +44,14 @@ func TestMarketplaceRoutesRequireAuthentication(t *testing.T) {
 		"/api/marketplace/auto-route-pool",
 		"/api/marketplace/route-pools",
 		"/api/marketplace/channels/mine",
+		"/api/marketplace/channels/mine?view=index",
+		"/api/marketplace/channels/mine?ids=some-channel",
 		"/api/marketplace/channels/mine/logs",
 		"/api/marketplace/channels/mine/logs/export",
 		"/api/marketplace/security-audit/events/export",
 		"/api/marketplace/admin/channels",
+		"/api/marketplace/shop/mine",
+		"/api/marketplace/admin/reports",
 	} {
 		t.Run(target, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, target, nil)
@@ -64,6 +68,13 @@ func TestMarketplaceRoutesAreRegistered(t *testing.T) {
 	RegisterMarketplaceRoutes(engine.Group("/api"))
 
 	want := map[string]bool{
+		"GET /api/marketplace/shops":                           false,
+		"GET /api/marketplace/shop/mine":                       false,
+		"PUT /api/marketplace/shop/mine":                       false,
+		"PUT /api/marketplace/shops/:id/rating":                false,
+		"POST /api/marketplace/reports":                        false,
+		"GET /api/marketplace/admin/reports":                   false,
+		"POST /api/marketplace/admin/reports/:id/resolve":      false,
 		"GET /api/marketplace/groups":                          false,
 		"GET /api/marketplace/multiplier-trends":               false,
 		"GET /api/marketplace/auto-route-pool":                 false,
@@ -101,6 +112,23 @@ func TestMarketplaceRoutesAreRegistered(t *testing.T) {
 	}
 	for route, registered := range want {
 		require.Truef(t, registered, "route %s was not registered", route)
+	}
+}
+
+func TestMarketplacePresentationMutationsRequireAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(sessions.Sessions("session", cookie.NewStore([]byte("marketplace-route-test"))))
+	RegisterMarketplaceRoutes(engine.Group("/api"))
+	for _, route := range []struct{ method, path string }{
+		{http.MethodPut, "/api/marketplace/shop/mine"},
+		{http.MethodPut, "/api/marketplace/shops/10/rating"},
+		{http.MethodPost, "/api/marketplace/reports"},
+		{http.MethodPost, "/api/marketplace/admin/reports/1/resolve"},
+	} {
+		response := httptest.NewRecorder()
+		engine.ServeHTTP(response, httptest.NewRequest(route.method, route.path, nil))
+		require.Equal(t, http.StatusUnauthorized, response.Code, route.path)
 	}
 }
 

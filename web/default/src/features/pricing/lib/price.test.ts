@@ -20,17 +20,17 @@ const model: PricingModel = {
 
 describe('public cache prices', () => {
   test('reads tier cache prices even without legacy cache write ratio', () => {
-    assert.equal(formatPrice(model, 'create_cache', 'M'), '$3.125')
-    assert.equal(formatPrice(model, 'cache', 'M'), '$0.25')
-    assert.equal(formatPrice(model, 'create_cache', 'K'), '$0.003125')
+    assert.equal(formatPrice(model, 'create_cache', 'M'), '3.125 credits')
+    assert.equal(formatPrice(model, 'cache', 'M'), '0.25 credits')
+    assert.equal(formatPrice(model, 'create_cache', 'K'), '0.003125 credits')
   })
 
   test('applies the selected group multiplier to each price', () => {
     for (const [type, expected] of [
-      ['input', '$1'],
-      ['output', '$6'],
-      ['create_cache', '$1.25'],
-      ['cache', '$0.1'],
+      ['input', '1 credits'],
+      ['output', '6 credits'],
+      ['create_cache', '1.25 credits'],
+      ['cache', '0.1 credits'],
     ] as const) {
       assert.equal(
         formatGroupPrice(model, 'third-party', type, 'M', false, 1, 1, {
@@ -63,13 +63,13 @@ describe('public cache prices', () => {
     assert.equal(formatPrice(fixed, 'create_cache', 'M'), '-')
     assert.equal(
       formatPrice({ ...fixed, create_cache_ratio: 0 }, 'create_cache', 'M'),
-      '$0'
+      '0 credits'
     )
     assert.equal(
       formatGroupPrice(model, 'free', 'create_cache', 'M', false, 1, 1, {
         free: 0,
       }),
-      '$0'
+      '0 credits'
     )
   })
 

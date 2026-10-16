@@ -25,7 +25,6 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -33,7 +32,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -119,14 +117,11 @@ export function CreemProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-[500px]'>
+      <DialogContent className='settings-dialog sm:max-w-[500px]'>
         <DialogHeader>
           <DialogTitle>
             {isEditMode ? t('Edit product') : t('Add product')}
           </DialogTitle>
-          <DialogDescription>
-            {t('Configure a Creem product for user recharge options.')}
-          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -143,9 +138,7 @@ export function CreemProductDialog({
                   <FormControl>
                     <Input placeholder={t('e.g., Basic Package')} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    {t('Display name shown to users.')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -164,9 +157,7 @@ export function CreemProductDialog({
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('Creem product ID from your Creem dashboard.')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -189,7 +180,7 @@ export function CreemProductDialog({
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={t('Select currency')} />
+                          <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent alignItemWithTrigger={false}>
@@ -241,9 +232,7 @@ export function CreemProductDialog({
                       onChange={(e) => field.onChange(e.target.valueAsNumber)}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('Amount of quota to credit to user account.')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}

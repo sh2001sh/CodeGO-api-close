@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -46,35 +48,132 @@ func ResponsesWebsocket(c *gin.Context) {
 	defer cancelSession()
 	deadline, _ := sessionCtx.Deadline()
 	_ = conn.SetReadDeadline(deadline)
-	state := &responsesWebsocketState{}
 	upstreamSession := responsesws.NewSession()
 	defer upstreamSession.Close()
+	serveResponsesWebsocket(conn, sessionCtx, cancelSession, func(ctx context.Context, writer *responsesWebsocketHTTPWriter, body []byte) {
+		executeResponsesWebsocketTurn(c, writer, ctx, upstreamSession, body)
+	})
+}
+
+// Keep reading control frames while the relay runs. Only one turn uses the
+// pinned route and continuation cache at a time; data writes share one lock.
+func serveResponsesWebsocket(conn *websocket.Conn, sessionCtx context.Context, cancelSession context.CancelFunc, execute func(context.Context, *responsesWebsocketHTTPWriter, []byte)) {
+	state := &responsesWebsocketState{}
+	var writeMu sync.Mutex
+	writePayload := func(payload []byte) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		_ = conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
+		return conn.WriteMessage(websocket.TextMessage, payload)
+	}
+	writeError := func(status int, code, message, param string) {
+		if writePayload(responsesWebsocketErrorPayload(status, code, message, param)) != nil {
+			cancelSession()
+		}
+	}
+	messages := make(chan []byte)
+	readerDone := make(chan struct{})
+	conn.SetReadLimit(32 << 20)
+	go func() {
+		defer close(readerDone)
+		defer cancelSession()
+		for {
+			messageType, payload, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			if messageType != websocket.TextMessage && messageType != websocket.BinaryMessage {
+				continue
+			}
+			select {
+			case messages <- payload:
+			case <-sessionCtx.Done():
+				return
+			}
+		}
+	}()
+	var pending [][]byte
+	var pendingBytes int
+	var turn *responsesWebsocketTurn
+	var writer *responsesWebsocketHTTPWriter
+	var finished chan struct{}
+	var cancelTurn context.CancelFunc
+	defer func() {
+		cancelSession()
+		_ = conn.Close()
+		if cancelTurn != nil {
+			cancelTurn()
+			<-finished // Do not release the Gin context before billing unwinds.
+		}
+		<-readerDone
+	}()
 
 	for {
-		if sessionCtx.Err() != nil {
-			_ = writeResponsesWebsocketError(conn, http.StatusBadRequest, "websocket_connection_limit_reached", "Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue.", "")
-			return
-		}
-		messageType, payload, readErr := conn.ReadMessage()
-		if readErr != nil {
-			if sessionCtx.Err() != nil {
-				_ = writeResponsesWebsocketError(conn, http.StatusBadRequest, "websocket_connection_limit_reached", "Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue.", "")
+		var payload []byte
+		if finished == nil && len(pending) > 0 {
+			payload, pending = pending[0], pending[1:]
+			pendingBytes -= len(payload)
+		} else {
+			select {
+			case <-sessionCtx.Done():
+				return
+			case <-finished:
+				cancelTurn()
+				cancelTurn = nil
+				finished = nil
+				responseID, output, completed := writer.Completion()
+				if writer.Interrupted() {
+					if err := writer.SendCancelled(); err != nil {
+						return
+					}
+				}
+				if completed {
+					state.complete(turn, responseID, output)
+				} else {
+					state.fail(turn)
+				}
+				continue
+			case payload = <-messages:
 			}
+		}
+		if sessionCtx.Err() != nil {
 			return
 		}
-		if messageType != websocket.TextMessage && messageType != websocket.BinaryMessage {
+		var event struct {
+			Type       string `json:"type"`
+			ResponseID string `json:"response_id"`
+		}
+		if json.Unmarshal(payload, &event) == nil && (event.Type == "response.interrupt" || event.Type == "response.cancel") {
+			if writer != nil && finished != nil {
+				if !writer.Interrupt(event.ResponseID) {
+					writeError(400, "response_not_found", "No active response matches response_id", "response_id")
+				}
+			} else if event.ResponseID != "" {
+				writeError(400, "response_not_found", "No active response matches response_id", "response_id")
+			}
 			continue
 		}
-
-		turn, normalizeErr := state.normalize(payload)
+		if finished != nil {
+			// Bound queued input without blocking control frames or retaining
+			// an unbounded collection of large conversation bodies.
+			if len(pending) >= 16 || pendingBytes+len(payload) > 32<<20 {
+				writeError(429, "websocket_queue_full", "Too many queued websocket requests", "")
+			} else {
+				pending = append(pending, payload)
+				pendingBytes += len(payload)
+			}
+			continue
+		}
+		var normalizeErr error
+		turn, normalizeErr = state.normalize(payload)
 		if normalizeErr != nil {
 			status, code, message, param := responsesWebsocketErrorDetails(normalizeErr)
-			_ = writeResponsesWebsocketError(conn, status, code, message, param)
+			writeError(status, code, message, param)
 			continue
 		}
 		if len(turn.prewarmPayloads) > 0 {
 			for _, responsePayload := range turn.prewarmPayloads {
-				if conn.WriteMessage(websocket.TextMessage, responsePayload) != nil {
+				if writePayload(responsePayload) != nil {
 					return
 				}
 			}
@@ -88,15 +187,24 @@ func ResponsesWebsocket(c *gin.Context) {
 			continue
 		}
 
-		responseID, output, completed, executeErr := executeResponsesWebsocketTurn(c, conn, sessionCtx, upstreamSession, turn.body)
-		if executeErr != nil {
-			return
-		}
-		if completed {
-			state.complete(turn, responseID, output)
-		} else {
-			state.fail(turn)
-		}
+		var ctx context.Context
+		ctx, cancelTurn = context.WithCancel(sessionCtx)
+		writer = newResponsesWebsocketHTTPWriter(conn, cancelTurn)
+		writer.writePayload = writePayload
+		finished = make(chan struct{})
+		go func(ctx context.Context, w *responsesWebsocketHTTPWriter, body []byte, done chan struct{}) {
+			defer close(done)
+			defer func() {
+				if recover() != nil {
+					log.Print("responses websocket relay panicked")
+					cancelSession()
+				}
+			}()
+			execute(ctx, w, body)
+			if err := w.Finish(); err != nil {
+				cancelSession()
+			}
+		}(ctx, writer, turn.body, finished)
 	}
 }
 
@@ -108,10 +216,10 @@ func responsesWebsocketErrorDetails(err error) (int, string, string, string) {
 	return http.StatusBadRequest, "invalid_request_error", err.Error(), ""
 }
 
-func executeResponsesWebsocketTurn(parent *gin.Context, conn *websocket.Conn, sessionCtx context.Context, upstreamSession *responsesws.Session, body []byte) (string, []byte, bool, error) {
-	turnCtx, cancelTurn := context.WithCancel(sessionCtx)
-	defer cancelTurn()
-	writer := newResponsesWebsocketHTTPWriter(conn, cancelTurn)
+func executeResponsesWebsocketTurn(parent *gin.Context, writer *responsesWebsocketHTTPWriter, turnCtx context.Context, upstreamSession *responsesws.Session, body []byte) {
+	if turnCtx.Err() != nil {
+		return
+	}
 	c := newResponsesWebsocketTurnContext(parent, writer, turnCtx, upstreamSession, body)
 	defer platformhttpx.CleanupBodyStorage(c)
 	defer saveResponsesWebsocketRoutingContext(parent, c, upstreamSession)
@@ -121,11 +229,6 @@ func executeResponsesWebsocketTurn(parent *gin.Context, conn *websocket.Conn, se
 			relayRequest(c, types.RelayFormatOpenAIResponses)
 		}),
 	)(c)
-	if err := writer.Finish(); err != nil {
-		return "", nil, false, err
-	}
-	responseID, output, completed := writer.Completion()
-	return responseID, output, completed, nil
 }
 
 func newResponsesWebsocketTurnContext(parent *gin.Context, writer http.ResponseWriter, requestContext context.Context, upstreamSession *responsesws.Session, body []byte) *gin.Context {
@@ -201,11 +304,11 @@ func cloneGinContextKeys(source map[any]any) map[any]any {
 	return cloned
 }
 
-func writeResponsesWebsocketError(conn *websocket.Conn, status int, code, message, param string) error {
+func responsesWebsocketErrorPayload(status int, code, message, param string) []byte {
 	errorBody := map[string]any{"type": "invalid_request_error", "code": code, "message": message}
 	if strings.TrimSpace(param) != "" {
 		errorBody["param"] = param
 	}
 	payload, _ := json.Marshal(map[string]any{"type": "error", "status": status, "error": errorBody})
-	return conn.WriteMessage(websocket.TextMessage, payload)
+	return payload
 }

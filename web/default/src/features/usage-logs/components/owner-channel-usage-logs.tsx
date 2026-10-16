@@ -5,14 +5,8 @@ import {
   type PaginationState,
   useReactTable,
 } from '@tanstack/react-table'
-import {
-  Activity,
-  Download,
-  RefreshCcw,
-  RotateCcw,
-  Search,
-  ShieldCheck,
-} from 'lucide-react'
+import { getIntlLocale } from '@/i18n/format'
+import { Activity, Download, RefreshCcw, RotateCcw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import dayjs from '@/lib/dayjs'
@@ -28,11 +22,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TableCell, TableRow } from '@/components/ui/table'
+import { BoundedSelect } from '@/components/bounded-select'
 import { DataTablePage } from '@/components/data-table'
 import { exportMyMarketplaceUsageLogs } from '@/features/marketplace/api'
 import { useMyMarketplaceUsageLogs } from '@/features/marketplace/hooks'
 import type {
-  MarketplaceChannel,
+  OwnerChannelOption,
   MarketplaceOwnerUsageLog,
 } from '@/features/marketplace/types'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
@@ -45,7 +40,7 @@ interface DateRange {
 }
 
 export function OwnerChannelUsageLogs(props: {
-  channels: MarketplaceChannel[]
+  channels: OwnerChannelOption[]
   focus?: {
     channelId: string
     requestId: string
@@ -108,10 +103,6 @@ export function OwnerChannelUsageLogs(props: {
     }
   }, [pageCount, pagination.pageIndex])
 
-  const periodLabel = React.useMemo(
-    () => formatPeriodLabel(range, t),
-    [range, t]
-  )
   const updateChannel = (value: string | null) => {
     if (!value) return
     setChannelId(value)
@@ -182,7 +173,6 @@ export function OwnerChannelUsageLogs(props: {
             status={status}
             search={searchDraft}
             range={range}
-            periodLabel={periodLabel}
             summary={data?.summary}
             fetching={query.isFetching}
             onChannelChange={updateChannel}
@@ -219,12 +209,11 @@ export function OwnerChannelUsageLogs(props: {
 }
 
 function OwnerLogToolbar(props: {
-  channels: MarketplaceChannel[]
+  channels: OwnerChannelOption[]
   channelId: string
   status: string
   search: string
   range: DateRange
-  periodLabel: string
   summary?: {
     request_count: number
     success_count: number
@@ -247,19 +236,24 @@ function OwnerLogToolbar(props: {
   onExport: () => void
 }) {
   const { t } = useTranslation()
+  const channelOptions = React.useMemo(
+    () => [
+      { value: 'all', label: t('全部渠道') },
+      ...props.channels.map((channel) => ({
+        value: channel.id,
+        label: `${channel.system_display_name}${channel.deleted_at ? ` (${t('已删除')})` : ''}`,
+      })),
+    ],
+    [props.channels, t]
+  )
   return (
-    <div className='space-y-3'>
+    <div className='console-usage-table space-y-4'>
       <div className='flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between'>
         <div className='min-w-0'>
           <div className='flex items-center gap-2 font-semibold'>
             <Activity className='text-primary size-4' />
             {t('渠道使用日志')}
           </div>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            {t(
-              '按渠道和时间范围核对调用、用户扣费与逐笔收入。套餐扣费按余额等值展示。'
-            )}
-          </p>
         </div>
         <div className='flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end'>
           <form
@@ -286,28 +280,13 @@ function OwnerLogToolbar(props: {
               <Search />
             </Button>
           </form>
-          <Select value={props.channelId} onValueChange={props.onChannelChange}>
-            <SelectTrigger className='w-full sm:w-56'>
-              <SelectValue>
-                {props.channelId === 'all'
-                  ? t('全部渠道')
-                  : props.channels.find(
-                      (channel) => channel.id === props.channelId
-                    )?.system_display_name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectGroup>
-                <SelectItem value='all'>{t('全部渠道')}</SelectItem>
-                {props.channels.map((channel) => (
-                  <SelectItem key={channel.id} value={channel.id}>
-                    {channel.system_display_name}
-                    {channel.deleted_at ? ` (${t('已删除')})` : ''}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <BoundedSelect
+            value={props.channelId}
+            options={channelOptions}
+            onValueChange={props.onChannelChange}
+            aria-label={t('渠道使用日志')}
+            className='w-full sm:w-56'
+          />
           <Select value={props.status} onValueChange={props.onStatusChange}>
             <SelectTrigger className='w-full sm:w-32'>
               <SelectValue>
@@ -365,17 +344,6 @@ function OwnerLogToolbar(props: {
           </Button>
         </div>
       </div>
-      <div className='border-border bg-info/5 text-muted-foreground flex items-start gap-2 rounded-md border px-3 py-2.5 text-xs'>
-        <ShieldCheck className='text-info mt-0.5 size-3.5 shrink-0' />
-        <span>
-          {t(
-            '“上游尝试”包含跨渠道重试前真实发出的每一次请求；“计费请求”只统计已落调用日志的请求。仅隐藏凭据、请求正文和用户隐私。当前统计范围：{{period}}。',
-            {
-              period: props.periodLabel,
-            }
-          )}
-        </span>
-      </div>
       <SummaryBand summary={props.summary} />
     </div>
   )
@@ -387,19 +355,25 @@ function SummaryBand(props: { summary?: OwnerLogToolbarProps['summary'] }) {
   const items = [
     {
       label: t('上游尝试'),
-      value: (summary?.upstream_attempt_count ?? 0).toLocaleString(),
+      value: (summary?.upstream_attempt_count ?? 0).toLocaleString(
+        getIntlLocale()
+      ),
     },
     {
       label: t('上游成功'),
-      value: (summary?.upstream_success_count ?? 0).toLocaleString(),
+      value: (summary?.upstream_success_count ?? 0).toLocaleString(
+        getIntlLocale()
+      ),
     },
     {
       label: t('上游失败'),
-      value: (summary?.upstream_failed_count ?? 0).toLocaleString(),
+      value: (summary?.upstream_failed_count ?? 0).toLocaleString(
+        getIntlLocale()
+      ),
     },
     {
       label: t('计费请求'),
-      value: (summary?.request_count ?? 0).toLocaleString(),
+      value: (summary?.request_count ?? 0).toLocaleString(getIntlLocale()),
     },
     {
       label: t('用户总扣费'),
@@ -408,11 +382,11 @@ function SummaryBand(props: { summary?: OwnerLogToolbarProps['summary'] }) {
     { label: t('渠道总收入'), value: formatQuota(summary?.owner_income ?? 0) },
   ]
   return (
-    <div className='border-border bg-card grid overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-6'>
+    <div className='solaris-owner-stats grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
       {items.map((item) => (
         <div
           key={item.label}
-          className='border-border min-w-0 border-b px-4 py-3 sm:border-r xl:border-b-0'
+          className='bg-card min-w-0 rounded-2xl border p-5'
         >
           <div className='text-muted-foreground text-xs'>{item.label}</div>
           <div className='mt-1 truncate font-semibold tabular-nums'>
@@ -434,13 +408,4 @@ function resetPage(
   setPagination: React.Dispatch<React.SetStateAction<PaginationState>>
 ) {
   setPagination((current) => ({ ...current, pageIndex: 0 }))
-}
-
-function formatPeriodLabel(range: DateRange, t: (key: string) => string) {
-  if (!range.start && !range.end) return t('全部时间')
-  const start = range.start
-    ? dayjs(range.start).format('YYYY-MM-DD HH:mm')
-    : '-'
-  const end = range.end ? dayjs(range.end).format('YYYY-MM-DD HH:mm') : '-'
-  return `${start} ~ ${end}`
 }

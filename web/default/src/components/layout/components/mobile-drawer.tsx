@@ -17,9 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
-import { X, User, Wallet, LogOut, ReceiptText } from 'lucide-react'
+import { X, User, Wallet, LogOut } from 'lucide-react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import type { AuthUser } from '@/stores/auth-store'
 import useDialogState from '@/hooks/use-dialog'
 import { useUserDisplay } from '@/hooks/use-user-display'
@@ -139,15 +139,6 @@ function MobileUserProfile({ user, onNavigate }: MobileUserProfileProps) {
         >
           <Wallet className='size-4' />
           {t('Wallet')}
-        </Link>
-
-        <Link
-          to='/invoices'
-          onClick={onNavigate}
-          className='text-primary/60 hover:text-primary/80 border-border flex items-center gap-2.5 border-b p-2.5 transition-colors'
-        >
-          <ReceiptText className='size-4' />
-          <Trans i18nKey={'电子发票'} />
         </Link>
 
         {/* Sign out - consistent style */}

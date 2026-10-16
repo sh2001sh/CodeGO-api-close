@@ -1,7 +1,6 @@
 package app
 
 import (
-	"gorm.io/gorm"
 	"testing"
 	"time"
 
@@ -50,8 +49,8 @@ func TestPauseAdminChannelKeepsEarnings(t *testing.T) {
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
 	require.Equal(t, marketplacedomain.LifecycleSuspended, channel.Status)
 	require.Equal(t, marketplacedomain.LifecycleSuspended, group.LifecycleStatus)
-	require.ErrorIs(t, db.First(&marketplaceschema.AutoRoutePoolMember{}, "group_id = ?", group.ID).Error, gorm.ErrRecordNotFound)
-	require.ErrorIs(t, db.First(&marketplaceschema.RoutePoolMember{}, "group_id = ?", group.ID).Error, gorm.ErrRecordNotFound)
+	require.NoError(t, db.First(&marketplaceschema.AutoRoutePoolMember{}, "group_id = ?", group.ID).Error)
+	require.NoError(t, db.First(&marketplaceschema.RoutePoolMember{}, "group_id = ?", group.ID).Error)
 }
 
 func TestPauseAdminChannelDisablesLinkedGatewayChannel(t *testing.T) {
@@ -64,7 +63,7 @@ func TestPauseAdminChannelDisablesLinkedGatewayChannel(t *testing.T) {
 		&marketplaceschema.AutoRoutePoolMember{},
 		&marketplaceschema.RoutePoolMember{},
 	))
-	internal := gatewayschema.Channel{Id: 901, Key: "test-key", Status: constant.ChannelStatusEnabled}
+	internal := gatewayschema.Channel{Id: 901, Key: "test-key", Status: constant.ChannelStatusEnabled, Group: "original-group", Models: "gpt-5"}
 	channel := marketplaceschema.Channel{
 		ID: "pause-linked-channel", OwnerUserID: 42, ProviderType: "openai_compatible",
 		BaseURLCiphertext: "encrypted-url", CredentialCiphertext: "encrypted-key",
@@ -82,13 +81,22 @@ func TestPauseAdminChannelDisablesLinkedGatewayChannel(t *testing.T) {
 	require.NoError(t, PauseAdminChannel(channel.ID, false))
 	require.NoError(t, db.First(&internal, internal.Id).Error)
 	require.Equal(t, constant.ChannelStatusEnabled, internal.Status)
+	var ability gatewayschema.Ability
+	require.NoError(t, db.First(&ability, "channel_id = ?", internal.Id).Error)
+	require.True(t, ability.Enabled)
+	require.Equal(t, "original-group", ability.Group)
+	require.Equal(t, "gpt-5", ability.Model)
 }
 
-func TestOwnerPauseRemovesSavedPoolMembersWithoutRestoringThemOnResume(t *testing.T) {
+func TestOwnerPausePreservesSavedPoolMembersOnResume(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{},
-		&marketplaceschema.AutoRoutePoolMember{}, &marketplaceschema.RoutePoolMember{}))
-	channel := marketplaceschema.Channel{ID: "owner-pause-channel", OwnerUserID: 42, Status: marketplacedomain.LifecycleActive}
+		&marketplaceschema.AutoRoutePoolMember{}, &marketplaceschema.RoutePoolMember{}, &marketplaceschema.RankingSnapshot{},
+		&gatewayschema.Channel{}, &gatewayschema.Ability{}))
+	internal := gatewayschema.Channel{Id: 902, Key: "pause-test-key", Group: "internal-owner-pause-group", Models: "gpt-5", Status: constant.ChannelStatusEnabled}
+	require.NoError(t, db.Create(&internal).Error)
+	channel := marketplaceschema.Channel{ID: "owner-pause-channel", OwnerUserID: 42, Status: marketplacedomain.LifecycleActive,
+		InternalChannelID: &internal.Id, DeclaredModels: `["gpt-5"]`}
 	group := autoRouteTestGroup("owner-pause-group", channel.ID, channel.OwnerUserID, 1)
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, db.Create(&group).Error)
@@ -96,12 +104,18 @@ func TestOwnerPauseRemovesSavedPoolMembersWithoutRestoringThemOnResume(t *testin
 	require.NoError(t, db.Create(&marketplaceschema.RoutePoolMember{PoolID: "saved", GroupID: group.ID, Priority: 1}).Error)
 
 	require.NoError(t, PauseOwnerChannel(42, channel.ID, true))
+	_, err := ResolveAutoRouteBindings(7, "gpt-5", 0)
+	require.Error(t, err, "paused members must not accept traffic")
 	require.NoError(t, PauseOwnerChannel(42, channel.ID, false))
+	bindings, err := ResolveAutoRouteBindings(7, "gpt-5", 0)
+	require.NoError(t, err)
+	require.Len(t, bindings, 1)
+	require.Equal(t, group.ID, bindings[0].GroupID)
 	var autoCount, namedCount int64
 	require.NoError(t, db.Model(&marketplaceschema.AutoRoutePoolMember{}).Where("group_id = ?", group.ID).Count(&autoCount).Error)
 	require.NoError(t, db.Model(&marketplaceschema.RoutePoolMember{}).Where("group_id = ?", group.ID).Count(&namedCount).Error)
-	require.Zero(t, autoCount)
-	require.Zero(t, namedCount)
+	require.EqualValues(t, 1, autoCount)
+	require.EqualValues(t, 1, namedCount)
 }
 
 func TestListOwnerChannelsIncludesIncomeSummary(t *testing.T) {

@@ -1,5 +1,9 @@
+import { getIntlLocale } from '@/i18n/format'
 import type { TFunction } from 'i18next'
-import { isMonthlyCardPlan } from '@/features/subscriptions/lib'
+import {
+  isActiveUserSubscription,
+  isMonthlyCardPlan,
+} from '@/features/subscriptions/lib'
 import type {
   PlanRecord,
   UserSubscriptionRecord,
@@ -13,7 +17,7 @@ export interface WalletPlanMeta {
 
 export function formatWalletDateTime(timestamp?: number): string {
   if (!timestamp) return '--'
-  return new Date(timestamp * 1000).toLocaleString()
+  return new Date(timestamp * 1000).toLocaleString(getIntlLocale())
 }
 
 export function getWalletRemainingDays(timestamp?: number): number {
@@ -59,9 +63,7 @@ export function getSubscriptionUsageStatus(
   note: string | null
 } {
   const subscription = record.subscription
-  const active =
-    subscription.status === 'active' &&
-    Number(subscription.end_time || 0) > Date.now() / 1000
+  const active = isActiveUserSubscription(subscription)
 
   if (!active) {
     return {

@@ -27,6 +27,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
+import { Button } from '@/components/ui/button'
 import { DataTablePage } from '@/components/data-table'
 import { getAdminPlans } from '../api'
 import { useSubscriptionsColumns } from './subscriptions-columns'
@@ -39,10 +40,12 @@ export function SubscriptionsTable() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-subscription-plans', refreshTrigger],
     queryFn: async () => {
       const result = await getAdminPlans()
+      if (!result.success)
+        throw new Error(result.message || 'Failed to load plans')
       return result.data || []
     },
     placeholderData: (prev) => prev,
@@ -62,15 +65,22 @@ export function SubscriptionsTable() {
   })
 
   return (
-    <DataTablePage
-      table={table}
-      columns={columns}
-      isLoading={isLoading}
-      emptyTitle={t('No subscription plans yet')}
-      emptyDescription={t(
-        'Click "Create Plan" to create your first subscription plan'
-      )}
-      skeletonKeyPrefix='subscriptions-skeleton'
-    />
+    <>
+      {isError ? (
+        <div role='alert' className='commerce-error'>
+          <span>{t('加载失败')}</span>
+          <Button variant='outline' onClick={() => void refetch()}>
+            {t('重试')}
+          </Button>
+        </div>
+      ) : null}
+      <DataTablePage
+        table={table}
+        columns={columns}
+        isLoading={isLoading}
+        emptyTitle={t('No subscription plans yet')}
+        skeletonKeyPrefix='subscriptions-skeleton'
+      />
+    </>
   )
 }

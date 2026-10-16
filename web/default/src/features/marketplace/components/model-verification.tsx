@@ -1,3 +1,4 @@
+import { getIntlLocale } from '@/i18n/format'
 import {
   CheckCircle2,
   CircleHelp,
@@ -89,7 +90,7 @@ export function ConnectivityTestStatusView(props: {
       </div>
       <div className='text-muted-foreground mt-1'>
         {props.checkedAt
-          ? `${t('最近测试')}: ${new Date(props.checkedAt).toLocaleString()}`
+          ? `${t('最近测试')}: ${new Date(props.checkedAt).toLocaleString(getIntlLocale())}`
           : props.required
             ? t('等待首次测试')
             : t('GPT-5.6 检测通过后可跳过此项')}
@@ -145,7 +146,7 @@ export function AutoProbeStatusView(props: {
           minutes: props.intervalMinutes,
         })}
         {props.checkedAt
-          ? ` · ${new Date(props.checkedAt).toLocaleString()}`
+          ? ` · ${new Date(props.checkedAt).toLocaleString(getIntlLocale())}`
           : ''}
       </p>
     </div>
@@ -195,7 +196,7 @@ export function ModelConsistencyStatusView(props: {
       <span className='text-muted-foreground text-xs tabular-nums'>
         {props.checkedAt
           ? t('检测于 {{time}}', {
-              time: new Date(props.checkedAt).toLocaleString(),
+              time: new Date(props.checkedAt).toLocaleString(getIntlLocale()),
             })
           : t('暂无检测时间')}
       </span>

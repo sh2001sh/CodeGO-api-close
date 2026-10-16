@@ -16,10 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import { sendChatCompletion } from '../api'
-import { MESSAGE_STATUS, ERROR_MESSAGES } from '../constants'
+import { ERROR_MESSAGES } from '../constants'
 import {
   buildChatCompletionPayload,
   updateAssistantMessageWithError,
@@ -32,185 +34,227 @@ import {
   recordWorkshopCallFailure,
   recordWorkshopCallSuccess,
 } from '../lib/workshop-feedback'
-import type { Message, PlaygroundConfig, ParameterEnabled } from '../types'
+import type {
+  Message,
+  PlaygroundConfig,
+  ParameterEnabled,
+  ToolCall,
+} from '../types'
 import { useStreamRequest } from './use-stream-request'
 
 interface UseChatHandlerOptions {
   config: PlaygroundConfig
   parameterEnabled: ParameterEnabled
-  onMessageUpdate: (updater: (prev: Message[]) => Message[]) => void
+  onMessageUpdate: (updater: (previous: Message[]) => Message[]) => void
+  apiKey?: string
 }
 
-/**
- * Hook for handling chat message sending and receiving
- */
-export function useChatHandler({
-  config,
-  parameterEnabled,
-  onMessageUpdate,
-}: UseChatHandlerOptions) {
+function mergeToolCalls(
+  previous: ToolCall[] = [],
+  updates: ToolCall[]
+): ToolCall[] {
+  const calls = previous.map((call) => ({
+    ...call,
+    function: { ...call.function },
+  }))
+  for (const update of updates) {
+    const index = update.index ?? 0
+    const current = calls[index] || {}
+    calls[index] = {
+      ...current,
+      ...update,
+      function: {
+        name: update.function?.name || current.function?.name,
+        arguments:
+          (current.function?.arguments || '') +
+          (update.function?.arguments || ''),
+      },
+    }
+  }
+  return calls
+}
+
+export function useChatHandler(options: UseChatHandlerOptions) {
+  const { t } = useTranslation()
   const { sendStreamRequest, stopStream, isStreaming } = useStreamRequest()
+  const [isRequesting, setIsRequesting] = useState(false)
+  const requestRef = useRef<AbortController | null>(null)
+  const busyRef = useRef(false)
+  const requestGeneration = useRef(0)
+  const onMessageUpdate = options.onMessageUpdate
+  const config = options.config
+  const parameterEnabled = options.parameterEnabled
+  const apiKey = options.apiKey
+  useEffect(() => () => requestRef.current?.abort(), [])
 
-  // Handle stream update
-  const handleStreamUpdate = useCallback(
-    (type: 'reasoning' | 'content', chunk: string) => {
-      onMessageUpdate((prev) =>
-        updateLastAssistantMessage(prev, (message) => {
-          if (message.status === MESSAGE_STATUS.ERROR) return message
-
-          if (type === 'reasoning') {
-            // Direct API reasoning_content
-            return {
-              ...message,
-              reasoning: {
-                content: (message.reasoning?.content || '') + chunk,
-                duration: 0,
-              },
-              isReasoningStreaming: true,
-              status: MESSAGE_STATUS.STREAMING,
-            }
-          }
-
-          // Content streaming: handle <think> tags
-          return {
-            ...processStreamingContent(message, chunk),
-            status: MESSAGE_STATUS.STREAMING,
-          }
-        })
+  const updateMetadata = useCallback(
+    (metadata: Partial<Message>) => {
+      onMessageUpdate((previous) =>
+        updateLastAssistantMessage(previous, (message) => ({
+          ...message,
+          ...metadata,
+          ...(metadata.toolCalls
+            ? {
+                toolCalls: mergeToolCalls(
+                  message.toolCalls,
+                  metadata.toolCalls
+                ),
+              }
+            : {}),
+        }))
       )
     },
     [onMessageUpdate]
   )
 
-  // Handle stream complete
-  const handleStreamComplete = useCallback(() => {
-    recordWorkshopCallSuccess()
-    onMessageUpdate((prev) =>
-      updateLastAssistantMessage(prev, (message) =>
-        message.status === MESSAGE_STATUS.COMPLETE ||
-        message.status === MESSAGE_STATUS.ERROR
-          ? message
-          : { ...finalizeMessage(message), status: MESSAGE_STATUS.COMPLETE }
-      )
-    )
-  }, [onMessageUpdate])
-
-  // Handle stream error
-  const handleStreamError = useCallback(
-    (error: string, errorCode?: string) => {
-      recordWorkshopCallFailure()
-      toast.error(error)
-      onMessageUpdate((prev) =>
-        updateAssistantMessageWithError(prev, error, errorCode)
-      )
-    },
-    [onMessageUpdate]
-  )
-
-  // Send streaming chat request
-  const sendStreamingChat = useCallback(
-    (messages: Message[]) => {
+  const sendChat = useCallback(
+    async (messages: Message[]) => {
+      if (busyRef.current) return
+      busyRef.current = true
+      const generation = ++requestGeneration.current
+      maybeShowNightWorkshopToast()
       const payload = buildChatCompletionPayload(
         messages,
         config,
         parameterEnabled
       )
-      sendStreamRequest(
-        payload,
-        handleStreamUpdate,
-        handleStreamComplete,
-        handleStreamError
-      )
+      const onError = (error: string, errorCode?: string) => {
+        recordWorkshopCallFailure()
+        toast.error(t(error))
+        onMessageUpdate((previous) =>
+          updateAssistantMessageWithError(previous, t(error), errorCode)
+        )
+      }
+      const onComplete = () => {
+        recordWorkshopCallSuccess()
+        onMessageUpdate((previous) =>
+          updateLastAssistantMessage(previous, (message) => ({
+            ...finalizeMessage(message),
+            status: 'complete',
+          }))
+        )
+      }
+      try {
+        if (config.stream) {
+          await sendStreamRequest(
+            payload,
+            (type, chunk) => {
+              onMessageUpdate((previous) =>
+                updateLastAssistantMessage(previous, (message) => {
+                  if (type === 'reasoning')
+                    return {
+                      ...message,
+                      reasoning: {
+                        content: (message.reasoning?.content || '') + chunk,
+                        duration: 0,
+                      },
+                      isReasoningStreaming: true,
+                      status: 'streaming',
+                    }
+                  return {
+                    ...processStreamingContent(message, chunk),
+                    status: 'streaming',
+                  }
+                })
+              )
+            },
+            onComplete,
+            onError,
+            updateMetadata,
+            apiKey
+          )
+        } else {
+          const controller = new AbortController()
+          requestRef.current = controller
+          setIsRequesting(true)
+          try {
+            const response = await sendChatCompletion(payload, {
+              signal: controller.signal,
+              apiKey: apiKey,
+            })
+            if (controller.signal.aborted) return
+            const choice = response.choices?.[0]
+            if (!choice) throw new Error(ERROR_MESSAGES.PARSE_ERROR)
+            onMessageUpdate((previous) =>
+              updateLastAssistantMessage(previous, (message) => ({
+                ...finalizeMessage(
+                  {
+                    ...message,
+                    versions: [
+                      {
+                        ...message.versions[0],
+                        content: choice.message?.content || '',
+                      },
+                    ],
+                  },
+                  choice.message?.reasoning_content
+                ),
+                status: 'complete',
+                requestId: response.id,
+                model: response.model || message.model,
+                usage: response.usage,
+                toolCalls: choice.message?.tool_calls,
+              }))
+            )
+            recordWorkshopCallSuccess()
+          } catch (error) {
+            if (controller.signal.aborted) return
+            const failure = error as {
+              response?: {
+                status?: number
+                data?: {
+                  message?: string
+                  error?: { message?: string; code?: string }
+                }
+              }
+              message?: string
+            }
+            if (failure.response?.status === 401 && !apiKey)
+              useAuthStore.getState().auth.reset()
+            onError(
+              failure.response?.data?.error?.message ||
+                failure.response?.data?.message ||
+                failure.message ||
+                ERROR_MESSAGES.API_REQUEST_ERROR,
+              failure.response?.data?.error?.code
+            )
+          } finally {
+            if (requestRef.current === controller) {
+              requestRef.current = null
+              setIsRequesting(false)
+            }
+          }
+        }
+      } finally {
+        if (generation === requestGeneration.current) busyRef.current = false
+      }
     },
     [
       config,
       parameterEnabled,
+      onMessageUpdate,
+      apiKey,
       sendStreamRequest,
-      handleStreamUpdate,
-      handleStreamComplete,
-      handleStreamError,
+      updateMetadata,
+      t,
     ]
   )
 
-  // Send non-streaming chat request
-  const sendNonStreamingChat = useCallback(
-    async (messages: Message[]) => {
-      const payload = buildChatCompletionPayload(
-        messages,
-        config,
-        parameterEnabled
-      )
-
-      try {
-        const response = await sendChatCompletion(payload)
-        const choice = response.choices?.[0]
-        if (!choice) return
-        recordWorkshopCallSuccess()
-
-        onMessageUpdate((prev) =>
-          updateLastAssistantMessage(prev, (message) => ({
-            ...finalizeMessage(
-              {
-                ...message,
-                versions: [
-                  {
-                    ...message.versions[0],
-                    content: choice.message?.content || '',
-                  },
-                ],
-              },
-              choice.message?.reasoning_content
-            ),
-            status: MESSAGE_STATUS.COMPLETE,
-          }))
-        )
-      } catch (error: unknown) {
-        const err = error as {
-          response?: {
-            data?: { message?: string; error?: { code?: string } }
-          }
-          message?: string
-        }
-        handleStreamError(
-          err?.response?.data?.message ||
-            err?.message ||
-            ERROR_MESSAGES.API_REQUEST_ERROR,
-          err?.response?.data?.error?.code || undefined
-        )
-      }
-    },
-    [config, parameterEnabled, onMessageUpdate, handleStreamError]
-  )
-
-  // Send chat request (stream or non-stream based on config)
-  const sendChat = useCallback(
-    (messages: Message[]) => {
-      maybeShowNightWorkshopToast()
-      if (config.stream) {
-        sendStreamingChat(messages)
-      } else {
-        sendNonStreamingChat(messages)
-      }
-    },
-    [config.stream, sendStreamingChat, sendNonStreamingChat]
-  )
-
-  // Stop generation
   const stopGeneration = useCallback(() => {
+    requestGeneration.current += 1
     stopStream()
-    onMessageUpdate((prev) =>
-      updateLastAssistantMessage(prev, (message) =>
-        message.status === MESSAGE_STATUS.LOADING ||
-        message.status === MESSAGE_STATUS.STREAMING
-          ? { ...finalizeMessage(message), status: MESSAGE_STATUS.COMPLETE }
+    requestRef.current?.abort()
+    requestRef.current = null
+    busyRef.current = false
+    setIsRequesting(false)
+    onMessageUpdate((previous) =>
+      updateLastAssistantMessage(previous, (message) =>
+        message.status === 'loading' || message.status === 'streaming'
+          ? { ...finalizeMessage(message), status: 'cancelled' }
           : message
       )
     )
   }, [stopStream, onMessageUpdate])
 
-  return {
-    sendChat,
-    stopGeneration,
-    isGenerating: isStreaming,
-  }
+  return { sendChat, stopGeneration, isGenerating: isStreaming || isRequesting }
 }

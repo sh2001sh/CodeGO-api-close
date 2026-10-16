@@ -85,31 +85,36 @@ export function DawnConsoleSidebar(props: {
         props.open && 'open',
         props.collapsed && 'collapsed'
       )}
+      aria-label={t('Navigation')}
       onClickCapture={(event) => {
         if ((event.target as HTMLElement).closest('a')) props.onNavigate?.()
       }}
     >
-      <button
-        type='button'
-        className='dawn-console-sidebar-toggle'
-        onClick={props.onToggleCollapsed}
-        aria-label={t(props.collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
-        title={t(props.collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
-      >
-        {props.collapsed ? (
-          <PanelLeftOpen size={16} />
-        ) : (
-          <PanelLeftClose size={16} />
-        )}
-      </button>
+      {props.onToggleCollapsed && (
+        <button
+          type='button'
+          className='dawn-console-sidebar-toggle'
+          onClick={props.onToggleCollapsed}
+          aria-label={t(
+            props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'
+          )}
+          title={t(props.collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
+        >
+          {props.collapsed ? (
+            <PanelLeftOpen size={16} />
+          ) : (
+            <PanelLeftClose size={16} />
+          )}
+        </button>
+      )}
       {navGroups.map((group) => (
         <SidebarGroup
           key={group.id || group.title}
           group={group}
           openGroups={openGroups}
-          onToggle={(key) => {
+          onToggle={(key, isOpen) => {
             if (props.collapsed) props.onToggleCollapsed?.()
-            setOpenGroups((current) => ({ ...current, [key]: !current[key] }))
+            setOpenGroups((current) => ({ ...current, [key]: !isOpen }))
           }}
           isActive={isActive}
         />
@@ -121,7 +126,7 @@ export function DawnConsoleSidebar(props: {
 function SidebarGroup(props: {
   group: NavGroup
   openGroups: SidebarGroupState
-  onToggle: (key: string) => void
+  onToggle: (key: string, isOpen: boolean) => void
   isActive: (item: NavItem) => boolean
 }) {
   const { group } = props
@@ -138,8 +143,13 @@ function SidebarGroup(props: {
         <SidebarItem
           key={item.title}
           item={item}
-          open={Boolean(props.openGroups[item.title])}
-          onToggle={() => props.onToggle(item.title)}
+          open={props.openGroups[item.title] ?? props.isActive(item)}
+          onToggle={() =>
+            props.onToggle(
+              item.title,
+              props.openGroups[item.title] ?? props.isActive(item)
+            )
+          }
           isActive={props.isActive}
         />
       ))}
@@ -165,6 +175,7 @@ function SidebarItem(props: {
         <button
           className='sgroup tog'
           onClick={props.onToggle}
+          aria-expanded={props.open}
           title={item.title}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -188,6 +199,7 @@ function SidebarItem(props: {
                   key={subItem.title}
                   to={subItem.url}
                   className={cn('sitem', props.isActive(subItem) && 'on')}
+                  aria-current={props.isActive(subItem) ? 'page' : undefined}
                   style={{ paddingLeft: 30 }}
                 >
                   {Icon ? <Icon size={15} /> : null}
@@ -210,6 +222,7 @@ function SidebarItem(props: {
       <Link
         to={item.url}
         className={cn('sitem', props.isActive(item) && 'on')}
+        aria-current={props.isActive(item) ? 'page' : undefined}
         title={item.title}
       >
         {Icon ? <Icon size={16} /> : null}
@@ -277,7 +290,12 @@ function ChatPresetsNav({ item }: { item: NavItem }) {
 
   return (
     <div>
-      <button className='sgroup tog' onClick={() => setOpen(!open)}>
+      <button
+        className='sgroup tog'
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        title={item.title}
+      >
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {item.icon ? <item.icon size={14} /> : null}
           {item.title}

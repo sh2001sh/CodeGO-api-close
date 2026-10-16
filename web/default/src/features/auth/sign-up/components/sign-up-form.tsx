@@ -21,7 +21,7 @@ import type { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import i18n from '@/i18n/config'
-import { Loader2 } from 'lucide-react'
+import { ArrowRight, Loader2, Lock, Mail, Tag, User } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -242,75 +242,36 @@ export function SignUpForm({
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
+        aria-busy={isLoading}
         className={cn('grid gap-4', className)}
         {...props}
       >
-        <FormField
-          control={form.control}
-          name='aff'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                <Trans i18nKey={'邀请码（可选）'} />
-              </FormLabel>
-              <FormControl>
-                <Input
-                  autoComplete='off'
-                  maxLength={32}
-                  placeholder={i18n.t('输入邀请码')}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
+        {/* Username */}
         <FormField
           control={form.control}
           name='username'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t('Username')}</FormLabel>
+              <FormLabel className='text-foreground/80 text-xs font-semibold'>
+                {t('Username')}
+              </FormLabel>
               <FormControl>
-                <Input placeholder={t('Enter your username')} {...field} />
+                <div className='relative'>
+                  <User className='text-muted-foreground/60 pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2' />
+                  <Input
+                    placeholder={t('Enter your username')}
+                    autoComplete='username'
+                    className='border-border/80 focus:border-foreground/50 h-12 rounded-2xl bg-white pl-10 text-[15px] transition-all dark:bg-white/[0.05]'
+                    {...field}
+                  />
+                </div>
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <FormField
-          control={form.control}
-          name='password'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t('Password')}</FormLabel>
-              <FormControl>
-                <PasswordInput
-                  placeholder={t('Enter password (8-20 characters)')}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name='confirmPassword'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t('Confirm password')}</FormLabel>
-              <FormControl>
-                <PasswordInput placeholder={t('Confirm password')} {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
+        {/* Email Field (when required) */}
         {emailVerificationRequired && (
           <>
             <FormField
@@ -318,15 +279,20 @@ export function SignUpForm({
               name='email'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
+                  <FormLabel className='text-foreground/80 text-xs font-semibold'>
                     {t('Email (required for verification)')}
                   </FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder={t('name@example.com')}
-                      type='email'
-                      {...field}
-                    />
+                    <div className='relative'>
+                      <Mail className='text-muted-foreground/60 pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2' />
+                      <Input
+                        placeholder='name@example.com'
+                        type='email'
+                        autoComplete='email'
+                        className='border-border/80 focus:border-foreground/50 h-12 rounded-2xl bg-white pl-10 text-[15px] transition-all dark:bg-white/[0.05]'
+                        {...field}
+                      />
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -335,10 +301,19 @@ export function SignUpForm({
 
             <div className='flex items-end gap-2'>
               <div className='flex-1'>
+                <label
+                  htmlFor='registration-verification-code'
+                  className='text-foreground/80 mb-1.5 block text-xs font-semibold'
+                >
+                  {t('Verification code')}
+                </label>
                 <Input
+                  id='registration-verification-code'
+                  autoComplete='one-time-code'
                   placeholder={t('Verification code')}
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value)}
+                  className='border-border/80 focus:border-foreground/50 h-12 rounded-2xl bg-white text-[15px] dark:bg-white/[0.05]'
                 />
               </div>
               <Button
@@ -346,6 +321,7 @@ export function SignUpForm({
                 type='button'
                 disabled={isLoading || isSendingCode || isActive || !emailValue}
                 onClick={handleSendVerificationCode}
+                className='border-border/80 h-12 rounded-2xl px-4 font-medium'
               >
                 {isActive ? (
                   t('Resend ({{seconds}}s)', { seconds: secondsLeft })
@@ -368,20 +344,102 @@ export function SignUpForm({
           </>
         )}
 
+        {/* Password */}
+        <FormField
+          control={form.control}
+          name='password'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className='text-foreground/80 text-xs font-semibold'>
+                {t('Password')}
+              </FormLabel>
+              <FormControl>
+                <div className='relative'>
+                  <Lock className='text-muted-foreground/60 pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2' />
+                  <PasswordInput
+                    placeholder={t('Enter password (8-20 characters)')}
+                    autoComplete='new-password'
+                    className='[&_input]:border-border/80 [&_input]:focus:border-foreground/50 [&_input]:h-12 [&_input]:rounded-2xl [&_input]:bg-white [&_input]:pl-10 [&_input]:text-[15px] dark:[&_input]:bg-white/[0.05]'
+                    {...field}
+                  />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Confirm Password */}
+        <FormField
+          control={form.control}
+          name='confirmPassword'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className='text-foreground/80 text-xs font-semibold'>
+                {t('Confirm password')}
+              </FormLabel>
+              <FormControl>
+                <div className='relative'>
+                  <Lock className='text-muted-foreground/60 pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2' />
+                  <PasswordInput
+                    placeholder={t('Confirm password')}
+                    autoComplete='new-password'
+                    className='[&_input]:border-border/80 [&_input]:focus:border-foreground/50 [&_input]:h-12 [&_input]:rounded-2xl [&_input]:bg-white [&_input]:pl-10 [&_input]:text-[15px] dark:[&_input]:bg-white/[0.05]'
+                    {...field}
+                  />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Invitation Code (Optional) */}
+        <FormField
+          control={form.control}
+          name='aff'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className='text-foreground/80 text-xs font-semibold'>
+                <Trans i18nKey={'邀请码（可选）'} />
+              </FormLabel>
+              <FormControl>
+                <div className='relative'>
+                  <Tag className='text-muted-foreground/60 pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2' />
+                  <Input
+                    autoComplete='off'
+                    maxLength={32}
+                    placeholder={i18n.t('输入邀请码（选填）')}
+                    className='border-border/80 focus:border-foreground/50 h-12 rounded-2xl bg-white pl-10 text-[15px] transition-all dark:bg-white/[0.05]'
+                    {...field}
+                  />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Legal Consent */}
         <LegalConsent
           status={status}
           checked={agreedToLegal}
           onCheckedChange={setAgreedToLegal}
-          className='mt-1'
+          className='mt-1 rounded-2xl'
         />
 
+        {/* Primary Action Button (OpenDesign Obsidian Pill) */}
         <Button
           type='submit'
-          className='mt-2 w-full justify-center gap-2'
+          className='market-auth-submit-btn mt-2.5 flex w-full items-center justify-center gap-2 text-[15px]'
           disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
         >
-          {isLoading ? <Loader2 className='h-4 w-4 animate-spin' /> : null}
-          {t('Create account')}
+          {isLoading ? (
+            <Loader2 className='size-4 animate-spin' />
+          ) : (
+            <ArrowRight className='size-4 transition-transform group-hover:translate-x-0.5' />
+          )}
+          {t('Create account with email')}
         </Button>
 
         {oauthRegisterEnabled && (

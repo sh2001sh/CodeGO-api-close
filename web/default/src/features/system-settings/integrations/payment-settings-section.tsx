@@ -21,6 +21,7 @@ import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { getIntlLocale } from '@/i18n/format'
 import { Code2, Eye, ShieldAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -49,6 +50,7 @@ import { RiskAcknowledgementDialog } from '@/components/risk-acknowledgement-dia
 import { confirmPaymentCompliance } from '../api'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 import { AmountDiscountVisualEditor } from './amount-discount-visual-editor'
 import { AmountOptionsVisualEditor } from './amount-options-visual-editor'
 import { CreemProductsVisualEditor } from './creem-products-visual-editor'
@@ -140,10 +142,12 @@ const paymentSchema = z.object({
   NowPaymentsEnabled: z.boolean(),
   NowPaymentsApiKey: z.string(),
   NowPaymentsIPNSecret: z.string(),
-  NowPaymentsPaymentCurrency: z.string().refine(
-    (value) => value.trim().toLowerCase() === 'usdt',
-    'NOWPayments only supports USDT'
-  ),
+  NowPaymentsPaymentCurrency: z
+    .string()
+    .refine(
+      (value) => value.trim().toLowerCase() === 'usdt',
+      'NOWPayments only supports USDT'
+    ),
   NowPaymentsPayCurrency: z.string().min(1),
   NowPaymentsQuotaPerUSDT: z.coerce.number().positive(),
   NowPaymentsMinTopUp: z.coerce.number().int().min(1),
@@ -278,6 +282,12 @@ export function PaymentSettingsSection({
   })
 
   React.useEffect(() => {
+    if (
+      form.formState.isDirty ||
+      form.formState.isSubmitting ||
+      updateOption.isPending
+    )
+      return
     const parsedDefaults = JSON.parse(defaultsSignature) as PaymentFormValues
     initialRef.current = parsedDefaults
     form.reset({
@@ -287,7 +297,13 @@ export function PaymentSettingsSection({
       AmountDiscount: formatJsonForEditor(parsedDefaults.AmountDiscount),
       CreemProducts: formatJsonForEditor(parsedDefaults.CreemProducts),
     })
-  }, [defaultsSignature, form])
+  }, [
+    defaultsSignature,
+    form,
+    form.formState.isDirty,
+    form.formState.isSubmitting,
+    updateOption.isPending,
+  ])
 
   const saveGeneralSettings = async () => {
     const values = form.getValues()
@@ -351,6 +367,10 @@ export function PaymentSettingsSection({
     for (const update of updates) {
       await updateOption.mutateAsync(update)
     }
+    initialRef.current = { ...initialRef.current, ...sanitized }
+    for (const key of Object.keys(sanitized) as Array<keyof typeof sanitized>) {
+      form.resetField(key, { defaultValue: values[key] })
+    }
   }
 
   const saveEpaySettings = async () => {
@@ -398,6 +418,10 @@ export function PaymentSettingsSection({
 
     for (const update of updates) {
       await updateOption.mutateAsync(update)
+    }
+    initialRef.current = { ...initialRef.current, ...sanitized }
+    for (const key of Object.keys(sanitized) as Array<keyof typeof sanitized>) {
+      form.resetField(key, { defaultValue: values[key] })
     }
   }
 
@@ -471,6 +495,10 @@ export function PaymentSettingsSection({
     for (const update of updates) {
       await updateOption.mutateAsync(update)
     }
+    initialRef.current = { ...initialRef.current, ...sanitized }
+    for (const key of Object.keys(sanitized) as Array<keyof typeof sanitized>) {
+      form.resetField(key, { defaultValue: values[key] })
+    }
   }
 
   const saveCreemSettings = async () => {
@@ -526,6 +554,10 @@ export function PaymentSettingsSection({
     for (const update of updates) {
       await updateOption.mutateAsync(update)
     }
+    initialRef.current = { ...initialRef.current, ...sanitized }
+    for (const key of Object.keys(sanitized) as Array<keyof typeof sanitized>) {
+      form.resetField(key, { defaultValue: values[key] })
+    }
   }
 
   const saveXunhuSettings = async () => {
@@ -570,6 +602,10 @@ export function PaymentSettingsSection({
     for (const update of updates) {
       await updateOption.mutateAsync(update)
     }
+    initialRef.current = { ...initialRef.current, ...sanitized }
+    for (const key of Object.keys(sanitized) as Array<keyof typeof sanitized>) {
+      form.resetField(key, { defaultValue: values[key] })
+    }
   }
 
   const saveNowPaymentsSettings = async () => {
@@ -580,7 +616,8 @@ export function PaymentSettingsSection({
       NowPaymentsIPNSecret: values.NowPaymentsIPNSecret.trim(),
       NowPaymentsPaymentCurrency:
         values.NowPaymentsPaymentCurrency.trim().toLowerCase(),
-      NowPaymentsPayCurrency: values.NowPaymentsPayCurrency.trim().toLowerCase(),
+      NowPaymentsPayCurrency:
+        values.NowPaymentsPayCurrency.trim().toLowerCase(),
       NowPaymentsQuotaPerUSDT: values.NowPaymentsQuotaPerUSDT as number,
       NowPaymentsMinTopUp: values.NowPaymentsMinTopUp as number,
     }
@@ -597,28 +634,62 @@ export function PaymentSettingsSection({
     }
     const updates: Array<{ key: string; value: string | number | boolean }> = []
     if (sanitized.NowPaymentsEnabled !== initial.NowPaymentsEnabled) {
-      updates.push({ key: 'NowPaymentsEnabled', value: sanitized.NowPaymentsEnabled })
+      updates.push({
+        key: 'NowPaymentsEnabled',
+        value: sanitized.NowPaymentsEnabled,
+      })
     }
-    if (sanitized.NowPaymentsApiKey && sanitized.NowPaymentsApiKey !== initial.NowPaymentsApiKey) {
-      updates.push({ key: 'NowPaymentsApiKey', value: sanitized.NowPaymentsApiKey })
+    if (
+      sanitized.NowPaymentsApiKey &&
+      sanitized.NowPaymentsApiKey !== initial.NowPaymentsApiKey
+    ) {
+      updates.push({
+        key: 'NowPaymentsApiKey',
+        value: sanitized.NowPaymentsApiKey,
+      })
     }
-    if (sanitized.NowPaymentsIPNSecret && sanitized.NowPaymentsIPNSecret !== initial.NowPaymentsIPNSecret) {
-      updates.push({ key: 'NowPaymentsIPNSecret', value: sanitized.NowPaymentsIPNSecret })
+    if (
+      sanitized.NowPaymentsIPNSecret &&
+      sanitized.NowPaymentsIPNSecret !== initial.NowPaymentsIPNSecret
+    ) {
+      updates.push({
+        key: 'NowPaymentsIPNSecret',
+        value: sanitized.NowPaymentsIPNSecret,
+      })
     }
-    if (sanitized.NowPaymentsPaymentCurrency !== initial.NowPaymentsPaymentCurrency) {
-      updates.push({ key: 'NowPaymentsPaymentCurrency', value: sanitized.NowPaymentsPaymentCurrency })
+    if (
+      sanitized.NowPaymentsPaymentCurrency !==
+      initial.NowPaymentsPaymentCurrency
+    ) {
+      updates.push({
+        key: 'NowPaymentsPaymentCurrency',
+        value: sanitized.NowPaymentsPaymentCurrency,
+      })
     }
     if (sanitized.NowPaymentsPayCurrency !== initial.NowPaymentsPayCurrency) {
-      updates.push({ key: 'NowPaymentsPayCurrency', value: sanitized.NowPaymentsPayCurrency })
+      updates.push({
+        key: 'NowPaymentsPayCurrency',
+        value: sanitized.NowPaymentsPayCurrency,
+      })
     }
     if (sanitized.NowPaymentsQuotaPerUSDT !== initial.NowPaymentsQuotaPerUSDT) {
-      updates.push({ key: 'NowPaymentsQuotaPerUSDT', value: sanitized.NowPaymentsQuotaPerUSDT })
+      updates.push({
+        key: 'NowPaymentsQuotaPerUSDT',
+        value: sanitized.NowPaymentsQuotaPerUSDT,
+      })
     }
     if (sanitized.NowPaymentsMinTopUp !== initial.NowPaymentsMinTopUp) {
-      updates.push({ key: 'NowPaymentsMinTopUp', value: sanitized.NowPaymentsMinTopUp })
+      updates.push({
+        key: 'NowPaymentsMinTopUp',
+        value: sanitized.NowPaymentsMinTopUp,
+      })
     }
     for (const update of updates) {
       await updateOption.mutateAsync(update)
+    }
+    initialRef.current = { ...initialRef.current, ...sanitized }
+    for (const key of Object.keys(sanitized) as Array<keyof typeof sanitized>) {
+      form.resetField(key, { defaultValue: values[key] })
     }
   }
 
@@ -647,8 +718,10 @@ export function PaymentSettingsSection({
       NowPaymentsEnabled: values.NowPaymentsEnabled,
       NowPaymentsApiKey: values.NowPaymentsApiKey.trim(),
       NowPaymentsIPNSecret: values.NowPaymentsIPNSecret.trim(),
-      NowPaymentsPaymentCurrency: values.NowPaymentsPaymentCurrency.trim().toLowerCase(),
-      NowPaymentsPayCurrency: values.NowPaymentsPayCurrency.trim().toLowerCase(),
+      NowPaymentsPaymentCurrency:
+        values.NowPaymentsPaymentCurrency.trim().toLowerCase(),
+      NowPaymentsPayCurrency:
+        values.NowPaymentsPayCurrency.trim().toLowerCase(),
       NowPaymentsQuotaPerUSDT: values.NowPaymentsQuotaPerUSDT,
       NowPaymentsMinTopUp: values.NowPaymentsMinTopUp,
     }
@@ -680,8 +753,10 @@ export function PaymentSettingsSection({
       NowPaymentsEnabled: initialRef.current.NowPaymentsEnabled,
       NowPaymentsApiKey: initialRef.current.NowPaymentsApiKey.trim(),
       NowPaymentsIPNSecret: initialRef.current.NowPaymentsIPNSecret.trim(),
-      NowPaymentsPaymentCurrency: initialRef.current.NowPaymentsPaymentCurrency.trim().toLowerCase(),
-      NowPaymentsPayCurrency: initialRef.current.NowPaymentsPayCurrency.trim().toLowerCase(),
+      NowPaymentsPaymentCurrency:
+        initialRef.current.NowPaymentsPaymentCurrency.trim().toLowerCase(),
+      NowPaymentsPayCurrency:
+        initialRef.current.NowPaymentsPayCurrency.trim().toLowerCase(),
       NowPaymentsQuotaPerUSDT: initialRef.current.NowPaymentsQuotaPerUSDT,
       NowPaymentsMinTopUp: initialRef.current.NowPaymentsMinTopUp,
     }
@@ -689,25 +764,55 @@ export function PaymentSettingsSection({
     const updates: Array<{ key: string; value: string | number | boolean }> = []
 
     if (sanitized.NowPaymentsEnabled !== initial.NowPaymentsEnabled) {
-      updates.push({ key: 'NowPaymentsEnabled', value: sanitized.NowPaymentsEnabled })
+      updates.push({
+        key: 'NowPaymentsEnabled',
+        value: sanitized.NowPaymentsEnabled,
+      })
     }
-    if (sanitized.NowPaymentsApiKey && sanitized.NowPaymentsApiKey !== initial.NowPaymentsApiKey) {
-      updates.push({ key: 'NowPaymentsApiKey', value: sanitized.NowPaymentsApiKey })
+    if (
+      sanitized.NowPaymentsApiKey &&
+      sanitized.NowPaymentsApiKey !== initial.NowPaymentsApiKey
+    ) {
+      updates.push({
+        key: 'NowPaymentsApiKey',
+        value: sanitized.NowPaymentsApiKey,
+      })
     }
-    if (sanitized.NowPaymentsIPNSecret && sanitized.NowPaymentsIPNSecret !== initial.NowPaymentsIPNSecret) {
-      updates.push({ key: 'NowPaymentsIPNSecret', value: sanitized.NowPaymentsIPNSecret })
+    if (
+      sanitized.NowPaymentsIPNSecret &&
+      sanitized.NowPaymentsIPNSecret !== initial.NowPaymentsIPNSecret
+    ) {
+      updates.push({
+        key: 'NowPaymentsIPNSecret',
+        value: sanitized.NowPaymentsIPNSecret,
+      })
     }
-    if (sanitized.NowPaymentsPaymentCurrency !== initial.NowPaymentsPaymentCurrency) {
-      updates.push({ key: 'NowPaymentsPaymentCurrency', value: sanitized.NowPaymentsPaymentCurrency })
+    if (
+      sanitized.NowPaymentsPaymentCurrency !==
+      initial.NowPaymentsPaymentCurrency
+    ) {
+      updates.push({
+        key: 'NowPaymentsPaymentCurrency',
+        value: sanitized.NowPaymentsPaymentCurrency,
+      })
     }
     if (sanitized.NowPaymentsPayCurrency !== initial.NowPaymentsPayCurrency) {
-      updates.push({ key: 'NowPaymentsPayCurrency', value: sanitized.NowPaymentsPayCurrency })
+      updates.push({
+        key: 'NowPaymentsPayCurrency',
+        value: sanitized.NowPaymentsPayCurrency,
+      })
     }
     if (sanitized.NowPaymentsQuotaPerUSDT !== initial.NowPaymentsQuotaPerUSDT) {
-      updates.push({ key: 'NowPaymentsQuotaPerUSDT', value: sanitized.NowPaymentsQuotaPerUSDT })
+      updates.push({
+        key: 'NowPaymentsQuotaPerUSDT',
+        value: sanitized.NowPaymentsQuotaPerUSDT,
+      })
     }
     if (sanitized.NowPaymentsMinTopUp !== initial.NowPaymentsMinTopUp) {
-      updates.push({ key: 'NowPaymentsMinTopUp', value: sanitized.NowPaymentsMinTopUp })
+      updates.push({
+        key: 'NowPaymentsMinTopUp',
+        value: sanitized.NowPaymentsMinTopUp,
+      })
     }
 
     if (sanitized.PayAddress !== initial.PayAddress) {
@@ -829,14 +934,16 @@ export function PaymentSettingsSection({
     for (const update of updates) {
       await updateOption.mutateAsync(update)
     }
+    initialRef.current = { ...initialRef.current, ...sanitized }
+    for (const key of Object.keys(sanitized) as Array<keyof typeof sanitized>) {
+      form.resetField(key, { defaultValue: values[key] })
+    }
   }
 
   return (
     <SettingsSection
       title={t('Payment Gateway')}
-      description={t(
-        'Configure recharge pricing and payment gateway integrations'
-      )}
+      description={t('Configure payment gateway integrations')}
     >
       {!complianceConfirmed ? (
         <Alert variant='destructive' className='mb-6'>
@@ -875,7 +982,7 @@ export function PaymentSettingsSection({
               time: complianceDefaults.confirmedAt
                 ? new Date(
                     complianceDefaults.confirmedAt * 1000
-                  ).toLocaleString()
+                  ).toLocaleString(getIntlLocale())
                 : '-',
               userId: complianceDefaults.confirmedBy || '-',
             })}
@@ -904,7 +1011,7 @@ export function PaymentSettingsSection({
       {/* eslint-disable react-hooks/refs */}
       <Form {...form}>
         <form
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={handleSettingsAction(form.handleSubmit(onSubmit))}
           className={cn(
             'space-y-8',
             !complianceConfirmed && 'pointer-events-none opacity-40'
@@ -914,9 +1021,6 @@ export function PaymentSettingsSection({
           <div className='space-y-4'>
             <div>
               <h3 className='text-lg font-medium'>{t('General Settings')}</h3>
-              <p className='text-muted-foreground text-sm'>
-                {t('Shared configuration for all payment gateways')}
-              </p>
             </div>
 
             <div className='grid gap-6 md:grid-cols-2'>
@@ -937,11 +1041,7 @@ export function PaymentSettingsSection({
                         }
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'How much to charge for each US dollar of balance (Epay)'
-                      )}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -964,9 +1064,7 @@ export function PaymentSettingsSection({
                         }
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Smallest USD amount users can recharge (Epay)')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1019,10 +1117,8 @@ export function PaymentSettingsSection({
                       />
                     )}
                   </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Configure available payment methods. Provide a JSON array.'
-                    )}
+                  <FormDescription className='settings-field-fact'>
+                    {t('JSON []')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1076,8 +1172,8 @@ export function PaymentSettingsSection({
                         />
                       )}
                     </FormControl>
-                    <FormDescription>
-                      {t('Preset recharge amounts (JSON array)')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('JSON []')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1130,8 +1226,8 @@ export function PaymentSettingsSection({
                         />
                       )}
                     </FormControl>
-                    <FormDescription>
-                      {t('Discount map by recharge amount (JSON object)')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('JSON {}')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1144,7 +1240,7 @@ export function PaymentSettingsSection({
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                saveGeneralSettings()
+                void handleSettingsAction(saveGeneralSettings)()
               }}
               disabled={updateOption.isPending}
             >
@@ -1159,9 +1255,6 @@ export function PaymentSettingsSection({
           <div className='space-y-4'>
             <div>
               <h3 className='text-lg font-medium'>{t('Epay Gateway')}</h3>
-              <p className='text-muted-foreground text-sm'>
-                {t('Configuration for Epay payment integration')}
-              </p>
             </div>
 
             <div className='grid gap-6 md:grid-cols-2'>
@@ -1178,9 +1271,7 @@ export function PaymentSettingsSection({
                         onChange={(event) => field.onChange(event.target.value)}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Base address provided by your Epay service')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1199,10 +1290,8 @@ export function PaymentSettingsSection({
                         onChange={(event) => field.onChange(event.target.value)}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'Optional callback override. Leave blank to use server address'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('Empty: server address')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1239,14 +1328,13 @@ export function PaymentSettingsSection({
                     <FormControl>
                       <Input
                         type='password'
-                        placeholder={t('Enter new key to update')}
                         autoComplete='new-password'
                         {...field}
                         onChange={(event) => field.onChange(event.target.value)}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Leave blank unless rotating the secret')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('Empty: unchanged')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1259,7 +1347,7 @@ export function PaymentSettingsSection({
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                saveEpaySettings()
+                void handleSettingsAction(saveEpaySettings)()
               }}
               disabled={updateOption.isPending}
             >
@@ -1274,9 +1362,6 @@ export function PaymentSettingsSection({
           <div className='space-y-4'>
             <div>
               <h3 className='text-lg font-medium'>{t('Stripe Gateway')}</h3>
-              <p className='text-muted-foreground text-sm'>
-                {t('Configuration for Stripe payment integration')}
-              </p>
             </div>
 
             <div className='rounded-md bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100'>
@@ -1328,8 +1413,8 @@ export function PaymentSettingsSection({
                         onChange={(event) => field.onChange(event.target.value)}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Stripe API key (leave blank unless updating)')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('Empty: unchanged')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1351,10 +1436,8 @@ export function PaymentSettingsSection({
                         onChange={(event) => field.onChange(event.target.value)}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'Webhook signing secret (leave blank unless updating)'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('Empty: unchanged')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1374,9 +1457,7 @@ export function PaymentSettingsSection({
                         onChange={(event) => field.onChange(event.target.value)}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Stripe product price ID')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1403,8 +1484,8 @@ export function PaymentSettingsSection({
                         }
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('e.g., 8 means 8 local currency per USD')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('1 USD = 8')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1445,9 +1526,6 @@ export function PaymentSettingsSection({
                       <FormLabel className='text-base'>
                         {t('Promotion codes')}
                       </FormLabel>
-                      <FormDescription>
-                        {t('Allow users to enter promo codes')}
-                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch
@@ -1465,7 +1543,7 @@ export function PaymentSettingsSection({
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                saveStripeSettings()
+                void handleSettingsAction(saveStripeSettings)()
               }}
               disabled={updateOption.isPending}
             >
@@ -1480,9 +1558,6 @@ export function PaymentSettingsSection({
           <div className='space-y-4'>
             <div>
               <h3 className='text-lg font-medium'>{t('Creem Gateway')}</h3>
-              <p className='text-muted-foreground text-sm'>
-                {t('Configuration for Creem payment integration')}
-              </p>
             </div>
 
             <div className='rounded-md bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100'>
@@ -1508,14 +1583,13 @@ export function PaymentSettingsSection({
                     <FormControl>
                       <Input
                         type='password'
-                        placeholder={t('Enter Creem API key')}
                         autoComplete='new-password'
                         {...field}
                         onChange={(event) => field.onChange(event.target.value)}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Creem API key (leave blank unless updating)')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('Empty: unchanged')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1531,16 +1605,13 @@ export function PaymentSettingsSection({
                     <FormControl>
                       <Input
                         type='password'
-                        placeholder={t('Enter webhook secret')}
                         autoComplete='new-password'
                         {...field}
                         onChange={(event) => field.onChange(event.target.value)}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'Webhook signing secret (leave blank unless updating)'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('Empty: unchanged')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1557,9 +1628,6 @@ export function PaymentSettingsSection({
                     <FormLabel className='text-base'>
                       {t('Test Mode')}
                     </FormLabel>
-                    <FormDescription>
-                      {t('Enable test mode for Creem payments')}
-                    </FormDescription>
                   </div>
                   <FormControl>
                     <Switch
@@ -1615,8 +1683,8 @@ export function PaymentSettingsSection({
                       />
                     )}
                   </FormControl>
-                  <FormDescription>
-                    {t('Configure Creem products. Provide a JSON array.')}
+                  <FormDescription className='settings-field-fact'>
+                    {t('JSON []')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1628,7 +1696,7 @@ export function PaymentSettingsSection({
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                saveCreemSettings()
+                void handleSettingsAction(saveCreemSettings)()
               }}
               disabled={updateOption.isPending}
             >
@@ -1643,9 +1711,6 @@ export function PaymentSettingsSection({
           <div className='space-y-4'>
             <div>
               <h3 className='text-lg font-medium'>{t('WeChat Pay')}</h3>
-              <p className='text-muted-foreground text-sm'>
-                {t('Configuration for WeChat Pay integration')}
-              </p>
             </div>
 
             <FormField
@@ -1655,11 +1720,6 @@ export function PaymentSettingsSection({
                 <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
                   <div className='space-y-0.5'>
                     <FormLabel className='text-base'>{t('Enabled')}</FormLabel>
-                    <FormDescription>
-                      {t(
-                        'Enable WeChat Pay for wallet and subscription payments'
-                      )}
-                    </FormDescription>
                   </div>
                   <FormControl>
                     <Switch
@@ -1697,11 +1757,10 @@ export function PaymentSettingsSection({
                         type='password'
                         autoComplete='new-password'
                         {...field}
-                        placeholder={t('Enter new secret to update')}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Leave blank unless rotating the secret')}
+                    <FormDescription className='settings-field-fact'>
+                      {t('Empty: unchanged')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1757,7 +1816,7 @@ export function PaymentSettingsSection({
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                saveXunhuSettings()
+                void handleSettingsAction(saveXunhuSettings)()
               }}
               disabled={updateOption.isPending}
             >
@@ -1772,8 +1831,8 @@ export function PaymentSettingsSection({
           <div className='space-y-4'>
             <div>
               <h3 className='text-lg font-medium'>{t('NOWPayments USDT')}</h3>
-              <p className='text-muted-foreground text-sm'>
-                {t('Accept USDT top-ups through NOWPayments. IPN URL:')} <code>/api/nowpayments/ipn</code>
+              <p className='text-muted-foreground text-base'>
+                {t('IPN URL:')} <code>/api/nowpayments/ipn</code>
               </p>
             </div>
 
@@ -1784,12 +1843,12 @@ export function PaymentSettingsSection({
                 <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
                   <div className='space-y-0.5'>
                     <FormLabel className='text-base'>{t('Enabled')}</FormLabel>
-                    <FormDescription>
-                      {t('Enable USDT top-ups via NOWPayments')}
-                    </FormDescription>
                   </div>
                   <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
                   </FormControl>
                 </FormItem>
               )}
@@ -1803,9 +1862,15 @@ export function PaymentSettingsSection({
                   <FormItem>
                     <FormLabel>{t('API Key')}</FormLabel>
                     <FormControl>
-                      <Input type='password' autoComplete='new-password' placeholder={t('Enter NOWPayments API key')} {...field} />
+                      <Input
+                        type='password'
+                        autoComplete='new-password'
+                        {...field}
+                      />
                     </FormControl>
-                    <FormDescription>{t('Leave blank unless updating')}</FormDescription>
+                    <FormDescription className='settings-field-fact'>
+                      {t('Empty: unchanged')}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1817,9 +1882,15 @@ export function PaymentSettingsSection({
                   <FormItem>
                     <FormLabel>{t('IPN Secret')}</FormLabel>
                     <FormControl>
-                      <Input type='password' autoComplete='new-password' placeholder={t('Enter IPN secret')} {...field} />
+                      <Input
+                        type='password'
+                        autoComplete='new-password'
+                        {...field}
+                      />
                     </FormControl>
-                    <FormDescription>{t('Used to verify x-nowpayments-sig')}</FormDescription>
+                    <FormDescription className='settings-field-fact'>
+                      {t('x-nowpayments-sig')}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1834,7 +1905,15 @@ export function PaymentSettingsSection({
                   <FormItem>
                     <FormLabel>{t('Quota per 1 USDT')}</FormLabel>
                     <FormControl>
-                      <Input type='number' min={0.000001} step='0.1' value={(field.value ?? 5) as number} onChange={(event) => field.onChange(event.target.valueAsNumber)} />
+                      <Input
+                        type='number'
+                        min={0.000001}
+                        step='0.1'
+                        value={(field.value ?? 5) as number}
+                        onChange={(event) =>
+                          field.onChange(event.target.valueAsNumber)
+                        }
+                      />
                     </FormControl>
                     <FormDescription>{t('Default: 5 quotas')}</FormDescription>
                     <FormMessage />
@@ -1848,7 +1927,15 @@ export function PaymentSettingsSection({
                   <FormItem>
                     <FormLabel>{t('Minimum top-up quota')}</FormLabel>
                     <FormControl>
-                      <Input type='number' min={1} step='1' value={(field.value ?? 5) as number} onChange={(event) => field.onChange(event.target.valueAsNumber)} />
+                      <Input
+                        type='number'
+                        min={1}
+                        step='1'
+                        value={(field.value ?? 5) as number}
+                        onChange={(event) =>
+                          field.onChange(event.target.valueAsNumber)
+                        }
+                      />
                     </FormControl>
                     <FormDescription>{t('Default: 5 quotas')}</FormDescription>
                     <FormMessage />
@@ -1876,7 +1963,13 @@ export function PaymentSettingsSection({
                   <FormItem>
                     <FormLabel>{t('USDT network')}</FormLabel>
                     <FormControl>
-                      <Input placeholder='usdttrc20' {...field} onChange={(event) => field.onChange(event.target.value.toLowerCase())} />
+                      <Input
+                        placeholder='usdttrc20'
+                        {...field}
+                        onChange={(event) =>
+                          field.onChange(event.target.value.toLowerCase())
+                        }
+                      />
                     </FormControl>
                     <FormDescription>{t('Default: USDTTRC20')}</FormDescription>
                     <FormMessage />
@@ -1890,17 +1983,21 @@ export function PaymentSettingsSection({
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                saveNowPaymentsSettings()
+                void handleSettingsAction(saveNowPaymentsSettings)()
               }}
               disabled={updateOption.isPending}
             >
-              {updateOption.isPending ? t('Saving...') : t('Save NOWPayments settings')}
+              {updateOption.isPending
+                ? t('Saving...')
+                : t('Save NOWPayments settings')}
             </Button>
           </div>
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save all settings')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending ? t('Saving...') : t('Save all settings')}
+            </Button>
+          </div>
         </form>
       </Form>
 

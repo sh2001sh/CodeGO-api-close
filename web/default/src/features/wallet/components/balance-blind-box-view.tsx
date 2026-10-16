@@ -1,6 +1,6 @@
+import { useState } from 'react'
 import i18n from '@/i18n/config'
 import {
-  FlaskConical,
   Gift,
   Loader2,
   PackageOpen,
@@ -11,23 +11,25 @@ import {
 import { useTranslation, Trans } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import type {
   BalanceBlindBoxOverview,
   PaymentMethod,
   WalletTransferRecipient,
 } from '../types'
-import {
-  BalanceBoxMetric,
-  BalanceBoxQuantityControl,
-} from './balance-blind-box-controls'
+import { BalanceBoxQuantityControl } from './balance-blind-box-controls'
 import { BalanceBoxGiftConfirm } from './balance-blind-box-gift-confirm'
 import { BalanceBoxPurchaseWorkspace } from './balance-blind-box-purchase'
-import { BalanceBlindBoxSimulator } from './balance-blind-box-simulator'
 import { EditorialBoxGlyph } from './blind-box-editorial-glyph'
 import { BlindBoxPityTrack } from './blind-box-rules-panel'
 
-export type ActionMode = 'purchase' | 'open' | 'gift' | 'simulation' | 'pity'
+export type ActionMode = 'purchase' | 'open' | 'gift' | 'pity'
 
 export interface BalanceBoxPanelViewProps {
   balance?: BalanceBlindBoxOverview
@@ -44,7 +46,7 @@ export interface BalanceBoxPanelViewProps {
   confirmGift: boolean
   cashMethods: PaymentMethod[]
   selectedCashMethod: PaymentMethod | null
-  cashAmountDue: number
+  cashAmountDue: number | null
   cashPaying: boolean
   onModeChange: (mode: ActionMode) => void
   onCountChange: (count: number) => void
@@ -62,167 +64,141 @@ export interface BalanceBoxPanelViewProps {
 }
 
 export function BalanceBoxPanelView(props: BalanceBoxPanelViewProps) {
+  const { t } = useTranslation()
+  const [confirmPurchase, setConfirmPurchase] = useState(false)
   return (
-    <section className='app-page-shell overflow-hidden'>
+    <section className='blind-box-operation overflow-hidden'>
       <BalanceBoxHeader
         balance={props.balance}
+        canOpen={props.canUseInventory}
         opening={props.busy && props.mode === 'open'}
         busy={props.busy}
         onOpenCount={props.onOpenCount}
         mode={props.mode}
         onModeChange={props.onModeChange}
       />
-      <div className='px-4 py-4 sm:px-6 sm:py-5'>
-        <BalanceBoxPurchaseWorkspace {...props} />
+      <div className='blind-box-purchase-surface'>
+        <BalanceBoxPurchaseWorkspace
+          {...props}
+          onPurchase={() => setConfirmPurchase(true)}
+        />
         <BalanceBoxSecondaryPanel {...props} />
       </div>
       <BalanceBoxGiftConfirm {...props} count={props.inventoryActionCount} />
+      <Dialog open={confirmPurchase} onOpenChange={setConfirmPurchase}>
+        <DialogContent className='commerce-dialog commerce-workspace sm:max-w-lg'>
+          <DialogHeader>
+            <DialogTitle>{t('确认购买')}</DialogTitle>
+          </DialogHeader>
+          <dl className='divide-y border-y'>
+            <div className='flex justify-between gap-6 py-4'>
+              <dt className='text-muted-foreground'>{t('数量')}</dt>
+              <dd>{props.count}</dd>
+            </div>
+            <div className='flex justify-between gap-6 py-4'>
+              <dt className='text-muted-foreground'>{t('单价')}</dt>
+              <dd>{props.balance?.price_usd.toFixed(2) ?? '—'} credits</dd>
+            </div>
+            <div className='flex justify-between gap-6 py-4'>
+              <dt className='text-muted-foreground'>{t('订单合计')}</dt>
+              <dd className='text-primary font-semibold'>
+                {props.balance
+                  ? (props.balance.price_usd * props.count).toFixed(2)
+                  : '—'}{' '}
+                credits
+              </dd>
+            </div>
+          </dl>
+          <div className='flex justify-end gap-3'>
+            <Button variant='outline' onClick={() => setConfirmPurchase(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button
+              disabled={!props.canPurchase}
+              onClick={() => {
+                setConfirmPurchase(false)
+                props.onPurchase()
+              }}
+            >
+              {t('额度支付')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }
 
 function BalanceBoxHeader(props: {
   balance?: BalanceBlindBoxOverview
+  canOpen: boolean
   opening: boolean
   busy: boolean
   onOpenCount: (count: number) => void
   mode: ActionMode
   onModeChange: (mode: ActionMode) => void
 }) {
-  useTranslation()
-  const inventoryCount = props.balance?.inventory_count || 0
+  const { t } = useTranslation()
+  const inventoryCount = props.balance?.inventory_count ?? 0
+  const openAllCount = Math.min(100, inventoryCount)
+  const ops = [
+    { mode: 'pity' as ActionMode, icon: ShieldCheck, label: t('保底进度') },
+    { mode: 'gift' as ActionMode, icon: Gift, label: t('赠送库存') },
+  ]
+
   return (
-    <div className='relative overflow-hidden border-b px-4 py-5 sm:px-6 sm:py-6'>
-      <span
-        aria-hidden
-        className='border-primary/[0.08] pointer-events-none absolute -top-28 -right-20 size-64 rounded-full border'
-      />
-      <div className='relative grid gap-7 sm:grid-cols-[auto_minmax(0,1fr)] lg:grid-cols-[auto_minmax(0,1fr)_minmax(220px,264px)] lg:items-end'>
+    <div className='blind-box-inventory-surface'>
+      <div className='blind-box-inventory-heading'>
+        <div className='min-w-0'>
+          <h2>{t('待开盲盒')}</h2>
+          <div className='blind-box-inventory-count tabular-nums'>
+            {props.balance ? inventoryCount : '—'}
+            <span>{t('个')}</span>
+          </div>
+        </div>
         <EditorialBoxGlyph
           pending={inventoryCount > 0}
           opening={props.opening}
-          busy={props.busy}
-          onOpen={() => props.onOpenCount(1)}
-        />
-        <div className='min-w-0'>
-          <div className='flex items-center gap-2.5'>
-            <span aria-hidden className='bg-primary block h-2 w-2' />
-            <span className='codego-kicker'>
-              <Trans i18nKey={'统一盲盒 ·'} />{' '}
-              {(props.balance?.price_usd || 2.5).toFixed(2)}{' '}
-              <Trans i18nKey={'/ 个'} />
-            </span>
-          </div>
-          <h2 className='text-foreground mt-3 text-2xl leading-[1.06] font-semibold text-balance sm:text-3xl'>
-            {inventoryCount > 0
-              ? i18n.t('{{param0}} 个盲盒待开启', { param0: inventoryCount })
-              : i18n.t('统一盲盒')}
-          </h2>
-          <BalanceBoxHeaderMetrics balance={props.balance} />
-        </div>
-        <BalanceBoxOpenActions
-          inventoryCount={inventoryCount}
-          busy={props.busy}
-          opening={props.opening}
-          onOpenCount={props.onOpenCount}
-          mode={props.mode}
-          onModeChange={props.onModeChange}
         />
       </div>
-    </div>
-  )
-}
-
-function BalanceBoxHeaderMetrics(props: { balance?: BalanceBlindBoxOverview }) {
-  useTranslation()
-  return (
-    <div className='codego-fact-row mt-6 grid max-w-md grid-cols-3'>
-      <BalanceBoxMetric
-        label={i18n.t('库存')}
-        value={`${props.balance?.inventory_count || 0} 个`}
-      />
-      <BalanceBoxMetric
-        label={i18n.t('今日购买')}
-        value={`${props.balance?.purchased_today || 0}/${props.balance?.daily_purchase_limit || 10}`}
-      />
-      <BalanceBoxMetric
-        label={i18n.t('统一额度')}
-        value={`${(props.balance?.balance_usd || 0).toFixed(2)}`}
-      />
-    </div>
-  )
-}
-
-function BalanceBoxOpenActions(props: {
-  inventoryCount: number
-  busy: boolean
-  opening: boolean
-  onOpenCount: (count: number) => void
-  mode: ActionMode
-  onModeChange: (mode: ActionMode) => void
-}) {
-  const ops = [
-    { mode: 'simulation' as ActionMode, icon: FlaskConical, label: '模拟抽盒' },
-    { mode: 'pity' as ActionMode, icon: ShieldCheck, label: '保底进度' },
-    { mode: 'gift' as ActionMode, icon: Gift, label: '赠送库存' },
-  ]
-
-  if (props.inventoryCount <= 0) {
-    return (
-      <div className='space-y-3'>
-        <div className='codego-stat-label'>
-          <Trans i18nKey={'库存操作'} />
+      <dl className='blind-box-inventory-metrics'>
+        <div>
+          <dt>{t('今日购买')}</dt>
+          <dd className='tabular-nums'>
+            {props.balance
+              ? `${props.balance.purchased_today ?? '—'} / ${props.balance.daily_purchase_limit ?? '—'}`
+              : '—'}
+          </dd>
         </div>
-        <div className='grid grid-cols-3 gap-1.5'>
-          {ops.map((op) => (
-            <InventoryOpButton
-              key={op.mode}
-              {...op}
-              active={props.mode === op.mode}
-              disabled={props.busy}
-              onClick={() =>
-                props.onModeChange(
-                  props.mode === op.mode ? 'purchase' : op.mode
-                )
-              }
-            />
-          ))}
+        <div>
+          <dt>{t('统一额度')}</dt>
+          <dd className='tabular-nums'>
+            {props.balance ? props.balance.balance_usd.toFixed(2) : '—'}{' '}
+            <span>credits</span>
+          </dd>
         </div>
-      </div>
-    )
-  }
-  const openAllCount = Math.min(100, props.inventoryCount)
-  return (
-    <div className='space-y-3'>
-      <div className='codego-stat-label'>
-        <Trans i18nKey={'直接开启'} />
-      </div>
-      <div className='grid grid-cols-2 gap-2'>
-        <Button
-          className='h-11 flex-1 px-2.5'
-          disabled={props.busy}
-          onClick={() => props.onOpenCount(1)}
-        >
+      </dl>
+      <div className='blind-box-open-actions'>
+        <Button disabled={!props.canOpen} onClick={() => props.onOpenCount(1)}>
           {props.opening ? (
-            <Loader2 className='size-4 animate-spin' />
+            <Loader2 className='size-4 animate-spin' aria-hidden />
           ) : (
-            <PackageOpen className='size-4' />
+            <PackageOpen className='size-4' aria-hidden />
           )}
-          <Trans i18nKey={'开启 1 个'} />
+          {t('开启 1 个')}
         </Button>
         <Button
           variant='outline'
-          className='h-11 flex-1 px-2.5'
-          disabled={props.busy}
+          disabled={!props.canOpen}
           onClick={() => props.onOpenCount(openAllCount)}
         >
-          <Trans i18nKey={'全部'} /> {openAllCount} <Trans i18nKey={'个'} />
+          {t('全部')} {openAllCount} {t('个')}
         </Button>
       </div>
-      <div className='codego-stat-label border-border/60 border-t pt-3'>
-        <Trans i18nKey={'库存操作'} />
-      </div>
-      <div className='grid grid-cols-3 gap-1.5'>
+      {inventoryCount === 0 ? (
+        <p className='blind-box-inventory-empty'>{t('盲盒库存为空')}</p>
+      ) : null}
+      <div className='blind-box-inventory-tools'>
         {ops.map((op) => (
           <InventoryOpButton
             key={op.mode}
@@ -255,36 +231,27 @@ function InventoryOpButton(props: {
       disabled={props.disabled}
       aria-pressed={props.active}
       className={cn(
-        'flex min-w-0 items-center justify-center gap-1.5 border px-1.5 py-2 text-xs transition-colors disabled:opacity-50',
-        props.active
-          ? 'border-primary bg-primary text-primary-foreground font-semibold'
-          : 'border-border bg-background/70 text-muted-foreground hover:border-primary/45 hover:text-foreground'
+        'blind-box-inventory-tool',
+        props.active ? 'is-active' : ''
       )}
     >
       <Icon className='size-3.5 shrink-0' />
-      <span className='truncate'>{props.label}</span>
+      <span className='text-wrap'>{props.label}</span>
     </button>
   )
 }
 
 function BalanceBoxSecondaryPanel(props: BalanceBoxPanelViewProps) {
-  if (props.mode === 'simulation') {
-    return (
-      <div className='border-border/70 mt-4 border-t pt-4'>
-        <BalanceBlindBoxSimulator balance={props.balance} />
-      </div>
-    )
-  }
   if (props.mode === 'pity') {
     return (
-      <div className='border-border/70 mt-4 border-t pt-4'>
+      <div className='blind-box-secondary-panel'>
         <BlindBoxPityTrack balance={props.balance} />
       </div>
     )
   }
   if (props.mode === 'gift') {
     return (
-      <div className='border-border/70 mt-4 border-t pt-4'>
+      <div className='blind-box-secondary-panel'>
         <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]'>
           <BalanceBoxRecipientFields {...props} />
           <BalanceBoxActionControls {...props} />
@@ -310,7 +277,6 @@ function BalanceBoxRecipientFields(props: BalanceBoxPanelViewProps) {
           onChange={(event) =>
             props.onRecipientIdChange(event.target.value.toUpperCase())
           }
-          placeholder={i18n.t('例如 A1B2C3')}
           className='font-mono uppercase'
         />
         <Button
@@ -318,7 +284,7 @@ function BalanceBoxRecipientFields(props: BalanceBoxPanelViewProps) {
           size='icon'
           onClick={props.onLookup}
           disabled={props.busy}
-          title={i18n.t('查找用户')}
+          aria-label={i18n.t('查找用户')}
         >
           <Search className='size-4' />
         </Button>
@@ -341,9 +307,11 @@ function BalanceBoxRecipientFields(props: BalanceBoxPanelViewProps) {
 }
 
 function BalanceBoxActionControls(props: BalanceBoxPanelViewProps) {
+  const { t } = useTranslation()
   return (
-    <div className='border-primary/20 bg-primary/[0.035] space-y-4 rounded-lg border p-4'>
+    <div className='space-y-4'>
       <BalanceBoxQuantityControl
+        label={`${t('赠送盲盒')} · ${t('盲盒数量')}`}
         count={props.inventoryActionCount}
         max={props.inventoryMaxCount}
         disabled={props.busy}
@@ -355,14 +323,19 @@ function BalanceBoxActionControls(props: BalanceBoxPanelViewProps) {
 }
 
 function BalanceBoxInventoryAction(props: BalanceBoxPanelViewProps) {
+  useTranslation()
+
   const gifting = props.mode === 'gift'
   return (
     <BalanceBoxPrimaryButton
       busy={props.busy}
       disabled={!props.canUseInventory || (gifting && !props.recipient)}
       icon={gifting ? Gift : PackageOpen}
-      busyLabel={gifting ? '赠送中…' : '开启中…'}
-      label={`${gifting ? '赠送' : '开启'} ${props.inventoryActionCount} 个`}
+      busyLabel={gifting ? i18n.t('赠送中…') : i18n.t('开启中…')}
+      label={i18n.t('{{param0}} {{param1}} 个', {
+        param0: gifting ? i18n.t('赠送') : i18n.t('开启'),
+        param1: props.inventoryActionCount,
+      })}
       onClick={gifting ? () => props.onConfirmGiftChange(true) : props.onOpen}
     />
   )

@@ -35,6 +35,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { handleSettingsAction } from '../utils/settings-action'
 import { ChatSettingsVisualEditor } from './chat-settings-visual-editor'
 import { formatJsonForEditor, normalizeJsonString } from './utils'
 
@@ -108,9 +109,10 @@ export function ChatSettingsSection({
   const initialNormalizedRef = useRef(normalizeJsonString(defaultValue, '[]'))
 
   useEffect(() => {
+    if (form.formState.isDirty || form.formState.isSubmitting) return
     form.reset({ Chats: formatJsonForEditor(defaultValue, '[]') })
     initialNormalizedRef.current = normalizeJsonString(defaultValue, '[]')
-  }, [defaultValue, form])
+  }, [defaultValue, form, form.formState.isDirty, form.formState.isSubmitting])
 
   const onSubmit = async (values: ChatSettingsFormValues) => {
     const normalized = normalizeJsonString(values.Chats, '[]')
@@ -122,16 +124,22 @@ export function ChatSettingsSection({
       key: 'Chats',
       value: normalized,
     })
+    initialNormalizedRef.current = normalized
+    form.reset(form.getValues())
   }
 
   return (
     <SettingsSection
       title={t('Chat Presets')}
-      description={t('Configure predefined chat links surfaced to end users.')}
+      description={t('Configure chat-related settings')}
     >
       <Form {...form}>
-        {/* eslint-disable-next-line react-hooks/refs */}
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+        <form
+          onSubmit={(event) =>
+            handleSettingsAction(form.handleSubmit(onSubmit))(event)
+          }
+          className='space-y-6'
+        >
           <Tabs
             value={editMode}
             onValueChange={(value) => setEditMode(value as 'visual' | 'json')}
@@ -175,10 +183,8 @@ export function ChatSettingsSection({
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'Array of chat client presets. Each item is an object with one key-value pair: client name and its URL.'
-                      )}
+                    <FormDescription className='settings-field-fact'>
+                      {t('JSON [{ name: URL }]')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -187,9 +193,13 @@ export function ChatSettingsSection({
             </TabsContent>
           </Tabs>
 
-          <Button type='submit' disabled={updateOption.isPending}>
-            {updateOption.isPending ? t('Saving...') : t('Save chat settings')}
-          </Button>
+          <div className='settings-save-bar'>
+            <Button type='submit' disabled={updateOption.isPending}>
+              {updateOption.isPending
+                ? t('Saving...')
+                : t('Save chat settings')}
+            </Button>
+          </div>
         </form>
       </Form>
     </SettingsSection>

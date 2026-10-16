@@ -1,0 +1,240 @@
+common.invalid_params: Paramètres invalides
+common.database_error: Erreur de base de données, veuillez contacter l'administrateur
+common.retry_later: Veuillez réessayer plus tard
+common.generate_failed: La génération a échoué
+common.not_found: Pas trouvé
+common.unauthorized: Non autorisé
+common.forbidden: Interdit
+common.invalid_id: Pièce d'identité invalide
+common.id_empty: L'identifiant est vide !
+common.feature_disabled: Cette fonctionnalité n'est pas activée
+common.operation_success: Opération réussie
+common.operation_failed: L'opération a échoué
+common.update_success: Mise à jour réussie
+common.update_failed: La mise à jour a échoué
+common.create_success: Création réussie
+common.create_failed: La création a échoué
+common.delete_success: Suppression réussie
+common.delete_failed: La suppression a échoué
+common.already_exists: Existe déjà
+common.name_cannot_be_empty: Le nom ne peut pas être vide
+common.batch_too_many: Trop d'articles dans la demande par lots, le maximum est {{.Max}}
+auth.not_logged_in: Non autorisé, non connecté et aucun accès token fourni
+auth.access_token_invalid: Accès non autorisé et invalide token
+auth.user_info_invalid: Informations utilisateur non autorisées et invalides
+auth.user_id_not_provided: Non autorisé, en-tête New-Api-User non fourni
+auth.user_id_format_error: Erreur de format d'en-tête New-Api-User non autorisée
+auth.user_id_mismatch: Non autorisé, l'utilisateur New-Api ne correspond pas à l'utilisateur connecté
+auth.user_banned: L'utilisateur a été banni
+auth.insufficient_privilege: Privilèges non autorisés et insuffisants
+token.name_too_long: Le nom Token est trop long
+token.quota_negative: La valeur du quota ne peut pas être négative
+token.quota_exceed_max: La valeur du quota dépasse la plage valide, le maximum est {{.Max}}
+token.generate_failed: Échec de la génération de token
+token.get_info_failed: Échec de l'obtention des informations token, veuillez réessayer plus tard
+token.expired_cannot_enable: Token a expiré et ne peut pas être activé. Veuillez modifier le délai d'expiration
+  ou le définir pour qu'il n'expire jamais
+token.exhausted_cannot_enable: Le quota Token est épuisé et ne peut pas être activé. Veuillez modifier le quota
+  restant ou le définir sur illimité
+token.invalid: token invalide
+token.not_provided: Token non fourni
+token.expired: Ce token a expiré
+token.exhausted: Ce quota token est épuisé TokenStatusExhausted[sk-{{.Prefix}}***{{.Suffix}}]
+token.status_unavailable: Ce statut token est indisponible
+token.db_error: token non valide, erreur de requête de base de données, veuillez contacter l'administrateur
+redemption.name_length: La longueur du nom du code de remboursement doit être comprise entre 1 et 20.
+redemption.count_positive: Le nombre de codes de remboursement doit être supérieur à 0
+redemption.count_max: Un maximum de 100 codes de remboursement peuvent être générés à la fois
+redemption.create_failed: Échec de la création du code de remboursement, veuillez réessayer plus tard
+redemption.invalid: Code de remboursement invalide
+redemption.used: Ce code de remboursement a été utilisé
+redemption.expired: Ce code de réduction a expiré
+redemption.busy: Le système est occupé, veuillez réessayer plus tard
+redemption.failed: L'échange a échoué, veuillez réessayer plus tard
+redemption.not_provided: Code de remboursement non fourni
+redemption.expire_time_invalid: L'heure d'expiration ne peut pas être antérieure à l'heure actuelle
+user.password_login_disabled: La connexion par mot de passe a été désactivée par l'administrateur
+user.register_disabled: L'enregistrement d'un nouvel utilisateur a été désactivé par l'administrateur
+user.password_register_disabled: L'enregistrement du mot de passe a été désactivé par l'administrateur, veuillez
+  utiliser la vérification du compte tiers
+user.username_or_password_empty: Le nom d'utilisateur ou le mot de passe est vide
+user.username_or_password_error: Le nom d'utilisateur ou le mot de passe est incorrect ou l'utilisateur a été banni
+user.email_or_password_empty: L'email ou le mot de passe est vide !
+user.exists: Le nom d'utilisateur existe déjà ou a été supprimé
+user.not_exists: L'utilisateur n'existe pas
+user.disabled: Cet utilisateur a été désactivé
+user.session_save_failed: Échec de l'enregistrement de la session, veuillez réessayer
+user.require_2fa: Veuillez saisir le code d'authentification à deux facteurs
+user.email_verification_required: La vérification par e-mail est activée, veuillez saisir l'adresse e-mail et le
+  code de vérification
+user.verification_code_error: Le code de vérification est incorrect ou a expiré
+user.input_invalid: Entrée invalide {{.Error}}
+user.no_permission_same_level: Aucune autorisation pour accéder aux utilisateurs de niveau identique ou supérieur
+user.no_permission_higher_level: Aucune autorisation pour mettre à jour les utilisateurs de niveau d'autorisation
+  identique ou supérieur
+user.cannot_create_higher_level: Impossible de créer des utilisateurs avec un niveau d'autorisation égal ou supérieur
+  au vôtre
+user.cannot_delete_root_user: Impossible de supprimer le compte super administrateur
+user.cannot_disable_root_user: Impossible de désactiver l'utilisateur super administrateur
+user.cannot_demote_root_user: Impossible de rétrograder l'utilisateur super-administrateur
+user.already_admin: Cet utilisateur est déjà administrateur
+user.already_common: Cet utilisateur est déjà un utilisateur commun
+user.admin_cannot_promote: Les administrateurs réguliers ne peuvent pas promouvoir d'autres utilisateurs au rang
+  d'administrateur
+user.original_password_error: Le mot de passe d'origine est incorrect
+user.invite_quota_insufficient: Le quota d'invitations est insuffisant !
+user.transfer_quota_minimum: Le quota de transfert minimum est de {{.Min}} !
+user.transfer_success: Transfert réussi
+user.transfer_failed: Échec du transfert {{.Error}}
+user.topup_processing: La recharge est en cours, veuillez réessayer plus tard
+user.register_failed: L'enregistrement de l'utilisateur a échoué ou la récupération de l'ID utilisateur a échoué
+user.default_token_failed: Échec de la génération du token par défaut
+user.aff_code_empty: Le code d'affiliation est vide !
+user.email_empty: L'e-mail est vide !
+user.github_id_empty: L'identifiant GitHub est vide !
+user.discord_id_empty: L'identifiant Discord est vide !
+user.oidc_id_empty: L'ID OIDC est vide !
+user.wechat_id_empty: L'identifiant WeChat est vide !
+user.telegram_id_empty: L'ID de télégramme est vide !
+user.telegram_not_bound: Ce compte Telegram n'est pas lié
+user.linux_do_id_empty: L'ID Linux DO est vide !
+user.quota_change_zero: Le montant de la modification du quota ne peut pas être nul
+quota.negative: Le quota ne peut pas être négatif !
+quota.exceed_max: La valeur du quota dépasse la plage valide
+quota.insufficient: Quota insuffisant
+quota.warning_invalid: Type d'avertissement non valide
+quota.threshold_gt_zero: Le seuil d'avertissement doit être supérieur à 0
+subscription.not_enabled: Le plan d'abonnement n'est pas activé
+subscription.title_empty: Le titre du plan d'abonnement ne peut pas être vide
+subscription.price_negative: Le prix ne peut pas être négatif
+subscription.price_max: Le prix ne peut pas dépasser 9999
+subscription.purchase_limit_negative: La limite d'achat ne peut pas être négative
+subscription.quota_negative: Le quota total ne peut pas être négatif
+subscription.group_not_exists: Le groupe de mise à niveau n'existe pas
+subscription.reset_cycle_gt_zero: Le cycle de réinitialisation personnalisé doit être supérieur à 0 seconde
+subscription.purchase_max: La limite d'achat pour ce plan a été atteinte
+subscription.invalid_id: ID d'abonnement invalide
+subscription.invalid_user_id: ID utilisateur invalide
+payment.not_configured: Les informations de paiement n'ont pas été configurées par l'administrateur
+payment.method_not_exists: Le mode de paiement n'existe pas
+payment.callback_error: Erreur de configuration de l'URL de rappel
+payment.create_failed: Échec de la création de la commande
+payment.start_failed: Échec du démarrage du paiement
+payment.amount_too_low: Le montant du plan est trop faible
+payment.stripe_not_configured: Stripe n'est pas configuré ou la clé n'est pas valide
+payment.webhook_not_configured: Le webhook n'est pas configuré
+payment.price_id_not_configured: StripePriceId n'est pas configuré pour ce plan
+payment.creem_not_configured: CreemProductId n'est pas configuré pour ce plan
+payment.compliance_required: Les fonctionnalités de paiement, d’échange, d’abonnement et de récompense d’invitation
+  sont désactivées. L'administrateur doit confirmer les conditions de conformité avant de les activer.
+topup.not_provided: Numéro d'ordre de paiement non fourni
+topup.order_not_exists: La commande de recharge n'existe pas
+topup.order_status: Erreur d'état de la commande de recharge
+topup.failed: La recharge a échoué, veuillez réessayer plus tard
+topup.invalid_quota: Quota de recharge non valide
+channel.not_exists: La chaîne n'existe pas
+channel.id_format_error: Erreur de format d'ID de chaîne
+channel.no_available_key: Aucune clé de chaîne disponible
+channel.get_list_failed: Échec de l'obtention de la liste des chaînes, veuillez réessayer plus tard
+channel.get_tags_failed: Échec de l'obtention des balises, veuillez réessayer plus tard
+channel.get_key_failed: Impossible d'obtenir la clé de la chaîne
+channel.get_ollama_failed: Impossible d'obtenir les modèles Ollama
+channel.query_failed: Échec de l'interrogation du canal
+channel.no_valid_upstream: Aucun canal amont valide
+channel.upstream_saturated: La charge en amont du groupe actuel est saturée. Veuillez réessayer plus tard.
+channel.get_available_failed: Échec de l'obtention des chaînes disponibles pour le modèle {{.Model}} sous le groupe
+  {{.Group}}
+model.name_empty: Le nom du modèle ne peut pas être vide
+model.name_exists: Le nom du modèle existe déjà
+model.id_missing: L'ID du modèle est manquant
+model.get_list_failed: Échec de l'obtention de la liste des modèles, veuillez réessayer plus tard
+model.get_failed: Échec de l'obtention des modèles en amont
+model.reset_success: Réinitialisation du rapport du modèle réussie
+vendor.name_empty: Le nom du fournisseur ne peut pas être vide
+vendor.name_exists: Le nom du fournisseur existe déjà
+vendor.id_missing: L'ID du fournisseur est manquant
+group.name_type_empty: Le nom et le type du groupe ne peuvent pas être vides
+group.name_exists: Le nom du groupe existe déjà
+group.id_missing: L'ID de groupe est manquant
+checkin.disabled: La fonction d'enregistrement n'est pas activée
+checkin.already_today: Déjà enregistré aujourd'hui
+checkin.failed: L'enregistrement a échoué, veuillez réessayer plus tard
+checkin.quota_failed: 'Échec de l''enregistrement : erreur de mise à jour du quota'
+passkey.create_failed: Impossible de créer les informations d'identification Passkey
+passkey.login_abnormal: L'état de connexion par mot de passe est anormal
+passkey.update_failed: Échec de la mise à jour des informations d'identification de la clé d'accès
+passkey.invalid_user_id: ID utilisateur invalide
+passkey.verify_failed: La vérification du mot de passe a échoué. Veuillez réessayer ou contacter l'administrateur.
+twofa.not_enabled: L'utilisateur n'a pas activé 2FA
+twofa.user_id_empty: L'ID utilisateur ne peut pas être vide
+twofa.already_exists: L'utilisateur a déjà configuré 2FA
+twofa.record_id_empty: L'ID d'enregistrement 2FA ne peut pas être vide
+twofa.code_invalid: Le code de vérification ou le code de secours est incorrect
+rate_limit.reached: Vous avez atteint la limite de requêtes : nombre maximum de requêtes {{.Max}} en minutes {{.Minutes}}
+rate_limit.total_reached: 'Vous avez atteint la limite totale de requêtes : nombre maximum de requêtes {{.Max}}
+  en minutes {{.Minutes}}, y compris les tentatives infructueuses.'
+setting.invalid_type: Type d'avertissement non valide
+setting.webhook_empty: L'URL du webhook ne peut pas être vide
+setting.webhook_invalid: URL de webhook invalide
+setting.email_invalid: Adresse e-mail invalide
+setting.bark_url_empty: L'URL de poussée d'écorce ne peut pas être vide
+setting.bark_url_invalid: URL push Bark non valide
+setting.gotify_url_empty: L'URL du serveur Gotify ne peut pas être vide
+setting.gotify_token_empty: Gotify token ne peut pas être vide
+setting.gotify_url_invalid: URL du serveur Gotify invalide
+setting.url_must_http: L'URL doit commencer par http:// ou https://
+setting.saved: Paramètres mis à jour
+deployment.not_enabled: Le déploiement du modèle io.net n'est pas activé ou la clé API est manquante
+deployment.id_required: L'ID de déploiement est requis
+deployment.container_id_required: L'ID du conteneur est requis
+deployment.name_empty: Le nom du déploiement ne peut pas être vide
+deployment.name_taken: Le nom du déploiement n'est pas disponible, veuillez en choisir un autre.
+deployment.hardware_id_required: Le paramètre hardware_id est requis
+deployment.hardware_invalid_id: Paramètre hardware_id non valide
+deployment.api_key_required: api_key est requis
+deployment.invalid_payload: Charge utile de la demande non valide
+deployment.not_found: Détails du conteneur introuvables
+performance.disk_cache_cleared: Le cache disque inactif a été vidé
+performance.stats_reset: Les statistiques ont été réinitialisées
+performance.gc_executed: GC a été exécuté
+ability.db_corrupted: La cohérence de la base de données a été compromise
+ability.repair_running: Une tâche de réparation est déjà en cours, veuillez réessayer plus tard
+oauth.invalid_code: Code d'autorisation invalide
+oauth.get_user_error: Échec de l'obtention des informations sur l'utilisateur
+oauth.account_used: Ce compte a été lié à un autre utilisateur
+oauth.unknown_provider: Fournisseur OAuth inconnu
+oauth.state_invalid: Le paramètre d'état est vide ou ne correspond pas
+oauth.not_enabled: La connexion et l'enregistrement {{.Provider}} n'ont pas été activés par l'administrateur
+oauth.user_deleted: L'utilisateur a été supprimé
+oauth.user_banned: L'utilisateur a été banni
+oauth.bind_success: Reliure réussie
+oauth.already_bound: Ce compte {{.Provider}} a déjà été lié
+oauth.connect_failed: Impossible de se connecter au serveur {{.Provider}}, veuillez réessayer plus tard
+oauth.token_failed: Échec de l'obtention de token à partir de {{.Provider}}, veuillez vérifier les paramètres
+oauth.user_info_empty: '{{.Provider}} a renvoyé des informations utilisateur vides, veuillez vérifier les paramètres'
+oauth.trust_level_low: Le niveau de confiance Linux DO ne répond pas au minimum requis par l'administrateur
+redeem.failed: L'échange a échoué, veuillez réessayer plus tard
+user.create_default_token_error: Échec de la création du token par défaut
+common.uuid_duplicate: Veuillez réessayer, le système a généré un UUID en double !
+common.invalid_input: Entrée invalide
+distributor.invalid_request: 'Demande invalide : {{.Error}}'
+distributor.invalid_channel_id: ID de chaîne invalide
+distributor.channel_disabled: Cette chaîne a été désactivée
+distributor.affinity_channel_disabled: Le canal sélectionné par affinité de canal a été désactivé et la nouvelle
+  tentative a été arrêtée par une règle. Veuillez contacter l'administrateur
+distributor.token_no_model_access: Ce token n'a accès à aucun modèle
+distributor.token_model_forbidden: Ce token n'a pas accès au modèle {{.Model}}
+distributor.model_name_required: Nom du modèle non spécifié, le nom du modèle ne peut pas être vide
+distributor.invalid_playground_request: 'Demande de terrain de jeu non valide : {{.Error}}'
+distributor.group_access_denied: Aucune autorisation pour accéder à ce groupe
+distributor.get_channel_failed: 'Échec de l''obtention du canal disponible pour le modèle {{.Model}} sous le groupe
+  {{.Group}} (distributeur) : {{.Error}}'
+distributor.no_available_channel: Aucun canal disponible pour le modèle {{.Model}} sous le groupe {{.Group}} (distributeur)
+distributor.invalid_request_parse_model: Requête invalide, impossible d'analyser le modèle
+custom_oauth.not_found: Fournisseur OAuth personnalisé introuvable
+custom_oauth.slug_empty: Le slug ne peut pas être vide
+custom_oauth.slug_exists: Slug existe déjà
+custom_oauth.name_empty: Le nom du fournisseur ne peut pas être vide
+custom_oauth.has_bindings: Impossible de supprimer le fournisseur avec les liaisons utilisateur existantes
+custom_oauth.binding_not_found: Liaison OAuth introuvable
+custom_oauth.provider_id_field_invalid: Impossible d'extraire l'ID utilisateur de la réponse du fournisseur

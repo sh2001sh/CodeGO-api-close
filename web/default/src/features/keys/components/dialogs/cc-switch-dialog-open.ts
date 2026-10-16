@@ -34,9 +34,9 @@ export interface WindowLike {
 }
 
 export function openDesktopImportDeepLink(
-	windowLike: WindowLike,
-	deepLink: string
+  windowLike: WindowLike,
+  deepLink: string
 ) {
-	windowLike.location.href = deepLink
-	return 'protocol' as const
+  windowLike.location.href = deepLink
+  return 'protocol' as const
 }

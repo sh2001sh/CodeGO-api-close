@@ -16,113 +16,68 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo } from 'react'
-import { Link } from '@tanstack/react-router'
+import { useState } from 'react'
 import { Menu } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { type TopNavLink } from '../types'
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import type { TopNavLink } from '../types'
+import { GlobalNavigation } from './global-navigation'
 
 type TopNavProps = React.HTMLAttributes<HTMLElement> & {
   links: TopNavLink[]
 }
 
-/**
- * 顶部导航栏组件
- * 在大屏幕显示水平导航，在小屏幕显示下拉菜单
- */
 export function TopNav({ className, links, ...props }: TopNavProps) {
-  // 规范化链接，确保所有可选属性都有默认值
-  const normalizedLinks = useMemo(
-    () =>
-      links.map((link) => ({
-        isActive: false,
-        disabled: false,
-        external: false,
-        ...link,
-      })),
-    [links]
-  )
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
 
   return (
     <>
-      {/* 移动端下拉菜单 */}
-      <div className='lg:hidden'>
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger
-            render={<Button size='icon' variant='outline' className='size-7' />}
-          >
-            <Menu />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side='bottom' align='start'>
-            {normalizedLinks.map(
-              ({ title, href, isActive, disabled, external }) => (
-                <DropdownMenuItem
-                  key={`${title}-${href}`}
-                  render={
-                    external ? (
-                      <a
-                        href={href}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                        className={!isActive ? 'text-muted-foreground' : ''}
-                      >
-                        {title}
-                      </a>
-                    ) : (
-                      <Link
-                        to={href}
-                        className={!isActive ? 'text-muted-foreground' : ''}
-                        disabled={disabled}
-                      >
-                        {title}
-                      </Link>
-                    )
-                  }
-                ></DropdownMenuItem>
-              )
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* 桌面端水平导航 */}
+      <Button
+        variant='ghost'
+        size='icon'
+        className='codego-public-menu'
+        aria-label={t('Open menu')}
+        aria-expanded={open}
+        onClick={() => setOpen(true)}
+      >
+        <Menu aria-hidden='true' />
+      </Button>
       <nav
-        className={cn(
-          'hidden items-center space-x-4 lg:flex lg:space-x-4 xl:space-x-6',
-          className
-        )}
+        className={cn('codego-public-desktop-nav', className)}
+        aria-label={t('gateway.navigation')}
         {...props}
       >
-        {normalizedLinks.map(({ title, href, isActive, disabled, external }) =>
-          external ? (
-            <a
-              key={`${title}-${href}`}
-              href={href}
-              target='_blank'
-              rel='noopener noreferrer'
-              className={`hover:text-primary text-sm font-medium transition-colors ${isActive ? '' : 'text-muted-foreground'}`}
-            >
-              {title}
-            </a>
-          ) : (
-            <Link
-              key={`${title}-${href}`}
-              to={href}
-              disabled={disabled}
-              className={`hover:text-primary text-sm font-medium transition-colors ${isActive ? '' : 'text-muted-foreground'}`}
-            >
-              {title}
-            </Link>
-          )
-        )}
+        <GlobalNavigation links={links.filter((link) => !link.secondary)} />
       </nav>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent
+          side='right'
+          className='codego-public-mobile-sheet'
+          aria-describedby={undefined}
+        >
+          <SheetHeader>
+            <SheetTitle>{t('Navigation')}</SheetTitle>
+          </SheetHeader>
+          <nav
+            className='codego-public-mobile-nav'
+            aria-label={t('gateway.navigation')}
+          >
+            <GlobalNavigation
+              mobile
+              links={links}
+              onNavigate={() => setOpen(false)}
+            />
+          </nav>
+        </SheetContent>
+      </Sheet>
     </>
   )
 }

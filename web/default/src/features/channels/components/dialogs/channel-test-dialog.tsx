@@ -26,6 +26,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table'
+import interfaceI18n from '@/i18n/config'
 import { Loader2, Settings } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -283,7 +284,7 @@ export function ChannelTestDialog({
             onCheckedChange={(value) =>
               table.toggleAllPageRowsSelected(!!value)
             }
-            aria-label='Select all models'
+            aria-label={interfaceI18n.t('Select all models')}
           />
         ),
         cell: ({ row }) => (
@@ -306,10 +307,10 @@ export function ChannelTestDialog({
 
           return (
             <div className='flex items-center gap-2'>
-              <span className='font-medium'>{model}</span>
+              <span className='font-mono text-sm font-medium'>{model}</span>
               {isDefault && (
                 <StatusBadge
-                  label='Default'
+                  label={interfaceI18n.t('Default')}
                   variant='info'
                   size='sm'
                   copyable={false}
@@ -340,7 +341,7 @@ export function ChannelTestDialog({
             return (
               <div className='text-muted-foreground flex items-center gap-2 text-sm'>
                 <Loader2 className='h-4 w-4 animate-spin' />
-                Testing...
+                {interfaceI18n.t('Testing...')}
               </div>
             )
           }
@@ -349,7 +350,7 @@ export function ChannelTestDialog({
             return (
               <div className='flex flex-col gap-1 text-xs'>
                 <StatusBadge
-                  label='Success'
+                  label={interfaceI18n.t('Success')}
                   variant='success'
                   copyable={false}
                 />
@@ -364,7 +365,11 @@ export function ChannelTestDialog({
 
           return (
             <div className='flex flex-col gap-1 text-xs'>
-              <StatusBadge label='Failed' variant='danger' copyable={false} />
+              <StatusBadge
+                label={interfaceI18n.t('Failed')}
+                variant='danger'
+                copyable={false}
+              />
               {result.error && (
                 <span className='text-muted-foreground break-all'>
                   {result.error}
@@ -406,7 +411,7 @@ export function ChannelTestDialog({
               {isTestingModel && (
                 <Loader2 className='mr-2 h-4 w-4 animate-spin' />
               )}
-              Test
+              {interfaceI18n.t('Test')}
             </Button>
           )
         },
@@ -421,6 +426,7 @@ export function ChannelTestDialog({
       testResults,
       testingModels,
       testSingleModel,
+      interfaceI18n.language,
     ]
   )
 
@@ -444,7 +450,7 @@ export function ChannelTestDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className='max-h-[90vh] overflow-hidden sm:max-w-3xl'>
+      <DialogContent className='channel-probe max-h-[90vh] overflow-hidden sm:max-w-3xl'>
         <DialogHeader>
           <DialogTitle>{t('Test Channel Connection')}</DialogTitle>
           <DialogDescription>
@@ -452,8 +458,8 @@ export function ChannelTestDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className='max-h-[78vh] space-y-4 overflow-y-auto py-4 pr-1'>
-          <div className='grid gap-4 md:grid-cols-2'>
+        <div className='channel-probe-body space-y-5'>
+          <div className='channel-probe-options grid gap-4 md:grid-cols-2'>
             <div className='grid gap-2'>
               <Label htmlFor='endpoint-type'>{t('Endpoint Type')}</Label>
               <Select
@@ -517,6 +523,7 @@ export function ChannelTestDialog({
               </div>
               <Input
                 placeholder={t('Filter models...')}
+                aria-label={t('Filter models...')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className='sm:w-64'

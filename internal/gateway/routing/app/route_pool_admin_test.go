@@ -2,10 +2,14 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/sh2001sh/new-api/constant"
+	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
+	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -66,4 +70,40 @@ func TestSaveRoutePoolGroupRejectsMarketplaceChannelMember(t *testing.T) {
 		{ChannelID: 12, Enabled: true, CostMultiplier: 1, ModelCostOverrides: "{}"},
 	})
 	require.EqualError(t, err, "route member is not assigned to this group")
+}
+
+func TestRoutePoolMetricsPreserveTTFTPenalty(t *testing.T) {
+	db := setupRoutePoolAdminTestDB(t)
+	require.NoError(t, db.AutoMigrate(&gatewayschema.Ability{}))
+	oldMemory := platformconfig.MemoryCacheEnabled
+	platformconfig.MemoryCacheEnabled = false
+	t.Cleanup(func() { platformconfig.MemoryCacheEnabled = oldMemory })
+	const model = "gpt-admin-ttft"
+	channels := []gatewayschema.Channel{
+		{Id: 8_400_001, Key: "test", Status: constant.ChannelStatusEnabled, Group: "metrics-ttft", Models: model},
+		{Id: 8_400_002, Key: "test", Status: constant.ChannelStatusEnabled, Group: "metrics-ttft", Models: model},
+	}
+	for index := range channels {
+		require.NoError(t, db.Create(&channels[index]).Error)
+		require.NoError(t, gatewaystore.AddChannelAbilities(&channels[index], db))
+	}
+	pool, err := gatewaystore.SaveRoutePool(&gatewayschema.RoutePool{Name: "metrics-ttft", Group: "metrics-ttft", Enabled: true}, []gatewayschema.RoutePoolMember{
+		{ChannelID: channels[0].Id, Enabled: true, CostMultiplier: 1},
+		{ChannelID: channels[1].Id, Enabled: true, CostMultiplier: 1},
+	})
+	require.NoError(t, err)
+	gatewayruntime.RecordChannelSuccess(channels[0].Id, model, 100*time.Millisecond, gatewayruntime.RequestTypeChatShortStream)
+	gatewayruntime.RecordChannelSuccess(channels[1].Id, model, time.Second, gatewayruntime.RequestTypeChatShortStream)
+	metrics, err := GetRoutePoolMetrics(pool.Pool.ID, model)
+	require.NoError(t, err)
+	require.Len(t, metrics.Members, 2)
+	for _, member := range metrics.Members {
+		require.True(t, member.Eligible)
+		baseScore := effectiveRoutePoolCostForPool(pool.Members[0], model, member.Health, &pool.Pool)
+		if member.ChannelID == channels[1].Id {
+			require.InDelta(t, baseScore*2, member.Score, 0.00001, "slow member retains its TTFT penalty")
+		} else {
+			require.InDelta(t, baseScore, member.Score, 0.00001)
+		}
+	}
 }

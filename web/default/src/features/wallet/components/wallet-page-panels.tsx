@@ -10,7 +10,10 @@ import {
   getBillingPreferenceFromFundingSourceOrder,
   normalizeFundingSourceOrder,
 } from '@/features/subscriptions/billing'
-import { getSubscriptionPlanSubtitle } from '@/features/subscriptions/lib'
+import {
+  getSubscriptionPlanSubtitle,
+  isCreditPackSubscription,
+} from '@/features/subscriptions/lib'
 import type {
   FundingSource,
   PlanRecord,
@@ -62,7 +65,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
 
   useEffect(() => {
     if (!props.subscriptionData) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraftFundingSourceOrder(
       normalizeFundingSourceOrder(
         props.subscriptionData.funding_source_order,
@@ -79,7 +81,10 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
 
   const planMetaMap = useMemo(() => {
     const map = new Map<number, WalletPlanMeta>()
-    for (const item of props.plans) {
+    const legacyPlans = activeSubscriptions.flatMap((item) =>
+      item.plan ? [{ plan: item.plan }] : []
+    )
+    for (const item of [...props.plans, ...legacyPlans]) {
       if (!item?.plan?.id) continue
       map.set(item.plan.id, {
         title: item.plan.title || '',
@@ -88,14 +93,16 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
       })
     }
     return map
-  }, [props.plans])
+  }, [props.plans, activeSubscriptions])
 
   const orderedSubscriptions = useMemo(
     () => getOrderedSubscriptions(activeSubscriptions, draftOrderIds),
     [activeSubscriptions, draftOrderIds]
   )
 
-  const currentSubscription = orderedSubscriptions[0]?.subscription
+  const currentSubscription = orderedSubscriptions.find(
+    (record) => !isCreditPackSubscription(record.subscription)
+  )?.subscription
   const currentSubscriptionPlanMeta = currentSubscription
     ? planMetaMap.get(currentSubscription.plan_id)
     : undefined
@@ -242,7 +249,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
       <div className='space-y-4'>
         <RedemptionCodePanel
           title={t('Redemption code')}
-          description={t('兑换码可发放统一额度、月卡、盲盒或活动权益。')}
           topupLink={props.topupLink}
           redemptionCode={props.redemptionCode}
           onRedemptionCodeChange={props.onRedemptionCodeChange}
@@ -283,13 +289,16 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
 
   return (
     <div className='space-y-4'>
-      <WalletResetOpportunityPanel
-        resetOpportunity={resetOpportunity}
-        currentSubscriptionTitle={currentSubscriptionPlanMeta?.title}
-        canUseResetOpportunity={canUseResetOpportunity}
-        usingResetOpportunity={usingResetOpportunity}
-        onUseResetOpportunity={() => void handleUseResetOpportunity()}
-      />
+      {(resetOpportunity.earned_total > 0 ||
+        resetOpportunity.used_total > 0) && (
+        <WalletResetOpportunityPanel
+          resetOpportunity={resetOpportunity}
+          currentSubscriptionTitle={currentSubscriptionPlanMeta?.title}
+          canUseResetOpportunity={canUseResetOpportunity}
+          usingResetOpportunity={usingResetOpportunity}
+          onUseResetOpportunity={() => void handleUseResetOpportunity()}
+        />
+      )}
 
       <WalletBillingOrderPanel
         draftFundingSourceOrder={draftFundingSourceOrder}

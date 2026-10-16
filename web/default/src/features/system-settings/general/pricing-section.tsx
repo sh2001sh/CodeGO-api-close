@@ -143,7 +143,9 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
 
       <SettingsSection
         title={t('Pricing & Display')}
-        description={t('Configure pricing model and display options')}
+        description={t(
+          'Configure currency conversion and quota display options'
+        )}
       >
         <Form {...form}>
           <form onSubmit={handleSubmit} className='space-y-6'>
@@ -166,9 +168,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                         ref={field.ref}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Number of tokens per unit quota')}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -193,7 +193,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder={t('Select display mode')} />
+                        <SelectValue />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent alignItemWithTrigger={false}>
@@ -211,9 +211,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                       </SelectGroup>
                     </SelectContent>
                   </Select>
-                  <FormDescription>
-                    {t('Choose how quota values are shown to users')}
-                  </FormDescription>
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -243,11 +241,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                         ref={field.ref}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'Real exchange rate between USD and your payment gateway currency'
-                      )}
-                    </FormDescription>
+
                     <FormMessage />
                   </FormItem>
                 )}
@@ -274,9 +268,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                           placeholder={t('e.g. ¥ or HK$')}
                         />
                       </FormControl>
-                      <FormDescription>
-                        {t('Prefix used when displaying prices')}
-                      </FormDescription>
+
                       <FormMessage />
                     </FormItem>
                   )}
@@ -305,9 +297,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                           placeholder={t('e.g. 8 means 1 USD = 8 units')}
                         />
                       </FormControl>
-                      <FormDescription>
-                        {t('Conversion rate from USD to your custom currency')}
-                      </FormDescription>
+
                       <FormMessage />
                     </FormItem>
                   )}
@@ -327,10 +317,8 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                       </FormLabel>
                       <FormDescription>
                         {displayType === 'TOKENS'
-                          ? t(
-                              'Tokens-only mode will show raw quota values regardless of this toggle.'
-                            )
-                          : t('Show prices in currency instead of quota.')}
+                          ? t('TOKENS: raw quota')
+                          : t('Currency')}
                       </FormDescription>
                     </div>
                     <FormControl>
@@ -353,9 +341,6 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                     <FormLabel className='text-base'>
                       {t('Display Token Statistics')}
                     </FormLabel>
-                    <FormDescription>
-                      {t('Show token usage statistics in the UI')}
-                    </FormDescription>
                   </div>
                   <FormControl>
                     <Switch
@@ -367,7 +352,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
               )}
             />
 
-            <div className='flex gap-2'>
+            <div className='settings-save-bar flex gap-2'>
               <Button
                 type='submit'
                 disabled={updateOption.isPending || isSubmitting}

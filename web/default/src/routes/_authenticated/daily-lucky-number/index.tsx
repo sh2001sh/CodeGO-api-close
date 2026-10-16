@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { DailyLuckyNumberPage } from '@/features/daily-lucky-number'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authenticated/daily-lucky-number/')({
-  component: DailyLuckyNumberPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/wallet', replace: true })
+  },
 })

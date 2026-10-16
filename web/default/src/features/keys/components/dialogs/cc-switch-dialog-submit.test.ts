@@ -125,7 +125,8 @@ describe('submitDesktopImportRequest', () => {
             data: {
               code: 'import-code',
               deep_link: 'codego://v1/import?resource=provider',
-              config_url: 'https://codegoai.com/api/desktop/import/config?code=1',
+              config_url:
+                'https://codegoai.com/api/desktop/import/config?code=1',
               expires_in_seconds: 300,
               tool: 'codex',
               token_name: 'My Codex',

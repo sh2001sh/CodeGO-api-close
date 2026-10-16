@@ -36,7 +36,17 @@ func classifyUpstreamFailure(err *types.NewAPIError) upstreamFailureClass {
 	if IsUpstreamCredentialRejectedError(err) {
 		return upstreamFailureCredentialRejected
 	}
-	if IsModelUnavailableError(err) || err.StatusCode == http.StatusServiceUnavailable {
+	if IsModelUnavailableError(err) {
+		return upstreamFailureModelUnavailable
+	}
+	// A temporary service rejection does not establish that the model is
+	// unavailable. Keep explicit model/account/credential/policy errors above
+	// this narrow match so only a safe pre-output retry gains eligibility.
+	if err.StatusCode == http.StatusServiceUnavailable && containsAny(message,
+		"service temporarily unavailable", "服务暂不可用", "服务暂时不可用", "服务临时不可用") {
+		return upstreamFailureTransient
+	}
+	if err.StatusCode == http.StatusServiceUnavailable {
 		return upstreamFailureModelUnavailable
 	}
 	if isIncompleteResponsesStreamMessage(message) {

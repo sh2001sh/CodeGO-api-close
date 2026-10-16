@@ -618,10 +618,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .blind-box-workspace .commerce-blind-box-sidebar {
-    grid-row: 2;
-  }
-
   .blind-box-pool-row {
     grid-template-columns: minmax(0, 1fr) 64px;
     gap: 12px;

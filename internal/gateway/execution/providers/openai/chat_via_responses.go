@@ -113,6 +113,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		sentStart   bool
 		sentStop    bool
 		sawToolCall bool
+		sawTerminal bool
 		streamErr   *types.NewAPIError
 		cyberErr    *types.NewAPIError
 	)
@@ -253,10 +254,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	sendToolCallDelta := func(callID string, name string, argsDelta string) bool {
 		if callID == "" {
-			return true
-		}
-		if outputText.Len() > 0 {
-			// Prefer streaming assistant text over tool calls to match non-stream behavior.
 			return true
 		}
 		if !sendStartIfNeeded() {
@@ -425,6 +422,21 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				}
 			}
 
+		case "response.refusal.delta":
+			if !sendStartIfNeeded() {
+				sr.Stop(streamErr)
+				return
+			}
+			delta := streamResp.Delta
+			usageText.WriteString(delta)
+			if !sendChatChunk(&dto.ChatCompletionsStreamResponse{
+				Id: responseId, Object: "chat.completion.chunk", Created: createAt, Model: model,
+				Choices: []dto.ChatCompletionsStreamResponseChoice{{Index: 0, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Refusal: &delta}}},
+			}) {
+				sr.Stop(streamErr)
+				return
+			}
+
 		case "response.output_item.added", "response.output_item.done":
 			if streamResp.Item == nil {
 				break
@@ -481,7 +493,8 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 		case "response.function_call_arguments.done":
 
-		case "response.completed":
+		case "response.completed", "response.incomplete":
+			sawTerminal = true
 			if streamResp.Response != nil {
 				if streamResp.Response.Model != "" {
 					model = streamResp.Response.Model
@@ -512,6 +525,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					if streamResp.Response.Usage.CompletionTokenDetails.ReasoningTokens != 0 {
 						usage.CompletionTokenDetails.ReasoningTokens = streamResp.Response.Usage.CompletionTokenDetails.ReasoningTokens
 					}
+					if streamResp.Response.Usage.OutputTokensDetails != nil {
+						usage.CompletionTokenDetails = *streamResp.Response.Usage.OutputTokensDetails
+					}
 				}
 			}
 
@@ -524,8 +540,14 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					info.ClaudeConvertInfo.Usage = usage
 				}
 				finishReason := "stop"
-				if sawToolCall && outputText.Len() == 0 {
+				if sawToolCall {
 					finishReason = "tool_calls"
+				}
+				if streamResp.Type == "response.incomplete" {
+					finishReason = "length"
+					if streamResp.Response != nil && streamResp.Response.IncompleteDetails != nil && streamResp.Response.IncompleteDetails.Reasoning == "content_filter" {
+						finishReason = "content_filter"
+					}
 				}
 				stop := helper.GenerateStopResponse(responseId, createAt, model, finishReason)
 				if !sendChatChunk(stop) {
@@ -534,8 +556,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				}
 				sentStop = true
 			}
+			sr.Done()
 
-		case "response.error", "response.failed":
+		case "error", "response.error", "response.failed", "response.cancelled", "response.canceled":
 			c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
 			if streamResp.Response != nil {
 				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
@@ -543,6 +566,11 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					sr.Stop(streamErr)
 					return
 				}
+			}
+			if oaiErr := dto.GetOpenAIError(streamResp.Error); oaiErr != nil {
+				streamErr = types.WithOpenAIError(*oaiErr, http.StatusBadGateway)
+				sr.Stop(streamErr)
+				return
 			}
 			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusBadGateway)
 			sr.Stop(streamErr)
@@ -572,6 +600,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	if streamErr != nil {
 		return nil, streamErr
 	}
+	if !sawTerminal {
+		return nil, types.NewOpenAIError(fmt.Errorf("responses stream closed before a terminal response event"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
 
 	if usage.TotalTokens == 0 {
 		usage = tokenx.ResponseText2Usage(c, usageText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
@@ -587,7 +618,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			info.ClaudeConvertInfo.Usage = usage
 		}
 		finishReason := "stop"
-		if sawToolCall && outputText.Len() == 0 {
+		if sawToolCall {
 			finishReason = "tool_calls"
 		}
 		stop := helper.GenerateStopResponse(responseId, createAt, model, finishReason)

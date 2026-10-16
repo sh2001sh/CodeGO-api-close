@@ -44,6 +44,9 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 		if resp.Usage.CompletionTokenDetails.ReasoningTokens != 0 {
 			usage.CompletionTokenDetails.ReasoningTokens = resp.Usage.CompletionTokenDetails.ReasoningTokens
 		}
+		if resp.Usage.OutputTokensDetails != nil {
+			usage.CompletionTokenDetails = *resp.Usage.OutputTokensDetails
+		}
 	}
 
 	created := resp.CreatedAt
@@ -54,10 +57,28 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 	if len(toolCalls) > 0 {
 		finishReason = "tool_calls"
 	}
+	if rawString(resp.Status) == "incomplete" {
+		finishReason = "length"
+		if resp.IncompleteDetails != nil && resp.IncompleteDetails.Reasoning == "content_filter" {
+			finishReason = "content_filter"
+		}
+	}
 
 	msg := dto.Message{
 		Role:    "assistant",
 		Content: text,
+	}
+	var refusal strings.Builder
+	for _, output := range resp.Output {
+		for _, part := range output.Content {
+			if part.Type == "refusal" {
+				refusal.WriteString(part.Refusal)
+			}
+		}
+	}
+	if refusal.Len() > 0 {
+		value := refusal.String()
+		msg.Refusal = &value
 	}
 	if reasoning != "" {
 		msg.ReasoningContent = &reasoning

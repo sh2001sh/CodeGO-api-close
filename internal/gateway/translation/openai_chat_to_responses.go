@@ -32,9 +32,12 @@ func ChatCompletionsResponseToResponsesResponse(
 	usage := chatUsageToResponsesUsage(resp.Usage)
 	status := "completed"
 	var incomplete *dto.IncompleteDetails
-	if choice.FinishReason == "length" {
+	if choice.FinishReason == "length" || choice.FinishReason == "content_filter" {
 		status = "incomplete"
 		incomplete = &dto.IncompleteDetails{Reasoning: "max_output_tokens"}
+		if choice.FinishReason == "content_filter" {
+			incomplete.Reasoning = "content_filter"
+		}
 	}
 	statusRaw, _ := platformencoding.Marshal(status)
 
@@ -68,6 +71,12 @@ func chatMessageToResponsesOutput(message dto.Message, responseID string, meta *
 		output = append(output, dto.ResponsesOutput{
 			Type: "message", ID: "msg_" + responseID, Status: "completed", Role: "assistant",
 			Content: []dto.ResponsesOutputContent{{Type: "output_text", Text: text, Annotations: []interface{}{}}},
+		})
+	}
+	if message.Refusal != nil && *message.Refusal != "" {
+		output = append(output, dto.ResponsesOutput{
+			Type: "message", ID: "msg_refusal_" + responseID, Status: "completed", Role: "assistant",
+			Content: []dto.ResponsesOutputContent{{Type: "refusal", Refusal: *message.Refusal}},
 		})
 	}
 	for index, call := range message.ParseToolCalls() {
@@ -106,6 +115,8 @@ func chatUsageToResponsesUsage(usage dto.Usage) *dto.Usage {
 	result.OutputTokens = usage.CompletionTokens
 	inputDetails := usage.PromptTokensDetails
 	result.InputTokensDetails = &inputDetails
+	outputDetails := usage.CompletionTokenDetails
+	result.OutputTokensDetails = &outputDetails
 	if result.TotalTokens == 0 {
 		result.TotalTokens = result.InputTokens + result.OutputTokens
 	}
@@ -155,8 +166,11 @@ func chatMessageReasoning(message dto.Message) string {
 func unwrapCustomToolArguments(arguments string) string {
 	var wrapped map[string]json.RawMessage
 	if platformencoding.UnmarshalString(arguments, &wrapped) == nil {
-		if input := rawJSONText(wrapped["input"]); input != "" {
-			return input
+		if raw, ok := wrapped["input"]; ok {
+			var input string
+			if platformencoding.Unmarshal(raw, &input) == nil {
+				return input
+			}
 		}
 	}
 	return arguments

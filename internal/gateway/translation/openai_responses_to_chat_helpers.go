@@ -27,6 +27,8 @@ func responsesContentToChat(raw json.RawMessage) (any, error) {
 		switch partType {
 		case "", "input_text", "output_text", "text":
 			converted = append(converted, dto.MediaContent{Type: dto.ContentTypeText, Text: rawString(part["text"])})
+		case "refusal":
+			converted = append(converted, dto.MediaContent{Type: "refusal", Text: rawString(part["refusal"])})
 		case "input_image", "image_url":
 			imageURL := rawString(part["image_url"])
 			if imageURL == "" {
@@ -64,13 +66,16 @@ func responsesContentToChat(raw json.RawMessage) (any, error) {
 				VideoUrl: map[string]any{"url": video},
 			})
 		case "input_file", "file":
+			if rawString(part["file_url"]) != "" {
+				return nil, errors.New("file_url inputs require a native Responses upstream")
+			}
 			var file any
 			if value := part["file"]; len(value) > 0 {
 				_ = platformencoding.Unmarshal(value, &file)
 			} else {
 				file = map[string]any{
 					"file_id": rawString(part["file_id"]), "file_data": rawString(part["file_data"]),
-					"file_name": rawString(part["filename"]),
+					"filename": rawString(part["filename"]),
 				}
 			}
 			converted = append(converted, dto.MediaContent{Type: dto.ContentTypeFile, File: file})
@@ -113,10 +118,7 @@ func responsesToolToChat(rawTool json.RawMessage, namespace string, meta *Respon
 		return responsesNamespaceToolsToChat(tool, meta)
 	}
 	if isResponsesServerToolType(toolType) {
-		// These are server-side Responses tools. A Chat Completions upstream
-		// cannot execute them, so omit them and let the caller omit tool_choice
-		// when no client-executable tools remain.
-		return nil, nil
+		return nil, fmt.Errorf("%s requires a native Responses upstream; chat completions cannot execute this server tool", toolType)
 	}
 	name := responsesToolNameFromMap(tool)
 	if name == "" {

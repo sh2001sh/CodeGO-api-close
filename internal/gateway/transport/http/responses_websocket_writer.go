@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -29,6 +31,9 @@ type responsesWebsocketHTTPWriter struct {
 	outputFallback []json.RawMessage
 	completed      bool
 	failed         bool
+	interrupted    bool
+	sequence       int
+	writePayload   func([]byte) error
 }
 
 func newResponsesWebsocketHTTPWriter(conn *websocket.Conn, cancel func()) *responsesWebsocketHTTPWriter {
@@ -71,6 +76,10 @@ func (w *responsesWebsocketHTTPWriter) Flush() {
 func (w *responsesWebsocketHTTPWriter) Finish() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.interrupted {
+		w.buffer.Reset()
+		return w.writeErr
+	}
 	if strings.Contains(strings.ToLower(w.header.Get("Content-Type")), "text/event-stream") {
 		w.drainSSELocked(true)
 	} else if w.buffer.Len() > 0 {
@@ -84,7 +93,44 @@ func (w *responsesWebsocketHTTPWriter) Finish() error {
 func (w *responsesWebsocketHTTPWriter) Completion() (string, []byte, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.responseID, bytes.Clone(w.responseOutput), w.completed && !w.failed
+	return w.responseID, bytes.Clone(w.responseOutput), w.completed && !w.failed && !w.interrupted
+}
+
+func (w *responsesWebsocketHTTPWriter) Interrupt(responseID string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if responseID != "" && responseID != w.responseID {
+		return false
+	}
+	if !w.completed && !w.failed && !w.interrupted {
+		w.interrupted = true
+		w.cancel()
+	}
+	return true
+}
+
+func (w *responsesWebsocketHTTPWriter) Interrupted() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.interrupted
+}
+
+// Send one terminal frame after the cancelled relay has settled its partial
+// usage. Cancelled output never enters the continuation cache.
+func (w *responsesWebsocketHTTPWriter) SendCancelled() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.responseID == "" {
+		w.responseID = "resp_" + platformruntime.GetRandomString(24)
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"type": "response.cancelled", "sequence_number": w.sequence + 1,
+		"response": map[string]any{"id": w.responseID, "object": "response", "status": "cancelled", "output": json.RawMessage(w.collectedOutputLocked())},
+	})
+	if w.writePayload != nil {
+		return w.writePayload(payload)
+	}
+	return w.conn.WriteMessage(websocket.TextMessage, payload)
 }
 
 func (w *responsesWebsocketHTTPWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
@@ -121,11 +167,15 @@ func (w *responsesWebsocketHTTPWriter) drainSSELocked(final bool) {
 }
 
 func (w *responsesWebsocketHTTPWriter) sendPayloadLocked(payload []byte) {
-	if len(payload) == 0 || w.writeErr != nil {
+	if len(payload) == 0 || w.writeErr != nil || w.interrupted {
 		return
 	}
 	w.observePayloadLocked(payload)
-	if err := w.conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+	write := w.writePayload
+	if write == nil {
+		write = func(data []byte) error { return w.conn.WriteMessage(websocket.TextMessage, data) }
+	}
+	if err := write(payload); err != nil {
 		w.writeErr = err
 		if w.cancel != nil {
 			w.cancel()
@@ -140,6 +190,7 @@ func (w *responsesWebsocketHTTPWriter) sendPayloadLocked(payload []byte) {
 func (w *responsesWebsocketHTTPWriter) observePayloadLocked(payload []byte) {
 	var event struct {
 		Type        string          `json:"type"`
+		Sequence    int             `json:"sequence_number"`
 		OutputIndex *int            `json:"output_index"`
 		Item        json.RawMessage `json:"item"`
 		Response    struct {
@@ -149,6 +200,12 @@ func (w *responsesWebsocketHTTPWriter) observePayloadLocked(payload []byte) {
 	}
 	if json.Unmarshal(payload, &event) != nil {
 		return
+	}
+	if event.Response.ID != "" {
+		w.responseID = event.Response.ID
+	}
+	if event.Sequence > w.sequence {
+		w.sequence = event.Sequence
 	}
 	switch event.Type {
 	case "response.output_item.done":
@@ -167,7 +224,7 @@ func (w *responsesWebsocketHTTPWriter) observePayloadLocked(payload []byte) {
 		if len(w.responseOutput) == 0 || bytes.Equal(bytes.TrimSpace(w.responseOutput), []byte("[]")) {
 			w.responseOutput = w.collectedOutputLocked()
 		}
-	case "error", "response.failed", "response.incomplete":
+	case "error", "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
 		w.failed = true
 	}
 }

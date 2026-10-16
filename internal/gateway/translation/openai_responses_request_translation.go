@@ -116,6 +116,9 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		if shouldAppendChatMessage(msg, role) {
 			inputItems = append(inputItems, chatMessageToResponsesItem(msg, role))
 		}
+		if role == "assistant" && msg.Refusal != nil && *msg.Refusal != "" {
+			inputItems = append(inputItems, map[string]any{"role": "assistant", "content": []map[string]any{{"type": "refusal", "refusal": *msg.Refusal}}})
+		}
 		inputItems = appendAssistantToolCalls(inputItems, role, msg.ParseToolCalls())
 	}
 
@@ -208,11 +211,25 @@ func chatContentPartToResponses(part dto.MediaContent, role string) map[string]a
 		}
 		return map[string]any{"type": textType, "text": part.Text}
 	case dto.ContentTypeImageURL:
-		return map[string]any{"type": "input_image", "image_url": normalizeChatImageURLToString(part.ImageUrl)}
+		item := map[string]any{"type": "input_image", "image_url": normalizeChatImageURLToString(part.ImageUrl)}
+		if image := part.GetImageMedia(); image != nil && image.Detail != "" {
+			item["detail"] = image.Detail
+		}
+		return item
 	case dto.ContentTypeInputAudio:
 		return map[string]any{"type": "input_audio", "input_audio": part.InputAudio}
 	case dto.ContentTypeFile:
-		return map[string]any{"type": "input_file", "file": part.File}
+		item := map[string]any{"type": "input_file"}
+		var file map[string]any
+		if raw, err := json.Marshal(part.File); err == nil {
+			_ = json.Unmarshal(raw, &file)
+		}
+		for _, key := range []string{"file_id", "file_data", "filename"} {
+			if value, ok := file[key]; ok && value != "" {
+				item[key] = value
+			}
+		}
+		return item
 	case dto.ContentTypeVideoUrl:
 		return map[string]any{"type": "input_video", "video_url": part.VideoUrl}
 	default:
@@ -226,10 +243,7 @@ func buildResponsesRequest(req *dto.GeneralOpenAIRequest, input json.RawMessage,
 		instructionsRaw, _ = platformencoding.Marshal(strings.Join(instructions, "\n\n"))
 	}
 
-	maxOutputTokens := lo.FromPtrOr(req.MaxTokens, uint(0))
-	if maxCompletionTokens := lo.FromPtrOr(req.MaxCompletionTokens, uint(0)); maxCompletionTokens > maxOutputTokens {
-		maxOutputTokens = maxCompletionTokens
-	}
+	maxOutputTokens := req.GetMaxTokens()
 
 	parallelToolCalls := json.RawMessage(nil)
 	if req.HasToolDefinitions() {
@@ -282,6 +296,10 @@ func convertChatTools(tools []dto.ToolCallRequest) json.RawMessage {
 			}
 			if tool.Function.Strict != nil {
 				item["strict"] = *tool.Function.Strict
+			} else {
+				// Chat defaults to non-strict; Responses otherwise normalizes
+				// omitted strict to true, changing optional parameter semantics.
+				item["strict"] = false
 			}
 			converted = append(converted, item)
 			continue

@@ -93,7 +93,7 @@ func publishVerifiedConnectivity(channel *marketplaceschema.Channel) error {
 			return err
 		}
 		*channel = current
-		if marketplaceChannelAdminHeld(channel) {
+		if marketplaceChannelAdminHeld(channel) || group.LifecycleStatus == marketplacedomain.LifecycleDisabled {
 			channel.Status, group.LifecycleStatus = marketplacedomain.LifecycleDisabled, marketplacedomain.LifecycleDisabled
 		} else if channel.Status != marketplacedomain.LifecycleSuspended && group.LifecycleStatus != marketplacedomain.LifecycleSuspended {
 			channel.Status, group.LifecycleStatus = marketplacedomain.LifecycleActive, marketplacedomain.LifecycleActive
@@ -115,10 +115,8 @@ func publishVerifiedConnectivity(channel *marketplaceschema.Channel) error {
 		if err := tx.Save(&group).Error; err != nil {
 			return err
 		}
-		if marketplaceChannelAdminHeld(channel) {
-			return syncPausedMarketplaceChannelWithDB(tx, channel, true)
-		}
-		return nil
+		return syncPausedMarketplaceChannelWithDB(tx, channel,
+			channel.Status != marketplacedomain.LifecycleActive || group.LifecycleStatus != marketplacedomain.LifecycleActive)
 	})
 	if err == nil && channel.InternalChannelID != nil {
 		refreshInternalChannelRuntime(*channel.InternalChannelID)

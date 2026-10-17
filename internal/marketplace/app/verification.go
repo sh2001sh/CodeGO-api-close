@@ -233,10 +233,11 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 			return err
 		}
 		*channel, *group = currentChannel, currentGroup
-		if marketplaceChannelAdminHeld(channel) {
+		if marketplaceChannelAdminHeld(channel) || group.LifecycleStatus == marketplacedomain.LifecycleDisabled {
 			channel.Status, group.LifecycleStatus = marketplacedomain.LifecycleDisabled, marketplacedomain.LifecycleDisabled
 		}
-		if probeErr == nil && channel.Status != marketplacedomain.LifecycleSuspended && !marketplaceChannelAdminHeld(channel) {
+		paused := channel.Status == marketplacedomain.LifecycleSuspended || group.LifecycleStatus == marketplacedomain.LifecycleSuspended || marketplaceChannelAdminHeld(channel)
+		if probeErr == nil && !paused {
 			var syncErr error
 			if channel.InternalChannelID == nil {
 				syncErr = createInternalChannelWithDB(tx, channel, group)
@@ -245,6 +246,9 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 			}
 			if syncErr != nil {
 				return syncErr
+			}
+			if err := syncPausedMarketplaceChannelWithDB(tx, channel, false); err != nil {
+				return err
 			}
 		}
 		updates := map[string]any{"verification_status": status, "lifecycle_status": gorm.Expr("CASE WHEN lifecycle_status IN ? THEN lifecycle_status ELSE ? END", []string{marketplacedomain.LifecycleSuspended, marketplacedomain.LifecycleDisabled}, lifecycle)}
@@ -265,6 +269,8 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 			if err := tx.Model(group).Update("lifecycle_status", marketplacedomain.LifecycleDisabled).Error; err != nil {
 				return err
 			}
+		}
+		if paused {
 			if err := syncPausedMarketplaceChannelWithDB(tx, channel, true); err != nil {
 				return err
 			}

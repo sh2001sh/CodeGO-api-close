@@ -33,7 +33,7 @@ func ReconcileMarketplaceChannels() error {
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&group, "channel_id = ?", channel.ID).Error; err != nil {
 				return err
 			}
-			if marketplaceChannelAdminHeld(channel) {
+			if marketplaceChannelAdminHeld(channel) || group.LifecycleStatus == marketplacedomain.LifecycleDisabled {
 				channel.Status, group.LifecycleStatus = marketplacedomain.LifecycleDisabled, marketplacedomain.LifecycleDisabled
 				if err := tx.Save(channel).Error; err != nil {
 					return err
@@ -62,6 +62,11 @@ func ReconcileMarketplaceChannels() error {
 						return err
 					}
 				} else if err := syncInternalChannelWithDB(tx, channel, &group); err != nil {
+					return err
+				}
+				// Publication owns lifecycle; configuration sync deliberately keeps
+				// the previous internal status, including an obsolete pause.
+				if err := syncPausedMarketplaceChannelWithDB(tx, channel, false); err != nil {
 					return err
 				}
 				now := time.Now().UTC()

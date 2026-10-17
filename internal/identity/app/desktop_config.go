@@ -424,8 +424,8 @@ func BuildDesktopImportConfigDeepLink(userID int, req DesktopImportCreateRequest
 	configURL := ""
 	expiresIn := int64(0)
 	if target == "codego" {
-		code = platformruntime.GetRandomString(32)
-		if code == "" {
+		code, err = platformruntime.GenerateRandomCharsKey(32)
+		if err != nil {
 			return nil, errors.New("failed to generate import code")
 		}
 		if err = getDesktopImportCache().SetWithTTL(code, *payload, desktopImportCodeTTL); err != nil {
@@ -511,16 +511,23 @@ func ResolveDesktopImportConfig(code string) (*DesktopImportConfigPayload, error
 	if code == "" {
 		return nil, errors.New("missing code")
 	}
-
-	cache := getDesktopImportCache()
-	payload, found, err := cache.Get(code)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
+	if len(code) != 32 || strings.ContainsAny(code, " /?&#=\r\n\t") {
 		return nil, errors.New("import code is invalid or expired")
 	}
-	if _, err = cache.DeleteMany([]string{code}); err != nil {
+
+	// Redis uses WATCH/CAS across instances; the memory backend needs a local
+	// critical section. Consuming replaces the secret with a short tombstone.
+	desktopImportConsumeMu.Lock()
+	defer desktopImportConsumeMu.Unlock()
+	var payload DesktopImportConfigPayload
+	err := getDesktopImportCache().UpdateWithTTL(code, time.Second, func(current DesktopImportConfigPayload, found bool) (DesktopImportConfigPayload, error) {
+		if !found || current.APIKey == "" {
+			return DesktopImportConfigPayload{}, errors.New("import code is invalid or expired")
+		}
+		payload = current
+		return DesktopImportConfigPayload{}, nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return &payload, nil

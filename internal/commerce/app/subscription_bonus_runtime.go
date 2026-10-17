@@ -17,6 +17,7 @@ import (
 	// HasStarterPurchaseWithin reports whether the user purchased a starter subscription within the window.
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func HasStarterPurchaseWithin(userID int, window time.Duration) (bool, error) {
@@ -80,37 +81,38 @@ func addSubscriptionBonusTx(tx *gorm.DB, sub *commerceschema.UserSubscription, b
 	if grantKey == "" {
 		return errors.New("subscription bonus grant key is empty")
 	}
-	applied, err := creditMaterializedSubscriptionBonusTx(tx, sub, bonusQuota, grantKey)
+	var current commerceschema.UserSubscription
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, sub.Id).Error; err != nil {
+		return err
+	}
+	applied, err := creditMaterializedSubscriptionBonusTx(tx, &current, bonusQuota, grantKey)
 	if err != nil || !applied {
 		return err
 	}
-	sub.AmountTotal += bonusQuota
-	if sub.PeriodAmount > 0 {
-		sub.PeriodAmount += bonusQuota
+	current.AmountTotal += bonusQuota
+	if current.PeriodAmount > 0 {
+		current.PeriodAmount += bonusQuota
 	}
 	if err := tx.Model(&commerceschema.UserSubscription{}).Where("id = ?", sub.Id).
 		Updates(map[string]any{
-			"amount_total":  sub.AmountTotal,
-			"period_amount": sub.PeriodAmount,
+			"amount_total":  current.AmountTotal,
+			"period_amount": current.PeriodAmount,
 			"updated_at":    platformruntime.GetTimestamp(),
 		}).Error; err != nil {
 		return err
 	}
+	*sub = current
 	return nil
 }
 
-// creditMaterializedSubscriptionBonusTx mirrors a subscription bonus into an
-// existing ledger account. New subscriptions remain unmaterialized until first
-// use, at which point their full updated quota is bootstrapped once.
+// creditMaterializedSubscriptionBonusTx materializes the previous available
+// projection only while the ledger has no entries, then records the bonus.
 // The returned bool reports whether the subscription projection should apply
 // the bonus. It is false when the same grant was already materialized.
 func creditMaterializedSubscriptionBonusTx(tx *gorm.DB, sub *commerceschema.UserSubscription, bonusQuota int64, grantKey string) (bool, error) {
-	var account billingschema.BillingAccount
-	err := tx.Where("account_type = ? AND owner_type = ? AND owner_id = ?", "subscription", "user_subscription", sub.Id).
-		First(&account).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return true, nil
-	}
+	account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
+		AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(sub.Id), QuotaUnit: "quota",
+	})
 	if err != nil {
 		return false, err
 	}
@@ -126,6 +128,23 @@ func creditMaterializedSubscriptionBonusTx(tx *gorm.DB, sub *commerceschema.User
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, err
+	}
+	ledgerBacked, err := subscriptionLedgerHasEntriesTx(tx, account.AccountID)
+	if err != nil {
+		return false, err
+	}
+	if !ledgerBacked {
+		available := sub.AmountTotal - sub.AmountUsed
+		if available > 0 {
+			if _, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+				AccountID: account.AccountID, Amount: available,
+				IdempotencyKey: fmt.Sprintf("subscription-bootstrap:%d", sub.Id),
+				ReasonCode:     "subscription_balance_bootstrap", ReferenceType: "user_subscription", ReferenceID: fmt.Sprint(sub.Id),
+				OperatorType: "commerce", OperatorID: "subscription_bonus",
+			}); err != nil {
+				return false, err
+			}
+		}
 	}
 
 	_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{

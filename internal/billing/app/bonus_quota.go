@@ -8,6 +8,7 @@ import (
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func GrantBonusWalletQuotaTx(tx *gorm.DB, userID int, amount int64, sourceType string, sourceID string, key string) (bool, error) {
@@ -84,7 +85,7 @@ func ConsumeBonusWalletQuotaCreditsTx(tx *gorm.DB, userID int, amount int64) err
 
 	remaining := amount
 	var credits []billingschema.BonusQuotaCredit
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ? AND remaining_amount > 0", userID).
 		Order("id asc").
 		Find(&credits).Error; err != nil {

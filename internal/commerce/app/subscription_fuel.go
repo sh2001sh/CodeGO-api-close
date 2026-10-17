@@ -15,11 +15,13 @@ import (
 
 	"github.com/sh2001sh/new-api/constant"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
+	"gorm.io/gorm/clause"
 )
 
 var ErrSubscriptionFuelUnavailable = errors.New("subscription fuel is unavailable")
@@ -197,11 +199,11 @@ func CreateSubscriptionFuelStripePayment(userID int, req SubscriptionFuelPurchas
 }
 
 func fulfillSubscriptionFuelTx(tx *gorm.DB, order *commerceschema.SubscriptionOrder) error {
-	if tx == nil || order == nil || order.PurchaseType != commerceschema.SubscriptionPurchaseTypeFuel || order.TargetSubscriptionId <= 0 || order.FuelQuota <= 0 {
+	if tx == nil || order == nil || order.PurchaseType != commerceschema.SubscriptionPurchaseTypeFuel || order.TargetSubscriptionId <= 0 || order.FuelQuota <= 0 || strings.TrimSpace(order.TradeNo) == "" {
 		return ErrSubscriptionFuelUnavailable
 	}
 	var subscription commerceschema.UserSubscription
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", order.TargetSubscriptionId, order.UserId).First(&subscription).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ?", order.TargetSubscriptionId, order.UserId).First(&subscription).Error; err != nil {
 		return ErrSubscriptionFuelUnavailable
 	}
 	if subscription.Status != "active" || subscription.EndTime <= platformruntime.GetTimestamp() || subscription.EndTime != order.FuelExpiresAt {
@@ -211,7 +213,36 @@ func fulfillSubscriptionFuelTx(tx *gorm.DB, order *commerceschema.SubscriptionOr
 	if err != nil {
 		return err
 	}
-	if _, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{AccountID: account.AccountID, Amount: order.FuelQuota, IdempotencyKey: "subscription-fuel:" + order.TradeNo, ReasonCode: "subscription_fuel", ReferenceType: "subscription_fuel_order", ReferenceID: order.TradeNo, OperatorType: "commerce", OperatorID: fmt.Sprintf("%d", order.Id)}); err != nil {
+	idempotencyKey := "subscription-fuel:" + order.TradeNo
+	var existing billingschema.BillingLedgerEntry
+	err = tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error
+	if err == nil {
+		if existing.AccountID != account.AccountID || existing.Amount != order.FuelQuota || existing.EntryType != billingdomain.LedgerEntryTypeGrantCredit {
+			return billingdomain.ErrLedgerConflict
+		}
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	ledgerBacked, err := subscriptionLedgerHasEntriesTx(tx, account.AccountID)
+	if err != nil {
+		return err
+	}
+	if !ledgerBacked {
+		available := subscription.AmountTotal - subscription.AmountUsed
+		if available > 0 {
+			if _, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+				AccountID: account.AccountID, Amount: available,
+				IdempotencyKey: fmt.Sprintf("subscription-bootstrap:%d", subscription.Id),
+				ReasonCode:     "subscription_balance_bootstrap", ReferenceType: "user_subscription", ReferenceID: fmt.Sprint(subscription.Id),
+				OperatorType: "commerce", OperatorID: order.TradeNo,
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{AccountID: account.AccountID, Amount: order.FuelQuota, IdempotencyKey: idempotencyKey, ReasonCode: "subscription_fuel", ReferenceType: "subscription_fuel_order", ReferenceID: order.TradeNo, OperatorType: "commerce", OperatorID: fmt.Sprintf("%d", order.Id)}); err != nil {
 		return err
 	}
 	return tx.Model(&commerceschema.UserSubscription{}).Where("id = ?", subscription.Id).Updates(map[string]any{"amount_total": gorm.Expr("amount_total + ?", order.FuelQuota)}).Error

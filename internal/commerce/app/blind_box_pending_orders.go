@@ -12,6 +12,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -39,7 +40,7 @@ func CancelPendingBlindBoxOrder(userID int, tradeNo string) error {
 
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var order commerceschema.BlindBoxOrder
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where(blindBoxTradeNoColumn()+" = ? AND user_id = ?", tradeNo, userID).
 			First(&order).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {

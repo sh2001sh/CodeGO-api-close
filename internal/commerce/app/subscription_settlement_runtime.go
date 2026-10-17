@@ -8,6 +8,7 @@ import (
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -46,8 +47,28 @@ func SettleSubscriptionReservationTx(tx *gorm.DB, requestID string, subscription
 	if record.Status == "refunded" {
 		return errors.New("subscription pre-consume already refunded")
 	}
-	if err := lockUserSubscriptionTx(tx, record.UserSubscriptionId); err != nil {
+	sub, err := lockUserSubscriptionRecordTx(tx, record.UserSubscriptionId)
+	if err != nil {
 		return err
+	}
+	if sub.AmountTotal == 0 {
+		if record.ModelName != strings.TrimSpace(modelName) || record.PreConsumed < 0 {
+			return errors.New("unlimited subscription settlement evidence mismatch")
+		}
+		if record.Status == "settled" {
+			if record.PreConsumed != actualAmount {
+				return billingdomain.ErrLedgerConflict
+			}
+			return nil
+		}
+		if record.Status != "consumed" {
+			return errors.New("unlimited subscription usage hold is unavailable")
+		}
+		if _, err := AdjustUserSubscriptionUsageDeltaTx(tx, subscriptionID, modelName, actualAmount-record.PreConsumed, "relay-settle:"+requestID); err != nil {
+			return err
+		}
+		record.PreConsumed, record.Status = actualAmount, "settled"
+		return tx.Save(record).Error
 	}
 	return settleSubscriptionReservationTx(tx, record, actualAmount)
 }
@@ -159,9 +180,8 @@ func PostConsumeUserSubscriptionUsageDelta(userSubscriptionID int, modelName str
 	if delta == 0 {
 		return nil
 	}
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		return postConsumeUserSubscriptionUsageDeltaTx(tx, userSubscriptionID, modelName, delta)
-	})
+	_, err := AdjustUserSubscriptionUsageDelta(userSubscriptionID, modelName, delta, platformruntime.GetUUID())
+	return err
 }
 
 func postConsumeUserSubscriptionUsageDeltaTx(tx *gorm.DB, userSubscriptionID int, modelName string, delta int64) error {

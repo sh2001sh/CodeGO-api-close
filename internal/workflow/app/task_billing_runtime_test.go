@@ -82,6 +82,7 @@ func truncateTables(t *testing.T) {
 		platformdb.DB.Exec("DELETE FROM logs")
 		platformdb.DB.Exec("DELETE FROM channels")
 		platformdb.DB.Exec("DELETE FROM top_ups")
+		platformdb.DB.Exec("DELETE FROM billing_outbox_events")
 		platformdb.DB.Exec("DELETE FROM billing_settlements")
 		platformdb.DB.Exec("DELETE FROM billing_reservations")
 		platformdb.DB.Exec("DELETE FROM billing_ledger_entries")
@@ -622,7 +623,8 @@ func TestSettleTaskBillingOnComplete_PerCallBillingSkipsAdaptorAdjust(t *testing
 	adaptor := &mockAdaptor{adjustReturn: 2000}
 	taskResult := &relaycommon.TaskInfo{Status: workflowschema.TaskStatusSuccess}
 
-	settleTaskBillingOnComplete(ctx, adaptor, task, taskResult)
+	actualQuota, reason := taskCompletionQuota(adaptor, task, taskResult)
+	require.NoError(t, settleTaskQuotaDelta(ctx, task, actualQuota, reason))
 
 	assert.Equal(t, initQuota, getUserQuota(t, userID))
 	assert.Equal(t, tokenRemain, getTokenRemainQuota(t, tokenID))
@@ -648,7 +650,8 @@ func TestSettleTaskBillingOnComplete_PerCallBillingSkipsTotalTokens(t *testing.T
 	adaptor := &mockAdaptor{adjustReturn: 0}
 	taskResult := &relaycommon.TaskInfo{Status: workflowschema.TaskStatusSuccess, TotalTokens: 9999}
 
-	settleTaskBillingOnComplete(ctx, adaptor, task, taskResult)
+	actualQuota, reason := taskCompletionQuota(adaptor, task, taskResult)
+	require.NoError(t, settleTaskQuotaDelta(ctx, task, actualQuota, reason))
 
 	assert.Equal(t, initQuota, getUserQuota(t, userID))
 	assert.Equal(t, tokenRemain, getTokenRemainQuota(t, tokenID))
@@ -674,7 +677,8 @@ func TestSettleTaskBillingOnComplete_NonPerCallAdaptorAdjustWorks(t *testing.T) 
 	adaptor := &mockAdaptor{adjustReturn: adaptorQuota}
 	taskResult := &relaycommon.TaskInfo{Status: workflowschema.TaskStatusSuccess}
 
-	settleTaskBillingOnComplete(ctx, adaptor, task, taskResult)
+	actualQuota, reason := taskCompletionQuota(adaptor, task, taskResult)
+	require.NoError(t, settleTaskQuotaDelta(ctx, task, actualQuota, reason))
 
 	assert.Equal(t, initQuota+(preConsumed-adaptorQuota), getUserQuota(t, userID))
 	assert.Equal(t, tokenRemain+(preConsumed-adaptorQuota), getTokenRemainQuota(t, tokenID))

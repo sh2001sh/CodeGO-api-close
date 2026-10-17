@@ -49,9 +49,16 @@ func TestRefundPostgresConcurrentCreationUsesOneProviderRequest(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &commerceschema.TopUp{}, &billingschema.BillingAccount{}, &billingschema.BillingBalanceSnapshot{}, &billingschema.BillingLedgerEntry{}, &billingschema.BillingReservation{}, &billingschema.BillingSettlement{}, &billingschema.BillingOutboxEvent{}, &billingschema.FundingLot{}, &billingschema.FundingAllocation{}))
 	order, account := seedRefundWallet(t, db)
 	var creates atomic.Int32
+	var queries atomic.Int32
+	var responseStatus atomic.Int32
+	responseStatus.Store(1)
 	mockRefundProvider(t, func(r *http.Request) (*http.Response, error) {
-		creates.Add(1)
-		return refundProviderResponse(t, r, "provider-paid", 1), nil
+		if strings.HasSuffix(r.URL.Path, "/create") {
+			creates.Add(1)
+		} else {
+			queries.Add(1)
+		}
+		return refundProviderResponse(t, r, "provider-paid", int(responseStatus.Load())), nil
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -85,4 +92,50 @@ func TestRefundPostgresConcurrentCreationUsesOneProviderRequest(t *testing.T) {
 	require.NoError(t, db.Model(&billingschema.BillingReservation{}).Where("account_id = ?", account).Count(&reservations).Error)
 	require.EqualValues(t, 1, reservations)
 	fmt.Println("PASS: PostgreSQL 8 concurrent refund attempts produced 1 provider call and 1 durable hold; canonical wallet, user balance and exact lot are frozen")
+
+	require.NoError(t, db.First(order, order.Id).Error)
+	firstRefundNo := order.RefundNo
+	responseStatus.Store(3)
+	failed, err := syncRefund(order.UserId, firstRefundNo)
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.RefundStatusFailed, failed.Status)
+	assertRefundWallet(t, db, account, 1000, 0, 1000)
+	queryCount := queries.Load()
+	failedReplay, err := syncRefund(order.UserId, firstRefundNo)
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.RefundStatusFailed, failedReplay.Status)
+	require.Equal(t, queryCount, queries.Load(), "known terminal failure is not queried or refunded again")
+
+	responseStatus.Store(1)
+	retry, err := createRefund(order.UserId, commerceschema.RefundRequest{OrderType: commerceschema.RefundOrderTypeBalance, TradeNo: order.TradeNo})
+	require.NoError(t, err)
+	require.NotEqual(t, firstRefundNo, retry.RefundNo)
+	require.EqualValues(t, 2, creates.Load(), "a second provider create requires a confirmed failed, released attempt")
+	assertRefundWallet(t, db, account, 0, 1000, 0)
+	responseStatus.Store(2)
+	results := make(chan error, workers)
+	start = make(chan struct{})
+	for range workers {
+		wg.Go(func() {
+			<-start
+			_, err := syncRefund(order.UserId, retry.RefundNo)
+			results <- err
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	for err := range results {
+		require.NoError(t, err)
+	}
+	assertRefundWallet(t, db, account, 0, 0, 0)
+	var settled int64
+	require.NoError(t, db.Model(&billingschema.BillingReservation{}).Where("account_id = ? AND status = ?", account, billingschema.BillingReservationStatusSettled).Count(&settled).Error)
+	require.EqualValues(t, 1, settled)
+	queryCount = queries.Load()
+	completedReplay, err := syncRefund(order.UserId, retry.RefundNo)
+	require.NoError(t, err)
+	require.Equal(t, commerceschema.RefundStatusSuccess, completedReplay.Status)
+	require.Equal(t, queryCount, queries.Load())
+	fmt.Println("PASS: PostgreSQL explicit failure restores the exact lot, terminal replay makes no provider call, and 8 successful syncs settle one native hold")
 }

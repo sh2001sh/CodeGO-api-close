@@ -50,7 +50,9 @@ func setupFileHandlers(t *testing.T) *gin.Engine {
 }
 
 func TestSignedFileDeliveryAllowsValidTokenAndRejectsTampering(t *testing.T) {
-	router := setupFileHandlers(t)
+	_ = setupFileHandlers(t)
+	router := gin.New()
+	router.GET("/v1/files/:id/delivery", DeliverFile)
 	t.Setenv("FILE_DELIVERY_BASE_URL", "https://api.example.com")
 	t.Setenv("FILE_DELIVERY_SIGNING_SECRET", "delivery-test-secret")
 	file, err := gatewayFiles.Create(11, "image.png", "vision", "image/png", bytes.NewReader([]byte("image")), 1024)

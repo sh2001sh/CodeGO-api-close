@@ -133,15 +133,16 @@ func finalizeTaskTimeout(ctx context.Context, task *workflowschema.Task, timeout
 
 	snap := workflowdomain.TakeTaskSnapshot(task)
 	decision := workflowdomain.ApplyTimeout(task, time.Now().Unix(), constant.TaskTimeoutMinutes, legacyTaskCutoffUnix)
-	won, err := workflowdomain.UpdateTaskWithStatus(task, snap.Status)
+	actualQuota := task.Quota
+	if decision.ShouldRefund {
+		actualQuota = 0
+	}
+	won, err := workflowapp.CommitTaskTerminalTransition(ctx, task, snap.Status, actualQuota, decision.Reason)
 	if err != nil {
 		return nil, err
 	}
 	if !won {
 		return workflowdomain.GetTaskByPublicTaskID(task.TaskID)
-	}
-	if decision.ShouldRefund {
-		workflowapp.RecordTaskRefundForWorkflow(ctx, task, decision.Reason)
 	}
 	return task, nil
 }

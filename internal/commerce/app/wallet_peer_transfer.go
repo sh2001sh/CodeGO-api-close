@@ -183,7 +183,8 @@ func ListWalletTransfers(userID, page, pageSize int) (*WalletTransferHistoryPage
 func validWalletTransferRequest(senderUserID int, req CreateWalletTransferRequest) bool {
 	minimumQuota := minimumWalletTransferQuota()
 	return senderUserID > 0 && len(req.RecipientExternalId) == identityschema.ExternalUserIDLength &&
-		req.AmountQuota >= minimumQuota && req.AmountQuota%minimumQuota == 0 && req.AmountQuota <= int64(^uint(0)>>1) &&
+		req.AmountQuota >= minimumQuota && req.AmountQuota%minimumQuota == 0 &&
+		req.AmountQuota <= int64(^uint(0)>>1)-walletTransferFee(req.AmountQuota) &&
 		req.RequestId != "" && len(req.RequestId) <= 128 && req.PaymentPassword != ""
 }
 
@@ -238,6 +239,9 @@ func executeWalletTransferTx(tx *gorm.DB, sender, recipient *identityschema.User
 	}
 	feeQuota := walletTransferFee(req.AmountQuota)
 	totalDebit := req.AmountQuota + feeQuota
+	if int64(recipientBalance) > int64(^uint(0)>>1)-req.AmountQuota {
+		return commerceschema.ErrWalletTransferInvalid
+	}
 	if senderBalance < int(totalDebit) {
 		return commerceschema.ErrWalletTransferInsufficientBalance
 	}
@@ -309,7 +313,8 @@ func walletTransferHistoryItem(transfer commerceschema.WalletTransfer, userID in
 }
 
 func walletTransferFee(amount int64) int64 {
-	return (amount*walletTransferFeeBPS + 9999) / 10000
+	// Divide before multiplying so large valid amounts retain the same ceil fee.
+	return amount/10000*walletTransferFeeBPS + (amount%10000*walletTransferFeeBPS+9999)/10000
 }
 
 func recipientFromUser(user *identityschema.User) *WalletTransferRecipient {

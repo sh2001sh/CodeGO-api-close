@@ -47,14 +47,9 @@ func GetGroupBuyDetail(userID int, groupBuyID int64) (*commercedomain.GroupBuyLi
 	return getGroupBuyDetail(userID, groupBuyID)
 }
 
-// JoinGroupBuy joins the requested group-buy room for the current user.
+// JoinGroupBuy preserves the retired entry point without adding participants.
 func JoinGroupBuy(userID int, req GroupBuyJoinRequest) (map[string]any, error) {
-	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		return joinGroupBuyTx(tx, userID, req.GroupBuyId, req.OrderId, 0, 0)
-	}); err != nil {
-		return nil, err
-	}
-	return map[string]any{"joined": true}, nil
+	return nil, ErrGroupBuyPlanNotEnabled
 }
 
 func listActiveGroupBuys(userID int) ([]commercedomain.GroupBuyListItem, error) {

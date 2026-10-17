@@ -39,6 +39,7 @@ func init() {
 		ReserveAdditional: func(requestID string, subscriptionID int, modelName string, amount int64) error {
 			return ReserveAdditionalSubscriptionQuota(requestID, subscriptionID, modelName, amount)
 		},
+		ReserveUnlimitedTarget: ReserveUnlimitedSubscriptionQuotaTarget,
 		GetPlanInfo: func(userSubscriptionID int) (*billingapp.SubscriptionFundingPlanInfo, error) {
 			planInfo, err := GetSubscriptionPlanInfoByUserSubscriptionID(userSubscriptionID)
 			if err != nil {
@@ -55,6 +56,7 @@ func init() {
 		PostConsumeDelta: func(subscriptionID int, modelName string, delta int64) error {
 			return PostConsumeUserSubscriptionUsageDelta(subscriptionID, modelName, delta)
 		},
+		AdjustUsageDelta: AdjustUserSubscriptionUsageDelta,
 		RefundPreConsume: func(requestID string) error {
 			return RefundSubscriptionPreConsume(requestID)
 		},

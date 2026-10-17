@@ -1,10 +1,10 @@
 package http
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	stdhttp "net/http"
 	"testing"
@@ -116,7 +116,7 @@ func TestGetGroupBuyReturnsDetail(t *testing.T) {
 	}
 }
 
-func TestJoinGroupBuyCreatesMember(t *testing.T) {
+func TestJoinGroupBuyRejectsRetiredEntryPoint(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)
 
 	user := &identityschema.User{
@@ -167,8 +167,8 @@ func TestJoinGroupBuyCreatesMember(t *testing.T) {
 	joinGroupBuy(ctx)
 
 	response := decodeCommerceResponse(t, recorder)
-	if !response.Success {
-		t.Fatalf("expected join group buy success, got %#v", response)
+	if response.Success {
+		t.Fatalf("retired group buy join must fail, got %#v", response)
 	}
 
 	var memberCount int64
@@ -177,7 +177,7 @@ func TestJoinGroupBuyCreatesMember(t *testing.T) {
 		Count(&memberCount).Error; err != nil {
 		t.Fatalf("failed to count group buy members: %v", err)
 	}
-	if memberCount != 1 {
-		t.Fatalf("expected created group buy member, got %d", memberCount)
+	if memberCount != 0 {
+		t.Fatalf("retired group buy join created %d members", memberCount)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func migrateBlindBoxLegacyCreditsTx(tx *gorm.DB) error {
@@ -18,7 +19,7 @@ func migrateBlindBoxLegacyCreditsTx(tx *gorm.DB) error {
 
 	now := platformruntime.GetTimestamp()
 	var pending []commerceschema.BlindBoxCredit
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("migrated_at = 0").
 		Order("id asc").
 		Find(&pending).Error; err != nil {

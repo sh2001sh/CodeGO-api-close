@@ -25,6 +25,7 @@ import (
 	"github.com/thanhpk/randstr"
 	waffo "github.com/waffo-com/waffo-go"
 	"github.com/waffo-com/waffo-go/config"
+	waffocore "github.com/waffo-com/waffo-go/core"
 	"github.com/waffo-com/waffo-go/types/order"
 	"io"
 	"math"
@@ -35,6 +36,8 @@ import (
 )
 
 const CreemSignatureHeader = "creem-signature"
+
+var newWaffoSDK = waffo.New
 
 type StripePayRequest struct {
 	Amount        int64  `json:"amount"`
@@ -603,7 +606,7 @@ func CreateWaffoTopUp(ctx context.Context, userID int, req WaffoPayRequest) (*Wa
 	createParams := &order.CreateOrderParams{
 		PaymentRequestID: paymentRequestID,
 		MerchantOrderID:  merchantOrderID,
-		OrderAmount:      formatWaffoAmount(payMoney, currency),
+		OrderAmount:      formatWaffoAmount(topUp.Money, currency),
 		OrderCurrency:    currency,
 		OrderDescription: fmt.Sprintf("Recharge %d credits", req.Amount),
 		OrderRequestedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
@@ -641,14 +644,14 @@ func CreateWaffoTopUp(ctx context.Context, userID int, req WaffoPayRequest) (*Wa
 	if paymentURL == "" {
 		paymentURL = orderData.OrderAction
 	}
-	logger.LogInfo(ctx, fmt.Sprintf("Waffo 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f pay_method_type=%s pay_method_name=%q", userID, merchantOrderID, req.Amount, payMoney, resolvedPayMethodType, resolvedPayMethodName))
+	logger.LogInfo(ctx, fmt.Sprintf("Waffo 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f pay_method_type=%s pay_method_name=%q", userID, merchantOrderID, req.Amount, topUp.Money, resolvedPayMethodType, resolvedPayMethodName))
 	return &WaffoCheckoutPayload{PaymentURL: paymentURL, OrderID: merchantOrderID}, nil
 }
 
 func HandleWaffoPaymentStatus(ctx context.Context, merchantOrderID string, orderStatus string, clientIP string) error {
-	if orderStatus != "PAY_SUCCESS" {
+	if orderStatus != waffocore.OrderStatusPaySuccess {
 		logger.LogInfo(ctx, fmt.Sprintf("Waffo 订单状态非成功，忽略充值 trade_no=%s order_status=%s client_ip=%s", merchantOrderID, orderStatus, clientIP))
-		if merchantOrderID != "" {
+		if merchantOrderID != "" && orderStatus == waffocore.OrderStatusOrderClose {
 			if err := UpdatePendingTopUpStatus(merchantOrderID, commerceschema.PaymentProviderWaffo, constant.TopUpStatusFailed); err != nil &&
 				!errors.Is(err, commerceschema.ErrTopUpNotFound) &&
 				!errors.Is(err, commerceschema.ErrTopUpStatusInvalid) {
@@ -759,7 +762,7 @@ func CreateWaffoPancakeTopUp(ctx context.Context, userID int, req WaffoPancakePa
 		ProductType: "onetime",
 		Currency:    strings.ToUpper(strings.TrimSpace(commercestore.WaffoPancakeCurrency)),
 		PriceSnapshot: &WaffoPancakePriceSnapshot{
-			Amount:      formatWaffoPancakeAmount(payMoney),
+			Amount:      formatWaffoPancakeAmount(topUp.Money),
 			TaxIncluded: false,
 			TaxCategory: "saas",
 		},
@@ -772,7 +775,7 @@ func CreateWaffoPancakeTopUp(ctx context.Context, userID int, req WaffoPancakePa
 		_ = UpdatePendingTopUpStatus(tradeNo, commerceschema.PaymentProviderWaffoPancake, constant.TopUpStatusFailed)
 		return nil, errors.New("拉起支付失败")
 	}
-	logger.LogInfo(ctx, fmt.Sprintf("Waffo Pancake 充值订单创建成功 user_id=%d trade_no=%s session_id=%s amount=%d money=%.2f", userID, tradeNo, sessionData.SessionID, req.Amount, payMoney))
+	logger.LogInfo(ctx, fmt.Sprintf("Waffo Pancake 充值订单创建成功 user_id=%d trade_no=%s session_id=%s amount=%d money=%.2f", userID, tradeNo, sessionData.SessionID, req.Amount, topUp.Money))
 	return &WaffoPancakeCheckoutPayload{
 		CheckoutURL: sessionData.CheckoutURL,
 		SessionID:   sessionData.SessionID,
@@ -904,7 +907,7 @@ func GetWaffoSDK() (*waffo.Waffo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return waffo.New(cfg), nil
+	return newWaffoSDK(cfg), nil
 }
 
 func StripeMoneyToMinorUnits(amount float64) int64 {

@@ -46,8 +46,11 @@ func SweepTimedOutTasks(ctx context.Context) {
 	for _, task := range tasks {
 		oldStatus := task.Status
 		decision := workflowdomain.ApplyTimeout(task, now, constant.TaskTimeoutMinutes, 1740182400)
-
-		won, err := workflowdomain.UpdateTaskWithStatus(task, oldStatus)
+		actualQuota := task.Quota
+		if decision.ShouldRefund {
+			actualQuota = 0
+		}
+		won, err := CommitTaskTerminalTransition(ctx, task, oldStatus, actualQuota, decision.Reason)
 		if err != nil {
 			logger.LogError(ctx, fmt.Sprintf("sweepTimedOutTasks CAS update error for task %s: %v", task.TaskID, err))
 			continue
@@ -57,9 +60,6 @@ func SweepTimedOutTasks(ctx context.Context) {
 			continue
 		}
 		timedOutCount++
-		if decision.ShouldRefund {
-			recordTaskRefund(ctx, task, decision.Reason)
-		}
 	}
 
 	if timedOutCount > 0 {
@@ -86,11 +86,13 @@ func PollSingleTask(ctx context.Context, task *workflowschema.Task) error {
 	}
 	upstreamTaskID := task.GetUpstreamTaskID()
 	if upstreamTaskID == "" {
+		oldStatus := task.Status
 		task.Status = workflowdomain.TaskStatusFailure
 		task.Progress = workflowdomain.TaskProgressComplete
 		task.FailReason = "missing upstream task id"
 		task.FinishTime = time.Now().Unix()
-		return workflowdomain.SaveTask(task)
+		_, err := CommitTaskTerminalTransition(ctx, task, oldStatus, 0, task.FailReason)
+		return err
 	}
 
 	taskChannelM := map[int][]string{
@@ -107,12 +109,14 @@ func PollSingleTask(ctx context.Context, task *workflowschema.Task) error {
 
 // UpdateSunoTasks polls batched Suno tasks channel-by-channel.
 func UpdateSunoTasks(ctx context.Context, taskChannelM map[int][]string, taskM map[string]*workflowschema.Task) error {
+	var updateErr error
 	for channelID, taskIDs := range taskChannelM {
 		if err := updateSunoTasks(ctx, channelID, taskIDs, taskM); err != nil {
 			logger.LogError(ctx, fmt.Sprintf("渠道 #%d 更新异步任务失败: %s", channelID, err.Error()))
+			updateErr = errors.Join(updateErr, err)
 		}
 	}
-	return nil
+	return updateErr
 }
 
 func updateSunoTasks(ctx context.Context, channelID int, taskIDs []string, taskM map[string]*workflowschema.Task) error {
@@ -124,21 +128,19 @@ func updateSunoTasks(ctx context.Context, channelID int, taskIDs []string, taskM
 	channel, err := gatewaystore.GetCachedChannel(channelID)
 	if err != nil {
 		platformobservability.SysLog(fmt.Sprintf("CacheGetChannel: %v", err))
-		var failedIDs []int64
 		for _, upstreamID := range taskIDs {
 			if task, ok := taskM[upstreamID]; ok {
-				failedIDs = append(failedIDs, task.ID)
+				oldStatus := task.Status
+				task.Status = workflowdomain.TaskStatusFailure
+				task.Progress = workflowdomain.TaskProgressComplete
+				task.FailReason = fmt.Sprintf("获取渠道信息失败，请联系管理员，渠道ID：%d", channelID)
+				task.FinishTime = time.Now().Unix()
+				if _, refundErr := CommitTaskTerminalTransition(ctx, task, oldStatus, 0, task.FailReason); refundErr != nil {
+					return fmt.Errorf("fail Suno task %s after channel lookup: %w", task.TaskID, refundErr)
+				}
 			}
 		}
-		err = workflowdomain.BulkUpdateTasksByID(failedIDs, map[string]any{
-			"fail_reason": fmt.Sprintf("获取渠道信息失败，请联系管理员，渠道ID：%d", channelID),
-			"status":      "FAILURE",
-			"progress":    "100%",
-		})
-		if err != nil {
-			platformobservability.SysLog(fmt.Sprintf("UpdateSunoTask error: %v", err))
-		}
-		return err
+		return nil
 	}
 
 	adaptor := GetTaskAdaptorFunc(constant.TaskPlatformSuno)
@@ -174,16 +176,26 @@ func updateSunoTasks(ctx context.Context, channelID int, taskIDs []string, taskM
 
 	for _, responseItem := range responseItems.Data {
 		task := taskM[responseItem.TaskID]
+		if task == nil || workflowdomain.IsTaskTerminalStatus(task.Status) {
+			continue
+		}
 		if !workflowdomain.ShouldApplySunoTaskUpdate(task, responseItem) {
 			continue
 		}
+		oldStatus := task.Status
 		decision := workflowdomain.ApplySunoTaskUpdate(task, responseItem)
-		if decision.ShouldRefund {
-			logger.LogInfo(ctx, task.TaskID+" 构建失败，"+task.FailReason)
-			recordTaskRefund(ctx, task, decision.Reason)
+		if workflowdomain.IsTaskTerminalStatus(task.Status) {
+			actualQuota := task.Quota
+			if decision.ShouldRefund {
+				actualQuota = 0
+			}
+			if _, err := CommitTaskTerminalTransition(ctx, task, oldStatus, actualQuota, decision.Reason); err != nil {
+				return fmt.Errorf("finalize Suno task %s: %w", task.TaskID, err)
+			}
+			continue
 		}
 		if err := workflowdomain.SaveTask(task); err != nil {
-			platformobservability.SysLog("UpdateSunoTask task error: " + err.Error())
+			return fmt.Errorf("update Suno task %s: %w", task.TaskID, err)
 		}
 	}
 	return nil
@@ -191,12 +203,14 @@ func updateSunoTasks(ctx context.Context, channelID int, taskIDs []string, taskM
 
 // UpdateVideoTasks polls async video tasks by channel.
 func UpdateVideoTasks(ctx context.Context, platform constant.TaskPlatform, taskChannelM map[int][]string, taskM map[string]*workflowschema.Task) error {
+	var updateErr error
 	for channelID, taskIDs := range taskChannelM {
 		if err := updateVideoTasks(ctx, platform, channelID, taskIDs, taskM); err != nil {
 			logger.LogError(ctx, fmt.Sprintf("Channel #%d failed to update video async tasks: %s", channelID, err.Error()))
+			updateErr = errors.Join(updateErr, err)
 		}
 	}
-	return nil
+	return updateErr
 }
 
 func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, channelID int, taskIDs []string, taskM map[string]*workflowschema.Task) error {
@@ -207,19 +221,17 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 
 	channel, err := gatewaystore.GetCachedChannel(channelID)
 	if err != nil {
-		var failedIDs []int64
 		for _, upstreamID := range taskIDs {
 			if task, ok := taskM[upstreamID]; ok {
-				failedIDs = append(failedIDs, task.ID)
+				oldStatus := task.Status
+				task.Status = workflowdomain.TaskStatusFailure
+				task.Progress = workflowdomain.TaskProgressComplete
+				task.FailReason = fmt.Sprintf("Failed to get channel info, channel ID: %d", channelID)
+				task.FinishTime = time.Now().Unix()
+				if _, refundErr := CommitTaskTerminalTransition(ctx, task, oldStatus, 0, task.FailReason); refundErr != nil {
+					return fmt.Errorf("fail video task %s after channel lookup: %w", task.TaskID, refundErr)
+				}
 			}
-		}
-		errUpdate := workflowdomain.BulkUpdateTasksByID(failedIDs, map[string]any{
-			"fail_reason": fmt.Sprintf("Failed to get channel info, channel ID: %d", channelID),
-			"status":      "FAILURE",
-			"progress":    "100%",
-		})
-		if errUpdate != nil {
-			platformobservability.SysLog(fmt.Sprintf("UpdateVideoTask error: %v", errUpdate))
 		}
 		return fmt.Errorf("CacheGetChannel failed: %w", err)
 	}
@@ -236,13 +248,15 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 	}
 	adaptor.Init(info)
 
+	var updateErr error
 	for _, taskID := range taskIDs {
 		if err := updateVideoSingleTask(ctx, adaptor, channel, taskID, taskM); err != nil {
 			logger.LogError(ctx, fmt.Sprintf("Failed to update video task %s: %s", taskID, err.Error()))
+			updateErr = errors.Join(updateErr, err)
 		}
 		time.Sleep(1 * time.Second)
 	}
-	return nil
+	return updateErr
 }
 
 func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, channel *gatewayschema.Channel, taskID string, taskM map[string]*workflowschema.Task) error {
@@ -256,6 +270,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, chan
 	if task == nil {
 		logger.LogError(ctx, fmt.Sprintf("Task %s not found in taskM", taskID))
 		return fmt.Errorf("task %s not found", taskID)
+	}
+	if workflowdomain.IsTaskTerminalStatus(task.Status) {
+		return nil
 	}
 
 	key := channel.Key
@@ -326,29 +343,28 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, chan
 
 	isDone := workflowdomain.IsTaskTerminalStatus(task.Status)
 	if isDone && snap.Status != task.Status {
-		won, err := workflowdomain.UpdateTaskWithStatus(task, snap.Status)
-		if err != nil {
-			logger.LogError(ctx, fmt.Sprintf("UpdateWithStatus failed for task %s: %s", task.TaskID, err.Error()))
-			shouldRefund = false
-			shouldSettle = false
-		} else if !won {
-			logger.LogWarn(ctx, fmt.Sprintf("Task %s already transitioned by another process, skip billing", task.TaskID))
-			shouldRefund = false
-			shouldSettle = false
+		actualQuota, reason := task.Quota, ""
+		if shouldRefund {
+			actualQuota, reason = 0, task.FailReason
+		} else if shouldSettle {
+			if completionQuota, completionReason := taskCompletionQuota(adaptor, task, taskResult); completionQuota > 0 {
+				actualQuota, reason = completionQuota, completionReason
+			}
 		}
+		won, err := CommitTaskTerminalTransition(ctx, task, snap.Status, actualQuota, reason)
+		if err != nil {
+			return fmt.Errorf("finalize task %s: %w", task.TaskID, err)
+		}
+		if !won {
+			logger.LogWarn(ctx, fmt.Sprintf("Task %s already transitioned by another process, skip billing", task.TaskID))
+		}
+		return nil
 	} else if !snap.Equal(workflowdomain.TakeTaskSnapshot(task)) {
 		if _, err := workflowdomain.UpdateTaskWithStatus(task, snap.Status); err != nil {
-			logger.LogError(ctx, fmt.Sprintf("Failed to update task %s: %s", task.TaskID, err.Error()))
+			return fmt.Errorf("update task %s: %w", task.TaskID, err)
 		}
 	} else {
 		logger.LogDebug(ctx, fmt.Sprintf("No update needed for task %s", task.TaskID))
-	}
-
-	if shouldSettle {
-		settleTaskBillingOnComplete(ctx, adaptor, task, taskResult)
-	}
-	if shouldRefund {
-		recordTaskRefund(ctx, task, task.FailReason)
 	}
 
 	return nil

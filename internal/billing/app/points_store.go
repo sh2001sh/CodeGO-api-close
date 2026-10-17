@@ -24,7 +24,7 @@ func EnsurePointAccountTx(tx *gorm.DB, userID int) (*billingschema.PointAccount,
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("user_id = ?", userID).First(&account).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", userID).First(&account).Error; err != nil {
 		return nil, err
 	}
 	return &account, nil

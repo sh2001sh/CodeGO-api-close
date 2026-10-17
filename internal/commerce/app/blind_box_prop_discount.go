@@ -10,6 +10,7 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ApplyBlindBoxConsumptionDiscount atomically applies and audits one request's
@@ -95,7 +96,7 @@ func ApplyBlindBoxConsumptionDiscount(request billingapp.BlindBoxConsumptionDisc
 
 func selectBlindBoxConsumptionPropTx(tx *gorm.DB, request billingapp.BlindBoxConsumptionDiscountRequest, now int64) (*commerceschema.BlindBoxProp, error) {
 	var props []commerceschema.BlindBoxProp
-	err := tx.Set("gorm:query_option", "FOR UPDATE").
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ? AND status = ? AND prop_type IN ? AND expires_at > ?", request.UserID, commerceschema.BlindBoxPropStatusActive, []string{
 			commerceschema.BlindBoxPropTypeConsumeDiscount95,
 			commerceschema.BlindBoxPropTypeConsumeDiscount90,

@@ -9,6 +9,7 @@ import (
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -75,6 +76,9 @@ func CreatePendingSubscriptionOrderWithDiscounts(order *commerceschema.Subscript
 				return errors.New("credit pack bonus must be between 5% and 10%")
 			}
 			order.OriginalMoney = plan.PriceAmount
+			if err := snapshotSubscriptionEpayCheckout(order, 0); err != nil {
+				return err
+			}
 			return tx.Create(order).Error
 		}
 		baseMoney = math.Round(baseMoney*100) / 100
@@ -82,6 +86,9 @@ func CreatePendingSubscriptionOrderWithDiscounts(order *commerceschema.Subscript
 			return err
 		}
 		if order.FirstPurchaseDiscountApplied {
+			if err := snapshotSubscriptionEpayCheckout(order, 0); err != nil {
+				return err
+			}
 			return tx.Create(order).Error
 		}
 		prop, err := ReserveBlindBoxSubscriptionDiscountPropTx(tx, order.UserId, order.TradeNo)
@@ -91,6 +98,13 @@ func CreatePendingSubscriptionOrderWithDiscounts(order *commerceschema.Subscript
 		if prop != nil {
 			appliedRate = prop.DiscountRate
 			order.Money = commercedomain.ApplyDiscountRateToMoney(baseMoney, prop.DiscountRate)
+		}
+		propID := 0
+		if prop != nil {
+			propID = prop.Id
+		}
+		if err := snapshotSubscriptionEpayCheckout(order, propID); err != nil {
+			return err
 		}
 		return tx.Create(order).Error
 	})
@@ -106,14 +120,45 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 	var completedOrder *commerceschema.SubscriptionOrder
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		order := &commerceschema.SubscriptionOrder{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(subscriptionTradeNoColumn()+" = ?", tradeNo).First(order).Error; err != nil {
-			return commerceschema.ErrSubscriptionOrderNotFound
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(subscriptionTradeNoColumn()+" = ?", tradeNo).First(order).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return commerceschema.ErrSubscriptionOrderNotFound
+			}
+			return err
 		}
 		if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
 			return commerceschema.ErrPaymentMethodMismatch
 		}
+		if order.PaymentProvider == commerceschema.PaymentProviderEpay {
+			if actualPaymentMethod != "" && actualPaymentMethod != order.PaymentMethod {
+				return commerceschema.ErrPaymentMethodMismatch
+			}
+			paid, err := validateEpayOrderPayment(providerPayload, order.TradeNo, order.PaymentMethod, order.Money)
+			if err != nil {
+				return err
+			}
+			if order.Status == constant.TopUpStatusSuccess {
+				if extractProviderOrderID(order.ProviderPayload) != paid.TradeNo {
+					return errors.New("epay original provider order mismatch")
+				}
+			} else {
+				if order.RefundStatus != "" || order.RefundNo != "" || order.RefundProviderID != "" || order.RefundQuota != 0 || order.RefundAmount != 0 {
+					return commerceschema.ErrSubscriptionOrderStatusInvalid
+				}
+				if order.Status != constant.TopUpStatusPending && order.Status != constant.TopUpStatusExpired {
+					return commerceschema.ErrSubscriptionOrderStatusInvalid
+				}
+				var user identityschema.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id = ?", order.UserId).First(&user).Error; err != nil {
+					return err
+				}
+				if err := consumeSubscriptionEpayOriginalPropTx(tx, order); err != nil {
+					return err
+				}
+			}
+		}
 		if order.Status == constant.TopUpStatusSuccess {
-			if order.FulfillmentStatus != commerceschema.SubscriptionOrderFulfillmentCompleted {
+			if order.FulfillmentStatus != commerceschema.SubscriptionOrderFulfillmentCompleted && order.RefundStatus == "" {
 				completedCopy := *order
 				completedOrder = &completedCopy
 			}
@@ -174,6 +219,9 @@ func FulfillPaidSubscriptionOrder(tradeNo string) error {
 		}
 		if order.FulfillmentStatus == commerceschema.SubscriptionOrderFulfillmentCompleted {
 			return nil
+		}
+		if order.RefundStatus != "" || order.RefundNo != "" || order.RefundProviderID != "" || order.RefundQuota != 0 || order.RefundAmount != 0 {
+			return commerceschema.ErrSubscriptionOrderStatusInvalid
 		}
 		if order.CreditPackQuota > 0 {
 			if err := fulfillCreditPackTx(tx, order); err != nil {
@@ -264,7 +312,7 @@ func ExpireSubscriptionOrder(tradeNo string, expectedPaymentProvider string) err
 
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		order := &commerceschema.SubscriptionOrder{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(subscriptionTradeNoColumn()+" = ?", tradeNo).First(order).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(subscriptionTradeNoColumn()+" = ?", tradeNo).First(order).Error; err != nil {
 			return commerceschema.ErrSubscriptionOrderNotFound
 		}
 		if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
@@ -290,7 +338,7 @@ func CancelPendingSubscriptionOrder(userID int, tradeNo string) error {
 	}
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		order := &commerceschema.SubscriptionOrder{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(subscriptionTradeNoColumn()+" = ? AND user_id = ?", tradeNo, userID).First(order).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(subscriptionTradeNoColumn()+" = ? AND user_id = ?", tradeNo, userID).First(order).Error; err != nil {
 			return commerceschema.ErrSubscriptionOrderNotFound
 		}
 		if order.Status != constant.TopUpStatusPending {
@@ -305,9 +353,9 @@ func CancelPendingSubscriptionOrder(userID int, tradeNo string) error {
 	})
 }
 
-// ExpireDueSubscriptionOrders releases stale unpaid checkouts. A verified
-// late payment remains safe because CompleteSubscriptionOrder accepts expired
-// orders and resumes the idempotent fulfillment workflow.
+// ExpireDueSubscriptionOrders releases stale unpaid checkouts. Late Epay
+// payments require original checkout evidence; released discount reservations
+// fail closed for manual review.
 func ExpireDueSubscriptionOrders(limit int) (int, error) {
 	if limit <= 0 {
 		limit = 300
@@ -325,7 +373,7 @@ func ExpireDueSubscriptionOrders(limit int) (int, error) {
 	for _, id := range ids {
 		err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 			var order commerceschema.SubscriptionOrder
-			if err := tx.Set("gorm:query_option", "FOR UPDATE").
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 				Where("id = ? AND status = ? AND create_time <= ?", id, constant.TopUpStatusPending, cutoff).
 				First(&order).Error; err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {

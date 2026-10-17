@@ -146,7 +146,7 @@ func TestCommunityBridgeRejectsInvalidPaginationBeforeDatabaseAccess(t *testing.
 	require.Equal(t, "INVALID_PAGINATION", body.Code)
 }
 
-func TestCommunityBridgeRejectsInvalidRatingBeforeDatabaseAccess(t *testing.T) {
+func TestCommunityBridgeRejectsRetiredRatingWriteBeforeDatabaseAccess(t *testing.T) {
 	secret := "community-rating-secret-with-at-least-32-characters"
 	t.Setenv("CODEGO_COMMUNITY_API_SECRET", secret)
 	gin.SetMode(gin.TestMode)
@@ -155,16 +155,16 @@ func TestCommunityBridgeRejectsInvalidRatingBeforeDatabaseAccess(t *testing.T) {
 	request := httptest.NewRequest(
 		http.MethodPut,
 		"/api/community/v1/channels/channel-1/rating",
-		strings.NewReader(`{"viewer_sub":"ABC234","stars":6}`),
+		strings.NewReader(`{"viewer_sub":"ABC234","stars":5}`),
 	)
 	request.Header.Set("Authorization", "Bearer "+secret)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	engine.ServeHTTP(response, request)
-	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Equal(t, http.StatusGone, response.Code)
 	var body struct {
 		Code string `json:"code"`
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	require.Equal(t, "INVALID_RATING", body.Code)
+	require.Equal(t, "RATING_WRITE_RETIRED", body.Code)
 }

@@ -259,16 +259,9 @@ func HandleEpayWebhook(params map[string]string, clientIP string) (bool, error) 
 		return false, nil
 	}
 
-	client := GetEpayClient()
-	if client == nil {
-		return false, nil
-	}
-	verifyInfo, err := client.Verify(params)
-	if err != nil || verifyInfo == nil || !verifyInfo.VerifyStatus {
+	verifyInfo, err := verifyConfiguredEpayOrder(params)
+	if err != nil {
 		return false, err
-	}
-	if params["pid"] != client.Config.PartnerID {
-		return false, errors.New("epay merchant mismatch")
 	}
 	if verifyInfo.TradeStatus != epay.StatusTradeSuccess {
 		return true, nil

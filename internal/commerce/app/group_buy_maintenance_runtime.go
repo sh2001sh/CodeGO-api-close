@@ -22,22 +22,33 @@ func SettleDueGroupBuys(limit int) (int, error) {
 	}
 
 	now := platformruntime.GetTimestamp()
-	var orders []commerceschema.GroupBuyOrder
-	if err := platformdb.DB.Where("status = ? AND (expires_at <= ? OR current_count >= target_count)", commerceschema.GroupBuyStatusPending, now).
-		Order("expires_at asc, id asc").
-		Limit(limit).
-		Find(&orders).Error; err != nil {
-		return 0, err
-	}
-
 	settled := 0
-	for _, order := range orders {
-		if err := settleGroupBuyOrder(order.Id); err != nil {
+	var lastExpiry, lastID int64
+	var failure error
+	for settled < limit {
+		var orders []commerceschema.GroupBuyOrder
+		query := platformdb.DB.Where("status = ? AND (expires_at <= ? OR current_count >= target_count)", commerceschema.GroupBuyStatusPending, now)
+		if lastID > 0 {
+			query = query.Where("expires_at > ? OR (expires_at = ? AND id > ?)", lastExpiry, lastExpiry, lastID)
+		}
+		batchSize := limit - settled
+		if err := query.Order("expires_at asc, id asc").Limit(batchSize).Find(&orders).Error; err != nil {
 			return settled, err
 		}
-		settled++
+		for _, order := range orders {
+			lastExpiry, lastID = order.ExpiresAt, order.Id
+			if err := settleGroupBuyOrder(order.Id); err != nil {
+				failure = fmt.Errorf("settle group buy %d: %w", order.Id, err)
+				platformobservability.SysError(failure.Error())
+				continue
+			}
+			settled++
+		}
+		if len(orders) < batchSize {
+			break
+		}
 	}
-	return settled, nil
+	return settled, failure
 }
 
 // EnsureGhostGroupBuys ensures enough active ghost group-buy rooms exist for discovery pages.

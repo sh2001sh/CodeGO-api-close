@@ -10,6 +10,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strings"
 	// OpenBlindBoxes opens the requested number of blind boxes for the user.
 )
@@ -58,7 +59,7 @@ func OpenBlindBoxOrderByTradeNoTx(tx *gorm.DB, tradeNo string) ([]commerceschema
 		return nil, errors.New("tradeNo is empty")
 	}
 	var order commerceschema.BlindBoxOrder
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("trade_no = ?", tradeNo).First(&order).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("trade_no = ?", tradeNo).First(&order).Error; err != nil {
 		return nil, commercedomain.ErrBlindBoxOrderNotFound
 	}
 	if order.Status != constant.TopUpStatusSuccess {
@@ -386,23 +387,20 @@ func countBlindBoxOpensInRange(tx *gorm.DB, start, end int64) (int64, error) {
 }
 
 func getOrCreateBlindBoxPityStateTx(tx *gorm.DB, userID int) (*commerceschema.BlindBoxPityState, error) {
-	var state commerceschema.BlindBoxPityState
-	err := tx.Set("gorm:query_option", "FOR UPDATE").Where("user_id = ?", userID).First(&state).Error
-	if err == nil {
-		return &state, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
+	state := commerceschema.BlindBoxPityState{UserId: userID, ConsecutiveLowRewards: 0}
+	// An absent row cannot be locked. Concurrent first opens must converge on
+	// one state before reading or changing the pity counter.
+	if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&state).Error; err != nil {
 		return nil, err
 	}
-	state = commerceschema.BlindBoxPityState{UserId: userID, ConsecutiveLowRewards: 0}
-	if err := tx.Create(&state).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", userID).First(&state).Error; err != nil {
 		return nil, err
 	}
 	return &state, nil
 }
 
 func getOpenableBlindBoxOrdersTx(tx *gorm.DB, userID int, orderID *int, now int64) ([]commerceschema.BlindBoxOrder, int, error) {
-	query := tx.Set("gorm:query_option", "FOR UPDATE").
+	query := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ? AND status = ? AND opened_count < quantity", userID, constant.TopUpStatusSuccess).
 		Where("source <> ? OR expires_at = 0 OR expires_at > ?", commerceschema.BlindBoxOrderSourceSubscriptionBenefit, now)
 	if orderID != nil {

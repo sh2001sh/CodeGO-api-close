@@ -684,6 +684,15 @@ func TestCreateDesktopImportConfigAndConsumeCodeOnce(t *testing.T) {
 	if !getResponse.Success {
 		t.Fatalf("expected import config fetch success, got %s", getResponse.Message)
 	}
+	if getRecorder.Header().Get("Cache-Control") != "no-store" || getRecorder.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatal("import credential exchange must disable caching and referrers")
+	}
+	if created.ExpiresIn != 120 {
+		t.Fatalf("unexpected import lifetime: %d", created.ExpiresIn)
+	}
+	if _, err := identityapp.ResolveDesktopImportConfig(created.Code); err == nil {
+		t.Fatal("import code must be consumed by the first exchange")
+	}
 }
 
 func TestCreateCCSwitchImportUsesOfficialDirectParameterContract(t *testing.T) {

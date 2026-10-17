@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/samber/hot"
 	"github.com/sh2001sh/new-api/constant"
+	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -27,13 +28,14 @@ const (
 	DesktopToolOpenCode       = "opencode"
 	DesktopToolOpenClaw       = "openclaw"
 	DesktopToolHermes         = "hermes"
-	desktopImportCodeTTL      = 10 * time.Minute
+	desktopImportCodeTTL      = 2 * time.Minute
 	desktopImportCacheNS      = "new-api:desktop_import:v1"
 )
 
 var (
 	desktopImportCacheOnce sync.Once
 	desktopImportCache     *cachex.HybridCache[DesktopImportConfigPayload]
+	desktopImportConsumeMu sync.Mutex
 )
 
 type DesktopEnsureTokenRequest struct {
@@ -172,6 +174,19 @@ func ValidateDesktopGroupForUser(user *identityschema.User, requested string) (s
 		userGroup = "default"
 	}
 	group := gatewayroutingapp.NormalizeTokenGroup(requested)
+	if group == commerceapp.LegacyMonthlyPassGroup {
+		_, active := commerceapp.ActiveMultiplierCardRoutePolicy(user.Id)
+		if !active {
+			return "", errors.New("monthly pass entitlement is inactive or unavailable")
+		}
+		return group, nil
+	}
+	if group == commerceapp.ZeroHourGroup {
+		if !commerceapp.IsZeroHourGroupActive(user.Id) {
+			return "", errors.New("zero hour entitlement is inactive or unavailable")
+		}
+		return group, nil
+	}
 	if group == gatewayroutingapp.AutoGroupName {
 		if len(gatewayroutingapp.GetUserAutoGroup(userGroup)) == 0 {
 			return "", errors.New("auto group is not available for current user")

@@ -289,7 +289,7 @@ NodeBB 不保存主站密码。昵称和头像只是社区副本，`sub` 不因�
 GET /api/community/v1/sellers?page=1&page_size=20&keyword=&provider=&sort=rating
 GET /api/community/v1/members/:sub
 GET /api/community/v1/members/:sub/channels?page=1&page_size=20&keyword=&sort=rating&viewer_sub=
-PUT /api/community/v1/channels/:id/rating
+PUT /api/community/v1/channels/:id/rating  # 已退役，认证后返回 410
 ```
 
 请求必须携带独立服务凭据：
@@ -306,7 +306,7 @@ Authorization: Bearer <CODEGO_COMMUNITY_API_SECRET>
 
 接口不会返回邮箱、数据库用户 ID、余额、倍率、收益、请求记录、内部渠道 ID、凭据尾号、API 密钥或加密凭据。未知账号返回 404；非法 `sub` 或分页返回 400；禁用账号查询渠道返回 403；未配置服务密钥返回 503；认证失败返回 401。数据库或依赖异常返回通用 500，详细错误只进入服务端日志。
 
-首期星级评分只要求统一账号登录并禁止自评，尚未增加“真实消费者”门槛；后续若需要提高评分可信度，应基于主站调用记录增加已消费权重或准入条件，不能由 NodeBB 浏览器自行声明消费资格。
+社区服务接口仅提供只读查询，评分提交使用主站登录用户流程；旧服务评分写接口返回 410，共享服务密钥及 `viewer_sub` 不具备评分写入权限。NodeBB 不提供评分写路由。
 
 后续主站可向社区发送的事件：
 

@@ -26,6 +26,7 @@ type BillingSession struct {
 	trusted               bool
 	quotaScale            float64
 	reservationQuotaScale float64
+	realtimeUsageQuota    int
 	monthlyPass           *MonthlyPassEntitlement
 	fundingSettled        bool
 	settled               bool
@@ -58,13 +59,24 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	gopool.Go(func() {
 		if err := funding.Refund(); err != nil {
 			platformobservability.SysLog("error refunding billing source: " + err.Error())
+			s.mu.Lock()
+			s.refunded = false
+			s.mu.Unlock()
+			return
 		}
 
 		if tokenConsumed > 0 && !isPlayground {
 			if err := AdjustTokenQuota(tokenID, tokenKey, -tokenConsumed); err != nil {
 				platformobservability.SysLog("error refunding token quota: " + err.Error())
+				s.mu.Lock()
+				s.refunded = false
+				s.mu.Unlock()
+				return
 			}
 		}
+		s.mu.Lock()
+		s.tokenConsumed = 0
+		s.mu.Unlock()
 	})
 }
 
@@ -90,18 +102,26 @@ func (s *BillingSession) RefundSync(c *gin.Context) error {
 	tokenConsumed := s.tokenConsumed
 	funding := s.funding
 
-	var errs []error
 	if err := funding.Refund(); err != nil {
-		errs = append(errs, fmt.Errorf("refund funding source: %w", err))
+		s.mu.Lock()
+		s.refunded = false
+		s.mu.Unlock()
+		return fmt.Errorf("refund funding source: %w", err)
 	}
 
 	if tokenConsumed > 0 && !isPlayground {
 		if err := AdjustTokenQuota(tokenID, tokenKey, -tokenConsumed); err != nil {
-			errs = append(errs, fmt.Errorf("refund token quota: %w", err))
+			s.mu.Lock()
+			s.refunded = false
+			s.mu.Unlock()
+			return fmt.Errorf("refund token quota: %w", err)
 		}
 	}
 
-	return errors.Join(errs...)
+	s.mu.Lock()
+	s.tokenConsumed = 0
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *BillingSession) NeedsRefund() bool {
@@ -124,12 +144,34 @@ func (s *BillingSession) needsRefundLocked() bool {
 }
 
 func (s *BillingSession) GetPreConsumedQuota() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.preConsumedQuota
 }
 
 func (s *BillingSession) Reserve(targetQuota int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.reserveLocked(targetQuota)
+}
+
+// reserveRealtimeUsage accumulates incremental usage against the request's
+// existing hold. Only final settlement consumes that hold.
+func (s *BillingSession) reserveRealtimeUsage(quota int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if quota < 0 || quota > math.MaxInt-s.realtimeUsageQuota {
+		return errors.New("realtime usage quota is out of range")
+	}
+	target := s.realtimeUsageQuota + quota
+	if err := s.reserveLocked(target); err != nil {
+		return err
+	}
+	s.realtimeUsageQuota = target
+	return nil
+}
+
+func (s *BillingSession) reserveLocked(targetQuota int) error {
 
 	if targetQuota < 0 {
 		targetQuota = 0
@@ -144,11 +186,15 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 		return nil
 	}
 
-	if err := s.reserveFunding(delta); err != nil {
+	if err := s.reserveToken(delta); err != nil {
 		return err
 	}
-	if err := s.reserveToken(delta); err != nil {
-		s.rollbackFundingReserve(delta)
+	if err := s.reserveFunding(delta); err != nil {
+		if !s.relayInfo.IsPlayground {
+			if rollbackErr := AdjustTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta); rollbackErr != nil {
+				return errors.Join(err, fmt.Errorf("rollback token reservation: %w", rollbackErr))
+			}
+		}
 		return err
 	}
 
@@ -269,7 +315,11 @@ func (s *BillingSession) scaleQuota(quota int, scale float64) int {
 	if quota <= 0 || scale <= 0 || scale == 1 {
 		return quota
 	}
-	scaled := int(math.Round(float64(quota) * scale))
+	scaledValue := math.Round(float64(quota) * scale)
+	if scaledValue >= float64(math.MaxInt) {
+		return math.MaxInt
+	}
+	scaled := int(scaledValue)
 	if scaled < 1 {
 		return 1
 	}

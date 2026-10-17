@@ -33,7 +33,11 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 		}
 		delta := int64(quota)
 		if delta != 0 {
-			if err := postSubscriptionUsageDelta(relayInfo.SubscriptionId, relayInfo.OriginModelName, delta); err != nil {
+			key := fmt.Sprintf("relay-post:%s:%d:%d", relayInfo.RequestId, relayInfo.SubscriptionPostDelta, delta)
+			if relayInfo.RequestId == "" {
+				return errors.New("subscription request id is missing")
+			}
+			if err := adjustSubscriptionUsageDelta(relayInfo.SubscriptionId, relayInfo.OriginModelName, delta, key); err != nil {
 				return err
 			}
 			relayInfo.SubscriptionPostDelta += delta

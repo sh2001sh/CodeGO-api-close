@@ -32,7 +32,7 @@ func debitClaudeWalletQuotaAmountTx(tx *gorm.DB, userID int, amount int64, opera
 	return debitUserWalletQuotaTx(tx, userID, amount, operationID, mirroredWalletTxStore{
 		accountType: billingAccountTypeClaudeWallet,
 		readBalance: getUserClaudeWalletQuotaTx,
-		applyDelta:  decreaseUserClaudeWalletQuotaTx,
+		applyDelta:  decreaseCanonicalUserClaudeWalletQuotaTx,
 	}, false, reasonCode)
 }
 
@@ -48,7 +48,7 @@ func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64, operationID s
 	if err != nil {
 		return err
 	}
-	if int64(legacyBalance) < amount {
+	if mirrored.accountType != billingAccountTypeClaudeWallet && int64(legacyBalance) < amount {
 		return billingdomain.ErrInsufficientBalance
 	}
 	account, err := ensureMirroredUserAccountTx(tx, userID, mirrored.accountType, legacyBalance)
@@ -58,8 +58,12 @@ func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64, operationID s
 	if err := reconcileAccountBalanceTx(tx, account, userID, legacyBalance); err != nil {
 		return err
 	}
-	if err := applyLedgerDeltaTx(tx, account, userID, amount, operationID, defaultReasonCode(reasonCode, "wallet_debit")); err != nil {
+	applied, err := applyLedgerDeltaTx(tx, account, userID, amount, operationID, defaultReasonCode(reasonCode, "wallet_debit"))
+	if err != nil {
 		return err
+	}
+	if !applied {
+		return nil
 	}
 	if reasonCode != "wallet_peer_transfer_debit" && reasonCode != "wallet_peer_transfer_fee" && reasonCode != "marketplace_owner_reclaim" && reasonCode != "payment_refund" {
 		if err := ConsumeWalletRewardHoldsTx(tx, account.AccountID, amount); err != nil {
@@ -81,6 +85,20 @@ func decreaseUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64) error {
 
 func decreaseUserClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int64) error {
 	return decreaseUserQuotaColumnTx(tx, userID, "claude_quota", amount)
+}
+
+func decreaseCanonicalUserClaudeWalletQuotaTx(tx *gorm.DB, userID int, amount int64) error {
+	// The ledger has authorized this debit. Keep compatibility delta semantics
+	// without rejecting against, or overdrawing, a stale legacy projection.
+	result := tx.Model(&identityschema.User{}).Where("id = ?", userID).
+		UpdateColumn("claude_quota", gorm.Expr("CASE WHEN claude_quota >= ? THEN claude_quota - ? ELSE 0 END", amount, amount))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func decreaseUserQuotaColumnTx(tx *gorm.DB, userID int, column string, amount int64) error {

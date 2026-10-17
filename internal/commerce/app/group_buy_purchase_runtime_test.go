@@ -16,6 +16,19 @@ import (
 	"gorm.io/gorm"
 )
 
+func seedGroupBuyMemberPayment(t *testing.T, db *gorm.DB, room *commerceschema.GroupBuyOrder, member *commerceschema.GroupBuyMember) {
+	t.Helper()
+	if member.OrderId <= 0 {
+		require.NoError(t, db.Create(&identityschema.User{Id: member.UserId, Username: fmt.Sprintf("ghost-%d", member.UserId), AffCode: fmt.Sprintf("ghost-%d", member.UserId), Group: "ghost"}).Error)
+		return
+	}
+	require.NoError(t, db.Create(&commerceschema.SubscriptionOrder{
+		Id: member.OrderId, UserId: member.UserId, PlanId: room.PlanId, GroupBuyId: room.Id,
+		TargetSubscriptionId: member.UserSubscriptionId, TradeNo: fmt.Sprintf("paid-group-%d-%d", room.Id, member.OrderId),
+		Status: constant.TopUpStatusSuccess, Money: 99, FulfillmentStatus: commerceschema.SubscriptionOrderFulfillmentCompleted,
+	}).Error)
+}
+
 func TestValidateGroupBuyPurchaseRejectsDayPass(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 	plan := &commerceschema.SubscriptionPlan{
@@ -164,6 +177,7 @@ func TestSettleGroupBuyOrderAddsBonusToSubscriptionInsteadOfWallet(t *testing.T)
 	}
 	for _, member := range members {
 		require.NoError(t, db.Create(member).Error)
+		seedGroupBuyMemberPayment(t, db, order, member)
 	}
 
 	require.NoError(t, settleGroupBuyOrder(order.Id))
@@ -277,6 +291,7 @@ func TestSettleGroupBuyOrder_OnlyOneRealMemberAndGhost_MarkedCompletedAtTwoMembe
 	}
 	for _, member := range members {
 		require.NoError(t, db.Create(member).Error)
+		seedGroupBuyMemberPayment(t, db, order, member)
 	}
 
 	initialTotal := sub.AmountTotal
@@ -369,6 +384,7 @@ func TestSettleGroupBuyOrder_TwoRealMembers_MarkedCompleted(t *testing.T) {
 	}
 	for _, member := range members {
 		require.NoError(t, db.Create(member).Error)
+		seedGroupBuyMemberPayment(t, db, order, member)
 	}
 
 	initialTotal := subs[0].AmountTotal

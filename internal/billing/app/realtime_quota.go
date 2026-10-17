@@ -85,19 +85,12 @@ func calculateAudioQuota(info QuotaInfo) int {
 }
 
 func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage) error {
+	if relayInfo == nil || usage == nil {
+		return fmt.Errorf("realtime billing info and usage are required")
+	}
 	if relayInfo.UsePrice {
 		return nil
 	}
-	userQuota, err := GetUserClaudeWalletQuota(relayInfo.UserId)
-	if err != nil {
-		return err
-	}
-
-	token, err := GetTokenByKey(strings.TrimPrefix(relayInfo.TokenKey, "sk-"))
-	if err != nil {
-		return err
-	}
-
 	modelName := relayInfo.OriginModelName
 	groupRatio := gatewaystore.GetGroupRatio(relayInfo.UsingGroup)
 	modelRatio, _, _ := gatewaystore.GetModelRatio(modelName)
@@ -127,10 +120,26 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 		ModelRatio: modelRatio,
 		GroupRatio: actualGroupRatio,
 	})
+	quota = relayInfo.ServiceTierQuota(quota)
+	if session, ok := relayInfo.Billing.(*BillingSession); ok && session != nil {
+		// Holds use the undiscounted amount. Discount cards are consumed once
+		// against final aggregate usage, after the realtime stream ends.
+		return session.reserveRealtimeUsage(quota)
+	}
 	quota = applyUsageConsumptionDiscount(relayInfo, quota)
 
-	if userQuota < quota {
-		return fmt.Errorf("user quota is not enough, user quota: %s, need quota: %s", logger.FormatQuota(userQuota), logger.FormatQuota(quota))
+	if relayInfo.BillingSource != BillingSourceSubscription {
+		userQuota, err := GetUserClaudeWalletQuota(relayInfo.UserId)
+		if err != nil {
+			return err
+		}
+		if userQuota < quota {
+			return fmt.Errorf("user quota is not enough, user quota: %s, need quota: %s", logger.FormatQuota(userQuota), logger.FormatQuota(quota))
+		}
+	}
+	token, err := GetTokenByKey(strings.TrimPrefix(relayInfo.TokenKey, "sk-"))
+	if err != nil {
+		return err
 	}
 	if !token.UnlimitedQuota && token.RemainQuota < quota {
 		return fmt.Errorf("token quota is not enough, token remain quota: %s, need quota: %s", logger.FormatQuota(token.RemainQuota), logger.FormatQuota(quota))
@@ -139,6 +148,9 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	if err := PostConsumeQuota(relayInfo, quota, 0, false); err != nil {
 		return err
 	}
+	// Legacy sessions charge each chunk immediately; final settlement subtracts
+	// those charges from the aggregate instead of consuming them again.
+	relayInfo.FinalPreConsumedQuota += quota
 	logger.LogInfo(ctx, "realtime streaming consume quota success, quota: "+fmt.Sprintf("%d", quota))
 	return nil
 }

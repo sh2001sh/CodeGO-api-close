@@ -25,13 +25,12 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		}
 	}
 
-	originalPreConsumed := s.preConsumedQuota
 	chargedQuota, err := s.reserveSettlementIncrease(actualQuota)
 	if err != nil {
 		return err
 	}
 	fundingDelta := chargedQuota - s.preConsumedQuota
-	tokenDelta := chargedQuota - originalPreConsumed
+	tokenDelta := chargedQuota - s.tokenConsumed
 	if !s.fundingSettled {
 		settle := func() error { return s.funding.Settle(fundingDelta) }
 		if funding, ok := s.funding.(*SubscriptionFunding); ok && funding.CreditPackGrantedQuota > 0 {
@@ -86,6 +85,25 @@ func (s *BillingSession) reserveSettlementIncrease(actualQuota int) (int, error)
 	}
 	if _, subscription := s.funding.(*SubscriptionFunding); subscription && subscriptionFundingHooks.ReserveAdditional == nil {
 		return actualQuota, nil
+	}
+	if subscription, ok := s.funding.(*SubscriptionFunding); ok && subscription.AmountTotal == 0 && subscriptionFundingHooks.ReserveUnlimitedTarget != nil {
+		// Unlimited funding has no finite balance cap, but the API key still
+		// needs to cover usage before its hold and final receipt grow.
+		if err := s.reserveToken(delta); err != nil {
+			return 0, err
+		}
+		if err := subscription.ReserveAdditional(int64(delta)); err != nil {
+			if !s.relayInfo.IsPlayground {
+				if rollbackErr := AdjustTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta); rollbackErr != nil {
+					return 0, errors.Join(err, fmt.Errorf("rollback token reservation: %w", rollbackErr))
+				}
+			}
+			return 0, err
+		}
+		s.preConsumedQuota += delta
+		s.tokenConsumed += delta
+		s.syncRelayInfo()
+		return s.preConsumedQuota, nil
 	}
 	reserveAdditional := reservable.ReserveAdditional
 	if wallet, ok := s.funding.(*LedgerRelayFunding); ok {

@@ -3,13 +3,18 @@ package app
 import (
 	"errors"
 	"fmt"
+	"math"
+
+	"github.com/sh2001sh/new-api/constant"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"time"
 )
 
@@ -32,6 +37,12 @@ func ApplyGroupBuyPurchaseAfterPaymentTx(tx *gorm.DB, order *commerceschema.Subs
 	purchaseType := commercedomain.NormalizeSubscriptionPurchaseType(order.PurchaseType)
 	if purchaseType == commerceschema.SubscriptionPurchaseTypeNormal {
 		return nil
+	}
+
+	if order.Id <= 0 || order.Status != constant.TopUpStatusSuccess || order.Money <= 0 || math.IsNaN(order.Money) || math.IsInf(order.Money, 0) ||
+		sub == nil || sub.Id <= 0 || sub.UserId != order.UserId || sub.PlanId != plan.Id || order.PlanId != plan.Id ||
+		(order.RefundStatus != "" && order.RefundStatus != commerceschema.RefundStatusFailed) {
+		return ErrGroupBuyNotJoinable
 	}
 
 	if purchaseType == commerceschema.SubscriptionPurchaseTypeGroupBuy {
@@ -101,15 +112,15 @@ func bonusForGroupBuyCount(plan commerceschema.SubscriptionPlan, count int) floa
 func settleGroupBuyOrder(groupBuyID int64) error {
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var order commerceschema.GroupBuyOrder
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", groupBuyID).First(&order).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", groupBuyID).First(&order).Error; err != nil {
 			return err
 		}
 		if order.Status != commerceschema.GroupBuyStatusPending {
 			return nil
 		}
 
-		var members []commerceschema.GroupBuyMember
-		if err := tx.Where("group_buy_id = ?", order.Id).Find(&members).Error; err != nil {
+		members, memberCount, err := qualifiedGroupBuyMembersTx(tx, &order, true)
+		if err != nil {
 			return err
 		}
 		plan, err := getSubscriptionPlanRecordTx(tx, order.PlanId)
@@ -117,7 +128,6 @@ func settleGroupBuyOrder(groupBuyID int64) error {
 			return err
 		}
 
-		memberCount := len(members)
 		bonusUSD := bonusForGroupBuyCount(*plan, memberCount)
 		status := commerceschema.GroupBuyStatusExpired
 		if memberCount >= 2 {
@@ -130,8 +140,15 @@ func settleGroupBuyOrder(groupBuyID int64) error {
 					continue
 				}
 				sub, err := getGroupBuyMemberSubscriptionTx(tx, member, order.PlanId)
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					platformobservability.SysLog(fmt.Sprintf("group buy settlement skipped missing subscription group_id=%d member_id=%d", order.Id, member.Id))
+					continue
+				}
 				if err != nil {
 					return err
+				}
+				if sub.Status != "active" {
+					continue
 				}
 				grantKey := fmt.Sprintf("group-buy:%d:member:%d:tier:%d", order.Id, member.Id, quota)
 				if err := addSubscriptionBonusTx(tx, sub, int64(quota), grantKey); err != nil {
@@ -168,28 +185,31 @@ func reconcileGroupBuyBonus(groupBuyID int64, activeSubscriptionsOnly bool) (int
 	adjusted := 0
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var order commerceschema.GroupBuyOrder
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").First(&order, groupBuyID).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&order, groupBuyID).Error; err != nil {
 			return err
 		}
-		var members []commerceschema.GroupBuyMember
-		if err := tx.Where("group_buy_id = ?", groupBuyID).Find(&members).Error; err != nil {
+		members, memberCount, err := qualifiedGroupBuyMembersTx(tx, &order, true)
+		if err != nil {
 			return err
 		}
 		plan, err := getSubscriptionPlanRecordTx(tx, order.PlanId)
 		if err != nil {
 			return err
 		}
-		target := bonusForGroupBuyCount(*plan, len(members))
+		target := bonusForGroupBuyCount(*plan, memberCount)
 		for _, member := range members {
 			if member.OrderId == 0 || target <= member.BonusAmountUSD {
 				continue
 			}
 			delta := target - member.BonusAmountUSD
 			sub, err := getGroupBuyMemberSubscriptionTx(tx, member, order.PlanId)
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
 			if err != nil {
 				return err
 			}
-			if activeSubscriptionsOnly && sub.Status != "active" {
+			if sub.Status == "refund_pending" || sub.Status == "cancelled" || sub.Status == commerceschema.SubscriptionStatusSettledCancelled || (activeSubscriptionsOnly && sub.Status != "active") {
 				continue
 			}
 			targetQuota := quotaUnitsFromUSD(target)
@@ -216,22 +236,57 @@ func getGroupBuyMemberSubscriptionTx(tx *gorm.DB, member commerceschema.GroupBuy
 	}
 
 	var sub commerceschema.UserSubscription
-	query := tx.Set("gorm:query_option", "FOR UPDATE")
-	if member.UserSubscriptionId > 0 {
-		err := query.Where("id = ? AND user_id = ?", member.UserSubscriptionId, member.UserId).First(&sub).Error
-		if err == nil {
-			return &sub, nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
+	if member.UserSubscriptionId <= 0 {
+		return nil, gorm.ErrRecordNotFound
 	}
-
-	err := query.Where("user_id = ? AND plan_id = ? AND status = ?", member.UserId, planID, "active").
-		Order("created_at desc, id desc").
-		First(&sub).Error
-	if err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ? AND user_id = ? AND plan_id = ?", member.UserSubscriptionId, member.UserId, planID).First(&sub).Error; err != nil {
 		return nil, err
 	}
 	return &sub, nil
+}
+
+// Historical tiers retain their original synthetic participants. Only an exact
+// successful payment can qualify a real participant or receive a new grant.
+// Lock payment rows before subscriptions, matching cash refund lock order.
+func qualifiedGroupBuyMembersTx(tx *gorm.DB, room *commerceschema.GroupBuyOrder, lock bool) ([]commerceschema.GroupBuyMember, int, error) {
+	var members []commerceschema.GroupBuyMember
+	if err := tx.Where("group_buy_id = ?", room.Id).Order("id asc").Find(&members).Error; err != nil {
+		return nil, 0, err
+	}
+	qualified := make([]commerceschema.GroupBuyMember, 0, len(members))
+	tierCount := 0
+	for _, member := range members {
+		if member.OrderId <= 0 {
+			var ghosts int64
+			if err := tx.Table("users").Where("id = ? AND "+subscriptionUserGroupColumn()+" = ?", member.UserId, "ghost").Count(&ghosts).Error; err != nil {
+				return nil, 0, err
+			}
+			if ghosts == 1 && member.BonusGranted {
+				tierCount++
+			}
+			continue
+		}
+		query := tx
+		if lock {
+			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+		}
+		var paid commerceschema.SubscriptionOrder
+		if err := query.Where("id = ? AND user_id = ? AND group_buy_id = ? AND plan_id = ?", member.OrderId, member.UserId, room.Id, room.PlanId).First(&paid).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return nil, 0, err
+		}
+		if paid.Status != constant.TopUpStatusSuccess || paid.FulfillmentStatus != commerceschema.SubscriptionOrderFulfillmentCompleted || paid.Money <= 0 || math.IsNaN(paid.Money) || math.IsInf(paid.Money, 0) || paid.TargetSubscriptionId <= 0 ||
+			(paid.RefundStatus != "" && paid.RefundStatus != commerceschema.RefundStatusFailed) ||
+			(paid.RefundStatus == "" && paid.RefundAmount != 0) ||
+			(member.UserSubscriptionId > 0 && member.UserSubscriptionId != paid.TargetSubscriptionId) {
+			continue
+		}
+		member.UserSubscriptionId = paid.TargetSubscriptionId
+		tierCount++
+		qualified = append(qualified, member)
+	}
+	return qualified, tierCount, nil
 }

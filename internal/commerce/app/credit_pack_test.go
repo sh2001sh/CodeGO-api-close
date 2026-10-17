@@ -389,11 +389,10 @@ func TestCreditPackCheckoutRejectsBonusOutsideApprovedBand(t *testing.T) {
 	}
 }
 
-func TestCreditPackBillingFallbackWhenLegacyTenfoldExceedsKeyBalance(t *testing.T) {
+func TestCreditPackBillingSelectsPackBeforeLegacyTenfoldExceedsKeyBalance(t *testing.T) {
 	db := setupRedemptionTestDB(t)
-	// Exercise the production reservation ordering: funding can succeed while
-	// the concurrent token reservation fails. Refunding legacy must not block
-	// a new-pack attempt for the same outward request.
+	// The onefold pack takes priority over legacy subscription pricing, even
+	// when the API key cannot cover the legacy tenfold reservation.
 	wasSQLite := platformdb.UsingSQLite
 	platformdb.UsingSQLite = false
 	t.Cleanup(func() { platformdb.UsingSQLite = wasSQLite })
@@ -426,9 +425,9 @@ func TestCreditPackBillingFallbackWhenLegacyTenfoldExceedsKeyBalance(t *testing.
 	require.Equal(t, 80, token.UsedQuota)
 	require.NoError(t, db.First(old, old.Id).Error)
 	require.Zero(t, old.AmountUsed)
-	var legacyAttempt commerceschema.SubscriptionPreConsumeRecord
-	require.NoError(t, db.Where("request_id = ?", info.RequestId).First(&legacyAttempt).Error)
-	require.Equal(t, "refunded", legacyAttempt.Status)
+	var legacyAttempts int64
+	require.NoError(t, db.Model(&commerceschema.SubscriptionPreConsumeRecord{}).Where("request_id = ?", info.RequestId).Count(&legacyAttempts).Error)
+	require.Zero(t, legacyAttempts, "the selected pack must not reserve the legacy subscription")
 	require.NoError(t, db.First(pack, pack.Id).Error)
 	require.EqualValues(t, 80, pack.AmountUsed)
 }

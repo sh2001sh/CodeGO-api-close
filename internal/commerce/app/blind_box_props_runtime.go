@@ -7,9 +7,11 @@ import (
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strings"
 )
 
@@ -54,11 +56,15 @@ func ActivateBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp,
 		if err := ensureBlindBoxPropSchema(tx); err != nil {
 			return err
 		}
+		var user identityschema.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id = ?", userID).First(&user).Error; err != nil {
+			return err
+		}
 		now := platformruntime.GetTimestamp()
 		if err := expireUserBlindBoxPropsTx(tx, userID, now); err != nil {
 			return err
 		}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
 			return err
 		}
 		if err := expireBlindBoxPropIfNeededTx(tx, &prop, now); err != nil {
@@ -115,7 +121,7 @@ func PauseBlindBoxProp(userID int, propID int) (*commerceschema.BlindBoxProp, er
 			return err
 		}
 		now := platformruntime.GetTimestamp()
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
 			return err
 		}
 		if !isPausableBlindBoxMultiplierProp(prop.PropType) {
@@ -175,7 +181,7 @@ func ConvertBlindBoxDiscountProp(userID int, propID int, targetType string) (*co
 		if err := ensureBlindBoxPropSchema(tx); err != nil {
 			return err
 		}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ?", propID, userID).First(&prop).Error; err != nil {
 			return err
 		}
 		if prop.PropType != commerceschema.BlindBoxPropTypeSubscriptionDiscount90 {
@@ -372,7 +378,7 @@ func getAvailableBlindBoxPropDiscountRateTx(tx *gorm.DB, userID int, propTypes [
 
 func getAvailableBlindBoxPropByTypeTx(tx *gorm.DB, userID int, propTypes []string) (*commerceschema.BlindBoxProp, error) {
 	var prop commerceschema.BlindBoxProp
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ? AND prop_type IN ? AND status = ?", userID, propTypes, commerceschema.BlindBoxPropStatusAvailable).
 		Order("created_at asc, id asc").
 		First(&prop).Error; err != nil {
@@ -397,8 +403,14 @@ func reserveBlindBoxDiscountPropTx(tx *gorm.DB, userID int, tradeNo string, prop
 	prop.ReservedAt = now
 	prop.ReservedOrderType = orderType
 	prop.ReservedOrderTradeNo = tradeNo
-	if err := tx.Save(prop).Error; err != nil {
-		return nil, err
+	result := tx.Model(&commerceschema.BlindBoxProp{}).
+		Where("id = ? AND user_id = ? AND status = ?", prop.Id, userID, commerceschema.BlindBoxPropStatusAvailable).
+		Updates(map[string]any{"status": prop.Status, "reserved_at": now, "reserved_order_type": orderType, "reserved_order_trade_no": tradeNo, "updated_at": now})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected != 1 {
+		return nil, errors.New("discount prop reservation changed")
 	}
 	return prop, nil
 }

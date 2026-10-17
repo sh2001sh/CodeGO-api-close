@@ -65,8 +65,10 @@ type SubscriptionFundingHooks struct {
 	PreConsumeCreditPack             func(requestID string, userID int, modelName string, amount int64) (*SubscriptionFundingPreConsumeResult, error)
 	PreConsume                       func(requestID string, userID int, modelName string, amount int64) (*SubscriptionFundingPreConsumeResult, error)
 	ReserveAdditional                func(requestID string, subscriptionID int, modelName string, amount int64) error
+	ReserveUnlimitedTarget           func(requestID string, subscriptionID int, modelName string, target int64) error
 	GetPlanInfo                      func(userSubscriptionID int) (*SubscriptionFundingPlanInfo, error)
 	PostConsumeDelta                 func(subscriptionID int, modelName string, delta int64) error
+	AdjustUsageDelta                 func(subscriptionID int, modelName string, delta int64, operationKey string) (bool, error)
 	RefundPreConsume                 func(requestID string) error
 	SettleReservation                func(requestID string, subscriptionID int, modelName string, actualAmount int64) error
 	SettleReservationTx              func(tx *gorm.DB, requestID string, subscriptionID int, modelName string, actualAmount int64) error
@@ -89,6 +91,14 @@ func postSubscriptionUsageDelta(subscriptionID int, modelName string, delta int6
 		return errors.New("subscription funding settle hook is not registered")
 	}
 	return subscriptionFundingHooks.PostConsumeDelta(subscriptionID, modelName, delta)
+}
+
+func adjustSubscriptionUsageDelta(subscriptionID int, modelName string, delta int64, operationKey string) error {
+	if subscriptionFundingHooks.AdjustUsageDelta != nil {
+		_, err := subscriptionFundingHooks.AdjustUsageDelta(subscriptionID, modelName, delta, operationKey)
+		return err
+	}
+	return postSubscriptionUsageDelta(subscriptionID, modelName, delta)
 }
 
 func applyBlindBoxConsumptionDiscount(request BlindBoxConsumptionDiscountRequest) (BlindBoxConsumptionDiscountResult, error) {
@@ -211,7 +221,10 @@ func (s *SubscriptionFunding) Settle(delta int) error {
 		}
 		return s.loadSettlement()
 	}
-	return postSubscriptionUsageDelta(s.subscriptionID, s.modelName, int64(delta))
+	if s.AmountTotal == 0 && subscriptionFundingHooks.SettleReservation != nil {
+		return subscriptionFundingHooks.SettleReservation(s.requestID, s.subscriptionID, s.modelName, actual)
+	}
+	return adjustSubscriptionUsageDelta(s.subscriptionID, s.modelName, int64(delta), "relay-settle:"+s.requestID)
 }
 
 func (s *SubscriptionFunding) ReservationID() string { return s.reservationID }
@@ -249,10 +262,13 @@ func (s *SubscriptionFunding) ReserveAdditional(amount int64) error {
 	if amount <= 0 {
 		return nil
 	}
-	if subscriptionFundingHooks.ReserveAdditional == nil {
+	if s.AmountTotal == 0 && subscriptionFundingHooks.ReserveUnlimitedTarget != nil {
+		if err := subscriptionFundingHooks.ReserveUnlimitedTarget(s.requestID, s.subscriptionID, s.modelName, s.preConsumed+amount); err != nil {
+			return err
+		}
+	} else if subscriptionFundingHooks.ReserveAdditional == nil {
 		return errors.New("subscription additional reservation hook is not registered")
-	}
-	if err := subscriptionFundingHooks.ReserveAdditional(s.requestID, s.subscriptionID, s.modelName, amount); err != nil {
+	} else if err := subscriptionFundingHooks.ReserveAdditional(s.requestID, s.subscriptionID, s.modelName, amount); err != nil {
 		return err
 	}
 	s.preConsumed += amount

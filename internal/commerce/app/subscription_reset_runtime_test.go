@@ -88,6 +88,25 @@ func TestAwardReferralSubscriptionResetOpportunityTx_MonthCardAwardedOnce(t *tes
 	assert.Zero(t, summary.EarnedTotal)
 }
 
+func TestRetiredReferralRefreshPreservesExistingBalanceWithoutNewAwards(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	insertSubscriptionResetAppTestUser(t, 7171, 0)
+	insertSubscriptionResetAppTestUser(t, 7172, 7171)
+	account := commerceschema.SubscriptionResetOpportunityAccount{UserId: 7171, EarnedTotal: 5, UsedTotal: 2, AvailableTotal: 3, LastUsedMonth: "2026-09"}
+	require.NoError(t, db.Create(&account).Error)
+	for _, orderID := range []string{"new-paid-order", "new-paid-order", "refunded-order", "another-new-order"} {
+		require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+			return AwardReferralSubscriptionResetOpportunityTx(tx, 7172, commercedomain.ReferralPurchaseTypeMonthCard, "subscription_order", orderID)
+		}))
+	}
+	var after commerceschema.SubscriptionResetOpportunityAccount
+	require.NoError(t, db.First(&after, account.Id).Error)
+	require.Equal(t, account, after)
+	var grants int64
+	require.NoError(t, db.Model(&commerceschema.SubscriptionResetOpportunityLedger{}).Count(&grants).Error)
+	require.Zero(t, grants)
+}
+
 func TestAwardReferralSubscriptionResetOpportunityTx_ExcludesCurrentSuccessfulOrder(t *testing.T) {
 	db := setupRedemptionTestDB(t)
 

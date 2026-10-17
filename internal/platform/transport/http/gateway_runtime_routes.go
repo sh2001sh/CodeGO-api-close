@@ -135,6 +135,9 @@ func registerRelayCoreRoutes(router *gin.Engine) {
 	}
 	fileDeliveryRouter := router.Group("/v1/files")
 	fileDeliveryRouter.Use(middleware.RouteTag("relay"))
+	// Upstream providers authenticate with the short-lived HMAC URL and
+	// cannot attach a user's bearer key. Apply the existing API budget.
+	fileDeliveryRouter.Use(middleware.GlobalAPIRateLimit())
 	{
 		fileDeliveryRouter.GET("/:id/delivery", gatewayhttp.DeliverFile)
 	}

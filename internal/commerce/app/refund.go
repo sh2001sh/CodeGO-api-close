@@ -303,7 +303,7 @@ func loadRefundOrderTx(tx *gorm.DB, userID int, orderType, tradeNo string) (*ref
 
 func validateRefundPayment(status, provider, method, payload, tradeNo string, paid float64) error {
 	if status != constant.TopUpStatusSuccess || provider != commerceschema.PaymentProviderEpay || (method != "alipay" && method != "wxpay") || paid <= 0 || math.IsNaN(paid) || math.IsInf(paid, 0) || paid*100 > float64(math.MaxInt64) {
-		return errors.New("仅支持已支付成功的人民币易支付订单退款")
+		return errors.New("仅支持已支付成功的现金支付订单退款")
 	}
 	var data map[string]any
 	if json.Unmarshal([]byte(payload), &data) != nil || extractProviderOrderID(payload) == "" {

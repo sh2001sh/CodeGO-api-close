@@ -14,6 +14,7 @@ import (
 
 	// ListAdminSubscriptionPlans returns all subscription plans for admin management.
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func ListAdminSubscriptionPlans() ([]SubscriptionPlanDTO, error) {
@@ -209,7 +210,7 @@ func ResetSubscriptionPeriodProjection(subscriptionID int) (*commerceschema.User
 	var updated commerceschema.UserSubscription
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		sub := &commerceschema.UserSubscription{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", subscriptionID).First(sub).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", subscriptionID).First(sub).Error; err != nil {
 			return err
 		}
 		plan, err := getSubscriptionPlanRecordTx(tx, sub.PlanId)

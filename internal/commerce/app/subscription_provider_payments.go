@@ -230,19 +230,11 @@ func CreateSubscriptionEpayPayment(userID int, req SubscriptionEpayPayRequest) (
 }
 
 func VerifySubscriptionEpay(params map[string]string) (*epay.VerifyRes, error) {
-	client := GetEpayClient()
-	if client == nil {
-		return nil, errors.New("payment gateway is not configured")
-	}
-	verifyInfo, err := client.Verify(params)
-	if err != nil || !verifyInfo.VerifyStatus {
-		return nil, errors.New("verify failed")
-	}
-	return verifyInfo, nil
+	return verifyConfiguredEpayOrder(params)
 }
 
 func CompleteSubscriptionEpayPayment(verifyInfo *epay.VerifyRes) error {
-	if verifyInfo == nil || verifyInfo.TradeStatus != epay.StatusTradeSuccess {
+	if verifyInfo == nil || !verifyInfo.VerifyStatus || verifyInfo.TradeStatus != epay.StatusTradeSuccess {
 		return errors.New("payment not complete")
 	}
 	LockOrder(verifyInfo.ServiceTradeNo)

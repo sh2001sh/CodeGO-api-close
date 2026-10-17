@@ -74,17 +74,9 @@ func listCommunityMemberChannels(c *gin.Context) {
 }
 
 func rateCommunityChannel(c *gin.Context) {
-	var request communityapp.CommunityRatingRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
-		writeCommunityBridgeAppError(c, communityapp.ErrInvalidCommunityRating)
-		return
-	}
-	result, err := communityapp.RateCommunityChannel(request, c.Param("id"))
-	if err != nil {
-		writeCommunityBridgeAppError(c, err)
-		return
-	}
-	writeCommunityBridgeSuccess(c, result)
+	// NodeBB consumes read-only channel data. Rating writes belong to the
+	// main-site authenticated user flow, never a service-supplied viewer_sub.
+	writeCommunityBridgeError(c, http.StatusGone, "RATING_WRITE_RETIRED", "ratings must be submitted on the main site")
 }
 
 func parseCommunityBridgePagination(c *gin.Context) (int, int, error) {

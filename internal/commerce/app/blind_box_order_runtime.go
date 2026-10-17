@@ -14,6 +14,7 @@ import (
 
 	// ValidateBlindBoxPurchase validates quantity limits and returns the payable amount.
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func ValidateBlindBoxPurchase(userID int, quantity int) (float64, error) {
@@ -61,11 +62,26 @@ func CompleteBlindBoxOrder(tradeNo string, providerPayload string, expectedPayme
 
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var order commerceschema.BlindBoxOrder
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(blindBoxTradeNoColumn()+" = ?", tradeNo).First(&order).Error; err != nil {
-			return commercedomain.ErrBlindBoxOrderNotFound
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(blindBoxTradeNoColumn()+" = ?", tradeNo).First(&order).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return commercedomain.ErrBlindBoxOrderNotFound
+			}
+			return err
 		}
 		if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
 			return commerceschema.ErrPaymentMethodMismatch
+		}
+		if order.PaymentProvider == commerceschema.PaymentProviderEpay {
+			if actualPaymentMethod != "" && actualPaymentMethod != order.PaymentMethod {
+				return commerceschema.ErrPaymentMethodMismatch
+			}
+			paid, err := validateEpayOrderPayment(providerPayload, order.TradeNo, order.PaymentMethod, order.Money)
+			if err != nil {
+				return err
+			}
+			if order.Status == constant.TopUpStatusSuccess && extractProviderOrderID(order.ProviderPayload) != paid.TradeNo {
+				return errors.New("epay original provider order mismatch")
+			}
 		}
 		if order.Status == constant.TopUpStatusSuccess {
 			return nil
@@ -100,7 +116,7 @@ func ExpireBlindBoxOrder(tradeNo string, expectedPaymentProvider string) error {
 	}
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var order commerceschema.BlindBoxOrder
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(blindBoxTradeNoColumn()+" = ?", tradeNo).First(&order).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(blindBoxTradeNoColumn()+" = ?", tradeNo).First(&order).Error; err != nil {
 			return commercedomain.ErrBlindBoxOrderNotFound
 		}
 		if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {

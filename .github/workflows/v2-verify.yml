@@ -36,3 +36,9 @@ jobs:
         run: go build -p 1 ./cmd/...
       - name: Test billing and stream handling
         run: go test -p 1 ./internal/billing/app ./internal/gateway/execution/providers/openai
+      - name: Test financial and authorization boundaries
+        run: >-
+          go test -p 1 ./internal/commerce/... ./internal/identity/...
+          ./internal/marketplace/... ./internal/community/... ./internal/workflow/...
+          ./internal/platform/transport/http/... ./internal/gateway/files
+          ./internal/gateway/transport/http

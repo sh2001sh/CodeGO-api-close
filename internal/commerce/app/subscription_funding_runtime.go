@@ -6,6 +6,7 @@ import (
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	"math"
 	"strings"
 	"time"
 
@@ -85,10 +86,15 @@ func ReserveAdditionalSubscriptionQuota(requestID string, subscriptionID int, mo
 	if strings.TrimSpace(requestID) == "" || subscriptionID <= 0 || amount <= 0 {
 		return errors.New("requestId, subscriptionId and amount are required")
 	}
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	unlimited := false
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		sub := &commerceschema.UserSubscription{}
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", subscriptionID).First(sub).Error; err != nil {
 			return err
+		}
+		if sub.AmountTotal == 0 {
+			unlimited = true
+			return nil
 		}
 		now, err := commercestore.GetDBTimestampTx(tx)
 		if err != nil {
@@ -127,6 +133,60 @@ func ReserveAdditionalSubscriptionQuota(requestID string, subscriptionID int, mo
 		})
 		return err
 	})
+	if err == nil && unlimited {
+		return reserveUnlimitedSubscriptionQuota(requestID, subscriptionID, modelName, amount, false)
+	}
+	return err
+}
+
+// ReserveUnlimitedSubscriptionQuotaTarget extends a usage hold to an absolute
+// target. Replaying the same target cannot charge usage a second time.
+func ReserveUnlimitedSubscriptionQuotaTarget(requestID string, subscriptionID int, modelName string, target int64) error {
+	return reserveUnlimitedSubscriptionQuota(requestID, subscriptionID, modelName, target, true)
+}
+
+func reserveUnlimitedSubscriptionQuota(requestID string, subscriptionID int, modelName string, amount int64, absolute bool) error {
+	if strings.TrimSpace(requestID) == "" || subscriptionID <= 0 || amount <= 0 {
+		return errors.New("requestId, subscriptionId and positive usage target are required")
+	}
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		// Settlement and cancellation use this same record -> subscription order.
+		var record commerceschema.SubscriptionPreConsumeRecord
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("request_id = ?", requestID).First(&record).Error; err != nil {
+			return err
+		}
+		if record.UserSubscriptionId != subscriptionID || record.ModelName != strings.TrimSpace(modelName) || record.Status != "consumed" || record.PreConsumed < 0 {
+			return errors.New("unlimited subscription usage hold is unavailable")
+		}
+		sub, err := lockUserSubscriptionRecordTx(tx, subscriptionID)
+		if err != nil {
+			return err
+		}
+		now, err := commercestore.GetDBTimestampTx(tx)
+		if err != nil {
+			return err
+		}
+		if sub.AmountTotal != 0 || sub.Status != "active" || sub.EndTime <= now {
+			return errors.New("unlimited subscription is no longer active")
+		}
+		target := amount
+		if !absolute {
+			if amount > math.MaxInt64-record.PreConsumed {
+				return errors.New("unlimited subscription usage target is out of range")
+			}
+			target += record.PreConsumed
+		}
+		if target <= record.PreConsumed {
+			return nil
+		}
+		_, err = AdjustUserSubscriptionUsageDeltaTx(tx, subscriptionID, modelName, target-record.PreConsumed,
+			fmt.Sprintf("relay-reserve:%s:%d", requestID, target))
+		if err != nil {
+			return err
+		}
+		record.PreConsumed = target
+		return tx.Save(&record).Error
+	})
 }
 
 func subscriptionReservationExpiry() *time.Time {
@@ -147,15 +207,23 @@ func RefundSubscriptionPreConsume(requestID string) error {
 			First(record).Error; err != nil {
 			return err
 		}
-		if record.Status == "refunded" {
+		if record.Status == "refunded" || record.Status == "settled" {
 			return nil
 		}
 		if record.PreConsumed <= 0 {
 			record.Status = "refunded"
 			return tx.Save(record).Error
 		}
-		if err := lockUserSubscriptionTx(tx, record.UserSubscriptionId); err != nil {
+		sub, err := lockUserSubscriptionRecordTx(tx, record.UserSubscriptionId)
+		if err != nil {
 			return err
+		}
+		if sub.AmountTotal == 0 {
+			if _, err := AdjustUserSubscriptionUsageDeltaTx(tx, sub.Id, record.ModelName, -record.PreConsumed, "relay-cancel:"+requestID); err != nil {
+				return err
+			}
+			record.Status = "refunded"
+			return tx.Save(record).Error
 		}
 		releasedAmount, err := releaseSubscriptionReservationTx(tx, record)
 		if err != nil {

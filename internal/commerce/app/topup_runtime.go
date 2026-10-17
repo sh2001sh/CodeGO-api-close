@@ -105,6 +105,10 @@ func completeVerifiedEpayTopUp(verified *epay.VerifyRes, params map[string]strin
 		if quota <= 0 {
 			return errors.New("invalid topup quota")
 		}
+		var user identityschema.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id = ?", order.UserId).First(&user).Error; err != nil {
+			return err
+		}
 		if err := consumeEpayTopupOriginalPropTx(tx, &order); err != nil {
 			return err
 		}

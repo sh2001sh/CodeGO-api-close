@@ -23,7 +23,7 @@ func RegisterUserRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gi
 		userRoute.GET("/logout", middleware.DisableCache(), Logout)
 		userRoute.POST("/epay/notify", anonymousRequestBodyLimit, commercehttp.EpayNotify)
 		userRoute.GET("/epay/notify", commercehttp.EpayNotify)
-		userRoute.POST("/xunhu/notify", commercehttp.XunhuNotify)
+		userRoute.POST("/xunhu/notify", anonymousRequestBodyLimit, commercehttp.XunhuNotify)
 		userRoute.GET("/xunhu/notify", commercehttp.XunhuNotify)
 		userRoute.GET("/xunhu/return", commercehttp.XunhuReturn)
 		userRoute.GET("/groups", gatewayhttp.GetUserGroups)
@@ -106,7 +106,7 @@ func RegisterUserRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gi
 }
 
 func RegisterDesktopRoutes(apiRouter *gin.RouterGroup) {
-	apiRouter.GET("/desktop/import/config", GetDesktopImportConfig)
+	apiRouter.GET("/desktop/import/config", middleware.CriticalRateLimit(), middleware.DisableCache(), GetDesktopImportConfig)
 	apiRouter.GET("/desktop/release/latest", middleware.DisableCache(), GetDesktopReleaseLatest)
 	apiRouter.GET("/desktop/release/latest.json", middleware.DisableCache(), GetDesktopReleaseLatestJSON)
 	// Browser-side one-click imports use the website session, not a desktop token.

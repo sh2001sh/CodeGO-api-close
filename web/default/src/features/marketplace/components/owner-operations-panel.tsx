@@ -13,7 +13,7 @@ import { Check, RefreshCw, RotateCcw, Search, Send, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import dayjs from '@/lib/dayjs'
-import { formatQuota } from '@/lib/format'
+import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -152,7 +152,11 @@ export function OwnerOperationsPanel({
   const [welfare, setWelfare] = useState<{
     type: WelfareType
     amount: string
+    requestId: string
+    channelId: string
+    users: MarketplaceOwnerUsageItem[]
   } | null>(null)
+  const [paymentPassword, setPaymentPassword] = useState('')
   const [result, setResult] = useState<MarketplaceBatchWelfareResult | null>(
     null
   )
@@ -160,7 +164,15 @@ export function OwnerOperationsPanel({
     mutationFn: sendMarketplaceBatchWelfare,
     onSuccess: (data) => {
       setResult(data)
+      if (data.failed_count > 0) {
+        toast.error(
+          data.details.find((item) => item.status === 'failed')?.error ||
+            t('Failed')
+        )
+        return
+      }
       setWelfare(null)
+      setPaymentPassword('')
       setSelectedIDs(new Set())
       toast.success(t('批量福利已完成'))
     },
@@ -368,7 +380,16 @@ export function OwnerOperationsPanel({
           onRankStartChange={setRankStart}
           onRankEndChange={setRankEnd}
           onSelectRankRange={selectRankRange}
-          onWelfare={setWelfare}
+          onWelfare={(value) => {
+            setPaymentPassword('')
+            setResult(null)
+            setWelfare({
+              ...value,
+              requestId: crypto.randomUUID(),
+              channelId: activeChannelID,
+              users: selectedUsers,
+            })
+          }}
           loading={usage.isLoading}
           error={usage.isError}
           loadMore={
@@ -388,30 +409,69 @@ export function OwnerOperationsPanel({
       <TimeMultiplierPanel channelID={activeChannelID} />
       <ConfirmDialog
         open={welfare != null}
-        onOpenChange={(open) => !open && setWelfare(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWelfare(null)
+            setPaymentPassword('')
+          }
+        }}
         title={
           welfare?.type === 'transfer'
             ? t('确认批量转账')
             : t('确认批量发放盲盒')
         }
-        desc={<WelfareConfirmSummary users={selectedUsers} welfare={welfare} />}
+        desc={
+          <WelfareConfirmSummary
+            users={welfare?.users ?? []}
+            welfare={welfare}
+          />
+        }
         handleConfirm={() => {
           if (!welfare) return
           void welfareMutation.mutateAsync({
-            channelId: activeChannelID,
-            userIds: selectedUsers.map((item) =>
-              welfare.type === 'blind_box'
-                ? item.external_user_id
-                : item.user_id
-            ),
+            channelId: welfare.channelId,
+            userIds: welfare.users.map((item) => item.external_user_id),
             type: welfare.type,
-            amount: welfare.type === 'transfer' ? Number(welfare.amount) : 1,
+            amount:
+              welfare.type === 'transfer'
+                ? parseQuotaFromDollars(Number(welfare.amount))
+                : 1,
+            requestId: welfare.requestId,
+            paymentPassword:
+              welfare.type === 'transfer' ? paymentPassword : undefined,
           })
         }}
         confirmText={t('确认发放')}
         isLoading={welfareMutation.isPending}
+        disabled={welfare?.type === 'transfer' && !paymentPassword}
+      >
+        {welfare?.type === 'transfer' && (
+          <Input
+            type='password'
+            autoComplete='off'
+            maxLength={64}
+            aria-label={t('Payment password')}
+            placeholder={t('Payment password')}
+            value={paymentPassword}
+            onChange={(event) => setPaymentPassword(event.target.value)}
+          />
+        )}
+        {result?.details
+          .filter((item) => item.status === 'failed')
+          .map((item) => (
+            <p
+              key={item.user_id}
+              className='text-destructive text-sm'
+              role='alert'
+            >
+              {item.user_id} · {item.error}
+            </p>
+          ))}
+      </ConfirmDialog>
+      <WelfareResultDialog
+        result={welfare ? null : result}
+        onClose={() => setResult(null)}
       />
-      <WelfareResultDialog result={result} onClose={() => setResult(null)} />
     </section>
   )
 }
@@ -587,6 +647,7 @@ function UserWelfarePanel(props: {
     !props.loading &&
     !props.error &&
     props.selectedIDs.size > 0 &&
+    props.selectedIDs.size <= 50 &&
     (type === 'blind_box' ||
       (Number.isFinite(Number(amount)) && Number(amount) > 0))
   return (
@@ -808,7 +869,8 @@ function UserWelfarePanel(props: {
         {type === 'transfer' ? (
           <Input
             type='number'
-            min={1}
+            min={0.01}
+            step={0.01}
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
             placeholder={t('每人额度')}
@@ -868,18 +930,32 @@ function WelfareConfirmSummary(props: {
   const { t } = useTranslation()
   if (!props.welfare) return null
   const isTransfer = props.welfare.type === 'transfer'
+  const amount = parseQuotaFromDollars(Number(props.welfare.amount))
+  const fee = Math.ceil(amount / 100)
   return (
     <div className='space-y-2 text-sm'>
       <p>
         {isTransfer
           ? t('将向 {{count}} 位已选用户分别转入 {{amount}} 额度。', {
               count: props.users.length,
-              amount: props.welfare.amount,
+              amount: formatQuota(amount),
             })
           : t('将向 {{count}} 位已选用户各发放 1 个盲盒。', {
               count: props.users.length,
             })}
       </p>
+      {isTransfer && (
+        <dl className='grid grid-cols-2 gap-2 tabular-nums'>
+          <dt>{t('手续费（1%）')}</dt>
+          <dd className='text-right'>
+            {formatQuota(fee * props.users.length)}
+          </dd>
+          <dt>{t('通用额度总扣除')}</dt>
+          <dd className='text-right'>
+            {formatQuota((amount + fee) * props.users.length)}
+          </dd>
+        </dl>
+      )}
     </div>
   )
 }

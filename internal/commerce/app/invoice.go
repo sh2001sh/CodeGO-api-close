@@ -12,6 +12,7 @@ import (
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const invoiceRequestMaxLength = 255
@@ -227,7 +228,7 @@ func UpdateAdminInvoiceRequest(id int64, adminID int, input UpdateInvoiceRequest
 	}
 	var result commerceschema.InvoiceRequest
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").First(&result, id).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&result, id).Error; err != nil {
 			return err
 		}
 		if isCommercialInvoiceArchive(result.Remark) {

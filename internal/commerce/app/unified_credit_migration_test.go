@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
@@ -131,6 +132,9 @@ func TestMigrateLegacyPaidBlindBoxOrdersIssuesRemainingInventoryOnce(t *testing.
 		TradeNo: "legacy-paid-box-991", Status: "success",
 	}
 	require.NoError(t, db.Create(&order).Error)
+	for index, amount := range []float64{0, -1} {
+		require.NoError(t, db.Create(&commerceschema.BlindBoxOrder{Id: 992 + index, UserId: user.Id, Quantity: 5, Money: amount, TradeNo: fmt.Sprintf("gift-box-%d", index), Status: "success"}).Error)
+	}
 
 	require.NoError(t, migrateLegacyPaidBlindBoxOrdersToInventory())
 	require.NoError(t, migrateLegacyPaidBlindBoxOrdersToInventory())
@@ -147,6 +151,12 @@ func TestMigrateLegacyPaidBlindBoxOrdersIssuesRemainingInventoryOnce(t *testing.
 
 	require.NoError(t, db.First(&order, order.Id).Error)
 	require.Equal(t, order.Quantity, order.OpenedCount)
+	var freeOrders []commerceschema.BlindBoxOrder
+	require.NoError(t, db.Where("money <= 0").Find(&freeOrders).Error)
+	require.Len(t, freeOrders, 2)
+	for _, free := range freeOrders {
+		require.Zero(t, free.OpenedCount)
+	}
 }
 
 func TestMigrateUnifiedCreditGPTGroupRatiosOnlyScalesOfficialGPTGroupsOnce(t *testing.T) {

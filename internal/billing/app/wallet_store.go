@@ -503,6 +503,11 @@ func reconcileAccountBalance(account *billingschema.BillingAccount, userID int, 
 	if account == nil {
 		return errors.New("billing account is required")
 	}
+	// Unified wallets are canonical after their one-time bootstrap. A legacy
+	// projection can lag reservations or settlement and cannot authorize money.
+	if account.AccountType == billingAccountTypeClaudeWallet {
+		return nil
+	}
 	snapshot, err := loadBalanceSnapshot(account.AccountID)
 	if err != nil {
 		return err
@@ -518,6 +523,9 @@ func reconcileAccountBalanceTx(tx *gorm.DB, account *billingschema.BillingAccoun
 	if account == nil {
 		return errors.New("billing account is required")
 	}
+	if account.AccountType == billingAccountTypeClaudeWallet {
+		return nil
+	}
 	snapshot, err := loadBalanceSnapshotTx(tx, account.AccountID)
 	if err != nil {
 		return err
@@ -526,7 +534,8 @@ func reconcileAccountBalanceTx(tx *gorm.DB, account *billingschema.BillingAccoun
 	if diff == 0 {
 		return nil
 	}
-	return applyLedgerDeltaTx(tx, account, userID, int64(-diff), fmt.Sprintf("reconcile:%s", platformruntime.GetUUID()), "ledger_sync_reconcile")
+	_, err = applyLedgerDeltaTx(tx, account, userID, int64(-diff), fmt.Sprintf("reconcile:%s", platformruntime.GetUUID()), "ledger_sync_reconcile")
+	return err
 }
 
 func loadBalanceSnapshot(accountID string) (*billingschema.BillingBalanceSnapshot, error) {
@@ -591,9 +600,11 @@ func applyLedgerDelta(account *billingschema.BillingAccount, userID int, delta i
 	return err
 }
 
-func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, userID int, delta int64, operationID string, reasonCode string) error {
+// The boolean identifies a new operation; a validated settlement replay must
+// not repeat compatibility projection or reward-hold side effects.
+func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, userID int, delta int64, operationID string, reasonCode string) (bool, error) {
 	if account == nil || delta == 0 {
-		return nil
+		return false, nil
 	}
 	if delta < 0 {
 		_, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
@@ -606,7 +617,7 @@ func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, user
 			OperatorType:   "ledger_sync",
 			OperatorID:     operationID,
 		})
-		return err
+		return err == nil, err
 	}
 
 	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
@@ -616,19 +627,23 @@ func applyLedgerDeltaTx(tx *gorm.DB, account *billingschema.BillingAccount, user
 		IdempotencyKey: fmt.Sprintf("ledger-reservation:%s", operationID),
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
+	alreadySettled := reservation.Status == billingschema.BillingReservationStatusSettled
 	_, err = billingdomain.SettleReservationTx(tx, billingdomain.SettleReservationParams{
 		ReservationID:  reservation.ReservationID,
 		ActualAmount:   delta,
 		IdempotencyKey: fmt.Sprintf("ledger-settlement:%s", operationID),
 	})
+	if err != nil || alreadySettled {
+		return false, err
+	}
 	// A transfer, box purchase or conversion spends its original funding just
 	// like inference. Otherwise a spent top-up can still appear refundable.
 	if err == nil && account.AccountType == billingAccountTypeClaudeWallet && reasonCode != "payment_refund" && reasonCode != "ledger_sync_reconcile" && reasonCode != "marketplace_owner_reclaim" && tx.Migrator().HasTable(&billingschema.FundingAllocation{}) {
 		err = allocateSettledFundingFIFOTx(tx, ledgerSyncRequestID(operationID), account.AccountID, delta)
 	}
-	return err
+	return err == nil, err
 }
 
 func ledgerSyncRequestID(operationID string) string {

@@ -200,6 +200,9 @@ func CreateDesktopImportConfig(c *gin.Context) {
 }
 
 func GetDesktopImportConfig(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
+	c.Header("Referrer-Policy", "no-referrer")
 	payload, err := identityapp.ResolveDesktopImportConfig(c.Query("code"))
 	if err != nil {
 		httpapi.ApiErrorMsg(c, err.Error())

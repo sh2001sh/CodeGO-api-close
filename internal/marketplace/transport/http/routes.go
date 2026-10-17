@@ -62,7 +62,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		marketplaceRoute.GET("/multiplier-notices", ListMultiplierNotices)
 		marketplaceRoute.POST("/multiplier-notices/:id/read", ReadMultiplierNotice)
 		marketplaceRoute.GET("/channels/:id/user-usage/:userId/time-series", GetUserUsageTimeSeries)
-		marketplaceRoute.POST("/channels/:id/batch-welfare", BatchWelfare)
+		marketplaceRoute.POST("/channels/:id/batch-welfare", middleware.CriticalRateLimit(), BatchWelfare)
 		marketplaceRoute.GET("/channels/:id/time-range-multipliers", ListTimeRangeMultipliers)
 		marketplaceRoute.POST("/channels/:id/time-range-multipliers", CreateTimeRangeMultiplier)
 		marketplaceRoute.DELETE("/channels/:id/time-range-multipliers/:ruleId", DeleteTimeRangeMultiplier)

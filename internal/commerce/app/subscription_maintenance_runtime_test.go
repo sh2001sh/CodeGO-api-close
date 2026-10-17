@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"github.com/sh2001sh/new-api/constant"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
@@ -11,9 +12,61 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"testing"
 	"time"
 )
+
+func TestResetDueSubscriptionsRechecksEligibilityAfterCandidateRead(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		change map[string]any
+	}{
+		{"refund started", map[string]any{"status": "refund_pending"}},
+		{"cancelled", map[string]any{"status": "cancelled"}},
+		{"became permanent credit pack", map[string]any{"credit_pack_granted_quota": 1000}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			db := setupRedemptionTestDB(t)
+			plan := insertSubscriptionResetAppTestPlan(t, 9901, 0, 1000)
+			plan.PeriodAmount, plan.QuotaResetPeriod = 500, commerceschema.SubscriptionResetDaily
+			require.NoError(t, db.Save(plan).Error)
+			now := time.Now().Unix()
+			sub := commerceschema.UserSubscription{UserId: 9901, PlanId: plan.Id, Status: "active", AmountTotal: 1000, AmountUsed: 100, PeriodAmount: 500, PeriodUsed: 100, StartTime: now - 2*86400, EndTime: now + 86400, NextResetTime: now - 1}
+			require.NoError(t, db.Create(&sub).Error)
+			const callback = "test:change-before-reset-lock"
+			require.NoError(t, db.Callback().Query().After("gorm:after_query").Register(callback, func(tx *gorm.DB) {
+				if _, ok := tx.Statement.Dest.(*[]commerceschema.UserSubscription); ok {
+					tx.AddError(db.Model(&sub).Updates(test.change).Error)
+				}
+			}))
+			t.Cleanup(func() { _ = db.Callback().Query().Remove(callback) })
+			n, err := ResetDueSubscriptions(10)
+			require.NoError(t, err)
+			require.Zero(t, n)
+			require.NoError(t, db.First(&sub, sub.Id).Error)
+			require.EqualValues(t, 100, sub.PeriodUsed)
+			require.Equal(t, now-1, sub.NextResetTime)
+		})
+	}
+}
+
+func TestResetDueSubscriptionsReportsLockQueryFailure(t *testing.T) {
+	db := setupRedemptionTestDB(t)
+	sub := commerceschema.UserSubscription{UserId: 9901, PlanId: 9901, Status: "active", NextResetTime: time.Now().Unix() - 1}
+	require.NoError(t, db.Create(&sub).Error)
+	failure := errors.New("test reset lock query failed")
+	const callback = "test:reset-lock-failure"
+	require.NoError(t, db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+		if _, ok := tx.Statement.Dest.(*commerceschema.UserSubscription); ok {
+			tx.AddError(failure)
+		}
+	}))
+	t.Cleanup(func() { _ = db.Callback().Query().Remove(callback) })
+	n, err := ResetDueSubscriptions(10)
+	require.ErrorIs(t, err, failure)
+	require.Zero(t, n)
+}
 
 func TestResetDueSubscriptions_ResetsPeriodUsageAndModelUsage(t *testing.T) {
 	db := setupRedemptionTestDB(t)

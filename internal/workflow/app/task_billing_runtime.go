@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	"math"
@@ -11,10 +12,12 @@ import (
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformmath "github.com/sh2001sh/new-api/internal/platform/mathx"
 	workflowdomain "github.com/sh2001sh/new-api/internal/workflow/domain"
 	workflowschema "github.com/sh2001sh/new-api/internal/workflow/schema"
+	"gorm.io/gorm"
 )
 
 func taskBillingModelName(task *workflowschema.Task) string {
@@ -37,14 +40,76 @@ func taskBillingResolveTokenKey(ctx context.Context, tokenID int, taskID string)
 	return token.Key
 }
 
-func taskBillingAdjustFunding(task *workflowschema.Task, delta int) error {
+func taskBillingOperationKey(task *workflowschema.Task) string {
+	if task.ID > 0 {
+		return fmt.Sprintf("async-task:%d:terminal", task.ID)
+	}
+	return "async-task:" + task.TaskID + ":terminal"
+}
+
+func taskBillingAdjustFunding(task *workflowschema.Task, delta int) (bool, error) {
 	if task == nil || delta == 0 {
-		return nil
+		return false, nil
 	}
 	if taskBillingIsSubscription(task) {
-		return commerceapp.PostConsumeUserSubscriptionUsageDelta(task.PrivateData.SubscriptionId, taskBillingModelName(task), int64(delta))
+		return commerceapp.AdjustUserSubscriptionUsageDelta(task.PrivateData.SubscriptionId, taskBillingModelName(task), int64(delta), taskBillingOperationKey(task))
 	}
-	return billingapp.AdjustClaudeWalletQuota(task.UserId, delta)
+	err := billingapp.AdjustClaudeWalletQuota(task.UserId, delta)
+	return err == nil, err
+}
+
+// CommitTaskTerminalTransition keeps a subscription's terminal CAS, authoritative
+// balance adjustment and final task quota in one transaction. A funding failure
+// leaves the task unfinished so the existing polling activity can retry it.
+func CommitTaskTerminalTransition(ctx context.Context, task *workflowschema.Task, fromStatus workflowschema.TaskStatus, actualQuota int, reason string) (bool, error) {
+	if task == nil || task.ID <= 0 || task.Quota < 0 || actualQuota < 0 {
+		return false, errors.New("valid persisted task and nonnegative quota are required")
+	}
+	if !workflowdomain.IsTaskTerminalStatus(task.Status) {
+		return false, errors.New("task transition must target a terminal status")
+	}
+	if workflowdomain.IsTaskTerminalStatus(fromStatus) {
+		return false, nil
+	}
+	if !taskBillingIsSubscription(task) {
+		won, err := workflowdomain.UpdateTaskWithStatus(task, fromStatus)
+		if err != nil || !won {
+			return won, err
+		}
+		if actualQuota == 0 {
+			return true, recordTaskRefund(ctx, task, reason)
+		}
+		return true, settleTaskQuotaDelta(ctx, task, actualQuota, reason)
+	}
+
+	preConsumedQuota := task.Quota
+	updated := *task
+	updated.Quota = actualQuota
+	var won, applied bool
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&updated).Where("status = ?", fromStatus).Select("*").Updates(&updated)
+		if result.Error != nil {
+			return result.Error
+		}
+		won = result.RowsAffected > 0
+		if !won || actualQuota == preConsumedQuota {
+			return nil
+		}
+		var err error
+		applied, err = commerceapp.AdjustUserSubscriptionUsageDeltaTx(tx, task.PrivateData.SubscriptionId, taskBillingModelName(task), int64(actualQuota-preConsumedQuota), taskBillingOperationKey(task))
+		return err
+	})
+	if err != nil {
+		task.Status = fromStatus
+		return false, err
+	}
+	if won {
+		task.Quota = actualQuota
+		if applied {
+			projectTaskBillingAdjustment(ctx, task, preConsumedQuota, actualQuota, reason)
+		}
+	}
+	return won, nil
 }
 
 func taskFundingQuota(task *workflowschema.Task, quota int) int {
@@ -93,52 +158,40 @@ func taskBillingOther(task *workflowschema.Task) map[string]interface{} {
 	return other
 }
 
-func recordTaskRefund(ctx context.Context, task *workflowschema.Task, reason string) {
+func recordTaskRefund(ctx context.Context, task *workflowschema.Task, reason string) error {
 	if task == nil {
-		return
+		return nil
 	}
 	quota := task.Quota
 	if quota == 0 {
-		return
+		return nil
 	}
-	if err := taskBillingAdjustFunding(task, -quota); err != nil {
-		logger.LogWarn(ctx, fmt.Sprintf("退还资金来源失败 task %s: %s", task.TaskID, err.Error()))
-		return
+	if quota < 0 {
+		return errors.New("task quota must be nonnegative")
 	}
-	taskBillingAdjustTokenQuota(ctx, task, -quota)
-	billingapp.AdjustUsageQuotaStats(task.UserId, task.ChannelId, -quota)
-
-	other := taskBillingOther(task)
-	other["task_id"] = task.TaskID
-	other["reason"] = reason
-	auditapp.RecordTaskBillingLog(auditschema.RecordTaskBillingLogParams{
-		UserId:    task.UserId,
-		LogType:   auditschema.LogTypeRefund,
-		Content:   "",
-		ChannelId: task.ChannelId,
-		ModelName: taskBillingModelName(task),
-		Quota:     quota,
-		TokenId:   task.PrivateData.TokenId,
-		Group:     task.Group,
-		Other:     other,
-	})
+	applied, err := taskBillingAdjustFunding(task, -quota)
+	if err != nil {
+		return err
+	}
+	if applied {
+		projectTaskBillingAdjustment(ctx, task, quota, 0, reason)
+	}
+	return nil
 }
 
-// RecordTaskRefundForWorkflow refunds a task from workflow-owned runtime paths.
-func RecordTaskRefundForWorkflow(ctx context.Context, task *workflowschema.Task, reason string) {
-	recordTaskRefund(ctx, task, reason)
-}
-
-func settleTaskQuotaDelta(ctx context.Context, task *workflowschema.Task, actualQuota int, reason string) {
+func settleTaskQuotaDelta(ctx context.Context, task *workflowschema.Task, actualQuota int, reason string) error {
 	if task == nil || actualQuota <= 0 {
-		return
+		return nil
+	}
+	if task.Quota < 0 {
+		return errors.New("task quota must be nonnegative")
 	}
 
 	preConsumedQuota := task.Quota
 	quotaDelta := actualQuota - preConsumedQuota
 	if quotaDelta == 0 {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 预扣费准确（%s，%s）", task.TaskID, logger.LogQuota(actualQuota), reason))
-		return
+		return nil
 	}
 
 	logger.LogInfo(ctx, fmt.Sprintf(
@@ -150,16 +203,40 @@ func settleTaskQuotaDelta(ctx context.Context, task *workflowschema.Task, actual
 		reason,
 	))
 
-	if err := taskBillingAdjustFunding(task, quotaDelta); err != nil {
-		logger.LogError(ctx, fmt.Sprintf("差额结算资金调整失败 task %s: %s", task.TaskID, err.Error()))
-		return
+	var applied bool
+	if taskBillingIsSubscription(task) {
+		err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+			var err error
+			applied, err = commerceapp.AdjustUserSubscriptionUsageDeltaTx(tx, task.PrivateData.SubscriptionId, taskBillingModelName(task), int64(quotaDelta), taskBillingOperationKey(task))
+			if err != nil || task.ID <= 0 {
+				return err
+			}
+			return tx.Model(task).Update("quota", actualQuota).Error
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+		var err error
+		applied, err = taskBillingAdjustFunding(task, quotaDelta)
+		if err != nil {
+			return err
+		}
+		task.Quota = actualQuota
+		if err := workflowdomain.UpdateTaskQuota(task); err != nil {
+			logger.LogError(ctx, fmt.Sprintf("差额结算回写 quota 失败 task %s: %s", task.TaskID, err.Error()))
+		}
 	}
-	taskBillingAdjustTokenQuota(ctx, task, quotaDelta)
-
 	task.Quota = actualQuota
-	if err := workflowdomain.UpdateTaskQuota(task); err != nil {
-		logger.LogError(ctx, fmt.Sprintf("差额结算回写 quota 失败 task %s: %s", task.TaskID, err.Error()))
+	if applied {
+		projectTaskBillingAdjustment(ctx, task, preConsumedQuota, actualQuota, reason)
 	}
+	return nil
+}
+
+func projectTaskBillingAdjustment(ctx context.Context, task *workflowschema.Task, preConsumedQuota, actualQuota int, reason string) {
+	quotaDelta := actualQuota - preConsumedQuota
+	taskBillingAdjustTokenQuota(ctx, task, quotaDelta)
 
 	logType := auditschema.LogTypeRefund
 	logQuota := -quotaDelta
@@ -175,10 +252,15 @@ func settleTaskQuotaDelta(ctx context.Context, task *workflowschema.Task, actual
 	other["task_id"] = task.TaskID
 	other["pre_consumed_quota"] = preConsumedQuota
 	other["actual_quota"] = actualQuota
+	content := reason
+	if actualQuota == 0 {
+		other["reason"] = reason
+		content = ""
+	}
 	auditapp.RecordTaskBillingLog(auditschema.RecordTaskBillingLogParams{
 		UserId:    task.UserId,
 		LogType:   logType,
-		Content:   reason,
+		Content:   content,
 		ChannelId: task.ChannelId,
 		ModelName: taskBillingModelName(task),
 		Quota:     logQuota,
@@ -188,15 +270,15 @@ func settleTaskQuotaDelta(ctx context.Context, task *workflowschema.Task, actual
 	})
 }
 
-func settleTaskQuotaByTokens(ctx context.Context, task *workflowschema.Task, totalTokens int) {
+func taskQuotaByTokens(task *workflowschema.Task, totalTokens int) (int, string) {
 	if task == nil || totalTokens <= 0 {
-		return
+		return 0, ""
 	}
 
 	modelName := taskBillingModelName(task)
 	modelRatio, hasRatioSetting, _ := gatewaystore.GetModelRatio(modelName)
 	if !hasRatioSetting || modelRatio <= 0 {
-		return
+		return 0, ""
 	}
 
 	group := task.Group
@@ -207,7 +289,7 @@ func settleTaskQuotaByTokens(ctx context.Context, task *workflowschema.Task, tot
 		}
 	}
 	if group == "" {
-		return
+		return 0, ""
 	}
 
 	groupRatio := gatewaystore.GetGroupRatio(group)
@@ -235,24 +317,23 @@ func settleTaskQuotaByTokens(ctx context.Context, task *workflowschema.Task, tot
 		finalGroupRatio,
 		otherMultiplier,
 	)
-	settleTaskQuotaDelta(ctx, task, actualQuota, reason)
+	return actualQuota, reason
 }
 
-func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor, task *workflowschema.Task, taskResult *relaycommon.TaskInfo) {
+func taskCompletionQuota(adaptor TaskPollingAdaptor, task *workflowschema.Task, taskResult *relaycommon.TaskInfo) (int, string) {
 	if task == nil || taskResult == nil {
-		return
+		return 0, ""
 	}
 	if billingContext := task.PrivateData.BillingContext; billingContext != nil && billingContext.PerCallBilling {
-		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))
-		return
+		return task.Quota, "按次计费"
 	}
 	if adaptor != nil {
 		if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {
-			settleTaskQuotaDelta(ctx, task, taskFundingQuota(task, actualQuota), "adaptor计费调整")
-			return
+			return taskFundingQuota(task, actualQuota), "adaptor计费调整"
 		}
 	}
 	if taskResult.TotalTokens > 0 {
-		settleTaskQuotaByTokens(ctx, task, taskResult.TotalTokens)
+		return taskQuotaByTokens(task, taskResult.TotalTokens)
 	}
+	return task.Quota, ""
 }

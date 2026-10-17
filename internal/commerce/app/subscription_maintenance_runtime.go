@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/store"
@@ -9,6 +10,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strings"
 )
 
@@ -120,25 +122,32 @@ func ResetDueSubscriptions(limit int) (int, error) {
 	resetCount := 0
 	for _, sub := range subs {
 		subCopy := sub
+		applied := false
 		err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 			locked := &commerceschema.UserSubscription{}
-			if err := tx.Set("gorm:query_option", "FOR UPDATE").
-				Where("id = ? AND next_reset_time > 0 AND next_reset_time <= ?", subCopy.Id, now).
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+				Where("id = ? AND next_reset_time > 0 AND next_reset_time <= ? AND status = ? AND credit_pack_granted_quota = 0", subCopy.Id, now, "active").
 				First(locked).Error; err != nil {
-				return nil
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil
+				}
+				return err
 			}
 			plan, err := getSubscriptionPlanRecordTx(tx, locked.PlanId)
-			if err != nil || plan == nil {
-				return nil
+			if err != nil {
+				return err
 			}
 			if err := maybeResetUserSubscriptionWithPlanTx(tx, locked, plan, now); err != nil {
 				return err
 			}
-			resetCount++
+			applied = true
 			return nil
 		})
 		if err != nil {
 			return resetCount, err
+		}
+		if applied {
+			resetCount++
 		}
 	}
 	return resetCount, nil

@@ -132,20 +132,12 @@ func CreateBlindBoxXunhuPayment(userID int, quantity int) (*BlindBoxXunhuCheckou
 
 // VerifyBlindBoxEpay verifies blind-box epay callback parameters.
 func VerifyBlindBoxEpay(params map[string]string) (*epay.VerifyRes, error) {
-	client := GetEpayClient()
-	if client == nil {
-		return nil, errors.New("payment gateway is not configured")
-	}
-	verifyInfo, err := client.Verify(params)
-	if err != nil || !verifyInfo.VerifyStatus {
-		return nil, errors.New("verify failed")
-	}
-	return verifyInfo, nil
+	return verifyConfiguredEpayOrder(params)
 }
 
 // CompleteBlindBoxEpayPayment completes a paid blind-box epay order.
 func CompleteBlindBoxEpayPayment(verifyInfo *epay.VerifyRes) error {
-	if verifyInfo == nil || verifyInfo.TradeStatus != epay.StatusTradeSuccess {
+	if verifyInfo == nil || !verifyInfo.VerifyStatus || verifyInfo.TradeStatus != epay.StatusTradeSuccess {
 		return errors.New("payment not complete")
 	}
 	return completeBlindBoxOrder(verifyInfo.ServiceTradeNo, platformtext.GetJsonString(verifyInfo), commerceschema.PaymentProviderEpay, verifyInfo.Type)

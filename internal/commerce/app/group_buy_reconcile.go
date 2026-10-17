@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
@@ -41,20 +42,23 @@ func InspectSettledMonthlyGroupBuyBonuses() (GroupBuyReconciliationResult, error
 			if err := tx.First(&order, groupBuyID).Error; err != nil {
 				return err
 			}
-			var members []commerceschema.GroupBuyMember
-			if err := tx.Where("group_buy_id = ?", groupBuyID).Find(&members).Error; err != nil {
+			members, memberCount, err := qualifiedGroupBuyMembersTx(tx, &order, false)
+			if err != nil {
 				return err
 			}
 			plan, err := getSubscriptionPlanRecordTx(tx, order.PlanId)
 			if err != nil {
 				return err
 			}
-			target := bonusForGroupBuyCount(*plan, len(members))
+			target := bonusForGroupBuyCount(*plan, memberCount)
 			for _, member := range members {
 				if member.OrderId == 0 || target <= member.BonusAmountUSD {
 					continue
 				}
 				sub, err := getGroupBuyMemberSubscriptionTx(tx, member, order.PlanId)
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					continue
+				}
 				if err != nil {
 					return err
 				}

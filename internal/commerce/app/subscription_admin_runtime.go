@@ -3,6 +3,8 @@ package app
 import (
 	"errors"
 	"fmt"
+	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -10,6 +12,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strings"
 	"time"
 )
@@ -47,13 +50,16 @@ func updateAdminUserSubscriptionRuntime(userSubscriptionID int, input adminUpdat
 	var userID int
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		sub := &commerceschema.UserSubscription{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", userSubscriptionID).First(sub).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", userSubscriptionID).First(sub).Error; err != nil {
 			return err
 		}
 		userID = sub.UserId
 
 		plan, err := getSubscriptionPlanRecordTx(tx, sub.PlanId)
 		if err != nil {
+			return err
+		}
+		if err := adjustAdminSubscriptionQuotaTx(tx, sub, input.AmountTotal, input.AmountUsed); err != nil {
 			return err
 		}
 
@@ -140,7 +146,7 @@ func invalidateAdminUserSubscriptionRuntime(userSubscriptionID int) (string, err
 	var userID int
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		sub := &commerceschema.UserSubscription{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", userSubscriptionID).First(sub).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", userSubscriptionID).First(sub).Error; err != nil {
 			return err
 		}
 		userID = sub.UserId
@@ -184,7 +190,7 @@ func deleteAdminUserSubscriptionRuntime(userSubscriptionID int) (string, error) 
 	var userID int
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		sub := &commerceschema.UserSubscription{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", userSubscriptionID).First(sub).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", userSubscriptionID).First(sub).Error; err != nil {
 			return err
 		}
 		userID = sub.UserId
@@ -219,7 +225,7 @@ func resetAdminUserSubscriptionQuotaRuntime(userSubscriptionID int, input adminR
 	var updated commerceschema.UserSubscription
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		sub := &commerceschema.UserSubscription{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", userSubscriptionID).First(sub).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", userSubscriptionID).First(sub).Error; err != nil {
 			return err
 		}
 		if sub.CreditPackGrantedQuota > 0 {
@@ -267,4 +273,96 @@ func maxInt64(a int64, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// The caller holds the subscription lock. AmountUsed includes quota held by
+// in-flight requests, so total-used is the available target, without subtracting
+// reserved funds again. Reservations and immutable purchase snapshots stay intact.
+func adjustAdminSubscriptionQuotaTx(tx *gorm.DB, sub *commerceschema.UserSubscription, total, used int64) error {
+	if total < 0 || used < 0 || (total > 0 && used > total) {
+		return errors.New("invalid subscription quota")
+	}
+	if sub.CreditPackGrantedQuota > 0 && total != sub.AmountTotal {
+		return errors.New("permanent credit pack purchased quota cannot be changed")
+	}
+	if (total == 0) != (sub.AmountTotal == 0) {
+		return errors.New("switching between limited and unlimited subscription quota is unsupported")
+	}
+	if total == 0 {
+		return nil
+	}
+	if total == sub.AmountTotal && used == sub.AmountUsed {
+		// Metadata-only edits keep an unmaterialized legacy balance untouched.
+		// Existing canonical balances still need to match the absolute target.
+		var existing billingschema.BillingAccount
+		query := tx.Where("account_type = ? AND owner_type = ? AND owner_id = ? AND quota_unit = ?", "subscription", "user_subscription", sub.Id, "quota").Limit(1).Find(&existing)
+		if query.Error != nil {
+			return query.Error
+		}
+		if query.RowsAffected == 0 {
+			return nil
+		}
+		backed, err := subscriptionLedgerHasEntriesTx(tx, existing.AccountID)
+		if err != nil || !backed {
+			return err
+		}
+	}
+	account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
+		AccountType: "subscription", OwnerType: "user_subscription", OwnerID: int64(sub.Id), QuotaUnit: "quota",
+	})
+	if err != nil {
+		return err
+	}
+	var snapshot billingschema.BillingBalanceSnapshot
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("account_id = ?", account.AccountID).First(&snapshot).Error; err != nil {
+		return err
+	}
+	if used < snapshot.ReservedBalance {
+		return errors.New("amount_used cannot be less than reserved subscription quota")
+	}
+	ledgerBacked, err := subscriptionLedgerHasEntriesTx(tx, account.AccountID)
+	if err != nil {
+		return err
+	}
+	if !ledgerBacked {
+		if snapshot.AvailableBalance != 0 || snapshot.ReservedBalance != 0 || snapshot.GrantedTotal != 0 || snapshot.ConsumedTotal != 0 || snapshot.RefundedTotal != 0 {
+			return errors.New("subscription balance without ledger entries requires reconciliation")
+		}
+		if sub.AmountTotal <= 0 || sub.AmountUsed < 0 || sub.AmountUsed > sub.AmountTotal {
+			return errors.New("invalid existing subscription quota")
+		}
+		available := sub.AmountTotal - sub.AmountUsed
+		if available < 0 {
+			return errors.New("invalid existing subscription quota")
+		}
+		bootstrapKey := fmt.Sprintf("subscription-bootstrap:%d", sub.Id)
+		if available > 0 {
+			if _, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+				AccountID: account.AccountID, Amount: available, IdempotencyKey: bootstrapKey,
+				ReasonCode: "subscription_balance_bootstrap", ReferenceType: "user_subscription",
+				ReferenceID: fmt.Sprintf("%d", sub.Id), OperatorType: "subscription_admin",
+			}); err != nil {
+				return err
+			}
+		} else if _, err := billingdomain.RecordAdjustmentTx(tx, billingdomain.RecordAdjustmentParams{
+			AccountID: account.AccountID, IdempotencyKey: bootstrapKey,
+			ReasonCode: "subscription_balance_bootstrap", ReferenceType: "user_subscription",
+			ReferenceID: fmt.Sprintf("%d", sub.Id), OperatorType: "subscription_admin",
+		}); err != nil {
+			return err
+		}
+		snapshot.AvailableBalance = available
+	}
+	if snapshot.AvailableBalance == total-used {
+		return nil
+	}
+	// Each committed correction gets its own receipt: a later A -> B -> A change
+	// must remain possible. Repeating the canonical target does not add a write.
+	_, err = billingdomain.AdjustAvailableBalanceTx(tx, billingdomain.AdjustAvailableBalanceParams{
+		AccountID: account.AccountID, UsageAmount: snapshot.AvailableBalance - (total - used),
+		IdempotencyKey: "subscription-admin-quota:" + platformruntime.GetUUID(),
+		ReasonCode:     "subscription_admin_quota_adjustment", ReferenceType: "user_subscription",
+		ReferenceID: fmt.Sprintf("%d", sub.Id),
+	})
+	return err
 }

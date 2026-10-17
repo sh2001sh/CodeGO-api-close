@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/sh2001sh/new-api/i18n"
+	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
@@ -336,6 +337,15 @@ func UpdateToken(c *gin.Context) {
 
 func normalizeTokenGroupSelection(userID int, group string, crossGroupRetry bool) (string, bool, error) {
 	group = gatewayroutingapp.NormalizeTokenGroup(group)
+	if group == commerceapp.LegacyMonthlyPassGroup {
+		_, active := commerceapp.ActiveMultiplierCardRoutePolicy(userID)
+		if !active {
+			return "", false, fmt.Errorf("倍率卡权益已结束或不可用，请选择其他分组")
+		}
+	}
+	if group == commerceapp.ZeroHourGroup && !commerceapp.IsZeroHourGroupActive(userID) {
+		return "", false, fmt.Errorf("0 倍率卡权益已结束或不可用，请选择其他分组")
+	}
 	if group == gatewayroutingapp.AutoGroupName {
 		// Auto is inherently a cross-group route pool. Keep the legacy field
 		// enabled for compatibility, but do not expose it as a user choice.

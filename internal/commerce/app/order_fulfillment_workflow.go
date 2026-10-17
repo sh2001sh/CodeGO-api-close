@@ -18,7 +18,9 @@ import (
 var (
 	orderWorkflowClient           temporalclient.Client
 	orderWorkflowClientErr        error
-	orderWorkflowClientOnce       sync.Once
+	orderWorkflowClientMu         sync.Mutex
+	orderWorkflowClientRetryAt    time.Time
+	orderWorkflowDial             = temporalclient.DialContext
 	orderFulfillmentSchedulerOnce sync.Once
 )
 
@@ -33,7 +35,7 @@ func StartOrderFulfillmentWorkflow(ctx context.Context, order *commerceschema.Su
 	if order == nil || order.TradeNo == "" {
 		return fmt.Errorf("paid subscription order is required")
 	}
-	client, err := orderFulfillmentTemporalClient()
+	client, err := orderFulfillmentTemporalClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -88,33 +90,67 @@ func StartPendingOrderFulfillmentScheduler(ctx context.Context) {
 }
 
 func schedulePendingOrderFulfillments(ctx context.Context) {
-	var orders []commerceschema.SubscriptionOrder
-	if err := platformdb.DB.WithContext(ctx).
-		Where("status = ? AND fulfillment_status = ?", "success", commerceschema.SubscriptionOrderFulfillmentPending).
-		Order("complete_time asc, id asc").
-		Limit(orderFulfillmentScheduleBatch).
-		Find(&orders).Error; err != nil {
-		platformobservability.SysLog("load pending order fulfillments: " + err.Error())
-		return
-	}
-	for index := range orders {
-		if err := StartOrderFulfillmentWorkflow(ctx, &orders[index]); err != nil {
-			platformobservability.SysLog(fmt.Sprintf("start pending order fulfillment %s: %v", orders[index].TradeNo, err))
+	var afterTime int64
+	var afterID int
+	for {
+		if ctx.Err() != nil {
+			return
 		}
+		var orders []commerceschema.SubscriptionOrder
+		query := platformdb.DB.WithContext(ctx).
+			Where("status = ? AND fulfillment_status = ? AND COALESCE(refund_status, '') = ''", "success", commerceschema.SubscriptionOrderFulfillmentPending)
+		if afterID > 0 {
+			query = query.Where("complete_time > ? OR (complete_time = ? AND id > ?)", afterTime, afterTime, afterID)
+		}
+		if err := query.
+			Order("complete_time asc, id asc").
+			Limit(orderFulfillmentScheduleBatch).
+			Find(&orders).Error; err != nil {
+			platformobservability.SysLog("load pending order fulfillments: " + err.Error())
+			return
+		}
+		for index := range orders {
+			if ctx.Err() != nil {
+				return
+			}
+			if err := StartOrderFulfillmentWorkflow(ctx, &orders[index]); err != nil {
+				platformobservability.SysLog(fmt.Sprintf("start pending order fulfillment %s: %v", orders[index].TradeNo, err))
+			}
+		}
+		if len(orders) < orderFulfillmentScheduleBatch {
+			return
+		}
+		last := orders[len(orders)-1]
+		afterTime, afterID = last.CompleteTime, last.Id
 	}
 }
 
-func orderFulfillmentTemporalClient() (temporalclient.Client, error) {
-	orderWorkflowClientOnce.Do(func() {
-		hostPort := platformconfig.GetEnvOrDefaultString("TEMPORAL_HOSTPORT", "")
-		if hostPort == "" {
-			orderWorkflowClientErr = fmt.Errorf("TEMPORAL_HOSTPORT is required for order fulfillment workflow orchestration")
-			return
-		}
-		orderWorkflowClient, orderWorkflowClientErr = temporalclient.Dial(temporalclient.Options{
-			HostPort:  hostPort,
-			Namespace: platformconfig.GetEnvOrDefaultString("TEMPORAL_NAMESPACE", "default"),
-		})
+func orderFulfillmentTemporalClient(ctx context.Context) (temporalclient.Client, error) {
+	orderWorkflowClientMu.Lock()
+	defer orderWorkflowClientMu.Unlock()
+	if orderWorkflowClient != nil {
+		return orderWorkflowClient, nil
+	}
+	if time.Now().Before(orderWorkflowClientRetryAt) {
+		return nil, orderWorkflowClientErr
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	orderWorkflowClientRetryAt = time.Now().Add(5 * time.Second)
+	hostPort := platformconfig.GetEnvOrDefaultString("TEMPORAL_HOSTPORT", "")
+	if hostPort == "" {
+		orderWorkflowClientErr = fmt.Errorf("TEMPORAL_HOSTPORT is required for order fulfillment workflow orchestration")
+		return nil, orderWorkflowClientErr
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	orderWorkflowClient, orderWorkflowClientErr = orderWorkflowDial(dialCtx, temporalclient.Options{
+		HostPort:  hostPort,
+		Namespace: platformconfig.GetEnvOrDefaultString("TEMPORAL_NAMESPACE", "default"),
 	})
+	if orderWorkflowClientErr != nil {
+		orderWorkflowClientRetryAt = time.Now().Add(5 * time.Second)
+	}
 	return orderWorkflowClient, orderWorkflowClientErr
 }

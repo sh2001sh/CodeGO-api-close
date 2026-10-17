@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -253,6 +254,9 @@ func creditAccountTx(tx *gorm.DB, params CreditAccountParams) (*billingschema.Bi
 	snapshot, err := ensureAndLockBalanceSnapshot(tx, params.AccountID)
 	if err != nil {
 		return nil, err
+	}
+	if snapshot.AvailableBalance > math.MaxInt64-params.Amount || snapshot.GrantedTotal > math.MaxInt64-params.Amount {
+		return nil, fmt.Errorf("billing account credit exceeds integer limit")
 	}
 	snapshot.AvailableBalance += params.Amount
 	snapshot.GrantedTotal += params.Amount

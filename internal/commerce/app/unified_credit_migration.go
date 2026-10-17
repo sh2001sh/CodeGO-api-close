@@ -222,8 +222,8 @@ func normalizeLegacySealedBlindBoxRewards() error {
 func migrateLegacyPaidBlindBoxOrdersToInventory() error {
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		var orders []commerceschema.BlindBoxOrder
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").
-			Where("status = ? AND opened_count < quantity", "success").
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("status = ? AND money > 0 AND opened_count < quantity", "success").
 			Order("id asc").Find(&orders).Error; err != nil {
 			return err
 		}

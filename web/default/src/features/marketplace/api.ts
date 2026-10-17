@@ -204,10 +204,18 @@ export async function sendMarketplaceBatchWelfare(input: {
   userIds: string[]
   type: 'transfer' | 'blind_box'
   amount: number
+  requestId: string
+  paymentPassword?: string
 }) {
   const response = await api.post<ApiResponse<MarketplaceBatchWelfareResult>>(
     `/api/marketplace/channels/${input.channelId}/batch-welfare`,
-    { user_ids: input.userIds, type: input.type, amount: input.amount }
+    {
+      user_ids: input.userIds,
+      type: input.type,
+      amount: input.amount,
+      request_id: input.requestId,
+      payment_password: input.paymentPassword,
+    }
   )
   return requireData(response.data)
 }

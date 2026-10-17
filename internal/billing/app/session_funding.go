@@ -69,13 +69,6 @@ func (s *BillingSession) reserveFunding(delta int) error {
 	)
 }
 
-func (s *BillingSession) rollbackFundingReserve(delta int) {
-	if _, ok := s.funding.(ReservableFundingSource); ok {
-		return
-	}
-	_ = delta
-}
-
 // NewBillingSession selects and reserves the request's permitted funding source.
 func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
 	if relayInfo == nil {

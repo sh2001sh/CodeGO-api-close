@@ -12,6 +12,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var zeroHourStateTableReady atomic.Bool
@@ -72,16 +73,11 @@ func getOrCreateZeroHourStateTx(tx *gorm.DB, userID int) (*commerceschema.BlindB
 	if !zeroHourStateTableExists(tx) {
 		return nil, nil
 	}
-	var state commerceschema.BlindBoxZeroHourState
-	err := tx.Set("gorm:query_option", "FOR UPDATE").Where("user_id = ?", userID).First(&state).Error
-	if err == nil {
-		return &state, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
+	state := commerceschema.BlindBoxZeroHourState{UserId: userID}
+	if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&state).Error; err != nil {
 		return nil, err
 	}
-	state = commerceschema.BlindBoxZeroHourState{UserId: userID}
-	if err := tx.Create(&state).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", userID).First(&state).Error; err != nil {
 		return nil, err
 	}
 	return &state, nil

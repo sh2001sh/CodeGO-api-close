@@ -77,7 +77,7 @@ func findPreConsumedSubscription(requestID string, userID int, creditPack bool) 
 	if query.RowsAffected == 0 {
 		return nil, false, nil
 	}
-	if record.UserId != userID || record.Status == "refunded" {
+	if record.UserId != userID || record.Status == "refunded" || record.Status == "settled" {
 		return nil, true, errors.New("subscription pre-consume request unavailable")
 	}
 	result, err := subscriptionPreConsumeResultFromRecord(platformdb.DB, &record)

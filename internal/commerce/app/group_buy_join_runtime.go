@@ -73,8 +73,11 @@ func ensureUserCanJoinGroupBuyTx(tx *gorm.DB, groupBuyID int64, userID int) erro
 }
 
 func joinGroupBuyTx(tx *gorm.DB, userID int, groupBuyID int64, orderID int, expectedPlanID int, userSubscriptionID int) error {
+	if tx == nil || userID <= 0 || orderID <= 0 || expectedPlanID <= 0 || userSubscriptionID <= 0 {
+		return ErrGroupBuyNotJoinable
+	}
 	var order commerceschema.GroupBuyOrder
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", groupBuyID).First(&order).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", groupBuyID).First(&order).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrGroupBuyNotFound
 		}

@@ -437,6 +437,10 @@ func TokenAuth() func(c *gin.Context) {
 			tokenGroup = commerceapp.MultiplierCardRouteGroup()
 		}
 		requiresOfficialChannel, monthlyPassActive := commerceapp.ActiveMultiplierCardRoutePolicy(token.UserId)
+		if legacyMonthlyPassGroup && !monthlyPassActive {
+			abortWithOpenAiMessage(c, http.StatusForbidden, "倍率卡权益已结束或不可用，请切换其他分组")
+			return
+		}
 		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelOnly, requiresOfficialChannel)
 		httpctx.SetContextKey(c, constant.ContextKeyMonthlyPassActive, monthlyPassActive)
 		httpctx.SetContextKey(c, constant.ContextKeyOfficialChannelFallback, false)

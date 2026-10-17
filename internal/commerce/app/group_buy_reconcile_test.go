@@ -74,6 +74,8 @@ func TestReconcileSettledMonthlyGroupBuyBonusesSkipsExpiredSubscriptions(t *test
 	require.NoError(t, db.Create(&commerceschema.GroupBuyMember{
 		GroupBuyId: order.Id, UserId: 9982, OrderId: 0, BonusGranted: true,
 	}).Error)
+	seedGroupBuyMemberPayment(t, db, order, &commerceschema.GroupBuyMember{UserId: subscription.UserId, OrderId: 1, UserSubscriptionId: subscription.Id})
+	seedGroupBuyMemberPayment(t, db, order, &commerceschema.GroupBuyMember{UserId: 9982})
 
 	result, err := ReconcileSettledMonthlyGroupBuyBonuses()
 	require.NoError(t, err)
@@ -108,6 +110,8 @@ func TestInspectSettledMonthlyGroupBuyBonusesReportsOnlyActiveMemberDifferences(
 	require.NoError(t, db.Create(&commerceschema.GroupBuyMember{
 		GroupBuyId: order.Id, UserId: 9992, OrderId: 0, BonusGranted: true,
 	}).Error)
+	seedGroupBuyMemberPayment(t, db, order, &commerceschema.GroupBuyMember{UserId: subscription.UserId, OrderId: 1, UserSubscriptionId: subscription.Id})
+	seedGroupBuyMemberPayment(t, db, order, &commerceschema.GroupBuyMember{UserId: 9992})
 
 	result, err := InspectSettledMonthlyGroupBuyBonuses()
 	require.NoError(t, err)

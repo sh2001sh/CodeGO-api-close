@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/csv"
 	"mime"
 	"net/http"
@@ -11,7 +12,6 @@ import (
 
 	"fmt"
 	"github.com/gin-gonic/gin"
-	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
@@ -283,13 +283,35 @@ func BatchWelfare(c *gin.Context) {
 		return
 	}
 	var r struct {
-		UserIDs []string `json:"user_ids"`
-		Type    string   `json:"type"`
-		Amount  int64    `json:"amount"`
+		UserIDs         []string `json:"user_ids"`
+		Type            string   `json:"type"`
+		Amount          int64    `json:"amount"`
+		RequestID       string   `json:"request_id"`
+		PaymentPassword string   `json:"payment_password"`
 	}
 	if e := c.ShouldBindJSON(&r); e != nil {
 		respond(c, nil, e)
 		return
+	}
+	r.RequestID = strings.TrimSpace(r.RequestID)
+	if len(r.UserIDs) == 0 || len(r.UserIDs) > 50 || r.RequestID == "" || len(r.RequestID) > 128 || r.Amount <= 0 || (r.Type != "transfer" && r.Type != "blind_box") || (r.Type == "blind_box" && r.Amount > 50) || (r.Type == "transfer" && r.PaymentPassword == "") {
+		respond(c, nil, fmt.Errorf("福利参数无效，每批最多 50 位用户；转账需支付密码"))
+		return
+	}
+	seen := make(map[string]bool, len(r.UserIDs))
+	for i, id := range r.UserIDs {
+		id = strings.ToUpper(strings.TrimSpace(id))
+		if id == "" || seen[id] {
+			respond(c, nil, fmt.Errorf("收款用户无效或重复"))
+			return
+		}
+		seen[id] = true
+		r.UserIDs[i] = id
+	}
+	// Bind retries to the authenticated owner, channel, batch and recipient.
+	// Each recipient uses the existing atomic transfer and gift services.
+	operationKey := func(recipient string) string {
+		return fmt.Sprintf("welfare:%x", sha256.Sum256([]byte(fmt.Sprintf("%d:%s:%s:%s:%s", c.GetInt("id"), c.Param("id"), r.Type, r.RequestID, recipient))))
 	}
 	if r.Type == "blind_box" {
 		if r.Amount <= 0 {
@@ -299,7 +321,7 @@ func BatchWelfare(c *gin.Context) {
 		d := make([]any, 0, len(r.UserIDs))
 		success := 0
 		for _, externalID := range r.UserIDs {
-			e := commerceapp.GiftBlindBoxPropsBatch(c.GetInt("id"), externalID, int(r.Amount), fmt.Sprintf("marketplace-welfare-blindbox:%s:%s:%d", c.Param("id"), externalID, r.Amount))
+			e := commerceapp.GiftBlindBoxPropsBatch(c.GetInt("id"), externalID, int(r.Amount), operationKey(externalID))
 			if e != nil {
 				d = append(d, gin.H{"user_id": externalID, "status": "failed", "error": e.Error()})
 			} else {
@@ -317,12 +339,9 @@ func BatchWelfare(c *gin.Context) {
 	d := make([]any, 0, len(r.UserIDs))
 	success := 0
 	for _, id := range r.UserIDs {
-		uid, e := strconv.Atoi(id)
-		if e != nil || uid <= 0 {
-			d = append(d, gin.H{"user_id": id, "status": "failed", "error": "invalid user id"})
-			continue
-		}
-		_, e = billingapp.GrantBonusWalletQuotaTx(nil, uid, r.Amount, "marketplace_welfare", c.Param("id"), fmt.Sprintf("marketplace-welfare:%s:%d:%d", c.Param("id"), uid, time.Now().UnixNano()))
+		_, e := commerceapp.TransferWalletQuota(c.GetInt("id"), commerceapp.CreateWalletTransferRequest{
+			RecipientExternalId: id, AmountQuota: r.Amount, PaymentPassword: r.PaymentPassword, RequestId: operationKey(id),
+		})
 		if e != nil {
 			d = append(d, gin.H{"user_id": id, "status": "failed", "error": e.Error()})
 		} else {

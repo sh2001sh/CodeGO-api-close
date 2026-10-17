@@ -32,6 +32,7 @@ type mirroredWalletStore struct {
 
 type mirroredWalletTxStore struct {
 	accountType string
+	canonical   bool
 	readBalance func(tx *gorm.DB, userID int) (int, error)
 	applyDelta  func(tx *gorm.DB, userID int, amount int64) error
 }
@@ -311,10 +312,16 @@ func ForfeitMarketplacePendingEarningsTx(tx *gorm.DB, pendingAccountID string, a
 // CreditUnifiedWalletQuotaTx credits the canonical unified-credit wallet.
 //
 // The historical Claude wallet function remains available for migrations and
-// old callers, but new business features should use this name so the unit is
-// explicit and cannot be mistaken for a model-specific balance.
+// old callers. Existing canonical balances must not be reconciled from the
+// legacy projection: a gateway reservation can commit before that projection
+// catches up. Both balances receive only this credit's increment.
 func CreditUnifiedWalletQuotaTx(tx *gorm.DB, userID int, amount int, idempotencyKey string, reasonCode string) error {
-	return CreditClaudeWalletQuotaTx(tx, userID, amount, idempotencyKey, reasonCode)
+	return creditUserWalletQuotaTx(tx, userID, int64(amount), idempotencyKey, reasonCode, mirroredWalletTxStore{
+		accountType: billingAccountTypeClaudeWallet,
+		canonical:   true,
+		readBalance: getUserClaudeWalletQuotaTx,
+		applyDelta:  increaseUserClaudeWalletQuotaTx,
+	})
 }
 
 func setUserWalletQuota(userID int, targetBalance int, readBalance func(int) (int, error), applyDelta func(int, int) error) error {
@@ -396,7 +403,7 @@ func creditUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64, idempotencyK
 		return existingErr
 	}
 	alreadyCredited := existingErr == nil
-	if !alreadyCredited {
+	if !alreadyCredited && !mirrored.canonical {
 		if err := reconcileAccountBalanceTx(tx, account, userID, legacyBalance); err != nil {
 			return err
 		}

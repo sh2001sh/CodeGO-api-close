@@ -30,6 +30,7 @@ import type {
   OwnerChannelOption,
   MarketplaceOwnerUsageLog,
 } from '@/features/marketplace/types'
+import '../usage-logs.css'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import { useOwnerChannelLogColumns } from './owner-channel-log-columns'
 import { OwnerChannelLogDetailsDialog } from './owner-channel-log-details-dialog'
@@ -164,7 +165,7 @@ export function OwnerChannelUsageLogs(props: {
         emptyDescription={t('渠道产生真实调用后，记录和逐笔收入会显示在这里。')}
         skeletonKeyPrefix='owner-channel-log'
         paginationInFooter={false}
-        tableClassName='max-h-[calc(100dvh-18rem)] overflow-auto'
+        tableClassName='usage-logs-scroll-viewport max-h-[calc(100dvh-18rem)] overflow-auto'
         tableHeaderClassName='bg-muted/30 sticky top-0 z-10'
         toolbar={
           <OwnerLogToolbar

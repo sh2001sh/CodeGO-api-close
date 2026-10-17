@@ -1,0 +1,83 @@
+.codego-about {
+  display: grid;
+  gap: clamp(40px, 7vw, 72px);
+  padding-block: clamp(32px, 6vw, 64px);
+}
+.codego-about-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.codego-about-heading h1 {
+  font-size: clamp(32px, 5vw, 56px);
+  letter-spacing: -0.035em;
+}
+.codego-about-heading img {
+  flex: none;
+  width: clamp(56px, 8vw, 80px);
+}
+.codego-about-product {
+  display: grid;
+  gap: 32px;
+}
+.codego-about-product section {
+  display: grid;
+  gap: 12px;
+  max-width: 68ch;
+}
+.codego-about-product p {
+  color: var(--ink-secondary);
+}
+.codego-about-company {
+  display: grid;
+  gap: 28px;
+  padding: clamp(24px, 4vw, 40px);
+  border-radius: 16px;
+  background: var(--bg-subtle);
+  min-width: 0;
+}
+.codego-about-company dl {
+  display: grid;
+  gap: 24px;
+}
+.codego-about-company dl > div {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px 24px;
+}
+.codego-about-company dt {
+  color: var(--ink-secondary);
+}
+.codego-about-company dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.codego-about-company address {
+  font-style: normal;
+}
+.codego-about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+.codego-about-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  text-decoration: none;
+}
+.codego-about-links a:hover {
+  text-decoration: underline;
+}
+.codego-about-links svg {
+  width: 16px;
+  height: 16px;
+}
+@media (max-width: 540px) {
+  .codego-about-company dl > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}

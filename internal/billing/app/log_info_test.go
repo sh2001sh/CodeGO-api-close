@@ -40,6 +40,20 @@ func TestGenerateTextOtherInfoIncludesFirstByteTrace(t *testing.T) {
 	require.Greater(t, trace["total_ms"], int64(0))
 }
 
+func TestBillingAuditFreezesPaidBonusFeeRateAndPackageIdentity(t *testing.T) {
+	other := map[string]interface{}{}
+	appendBillingInfo(&gatewaysruntime.RelayInfo{
+		BillingSource: BillingSourceSubscription, MarketplaceGroupID: "market",
+		CreditPackGrantedQuota: 103000, CreditPackPaidQuota: 100000, CreditPackChannelShareBPS: 6000,
+		SubscriptionId: 44, SubscriptionPlanId: 9, SubscriptionPlanTitle: "Original pack",
+	}, other)
+	require.InDelta(t, .018, other["marketplace_transaction_fee_rate"], 1e-12)
+	require.InDelta(t, .932, other["marketplace_owner_net_rate"], 1e-12)
+	require.Equal(t, "paid_bonus_rate_v2", other["marketplace_fee_policy_version"])
+	require.Equal(t, 44, other["subscription_id"])
+	require.Equal(t, "Original pack", other["subscription_plan_title"])
+}
+
 func TestGenerateTextOtherInfoUsesFrozenResponseTiming(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	start := time.Now().Add(-time.Hour)

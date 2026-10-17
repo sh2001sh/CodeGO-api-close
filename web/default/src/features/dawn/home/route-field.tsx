@@ -275,7 +275,7 @@ export function RouteField(props: RouteFieldProps) {
             <i />
           </div>
           <div className='mh-path-node mh-path-core'>
-            <img src='/code-go-logo.svg' width='16' height='16' alt='' />
+            <img src='/codego-mark.svg' width='16' height='16' alt='' />
             <span>CodeGo</span>
           </div>
           <div className='mh-fiber mh-fiber-lag' aria-hidden='true'>

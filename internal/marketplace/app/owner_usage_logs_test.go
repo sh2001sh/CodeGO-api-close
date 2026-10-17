@@ -8,6 +8,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -243,7 +244,7 @@ func openOwnerUsageLogTestDB(t testing.TB) (*gorm.DB, *gorm.DB) {
 	logDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
 	platformdb.DB, platformdb.LogDB = db, logDB
-	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.Settlement{}, &gatewayschema.RequestAudit{}, &gatewayschema.RequestAttemptAudit{}))
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.Settlement{}, &gatewayschema.RequestAudit{}, &gatewayschema.RequestAttemptAudit{}, &billingschema.BillingLedgerEntry{}))
 	require.NoError(t, logDB.AutoMigrate(&auditschema.Log{}))
 	return db, logDB
 }

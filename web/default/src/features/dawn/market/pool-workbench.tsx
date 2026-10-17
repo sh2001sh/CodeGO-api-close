@@ -22,7 +22,6 @@ import { Link } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
 import { getIntlLocale } from '@/i18n/format'
 import {
-  Activity,
   Check,
   ChevronDown,
   ChevronUp,
@@ -370,18 +369,18 @@ export function PoolWorkbench(props: {
       aria-label={i18n.t('路由池工作台')}
     >
       <div className='ph'>
-        <span className='pool-eyebrow'>
-          <Activity size={13} aria-hidden='true' /> M-02 / ROUTE POOL
-        </span>
-        <h3>
-          {mode === 'create'
-            ? i18n.t('新建路由池')
-            : mode === 'autobuild'
-              ? i18n.t('智能新建池')
-              : isAuto
-                ? i18n.t('AUTO 池')
-                : (poolDetail.data?.name ?? i18n.t('路由池工作台'))}
-        </h3>
+        <div className='pool-title-row'>
+          <Waypoints size={20} aria-hidden='true' />
+          <h3>
+            {mode === 'create'
+              ? i18n.t('新建路由池')
+              : mode === 'autobuild'
+                ? i18n.t('智能新建池')
+                : isAuto
+                  ? i18n.t('AUTO 池')
+                  : (poolDetail.data?.name ?? i18n.t('路由池工作台'))}
+          </h3>
+        </div>
         <div className='psub'>
           {mode === 'pool'
             ? i18n.t('POOL · {{param0}} 分组 · {{param1}}', {
@@ -480,7 +479,7 @@ export function PoolWorkbench(props: {
         ) : (
           <>
             <div className='toolbar'>
-              <div className='row'>
+              <div className='row pool-selection-row'>
                 <select
                   className='iname'
                   aria-label={i18n.t('路由池')}
@@ -763,35 +762,6 @@ function PoolNode(props: {
         <span className='cname' title={props.member.name}>
           {t(props.member.name)}
         </span>
-        <span className='ord'>
-          <button
-            disabled={props.index === 0}
-            onClick={() => props.onMove(-1)}
-            aria-label={t('上移')}
-            title={t('上移')}
-          >
-            <ChevronUp size={13} aria-hidden='true' />
-          </button>
-          <button
-            disabled={props.index === props.count - 1}
-            onClick={() => props.onMove(1)}
-            aria-label={t('下移')}
-            title={t('下移')}
-          >
-            <ChevronDown size={13} aria-hidden='true' />
-          </button>
-          <button
-            onClick={props.onRemove}
-            aria-label={t('移出')}
-            title={t('移出')}
-          >
-            <X size={13} aria-hidden='true' />
-          </button>
-        </span>
-      </div>
-      <div className='pool-node-source'>
-        {t(props.member.source)}
-        {props.member.observing && <span>{t('观测中')}</span>}
       </div>
       <div className='r2'>
         <div>
@@ -832,6 +802,37 @@ function PoolNode(props: {
               : `${pct(props.member.cache, 0)}%`}
           </b>
         </div>
+      </div>
+      <div className='pool-node-footer'>
+        <div className='pool-node-source'>
+          {t(props.member.source)}
+          {props.member.observing && <span>{t('观测中')}</span>}
+        </div>
+        <span className='ord'>
+          <button
+            disabled={props.index === 0}
+            onClick={() => props.onMove(-1)}
+            aria-label={t('上移')}
+            title={t('上移')}
+          >
+            <ChevronUp size={13} aria-hidden='true' />
+          </button>
+          <button
+            disabled={props.index === props.count - 1}
+            onClick={() => props.onMove(1)}
+            aria-label={t('下移')}
+            title={t('下移')}
+          >
+            <ChevronDown size={13} aria-hidden='true' />
+          </button>
+          <button
+            onClick={props.onRemove}
+            aria-label={t('移出')}
+            title={t('移出')}
+          >
+            <X size={13} aria-hidden='true' />
+          </button>
+        </span>
       </div>
       {props.test && (
         <div className='pool-test-node-status' role='status'>

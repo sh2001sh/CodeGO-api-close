@@ -13,10 +13,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
-import {
-  getPerfMetrics,
-  getPerfMetricsSummary,
-} from '@/features/performance-metrics/api'
+import { getModelRankingSummary, getModelRankingTrend } from './api'
 import { rankModels } from './data'
 import { UsageChart } from './usage-chart'
 
@@ -32,7 +29,7 @@ export function ModelRankings() {
   const summary = useQuery({
     queryKey: ['ranking-model-summary', search.hours],
     queryFn: async () => {
-      const response = await getPerfMetricsSummary(search.hours)
+      const response = await getModelRankingSummary(search.hours)
       if (!response.success || !Array.isArray(response.data?.models))
         throw new Error('Model usage unavailable')
       return response.data.models
@@ -81,7 +78,7 @@ export function ModelRankings() {
   const trend = useQuery({
     queryKey: ['ranking-model-trend', activeModel, search.hours],
     queryFn: async () => {
-      const response = await getPerfMetrics(activeModel, search.hours)
+      const response = await getModelRankingTrend(activeModel, search.hours)
       if (!response.success || !Array.isArray(response.data?.groups))
         throw new Error('Model trend unavailable')
       return response.data.groups

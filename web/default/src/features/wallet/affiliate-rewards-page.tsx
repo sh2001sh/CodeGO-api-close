@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
@@ -27,7 +27,6 @@ import {
   Wallet,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { formatNumber, formatQuota, formatTimestampToDate } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,15 +41,7 @@ import {
 } from '@/components/ui/table'
 import { SectionPageLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
-import {
-  consumeSubscriptionResetOpportunity,
-  getSelfSubscriptionFull,
-} from '@/features/subscriptions/api'
-import {
-  getOrderedSubscriptions,
-  isActiveUserSubscription,
-  isCreditPackSubscription,
-} from '@/features/subscriptions/lib'
+import { getSelfSubscriptionFull } from '@/features/subscriptions/api'
 import './commerce.css'
 import { WalletResetOpportunityPanel } from './components/wallet-reset-opportunity-panel'
 import { useAffiliate } from './hooks'
@@ -59,7 +50,6 @@ const INVITEES_PER_PAGE = 20
 
 export function AffiliateRewardsPage() {
   const { t } = useTranslation()
-  const [usingResetOpportunity, setUsingResetOpportunity] = useState(false)
   const [page, setPage] = useState(1)
   const affiliate = useAffiliate()
   const overview = affiliate.overview
@@ -77,25 +67,6 @@ export function AffiliateRewardsPage() {
     enabled: hasHistoricalReset,
   })
   const subscriptions = subscriptionsQuery.data?.data
-  const legacySubscription = useMemo(
-    () =>
-      getOrderedSubscriptions(
-        subscriptions?.subscriptions ?? [],
-        subscriptions?.subscription_order_ids ?? []
-      ).find(
-        (record) =>
-          !isCreditPackSubscription(record.subscription) &&
-          isActiveUserSubscription(record.subscription)
-      ),
-    [subscriptions]
-  )
-  const canUseResetOpportunity = Boolean(
-    subscriptionsQuery.data?.success &&
-    legacySubscription &&
-    resetOpportunity &&
-    resetOpportunity.available_count > 0 &&
-    !resetOpportunity.used_this_month
-  )
   const invitees = overview?.invitees ?? []
   const pageCount = Math.max(1, Math.ceil(invitees.length / INVITEES_PER_PAGE))
   const currentPage = Math.min(page, pageCount)
@@ -121,25 +92,6 @@ export function AffiliateRewardsPage() {
       value: overview ? `${overview.rebate_rate_bps / 100}%` : '--',
     },
   ]
-
-  const handleUseResetOpportunity = async () => {
-    if (usingResetOpportunity || !canUseResetOpportunity) return
-    setUsingResetOpportunity(true)
-    try {
-      const response = await consumeSubscriptionResetOpportunity()
-      if (!response.success) {
-        toast.error(response.message || t('额度刷新失败'))
-        return
-      }
-      toast.success(t('已刷新旧套餐额度'))
-      await Promise.all([affiliate.refetch(), subscriptionsQuery.refetch()])
-      window.dispatchEvent(new Event('subscription:changed'))
-    } catch {
-      toast.error(t('额度刷新失败'))
-    } finally {
-      setUsingResetOpportunity(false)
-    }
-  }
 
   return (
     <SectionPageLayout kicker=''>
@@ -198,6 +150,82 @@ export function AffiliateRewardsPage() {
                 {t('复制邀请码')}
               </Button>
             </div>
+          </section>
+
+          <section
+            className='commerce-invite-rules'
+            aria-labelledby='affiliate-rules-title'
+          >
+            <h2 id='affiliate-rules-title'>{t('返利规则')}</h2>
+            <dl>
+              <div>
+                <dt>{t('邀请关系')}</dt>
+                <dd>
+                  {t(
+                    '受邀人通过你的邀请链接或邀请码完成注册，并成功绑定邀请关系。'
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('有效时间')}</dt>
+                <dd>
+                  {t(
+                    '从受邀人注册时刻起连续 7 天（168 小时），按消费结算时间判定；满 7 天后的消费不计入。'
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('计算方式')}</dt>
+                <dd>
+                  {t(
+                    '返利 = 首周已结算的合资格实付消费 × {{rate}}。充值、购买套餐和转账本身不产生返利。',
+                    {
+                      rate: overview
+                        ? `${overview.rebate_rate_bps / 100}%`
+                        : '3%',
+                    }
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('实付范围')}</dt>
+                <dd>
+                  {t(
+                    '钱包现金充值及现金购买的新套餐，仅按已消费额度中的实付部分计算。赠送额度、返利余额再次消费、旧套餐、旧套餐转入的钱包余额及集享增额，以及缺少成功付款记录的历史转换套餐均不计入。'
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('到账方式')}</dt>
+                <dd>
+                  {t(
+                    '消费结算完成后自动处理，返利计入邀请人的可用钱包，无需领取。处理完成前，返利明细可能稍后更新。'
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('计算精度')}</dt>
+                <dd>
+                  {t(
+                    '按每位受邀人的累计合资格消费，以最小计费单位计算返利；尾差随该受邀人后续合资格消费累计。'
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('生效范围')}</dt>
+                <dd>
+                  {t(
+                    '仅计算规则生效后的消费，历史消费不补发。邀请活动已停止新增旧套餐刷新次数。'
+                  )}
+                </dd>
+              </div>
+              {overview && overview.rebate_effective_at > 0 && (
+                <div>
+                  <dt>{t('规则生效时间')}</dt>
+                  <dd>{formatTimestampToDate(overview.rebate_effective_at)}</dd>
+                </div>
+              )}
+            </dl>
           </section>
 
           {affiliate.isError ? (
@@ -331,19 +359,14 @@ export function AffiliateRewardsPage() {
 
           {hasHistoricalReset && resetOpportunity && (
             <WalletResetOpportunityPanel
-              resetOpportunity={resetOpportunity}
-              currentSubscriptionTitle={
-                legacySubscription?.plan?.title ||
-                (legacySubscription
-                  ? t('Plan #{{id}}', {
-                      id: legacySubscription.subscription.id,
-                    })
-                  : undefined)
-              }
-              canUseResetOpportunity={canUseResetOpportunity}
-              usingResetOpportunity={usingResetOpportunity}
-              onUseResetOpportunity={() => void handleUseResetOpportunity()}
-              hideDetailsLink
+              subscriptionData={subscriptions}
+              loading={subscriptionsQuery.isLoading}
+              onRefresh={async () => {
+                await Promise.all([
+                  affiliate.refetch(),
+                  subscriptionsQuery.refetch(),
+                ])
+              }}
             />
           )}
         </div>

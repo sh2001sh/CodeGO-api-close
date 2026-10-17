@@ -47,6 +47,9 @@ func registerControlAPIRoutes(router *gin.Engine) {
 			perfMetricsRoute.GET("/summary", gatewayhttp.GetPerfMetricsSummary)
 			perfMetricsRoute.GET("", gatewayhttp.GetPerfMetrics)
 		}
+		modelRankingsRoute := apiRouter.Group("/rankings/models", middleware.HeaderNavModuleAuth("rankings"))
+		modelRankingsRoute.GET("/summary", gatewayhttp.GetModelRankingSummary)
+		modelRankingsRoute.GET("", gatewayhttp.GetModelRankingTrend)
 		apiRouter.GET("/oauth/state", middleware.CriticalRateLimit(), identityhttp.GenerateOAuthCode)
 		apiRouter.POST("/oauth/email/bind", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, identityhttp.BindEmail)
 		apiRouter.GET("/oauth/wechat", middleware.CriticalRateLimit(), identityhttp.HandleWeChatOAuth)

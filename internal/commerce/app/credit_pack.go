@@ -42,6 +42,10 @@ func fulfillCreditPackTx(tx *gorm.DB, order *commerceschema.SubscriptionOrder) e
 }
 
 func createCreditPackBalanceTx(tx *gorm.DB, userID, planID int, granted, paid, channelShareBPS int64, reference string) (*commerceschema.UserSubscription, error) {
+	return createCreditPackBalanceWithReasonTx(tx, userID, planID, granted, paid, channelShareBPS, reference, "credit_pack_purchase")
+}
+
+func createCreditPackBalanceWithReasonTx(tx *gorm.DB, userID, planID int, granted, paid, channelShareBPS int64, reference, reason string) (*commerceschema.UserSubscription, error) {
 	if granted <= 0 || paid <= 0 || paid > granted || channelShareBPS < 0 || channelShareBPS > 10000 {
 		return nil, errors.New("invalid credit pack balance")
 	}
@@ -59,7 +63,7 @@ func createCreditPackBalanceTx(tx *gorm.DB, userID, planID int, granted, paid, c
 	}
 	_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 		AccountID: account.AccountID, Amount: granted, IdempotencyKey: reference,
-		ReasonCode: "credit_pack_purchase", ReferenceType: "user_subscription", ReferenceID: fmt.Sprint(sub.Id), OperatorType: "commerce",
+		ReasonCode: reason, ReferenceType: "user_subscription", ReferenceID: fmt.Sprint(sub.Id), OperatorType: "commerce",
 	})
 	return sub, err
 }

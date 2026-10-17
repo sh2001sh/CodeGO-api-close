@@ -124,6 +124,37 @@ func TestReferralRebateUsesPaidFIFOAndNetSettledUsageWithoutRecursion(t *testing
 	require.Equal(t, "unpaid_funding", recursive.ExclusionReason)
 }
 
+func TestReferralRebateExcludesConvertedBalanceAndCompensation(t *testing.T) {
+	db, now := referralTestDB(t)
+	// A source policy cannot turn historical converted funds or compensation
+	// into a new cash payment or referral-paid funding.
+	require.NoError(t, db.Create(&billingschema.FundingSourcePolicy{Source: "other", RevenueMultiplier: 99}).Error)
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		if err := CreditUnifiedWalletQuotaTx(tx, 2, 1000, "monthly-pass-wallet-conversion:check:base", "subscription_conversion_base"); err != nil {
+			return err
+		}
+		return CreditUnifiedWalletQuotaTx(tx, 2, 100, "monthly-pass-wallet-conversion:check:gift", "subscription_conversion_gift")
+	}))
+	var account billingschema.BillingAccount
+	require.NoError(t, db.First(&account, "owner_type = ? AND owner_id = ? AND account_type = ?", "user", 2, "claude_wallet").Error)
+	settlement := referralSettle(t, db, account.AccountID, "conversion-spend", "relay:wallet:conversion-spend", 1100, 1100, now)
+	_, err := processLedgerOutboxAccount(context.Background(), account.AccountID)
+	require.NoError(t, err)
+	var receipt billingschema.ReferralConsumptionRebate
+	require.NoError(t, db.First(&receipt, "settlement_id = ?", settlement.SettlementID).Error)
+	require.Zero(t, receipt.EligibleQuota)
+	require.Zero(t, receipt.RebateQuota)
+	require.Equal(t, "unpaid_funding", receipt.ExclusionReason)
+	var lots []billingschema.FundingLot
+	require.NoError(t, db.Where("account_id = ?", account.AccountID).Find(&lots).Error)
+	require.Len(t, lots, 2)
+	for _, lot := range lots {
+		require.Equal(t, "other", lot.Source)
+		require.Zero(t, lot.PaidQuota)
+		require.Zero(t, lot.RevenueMultiplier)
+	}
+}
+
 func TestReferralRebatePreservesSmallPaidFractions(t *testing.T) {
 	db, now := referralTestDB(t)
 	accountID := referralPaidWallet(t, db, 110, 100)
@@ -255,6 +286,7 @@ func TestReferralRebateTimeWindowAndNonConsumptionExclusions(t *testing.T) {
 func TestReferralRebateCreditPackExcludesBonusAndUnprovenConversions(t *testing.T) {
 	for _, test := range []struct {
 		name          string
+		source        string
 		granted, paid int64
 		paidOrder     bool
 		expected      int64
@@ -263,10 +295,11 @@ func TestReferralRebateCreditPackExcludesBonusAndUnprovenConversions(t *testing.
 		{name: "paid permanent package", granted: 1100, paid: 1000, paidOrder: true, expected: 1000},
 		{name: "legacy tenfold balance", reason: "legacy_paid_snapshot_missing"},
 		{name: "converted unproven gift", granted: 1100, paid: 1100, reason: "conversion_paid_snapshot_missing"},
+		{name: "refresh redemption gift", source: "reset_redemption", granted: 1100, paid: 1100, reason: "conversion_paid_snapshot_missing"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			db, now := referralTestDB(t)
-			sub := commerceschema.UserSubscription{UserId: 2, AmountTotal: 1100, CreditPackGrantedQuota: test.granted, CreditPackPaidQuota: test.paid}
+			sub := commerceschema.UserSubscription{UserId: 2, Source: test.source, AmountTotal: 1100, CreditPackGrantedQuota: test.granted, CreditPackPaidQuota: test.paid}
 			require.NoError(t, db.Create(&sub).Error)
 			if test.paidOrder {
 				require.NoError(t, db.Create(&commerceschema.SubscriptionOrder{UserId: 2, TradeNo: "pack", Money: 1000, Status: "success", TargetSubscriptionId: sub.Id, CreditPackQuota: test.granted, CreditPackPaidQuota: test.paid}).Error)

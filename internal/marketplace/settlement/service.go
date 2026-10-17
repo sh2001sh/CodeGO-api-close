@@ -46,6 +46,25 @@ type RecordParams struct {
 	CreditPackGrantedQuota    int64
 	CreditPackPaidQuota       int64
 	CreditPackChannelShareBPS int64
+	FeePolicyVersion          string
+	SubscriptionID            int
+	SubscriptionPlanID        int
+	SubscriptionPlanTitle     string
+}
+
+// An empty version belongs to already queued historical settlement contexts.
+const FeePolicyPaidBonusV2 = "paid_bonus_rate_v2"
+
+type IncomeSnapshot struct {
+	AlgorithmVersion      string  `json:"algorithm_version"`
+	BillingSource         string  `json:"billing_source"`
+	SubscriptionID        int     `json:"subscription_id"`
+	SubscriptionPlanID    int     `json:"subscription_plan_id"`
+	SubscriptionPlanTitle string  `json:"subscription_plan_title"`
+	BaseCommissionRateBPS int64   `json:"base_commission_rate_bps"`
+	PackageBonusRate      float64 `json:"package_bonus_rate"`
+	ChannelShareBPS       int64   `json:"channel_share_bps"`
+	PackageSurchargeRate  float64 `json:"package_surcharge_rate"`
 }
 
 type ReleaseHook func(tx *gorm.DB, userID int, amount int64, idempotencyKey string, reasonCode string) error
@@ -155,12 +174,36 @@ func RecordTx(tx *gorm.DB, params RecordParams) error {
 	if result.RowsAffected == 0 {
 		return nil
 	}
-	_, err = billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
+	entry, err := billingdomain.CreditAccountTx(tx, billingdomain.CreditAccountParams{
 		AccountID: account.AccountID, Amount: ownerNet, IdempotencyKey: "marketplace-pending:" + params.RequestID,
 		ReasonCode: "marketplace_owner_pending", ReferenceType: "marketplace_settlement", ReferenceID: settlement.ID,
 		OperatorType: "system", OperatorID: "marketplace",
 	})
 	if err != nil {
+		return err
+	}
+	snapshot := IncomeSnapshot{
+		AlgorithmVersion: params.FeePolicyVersion, BillingSource: params.BillingSource,
+		SubscriptionID: params.SubscriptionID, SubscriptionPlanID: params.SubscriptionPlanID,
+		SubscriptionPlanTitle: params.SubscriptionPlanTitle, BaseCommissionRateBPS: 500,
+		ChannelShareBPS: params.CreditPackChannelShareBPS,
+	}
+	if snapshot.AlgorithmVersion == "" {
+		snapshot.AlgorithmVersion = "granted_bonus_share_v1"
+	}
+	if params.CreditPackPaidQuota > 0 {
+		snapshot.PackageBonusRate = float64(params.CreditPackGrantedQuota-params.CreditPackPaidQuota) / float64(params.CreditPackPaidQuota)
+		denominator := params.CreditPackGrantedQuota
+		if params.FeePolicyVersion == FeePolicyPaidBonusV2 {
+			denominator = params.CreditPackPaidQuota
+		}
+		snapshot.PackageSurchargeRate = float64(params.CreditPackGrantedQuota-params.CreditPackPaidQuota) / float64(denominator) * float64(params.CreditPackChannelShareBPS) / 10000
+	}
+	metadata, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+	if err := tx.Model(entry).Update("metadata", metadata).Error; err != nil {
 		return err
 	}
 	if commission+fee <= 0 {
@@ -855,9 +898,12 @@ func percentage(amount int64, percent int64) int64 {
 }
 
 // creditPackCharges uses the purchase snapshot rather than today's plan price.
-// Both amounts round half up once at the quota unit; the fee is computed from
-// the exact discount ratio, avoiding another rounding step for small requests.
+// Both amounts round half up once at the quota unit. V2 charges the purchase
+// bonus/paid ratio; an unversioned historical event keeps its bonus/granted ratio.
 func creditPackCharges(params RecordParams) (discount, fee int64, err error) {
+	if params.FeePolicyVersion != "" && params.FeePolicyVersion != FeePolicyPaidBonusV2 {
+		return 0, 0, errors.New("unsupported marketplace fee policy")
+	}
 	if params.CreditPackGrantedQuota == 0 && params.CreditPackPaidQuota == 0 && params.CreditPackChannelShareBPS == 0 {
 		if params.BillingSource == "credit_pack" {
 			return 0, 0, errors.New("credit pack settlement snapshot is missing")
@@ -873,7 +919,13 @@ func creditPackCharges(params RecordParams) (discount, fee int64, err error) {
 	denominator := big.NewInt(params.CreditPackGrantedQuota)
 	discount = roundedRatio(numerator, denominator)
 	feeNumerator := new(big.Int).Mul(numerator, big.NewInt(params.CreditPackChannelShareBPS))
+	if params.FeePolicyVersion == FeePolicyPaidBonusV2 {
+		denominator = big.NewInt(params.CreditPackPaidQuota)
+	}
 	feeDenominator := new(big.Int).Mul(denominator, big.NewInt(10000))
+	if feeNumerator.Cmp(new(big.Int).Mul(big.NewInt(params.SettlementGrossAmount), feeDenominator)) > 0 {
+		return 0, 0, errors.New("credit pack fees exceed settlement gross amount")
+	}
 	return discount, roundedRatio(feeNumerator, feeDenominator), nil
 }
 

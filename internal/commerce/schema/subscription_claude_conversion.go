@@ -37,6 +37,12 @@ type SubscriptionClaudeConversion struct {
 	PlanPriceAmount                float64 `json:"plan_price_amount" gorm:"type:decimal(10,6);not null;default:0"`
 	UnusedRatio                    float64 `json:"unused_ratio" gorm:"type:decimal(12,8);not null;default:0"`
 	ConversionPercent              int     `json:"conversion_percent" gorm:"type:int;not null;default:0"`
+	TargetType                     string  `json:"target_type" gorm:"-"`
+	BaseQuota                      int     `json:"base_quota" gorm:"-"`
+	BonusQuota                     int     `json:"bonus_quota" gorm:"-"`
+	BonusPercent                   int     `json:"bonus_percent" gorm:"-"`
+	GroupBuyID                     int64   `json:"group_buy_id" gorm:"-"`
+	GroupBuyMemberCount            int     `json:"group_buy_member_count" gorm:"-"`
 	// Deprecated ratio fields are retained only so historical rows remain readable.
 	RatioNumerator   int   `json:"-" gorm:"type:int;not null;default:1"`
 	RatioDenominator int   `json:"-" gorm:"type:int;not null;default:10"`
@@ -57,7 +63,8 @@ func (c *SubscriptionClaudeConversion) BeforeUpdate(_ *gorm.DB) error {
 }
 
 type SubscriptionClaudeConversionConfig struct {
-	Enabled bool `json:"enabled"`
+	Enabled      bool `json:"enabled"`
+	BonusPercent int  `json:"bonus_percent"`
 }
 
 type SubscriptionClaudeConversionPreview struct {
@@ -67,6 +74,12 @@ type SubscriptionClaudeConversionPreview struct {
 	UnusedRatio          float64 `json:"unused_ratio"`
 	MaxConversionPercent int     `json:"max_conversion_percent"`
 	PreviewQuota         int     `json:"preview_quota"`
+	BaseQuota            int     `json:"base_quota"`
+	BonusQuota           int     `json:"bonus_quota"`
+	BonusPercent         int     `json:"bonus_percent"`
+	TargetType           string  `json:"target_type"`
+	GroupBuyID           int64   `json:"group_buy_id"`
+	GroupBuyMemberCount  int     `json:"group_buy_member_count"`
 	IneligibleReason     string  `json:"ineligible_reason,omitempty"`
 }
 
@@ -76,6 +89,12 @@ type SubscriptionClaudeConversionResult struct {
 	TargetCreditPackSubscriptionId int                                `json:"target_credit_pack_subscription_id"`
 	SourceQuota                    int64                              `json:"source_quota"`
 	TargetQuota                    int                                `json:"target_quota"`
+	BaseQuota                      int                                `json:"base_quota"`
+	BonusQuota                     int                                `json:"bonus_quota"`
+	BonusPercent                   int                                `json:"bonus_percent"`
+	GroupBuyID                     int64                              `json:"group_buy_id"`
+	GroupBuyMemberCount            int                                `json:"group_buy_member_count"`
+	TargetType                     string                             `json:"target_type"`
 	QuotaAfter                     int                                `json:"quota_after"`
 	AmountUsedAfter                int64                              `json:"amount_used_after"`
 	PeriodUsedAfter                int64                              `json:"period_used_after"`

@@ -1,10 +1,14 @@
 package app
 
 import (
+	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/sh2001sh/new-api/constant"
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
@@ -32,12 +36,12 @@ func TestConvertMonthlyPassToUnifiedCreditPartialPercentage(t *testing.T) {
 	assert.InDelta(t, 0.8, result.UnusedRatio, 0.00000001)
 	assert.InDelta(t, 0.2, result.RemainingRatioAfter, 0.00000001)
 	assert.False(t, result.SubscriptionEnded)
-	assert.Equal(t, expectedQuota, result.QuotaAfter)
+	assert.Equal(t, 100+expectedQuota, result.QuotaAfter)
 	assert.Equal(t, 60, result.Conversion.ConversionPercent)
 
 	var savedUser identityschema.User
 	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
-	assert.Equal(t, 100, savedUser.ClaudeQuota)
+	assert.Equal(t, 100+expectedQuota, savedUser.ClaudeQuota)
 
 	var savedSub commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", sub.Id).First(&savedSub).Error)
@@ -69,7 +73,7 @@ func TestConvertMonthlyPassToUnifiedCreditAllRemainingEndsPass(t *testing.T) {
 	assert.Equal(t, expectedQuota, result.TargetQuota)
 	assert.True(t, result.SubscriptionEnded)
 	assert.Zero(t, result.RemainingRatioAfter)
-	assert.Equal(t, expectedQuota, result.QuotaAfter)
+	assert.Equal(t, 100+expectedQuota, result.QuotaAfter)
 
 	var savedSub commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", sub.Id).First(&savedSub).Error)
@@ -139,7 +143,7 @@ func TestConvertMonthlyPassToUnifiedCreditWritesOffConversionDustOnly(t *testing
 	require.True(t, result.SubscriptionEnded)
 	require.Equal(t, int64(1), result.SourceQuota)
 	require.Equal(t, 1, result.TargetQuota)
-	require.Equal(t, 1, result.QuotaAfter)
+	require.Equal(t, 101, result.QuotaAfter)
 
 	var savedSub commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", sub.Id).First(&savedSub).Error)
@@ -233,7 +237,7 @@ func TestConvertMonthlyPassToUnifiedCreditIdempotencyIncludesPercentage(t *testi
 }
 
 func TestConvertMonthlyPassToUnifiedCreditRejectsResetSubscription(t *testing.T) {
-	db, user, _, sub := setupMonthlyPassConversionTest(t, 9206, 9306, 9406, 49, 20)
+	db, user, plan, sub := setupMonthlyPassConversionTest(t, 9206, 9306, 9406, 49, 20)
 	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityLedger{
 		UserId:        user.Id,
 		RelatedUserId: sub.Id,
@@ -242,6 +246,9 @@ func TestConvertMonthlyPassToUnifiedCreditRejectsResetSubscription(t *testing.T)
 		EventKey:      "monthly-pass-reset-before-conversion",
 	}).Error)
 
+	preview := BuildSubscriptionClaudeConversionPreview(plan, sub)
+	require.False(t, preview.Eligible)
+	require.Equal(t, commerceschema.ErrSubscriptionClaudeConversionResetUsed.Error(), preview.IneligibleReason)
 	_, err := ConvertMonthlyPassToUnifiedCredit("req-after-reset", user.Id, sub.Id, 60)
 	require.ErrorIs(t, err, commerceschema.ErrSubscriptionClaudeConversionResetUsed)
 }
@@ -276,4 +283,146 @@ func restoreSubscriptionClaudeConversionConfigForTest(t *testing.T) {
 	t.Helper()
 	enabled := commerceschema.SubscriptionClaudeConversionEnabled
 	t.Cleanup(func() { commerceschema.SubscriptionClaudeConversionEnabled = enabled })
+}
+
+func TestMonthlyPassWalletConversion299PrincipalAndReceipts(t *testing.T) {
+	for _, used := range []int{0, 50} {
+		t.Run(fmt.Sprint(used), func(t *testing.T) {
+			db, user, plan, sub := setupMonthlyPassConversionTest(t, 73001, 73002, 73003, 399, used)
+			require.NoError(t, db.Create(&commerceschema.SubscriptionOrder{UserId: user.Id, PlanId: plan.Id, TargetSubscriptionId: sub.Id, Money: 299, TradeNo: "actual-299", Status: constant.TopUpStatusSuccess}).Error)
+			preview := BuildSubscriptionClaudeConversionPreview(plan, sub)
+			base := quotaUnitsFromUSD(299 * float64(100-used) / 100)
+			require.EqualValues(t, base, preview.BaseQuota)
+			require.Zero(t, preview.BonusQuota)
+			require.EqualValues(t, base, preview.PreviewQuota)
+			require.Equal(t, "wallet", preview.TargetType)
+			result, err := ConvertMonthlyPassToUnifiedCredit("wallet-299", user.Id, sub.Id, preview.MaxConversionPercent)
+			require.NoError(t, err)
+			require.EqualValues(t, base, result.BaseQuota)
+			require.Zero(t, result.BonusQuota)
+			require.EqualValues(t, user.ClaudeQuota+result.TargetQuota, result.QuotaAfter)
+			require.Zero(t, result.TargetCreditPackSubscriptionId)
+			var lots []billingschema.FundingLot
+			require.NoError(t, db.Where("idempotency_key IN ?", []string{monthlyPassWalletReceiptKey("wallet-299", "base"), monthlyPassWalletReceiptKey("wallet-299", "gift")}).Order("original_amount desc").Find(&lots).Error)
+			require.Len(t, lots, 1)
+			require.EqualValues(t, base, lots[0].OriginalAmount)
+			for _, lot := range lots {
+				require.Equal(t, billingschema.FundingSourceOther, lot.Source)
+				require.Zero(t, lot.PaidQuota)
+				require.Zero(t, lot.RevenueMultiplier)
+			}
+			_, _, err = billingapp.TopupFundingLotAmounts(db, user.Id, "wallet-299")
+			require.ErrorIs(t, err, gorm.ErrRecordNotFound, "conversion must not create refundable top-up funding")
+			replay, err := ConvertMonthlyPassToUnifiedCredit("wallet-299", user.Id, sub.Id, preview.MaxConversionPercent)
+			require.NoError(t, err)
+			require.Equal(t, result.BaseQuota, replay.BaseQuota)
+			require.Equal(t, result.BonusQuota, replay.BonusQuota)
+			require.Equal(t, result.QuotaAfter, replay.QuotaAfter)
+			history, err := ListRecentSubscriptionClaudeConversions(user.Id, 10)
+			require.NoError(t, err)
+			require.Len(t, history, 1)
+			require.Equal(t, result.BaseQuota, history[0].BaseQuota)
+			require.Equal(t, result.BonusQuota, history[0].BonusQuota)
+		})
+	}
+}
+
+func TestMonthlyPassWalletConversionRoundsDownInQuotaUnitsWithoutGift(t *testing.T) {
+	_, _, plan, sub := setupMonthlyPassConversionTest(t, 73011, 73012, 73013, 1, 0)
+	plan.PriceAmount = 19 / platformruntime.QuotaPerUnit
+	quote := calculateMonthlyPassConversionQuote(plan, sub, time.Now().Unix(), 100)
+	require.Equal(t, 19, quote.baseQuota)
+	require.Zero(t, quote.bonusQuota)
+	require.Equal(t, 19, quote.targetQuota)
+}
+
+func TestMonthlyPassWalletConversionReceiptFailureRollsBackAllBalances(t *testing.T) {
+	db, user, _, sub := setupMonthlyPassConversionTest(t, 73021, 73022, 73023, 299, 50)
+	require.NoError(t, db.Callback().Create().Before("gorm:create").Register("test:conversion-gift-failure", func(tx *gorm.DB) {
+		if _, ok := tx.Statement.Dest.(*commerceschema.SubscriptionClaudeConversion); ok {
+			tx.AddError(errors.New("injected conversion receipt failure"))
+		}
+	}))
+	_, err := ConvertMonthlyPassToUnifiedCredit("rollback-gift", user.Id, sub.Id, 50)
+	require.ErrorContains(t, err, "injected conversion")
+	var saved commerceschema.UserSubscription
+	require.NoError(t, db.First(&saved, sub.Id).Error)
+	require.Equal(t, sub.AmountUsed, saved.AmountUsed)
+	require.Equal(t, sub.Status, saved.Status)
+	var savedUser identityschema.User
+	require.NoError(t, db.First(&savedUser, user.Id).Error)
+	require.Equal(t, user.ClaudeQuota, savedUser.ClaudeQuota)
+	for _, model := range []any{&commerceschema.SubscriptionClaudeConversion{}, &billingschema.BillingLedgerEntry{}, &billingschema.FundingLot{}, &billingschema.BillingReservation{}} {
+		var count int64
+		require.NoError(t, db.Model(model).Count(&count).Error)
+		require.Zero(t, count)
+	}
+}
+
+func TestMonthlyPassWalletConversionReplaysHistoricalTargetsWithoutCompensation(t *testing.T) {
+	for _, target := range []string{"wallet", "credit_pack"} {
+		t.Run(target, func(t *testing.T) {
+			db, user, _, sub := setupMonthlyPassConversionTest(t, 73031, 73032, 73033, 299, 50)
+			record := commerceschema.SubscriptionClaudeConversion{UserId: user.Id, UserSubscriptionId: sub.Id, RequestId: "historical", Status: "completed", SourceQuota: 100, TargetQuota: 1000, ConversionPercent: 20}
+			if target == "credit_pack" {
+				pack, err := createCreditPackBalanceTx(db, user.Id, sub.PlanId, 1000, 1000, 6000, "historical-pack")
+				require.NoError(t, err)
+				record.TargetCreditPackSubscriptionId = pack.Id
+			}
+			require.NoError(t, db.Create(&record).Error)
+			replay, err := ConvertMonthlyPassToUnifiedCredit("historical", user.Id, sub.Id, 20)
+			require.NoError(t, err)
+			require.Equal(t, target, replay.TargetType)
+			require.Equal(t, 1000, replay.TargetQuota)
+			require.Equal(t, 1000, replay.BaseQuota)
+			require.Zero(t, replay.BonusQuota)
+			require.Equal(t, record.TargetCreditPackSubscriptionId, replay.TargetCreditPackSubscriptionId)
+			var savedUser identityschema.User
+			require.NoError(t, db.First(&savedUser, user.Id).Error)
+			require.Equal(t, user.ClaudeQuota, savedUser.ClaudeQuota)
+			var giftCount int64
+			require.NoError(t, db.Model(&billingschema.BillingLedgerEntry{}).Where("reason_code IN ?", []string{"subscription_conversion_base", "subscription_conversion_gift"}).Count(&giftCount).Error)
+			require.Zero(t, giftCount)
+		})
+	}
+}
+
+func TestMonthlyPassWalletConversionConcurrentReplayCreditsOnce(t *testing.T) {
+	db, user, _, sub := setupMonthlyPassConversionTest(t, 73041, 73042, 73043, 299, 50)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	// SQLite serializes writers; a single connection exercises simultaneous
+	// callers and replay without presenting it as PostgreSQL lock validation.
+	sqlDB.SetMaxOpenConns(1)
+	const callers = 12
+	start := make(chan struct{})
+	results := make(chan *commerceschema.SubscriptionClaudeConversionResult, callers)
+	errors := make(chan error, callers)
+	var workers sync.WaitGroup
+	for range callers {
+		workers.Go(func() {
+			<-start
+			result, err := ConvertMonthlyPassToUnifiedCredit("concurrent-wallet", user.Id, sub.Id, 50)
+			results <- result
+			errors <- err
+		})
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+	close(errors)
+	for err := range errors {
+		require.NoError(t, err)
+	}
+	for result := range results {
+		require.EqualValues(t, quotaUnitsFromUSD(149.5), result.TargetQuota)
+	}
+	var saved identityschema.User
+	require.NoError(t, db.First(&saved, user.Id).Error)
+	require.EqualValues(t, int64(user.ClaudeQuota)+quotaUnitsFromUSD(149.5), saved.ClaudeQuota)
+	var count int64
+	require.NoError(t, db.Model(&commerceschema.SubscriptionClaudeConversion{}).Count(&count).Error)
+	require.EqualValues(t, 1, count)
+	require.NoError(t, db.Model(&billingschema.FundingLot{}).Count(&count).Error)
+	require.EqualValues(t, 1, count)
 }

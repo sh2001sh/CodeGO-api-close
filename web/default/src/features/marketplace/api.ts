@@ -290,7 +290,7 @@ export async function getMyMarketplaceChannels() {
 export async function getMyMarketplaceChannelIndex(signal?: AbortSignal) {
   const response = await api.get<ApiResponse<OwnerChannelIndexItem[]>>(
     '/api/marketplace/channels/mine?view=index',
-    { signal }
+    { signal, disableDuplicate: true } as Record<string, unknown>
   )
   return requireData(response.data)
 }
@@ -304,7 +304,7 @@ export async function getMyMarketplaceChannelPage(
   for (const id of ids) params.append('ids', id)
   const response = await api.get<ApiResponse<MarketplaceChannel[]>>(
     `/api/marketplace/channels/mine?${params}`,
-    { signal }
+    { signal, disableDuplicate: true } as Record<string, unknown>
   )
   const channels = requireData(response.data)
   const byId = new Map(channels.map((channel) => [channel.id, channel]))

@@ -122,6 +122,20 @@ func useSubscriptionResetOpportunity(c *gin.Context) {
 	httpapi.ApiSuccess(c, payload)
 }
 
+func redeemSubscriptionResetOpportunity(c *gin.Context) {
+	var req commerceapp.RedeemSubscriptionResetOpportunityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiErrorMsg(c, "invalid request")
+		return
+	}
+	payload, err := commerceapp.RedeemSubscriptionResetOpportunity(c.GetInt("id"), req)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	httpapi.ApiSuccess(c, payload)
+}
+
 func listSubscriptionClaudeConversions(c *gin.Context) {
 	payload, err := commerceapp.BuildSubscriptionClaudeConversionsPayload(c.GetInt("id"))
 	if err != nil {

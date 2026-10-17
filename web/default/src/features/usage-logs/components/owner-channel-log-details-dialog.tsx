@@ -1,5 +1,6 @@
+import { useRef } from 'react'
 import { getIntlLocale } from '@/i18n/format'
-import { AlertTriangle, Clock3, Copy, Route } from 'lucide-react'
+import { AlertTriangle, Calculator, Clock3, Copy, Route } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
@@ -7,32 +8,39 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { MarketplaceOwnerUsageLog } from '@/features/marketplace/types'
+import { OwnerIncomeBreakdown } from './owner-income-breakdown'
 
 export function OwnerChannelLogDetailsDialog(props: {
   item: MarketplaceOwnerUsageLog | null
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation()
+  const titleRef = useRef<HTMLHeadingElement>(null)
   const item = props.item
   const { copyToClipboard } = useCopyToClipboard({ notify: true })
   return (
     <Dialog open={Boolean(item)} onOpenChange={props.onOpenChange}>
-      <DialogContent className='solaris-log-details sm:max-w-2xl'>
+      <DialogContent
+        className='solaris-log-details sm:max-w-2xl'
+        aria-describedby={undefined}
+        initialFocus={titleRef}
+      >
         <DialogHeader>
-          <DialogTitle>{t('渠道调用详情')}</DialogTitle>
-          <DialogDescription>
-            {t('查看请求标识、首字分段、总耗时与上游返回。')}
-          </DialogDescription>
+          <DialogTitle ref={titleRef} tabIndex={-1} className='outline-none'>
+            {t('渠道调用详情')}
+          </DialogTitle>
         </DialogHeader>
         {item && (
           <ScrollArea className='max-h-[70dvh] pr-3'>
             <div className='space-y-5 py-2'>
+              <DetailSection icon={<Calculator />} title={t('收益计算')}>
+                <OwnerIncomeBreakdown breakdown={item.income_breakdown} />
+              </DetailSection>
               <DetailSection icon={<Route />} title={t('请求与路由')}>
                 <DetailRow label={t('渠道')} value={item.channel_name} />
                 <DetailRow

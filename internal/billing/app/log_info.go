@@ -7,6 +7,7 @@ import (
 	"github.com/sh2001sh/new-api/internal/billing/domain/billingexpr"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
+	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 	"strings"
@@ -154,9 +155,10 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		other["marketplace_multiplier"] = relayInfo.MarketplaceMultiplier
 		other["marketplace_platform_commission_rate"] = 0.05
 		feeRate := 0.0
-		if relayInfo.CreditPackGrantedQuota > 0 {
-			feeRate = float64(relayInfo.CreditPackGrantedQuota-relayInfo.CreditPackPaidQuota) / float64(relayInfo.CreditPackGrantedQuota) * float64(relayInfo.CreditPackChannelShareBPS) / 10000
+		if relayInfo.CreditPackPaidQuota > 0 {
+			feeRate = float64(relayInfo.CreditPackGrantedQuota-relayInfo.CreditPackPaidQuota) / float64(relayInfo.CreditPackPaidQuota) * float64(relayInfo.CreditPackChannelShareBPS) / 10000
 		}
+		other["marketplace_fee_policy_version"] = marketplacesettlement.FeePolicyPaidBonusV2
 		other["marketplace_transaction_fee_rate"] = feeRate
 		other["marketplace_owner_net_rate"] = 0.95 - feeRate
 	}

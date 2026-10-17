@@ -141,6 +141,14 @@ func BuildSubscriptionSelfPayload(userID int) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	resetRedemption, err := BuildSubscriptionResetRedemptionPreview(userID)
+	if err != nil {
+		return nil, err
+	}
+	resetUse, err := BuildSubscriptionResetUsePreview(userID)
+	if err != nil {
+		return nil, err
+	}
 	recentConversions, err := ListRecentSubscriptionClaudeConversions(userID, 10)
 	if err != nil {
 		return nil, err
@@ -155,16 +163,6 @@ func BuildSubscriptionSelfPayload(userID int) (map[string]any, error) {
 		if plan, planErr := GetSubscriptionPlanByID(item.Subscription.PlanId); planErr == nil && plan != nil {
 			if plan.PlanType != commerceschema.SubscriptionPlanTypeCreditPack {
 				preview := BuildSubscriptionClaudeConversionPreview(plan, item.Subscription)
-				if preview.Eligible {
-					resetUsed, resetErr := subscriptionHasResetOpportunityUsageTx(platformdb.DB, item.Subscription.Id)
-					if resetErr != nil {
-						return nil, resetErr
-					}
-					if resetUsed {
-						preview.Eligible = false
-						preview.IneligibleReason = commerceschema.ErrSubscriptionClaudeConversionResetUsed.Error()
-					}
-				}
 				item.Subscription.ConversionPreview = &preview
 			}
 		}
@@ -189,14 +187,16 @@ func BuildSubscriptionSelfPayload(userID int) (map[string]any, error) {
 	}
 
 	return map[string]any{
-		"billing_preference":     preference,
-		"funding_source_order":   fundingSourceOrder,
-		"subscription_order_ids": orderedIDs,
-		"subscriptions":          activeSubscriptions,
-		"all_subscriptions":      allSubscriptions,
-		"reset_opportunity":      resetOpportunity,
-		"conversion_config":      GetSubscriptionClaudeConversionConfig(),
-		"recent_conversions":     recentConversions,
+		"billing_preference":       preference,
+		"funding_source_order":     fundingSourceOrder,
+		"subscription_order_ids":   orderedIDs,
+		"subscriptions":            activeSubscriptions,
+		"all_subscriptions":        allSubscriptions,
+		"reset_opportunity":        resetOpportunity,
+		"reset_redemption_preview": resetRedemption,
+		"reset_use_preview":        resetUse,
+		"conversion_config":        GetSubscriptionClaudeConversionConfig(),
+		"recent_conversions":       recentConversions,
 	}, nil
 }
 
@@ -239,19 +239,25 @@ func CreateSubscriptionClaudeConversion(userID int, req CreateSubscriptionClaude
 		auditapp.RecordLog(userID, auditschema.LogTypeTopup, BuildSubscriptionClaudeConversionLog(planInfo.PlanTitle, result.ConversionPercent, result.TargetQuota))
 	}
 	return map[string]any{
-		"subscription_id":       result.SubscriptionId,
-		"source_quota":          result.SourceQuota,
-		"target_quota":          result.TargetQuota,
-		"quota_after":           result.QuotaAfter,
-		"amount_used_after":     result.AmountUsedAfter,
-		"period_used_after":     result.PeriodUsedAfter,
-		"plan_price_amount":     result.PlanPriceAmount,
-		"unused_ratio":          result.UnusedRatio,
-		"conversion_percent":    result.ConversionPercent,
-		"remaining_ratio_after": result.RemainingRatioAfter,
-		"subscription_ended":    result.SubscriptionEnded,
-		"conversion":            result.Conversion,
-		"config":                result.Config,
+		"subscription_id":        result.SubscriptionId,
+		"source_quota":           result.SourceQuota,
+		"target_quota":           result.TargetQuota,
+		"base_quota":             result.BaseQuota,
+		"bonus_quota":            result.BonusQuota,
+		"bonus_percent":          result.BonusPercent,
+		"group_buy_id":           result.GroupBuyID,
+		"group_buy_member_count": result.GroupBuyMemberCount,
+		"target_type":            result.TargetType,
+		"quota_after":            result.QuotaAfter,
+		"amount_used_after":      result.AmountUsedAfter,
+		"period_used_after":      result.PeriodUsedAfter,
+		"plan_price_amount":      result.PlanPriceAmount,
+		"unused_ratio":           result.UnusedRatio,
+		"conversion_percent":     result.ConversionPercent,
+		"remaining_ratio_after":  result.RemainingRatioAfter,
+		"subscription_ended":     result.SubscriptionEnded,
+		"conversion":             result.Conversion,
+		"config":                 result.Config,
 	}, nil
 }
 

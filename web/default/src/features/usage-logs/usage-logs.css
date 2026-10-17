@@ -35,6 +35,15 @@
   box-shadow: none;
   overflow: hidden;
 }
+.codego-panel.usage-logs-scroll-viewport {
+  overflow: auto;
+}
+.codego-panel.usage-logs-scroll-viewport > [data-slot='table-container'] {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
 .console-usage-table table {
   min-width: max-content;
   width: 100%;

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	commercedomain "github.com/sh2001sh/new-api/internal/commerce/domain"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
@@ -22,7 +25,8 @@ import (
 // GetSubscriptionClaudeConversionConfig returns the current conversion switch.
 func GetSubscriptionClaudeConversionConfig() commerceschema.SubscriptionClaudeConversionConfig {
 	return commerceschema.SubscriptionClaudeConversionConfig{
-		Enabled: commerceschema.SubscriptionClaudeConversionEnabled,
+		Enabled:      commerceschema.SubscriptionClaudeConversionEnabled,
+		BonusPercent: 0,
 	}
 }
 
@@ -47,8 +51,13 @@ func ListRecentSubscriptionClaudeConversions(userID int, limit int) ([]commerces
 	}
 
 	var items []commerceschema.SubscriptionClaudeConversion
-	err := platformdb.DB.Where("user_id = ?", userID).Order("id desc").Limit(limit).Find(&items).Error
-	return items, err
+	if err := platformdb.DB.Where("user_id = ?", userID).Order("id desc").Limit(limit).Find(&items).Error; err != nil {
+		return nil, err
+	}
+	if err := attachMonthlyPassConversionReceipts(platformdb.DB, items); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 // GetSubscriptionPlanInfoByUserSubscriptionID resolves plan metadata for a subscription snapshot.
@@ -70,17 +79,32 @@ func GetSubscriptionPlanInfoByUserSubscriptionID(userSubscriptionID int) (*comme
 
 // BuildSubscriptionClaudeConversionLog formats the user-facing settlement log.
 func BuildSubscriptionClaudeConversionLog(planTitle string, conversionPercent int, targetQuota int) string {
-	return fmt.Sprintf("月卡转通用额度成功，月卡：%s，折现比例：%d%%，到账通用额度：%s", planTitle, conversionPercent, logger.LogQuota(targetQuota))
+	return fmt.Sprintf("旧套餐转余额成功，套餐：%s，转换比例：%d%%，到账余额：%s", planTitle, conversionPercent, logger.LogQuota(targetQuota))
 }
 
 // BuildSubscriptionClaudeConversionPreview calculates the cash-out value of the whole monthly pass.
 func BuildSubscriptionClaudeConversionPreview(plan *commerceschema.SubscriptionPlan, sub *commerceschema.UserSubscription) commerceschema.SubscriptionClaudeConversionPreview {
+	if plan == nil || sub == nil {
+		return commerceschema.SubscriptionClaudeConversionPreview{}
+	}
 	pricedPlan, err := legacyConversionPaidPlanTx(platformdb.DB, plan, sub)
 	if err != nil {
 		return commerceschema.SubscriptionClaudeConversionPreview{IneligibleReason: err.Error()}
 	}
 	plan = pricedPlan
+	resetUsed, err := subscriptionHasResetOpportunityUsageTx(platformdb.DB, sub.Id)
+	if err != nil {
+		return commerceschema.SubscriptionClaudeConversionPreview{IneligibleReason: err.Error()}
+	}
+	if resetUsed {
+		return commerceschema.SubscriptionClaudeConversionPreview{IneligibleReason: commerceschema.ErrSubscriptionClaudeConversionResetUsed.Error()}
+	}
 	quote := calculateMonthlyPassConversionQuote(plan, sub, platformruntime.GetTimestamp(), 0)
+	group, err := monthlyPassConversionGroupTx(platformdb.DB, sub)
+	if err != nil {
+		return commerceschema.SubscriptionClaudeConversionPreview{IneligibleReason: err.Error()}
+	}
+	applyMonthlyPassGroupBonus(&quote, group)
 	return commerceschema.SubscriptionClaudeConversionPreview{
 		Eligible:             quote.targetQuota > 0,
 		RemainingQuota:       quote.remainingQuota,
@@ -88,6 +112,12 @@ func BuildSubscriptionClaudeConversionPreview(plan *commerceschema.SubscriptionP
 		UnusedRatio:          quote.unusedRatio,
 		MaxConversionPercent: quote.maxConversionPercent,
 		PreviewQuota:         quote.targetQuota,
+		BaseQuota:            quote.baseQuota,
+		BonusQuota:           quote.bonusQuota,
+		BonusPercent:         group.BonusPercent,
+		TargetType:           "wallet",
+		GroupBuyID:           group.GroupBuyID,
+		GroupBuyMemberCount:  group.MemberCount,
 	}
 }
 
@@ -96,6 +126,8 @@ type monthlyPassConversionQuote struct {
 	planPriceAmount      float64
 	unusedRatio          float64
 	targetQuota          int
+	baseQuota            int
+	bonusQuota           int
 	conversionPercent    int
 	maxConversionPercent int
 }
@@ -107,7 +139,7 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 		return nil, commerceschema.ErrSubscriptionClaudeConversionDisabled
 	}
 	requestID = strings.TrimSpace(requestID)
-	if requestID == "" || userID <= 0 || subscriptionID <= 0 || conversionPercent <= 0 || conversionPercent > 100 {
+	if requestID == "" || len(requestID) > 128 || userID <= 0 || subscriptionID <= 0 || conversionPercent <= 0 || conversionPercent > 100 {
 		return nil, commerceschema.ErrSubscriptionClaudeConversionInvalid
 	}
 
@@ -133,6 +165,17 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 			First(sub).Error; err != nil {
 			return commerceschema.ErrSubscriptionClaudeConversionNoTarget
 		}
+		// A competing request may have committed while this transaction waited
+		// on the subscription lock. Replay its immutable target before checking
+		// the now-consumed subscription again.
+		if err := tx.Where("request_id = ?", requestID).First(existing).Error; err == nil {
+			if existing.UserId != userID || existing.UserSubscriptionId != subscriptionID || existing.ConversionPercent != conversionPercent {
+				return commerceschema.ErrSubscriptionClaudeConversionInvalid
+			}
+			return loadExistingMonthlyPassConversionResult(tx, result, existing)
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 		plan, err := getSubscriptionPlanRecordTx(tx, sub.PlanId)
 		if err != nil || plan == nil {
 			return commerceschema.ErrSubscriptionClaudeConversionNoTarget
@@ -153,6 +196,11 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 			return err
 		}
 		quote := calculateMonthlyPassConversionQuote(pricedPlan, sub, now, conversionPercent)
+		group, err := monthlyPassConversionGroupTx(tx, sub)
+		if err != nil {
+			return err
+		}
+		applyMonthlyPassGroupBonus(&quote, group)
 		if quote.targetQuota <= 0 {
 			return commerceschema.ErrSubscriptionClaudeConversionNoTarget
 		}
@@ -188,31 +236,61 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 			}
 		}
 
-		converted, err := createCreditPackBalanceTx(tx, userID, sub.PlanId, int64(quote.targetQuota), int64(quote.targetQuota), creditPackChannelShareBPS, fmt.Sprintf("monthly-pass-conversion:%s", requestID))
+		// Keep conversion value and compensation in separate native receipts and
+		// funding lots. Neither is a new cash top-up or referral-paid principal.
+		if !tx.Migrator().HasTable(&billingschema.FundingLot{}) {
+			return errors.New("conversion funding attribution is unavailable")
+		}
+		var walletOwner identityschema.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").First(&walletOwner, userID).Error; err != nil {
+			return err
+		}
+		if err := billingapp.CreditUnifiedWalletQuotaTx(tx, userID, quote.baseQuota, monthlyPassWalletReceiptKey(requestID, "base"), "subscription_conversion_base"); err != nil {
+			return err
+		}
+		policy, err := json.Marshal(group)
 		if err != nil {
 			return err
 		}
+		if err := tx.Model(&billingschema.BillingLedgerEntry{}).Where("idempotency_key = ?", monthlyPassWalletReceiptKey(requestID, "base")).Update("metadata", json.RawMessage(policy)).Error; err != nil {
+			return err
+		}
+		if quote.bonusQuota > 0 {
+			if err := billingapp.CreditUnifiedWalletQuotaTx(tx, userID, quote.bonusQuota, monthlyPassWalletReceiptKey(requestID, "gift"), "subscription_conversion_gift"); err != nil {
+				return err
+			}
+		}
 
 		record := &commerceschema.SubscriptionClaudeConversion{
-			UserId:                         userID,
-			UserSubscriptionId:             sub.Id,
-			TargetCreditPackSubscriptionId: converted.Id,
-			RequestId:                      requestID,
-			Status:                         commerceschema.SubscriptionClaudeConversionStatusCompleted,
-			SourceQuota:                    quote.remainingQuota,
-			TargetQuota:                    quote.targetQuota,
-			PlanPriceAmount:                quote.planPriceAmount,
-			UnusedRatio:                    quote.unusedRatio,
-			ConversionPercent:              conversionPercent,
-			RatioNumerator:                 0,
-			RatioDenominator:               0,
+			UserId:              userID,
+			UserSubscriptionId:  sub.Id,
+			RequestId:           requestID,
+			Status:              commerceschema.SubscriptionClaudeConversionStatusCompleted,
+			SourceQuota:         quote.remainingQuota,
+			TargetQuota:         quote.targetQuota,
+			PlanPriceAmount:     quote.planPriceAmount,
+			UnusedRatio:         quote.unusedRatio,
+			ConversionPercent:   conversionPercent,
+			TargetType:          "wallet",
+			BaseQuota:           quote.baseQuota,
+			BonusQuota:          quote.bonusQuota,
+			BonusPercent:        group.BonusPercent,
+			GroupBuyID:          group.GroupBuyID,
+			GroupBuyMemberCount: group.MemberCount,
+			RatioNumerator:      0,
+			RatioDenominator:    0,
 		}
 		if err := tx.Create(record).Error; err != nil {
 			return err
 		}
 
 		result.Conversion = record
-		result.TargetCreditPackSubscriptionId = converted.Id
+		result.TargetType = "wallet"
+		result.BaseQuota = quote.baseQuota
+		result.BonusQuota = quote.bonusQuota
+		result.BonusPercent = group.BonusPercent
+		result.GroupBuyID = group.GroupBuyID
+		result.GroupBuyMemberCount = group.MemberCount
 		result.SourceQuota = quote.remainingQuota
 		result.TargetQuota = quote.targetQuota
 		result.PlanPriceAmount = quote.planPriceAmount
@@ -222,7 +300,10 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 		result.SubscriptionEnded = ended
 		result.AmountUsedAfter = sub.AmountUsed
 		result.PeriodUsedAfter = sub.PeriodUsed
-		result.QuotaAfter = int(converted.AmountTotal - converted.AmountUsed)
+		result.QuotaAfter, err = billingapp.GetUnifiedCreditBalanceTx(tx, userID)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -250,7 +331,71 @@ func subscriptionHasResetOpportunityUsageTx(tx *gorm.DB, subscriptionID int) (bo
 	return count > 0, err
 }
 
+func monthlyPassWalletReceiptKey(requestID, component string) string {
+	return fmt.Sprintf("monthly-pass-wallet-conversion:%x:%s", sha256.Sum256([]byte(requestID)), component)
+}
+
+// Native credit receipts identify the new wallet policy without reinterpreting
+// historical wallet or credit-pack conversions or adding mutable policy columns.
+func attachMonthlyPassConversionReceipts(tx *gorm.DB, items []commerceschema.SubscriptionClaudeConversion) error {
+	keys := make([]string, 0, len(items)*2)
+	for i := range items {
+		items[i].BaseQuota = items[i].TargetQuota
+		items[i].TargetType = "wallet"
+		if items[i].TargetCreditPackSubscriptionId > 0 {
+			items[i].TargetType = "credit_pack"
+			continue
+		}
+		keys = append(keys, monthlyPassWalletReceiptKey(items[i].RequestId, "base"), monthlyPassWalletReceiptKey(items[i].RequestId, "gift"))
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	var entries []billingschema.BillingLedgerEntry
+	if err := tx.Where("idempotency_key IN ?", keys).Find(&entries).Error; err != nil {
+		return err
+	}
+	byKey := make(map[string]billingschema.BillingLedgerEntry, len(entries))
+	for _, entry := range entries {
+		byKey[entry.IdempotencyKey] = entry
+	}
+	for i := range items {
+		item := &items[i]
+		if item.TargetCreditPackSubscriptionId > 0 {
+			continue
+		}
+		base, hasBase := byKey[monthlyPassWalletReceiptKey(item.RequestId, "base")]
+		gift, hasGift := byKey[monthlyPassWalletReceiptKey(item.RequestId, "gift")]
+		if !hasBase && !hasGift {
+			continue // Historical wallet conversion: its original amount has no new gift.
+		}
+		if !hasBase || base.Amount <= 0 || base.ReasonCode != "subscription_conversion_base" || base.ReferenceType != "user" || base.ReferenceID != fmt.Sprint(item.UserId) {
+			return errors.New("conversion base receipt is inconsistent")
+		}
+		if hasGift && (gift.Amount <= 0 || gift.ReasonCode != "subscription_conversion_gift" || gift.AccountID != base.AccountID || gift.ReferenceType != base.ReferenceType || gift.ReferenceID != base.ReferenceID) {
+			return errors.New("conversion gift receipt is inconsistent")
+		}
+		if base.Amount != int64(item.TargetQuota)-gift.Amount {
+			return errors.New("conversion receipt amounts do not match")
+		}
+		item.BaseQuota, item.BonusQuota = int(base.Amount), int(gift.Amount)
+		var policy monthlyPassConversionGroup
+		if len(base.Metadata) > 0 {
+			if err := json.Unmarshal(base.Metadata, &policy); err != nil {
+				return err
+			}
+		}
+		item.BonusPercent, item.GroupBuyID, item.GroupBuyMemberCount = policy.BonusPercent, policy.GroupBuyID, policy.MemberCount
+	}
+	return nil
+}
+
 func loadExistingMonthlyPassConversionResult(tx *gorm.DB, result *commerceschema.SubscriptionClaudeConversionResult, existing *commerceschema.SubscriptionClaudeConversion) error {
+	items := []commerceschema.SubscriptionClaudeConversion{*existing}
+	if err := attachMonthlyPassConversionReceipts(tx, items); err != nil {
+		return err
+	}
+	*existing = items[0]
 	sub := &commerceschema.UserSubscription{}
 	if err := tx.Where("id = ?", existing.UserSubscriptionId).First(sub).Error; err != nil {
 		return err
@@ -264,7 +409,7 @@ func loadExistingMonthlyPassConversionResult(tx *gorm.DB, result *commerceschema
 		balance = int(target.AmountTotal - target.AmountUsed)
 	} else {
 		var err error
-		balance, err = getUserClaudeQuotaTx(tx, existing.UserId)
+		balance, err = billingapp.GetUnifiedCreditBalanceTx(tx, existing.UserId)
 		if err != nil {
 			return err
 		}
@@ -272,6 +417,12 @@ func loadExistingMonthlyPassConversionResult(tx *gorm.DB, result *commerceschema
 	result.Conversion = existing
 	result.SourceQuota = existing.SourceQuota
 	result.TargetQuota = existing.TargetQuota
+	result.BaseQuota = existing.BaseQuota
+	result.BonusQuota = existing.BonusQuota
+	result.BonusPercent = existing.BonusPercent
+	result.GroupBuyID = existing.GroupBuyID
+	result.GroupBuyMemberCount = existing.GroupBuyMemberCount
+	result.TargetType = existing.TargetType
 	result.TargetCreditPackSubscriptionId = existing.TargetCreditPackSubscriptionId
 	result.QuotaAfter = balance
 	result.AmountUsedAfter = sub.AmountUsed
@@ -326,11 +477,16 @@ func calculateMonthlyPassConversionQuote(plan *commerceschema.SubscriptionPlan, 
 	if target <= 0 {
 		return monthlyPassConversionQuote{}
 	}
+	// No fixed compensation applies. Historical gifts are read from immutable
+	// credit receipts instead of being recomputed from current policy.
+	bonus := int64(0)
 	return monthlyPassConversionQuote{
 		remainingQuota:       convertedQuota,
 		planPriceAmount:      plan.PriceAmount,
 		unusedRatio:          unusedRatio.InexactFloat64(),
-		targetQuota:          int(target),
+		targetQuota:          int(target + bonus),
+		baseQuota:            int(target),
+		bonusQuota:           int(bonus),
 		conversionPercent:    conversionPercent,
 		maxConversionPercent: int(maxPercent),
 	}
@@ -370,7 +526,7 @@ func consumeMonthlyPassConversionQuotaTx(tx *gorm.DB, sub *commerceschema.UserSu
 	}
 	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
 		AccountID:      account.AccountID,
-		RequestID:      requestID,
+		RequestID:      fmt.Sprintf("monthly-pass-conversion:%x", sha256.Sum256([]byte(requestID)))[:64],
 		ReservedAmount: amount,
 		IdempotencyKey: "monthly-pass-conversion:" + requestID + ":reserve",
 	})

@@ -26,10 +26,18 @@ type SettlementBackfillReport struct {
 }
 
 type settlementBackfillPayload struct {
-	MarketplaceGroupID     string  `json:"marketplace_group_id"`
-	MarketplaceMultiplier  float64 `json:"marketplace_multiplier"`
-	BillingSource          string  `json:"billing_source"`
-	SubscriptionMultiplier float64 `json:"subscription_multiplier"`
+	MarketplaceGroupID         string  `json:"marketplace_group_id"`
+	MarketplaceMultiplier      float64 `json:"marketplace_multiplier"`
+	BillingSource              string  `json:"billing_source"`
+	SubscriptionMultiplier     float64 `json:"subscription_multiplier"`
+	SubscriptionBillingVersion string  `json:"subscription_billing_version"`
+	CreditPackGrantedQuota     int64   `json:"credit_pack_granted_quota"`
+	CreditPackPaidQuota        int64   `json:"credit_pack_paid_quota"`
+	CreditPackChannelShareBPS  *int64  `json:"credit_pack_channel_share_bps"`
+	FeePolicyVersion           string  `json:"marketplace_fee_policy_version"`
+	SubscriptionID             int     `json:"subscription_id"`
+	SubscriptionPlanID         int     `json:"subscription_plan_id"`
+	SubscriptionPlanTitle      string  `json:"subscription_plan_title"`
 }
 
 // BackfillMissingSettlements inspects successful request logs carrying the
@@ -148,23 +156,42 @@ func backfillSettlementBatch(logs []auditschema.Log, apply bool, report *Settlem
 			report.Skipped++
 			continue
 		}
-		if !apply {
+		creditPack := payload.SubscriptionBillingVersion == "credit_pack" || payload.CreditPackGrantedQuota > 0 || payload.BillingSource == "credit_pack"
+		if creditPack && (payload.CreditPackGrantedQuota <= 0 || payload.CreditPackPaidQuota <= 0 ||
+			payload.CreditPackPaidQuota > payload.CreditPackGrantedQuota || payload.CreditPackChannelShareBPS == nil ||
+			*payload.CreditPackChannelShareBPS < 0 || *payload.CreditPackChannelShareBPS > 10000 ||
+			(payload.FeePolicyVersion != "" && payload.FeePolicyVersion != marketplacesettlement.FeePolicyPaidBonusV2)) {
+			report.Invalid++
 			continue
 		}
 		gross := settlementBackfillGross(int64(log.Quota), payload.BillingSource)
+		if creditPack {
+			gross = int64(log.Quota)
+		}
 		if gross <= 0 {
 			report.Skipped++
 			continue
 		}
+		if !apply {
+			continue
+		}
 		multiplier := payload.MarketplaceMultiplier
-		if multiplier <= 0 {
+		if multiplier <= 0 && !creditPack {
 			multiplier = group.Multiplier
+		}
+		share := int64(0)
+		if payload.CreditPackChannelShareBPS != nil {
+			share = *payload.CreditPackChannelShareBPS
 		}
 		err := marketplacesettlement.Record(marketplacesettlement.RecordParams{
 			RequestID: log.RequestId, GroupID: group.ID, OwnerUserID: group.OwnerUserID,
 			ConsumerUserID: log.UserId, BillingSource: payload.BillingSource,
 			ConsumerDebitAmount: int64(log.Quota), SettlementGrossAmount: int64(gross),
 			WalletMultiplier: multiplier, SubscriptionMultiplier: payload.SubscriptionMultiplier,
+			CreditPackGrantedQuota: payload.CreditPackGrantedQuota, CreditPackPaidQuota: payload.CreditPackPaidQuota,
+			CreditPackChannelShareBPS: share, FeePolicyVersion: payload.FeePolicyVersion,
+			SubscriptionID: payload.SubscriptionID, SubscriptionPlanID: payload.SubscriptionPlanID,
+			SubscriptionPlanTitle: payload.SubscriptionPlanTitle,
 		})
 		if err != nil {
 			return err

@@ -47,7 +47,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 	c.Set("channel_marketplace_max_concurrency", channel.MarketplaceMaxConcurrency)
 	c.Set("channel_marketplace_user_max_concurrency", channel.MarketplaceUserMaxConcurrency)
 	httpctx.SetContextKey(c, constant.ContextKeyMultiplierCardSupported, channel.MultiplierCardSupported)
-	httpctx.SetContextKey(c, constant.ContextKeyCreditPackSupported, channel.CreditPackSupported)
+	httpctx.SetContextKey(c, constant.ContextKeyCreditPackSupported, channel.IsOfficial() || channel.CreditPackSupported)
 	httpctx.SetContextKey(c, constant.ContextKeyMultiplierCardUserEnabled, channel.MultiplierCardUserEnabled)
 	httpctx.SetContextKey(c, constant.ContextKeyChannelResponsesCapabilities, channel.ChannelInfo.ResponsesCapabilities)
 

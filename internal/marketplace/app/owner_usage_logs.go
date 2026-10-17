@@ -8,6 +8,7 @@ import (
 	"time"
 
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -527,8 +528,29 @@ func loadOwnerUsageSettlements(ownerUserID int, logs []auditschema.Log) (map[str
 		Find(&settlements).Error; err != nil {
 		return nil, err
 	}
+	settlementIDs := make([]string, 0, len(settlements))
 	for i := range settlements {
 		result[settlements[i].RequestID] = settlements[i]
+		settlementIDs = append(settlementIDs, settlements[i].ID)
+	}
+	if len(settlementIDs) == 0 {
+		return result, nil
+	}
+	var entries []billingschema.BillingLedgerEntry
+	if err := platformdb.DB.Select("reference_id, account_id, idempotency_key, metadata").
+		Where("reference_type = ? AND reason_code = ? AND reference_id IN ?", "marketplace_settlement", "marketplace_owner_pending", settlementIDs).
+		Find(&entries).Error; err != nil {
+		return nil, err
+	}
+	byID := make(map[string]billingschema.BillingLedgerEntry, len(entries))
+	for _, entry := range entries {
+		byID[entry.ReferenceID] = entry
+	}
+	for requestID, settlement := range result {
+		if entry, ok := byID[settlement.ID]; ok && entry.AccountID == settlement.PendingAccountID && entry.IdempotencyKey == "marketplace-pending:"+requestID {
+			settlement.IncomeSnapshot = entry.Metadata
+			result[requestID] = settlement
+		}
 	}
 	return result, nil
 }
@@ -546,6 +568,7 @@ func ownerUsageLogItem(log auditschema.Log, channel ownerUsageChannel, settlemen
 		IncomeStatus: "none",
 	}
 	applyOwnerUsageLogDetails(&item, log)
+	item.IncomeBreakdown = ownerIncomeBreakdown(log, settlement)
 	if settlement.ID != "" {
 		item.ConsumerAmount = settlement.ConsumerAmount
 		if settlement.BillingSource == "subscription" {
@@ -566,9 +589,11 @@ func ownerUsageLogItem(log auditschema.Log, channel ownerUsageChannel, settlemen
 		item.ReleasedAt = settlement.ReleasedAt
 	} else {
 		var billing struct {
-			Source string `json:"billing_source"`
+			Source                     string `json:"billing_source"`
+			CreditPackGrantedQuota     int64  `json:"credit_pack_granted_quota"`
+			SubscriptionBillingVersion string `json:"subscription_billing_version"`
 		}
-		if json.Unmarshal([]byte(log.Other), &billing) == nil && billing.Source == "subscription" {
+		if json.Unmarshal([]byte(log.Other), &billing) == nil && billing.Source == "subscription" && billing.CreditPackGrantedQuota == 0 && billing.SubscriptionBillingVersion != "credit_pack" {
 			item.ConsumerAmount = walletEquivalentSubscriptionAmount(item.ConsumerAmount)
 		}
 	}

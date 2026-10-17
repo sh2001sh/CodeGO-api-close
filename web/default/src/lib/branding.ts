@@ -26,6 +26,8 @@ const LEGACY_LOGO_VALUES = new Set([
   'logo.png',
   '/favicon.ico',
   'favicon.ico',
+  '/code-go-logo.svg',
+  'code-go-logo.svg',
 ])
 const LEGACY_SYSTEM_NAMES = new Set(['codexforall', 'new api', 'newapi'])
 
@@ -46,6 +48,12 @@ export function normalizeLogoUrl(value?: unknown): string {
   if (!trimmed) return DEFAULT_LOGO
   if (INVALID_LOGO_VALUES.has(trimmed.toLowerCase())) return DEFAULT_LOGO
   if (LEGACY_LOGO_VALUES.has(trimmed)) return DEFAULT_LOGO
+
+  // Older status/local-storage values include favicon query versions.
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    const path = trimmed.split(/[?#]/, 1)[0]
+    if (LEGACY_LOGO_VALUES.has(path)) return DEFAULT_LOGO
+  }
 
   return trimmed
 }

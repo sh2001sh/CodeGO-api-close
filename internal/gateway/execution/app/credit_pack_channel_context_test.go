@@ -24,3 +24,24 @@ func TestCreditPackChannelContextRefreshesSupportOnRetry(t *testing.T) {
 		require.Equal(t, supported, info.ChannelMeta.CreditPackSupported)
 	}
 }
+
+func TestOfficialCreditPackDefaultAndExternalRetryIsolation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &gatewayruntime.RelayInfo{}
+	for _, test := range []struct {
+		scope         string
+		enabled, want bool
+	}{
+		{gatewayschema.ChannelScopeOfficial, false, true},
+		{gatewayschema.ChannelScopeExternal, false, false},
+		{gatewayschema.ChannelScopeExternal, true, true},
+		{gatewayschema.ChannelScopeOfficial, false, true},
+	} {
+		require.Nil(t, SetupContextForSelectedChannel(context, &gatewayschema.Channel{
+			Id: 10, Type: 1, Key: "test-key", ChannelScope: test.scope, CreditPackSupported: test.enabled,
+		}, "gpt-5"))
+		info.InitChannelMeta(context)
+		require.Equal(t, test.want, info.ChannelMeta.CreditPackSupported)
+	}
+}

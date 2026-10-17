@@ -14,6 +14,7 @@ import (
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"github.com/stretchr/testify/require"
 	stdhttp "net/http"
 )
 
@@ -203,6 +204,12 @@ func TestGetSubscriptionSelfReturnsOverview(t *testing.T) {
 
 	var payload struct {
 		BillingPreference string `json:"billing_preference"`
+		RedemptionPreview *struct {
+			Eligible bool `json:"eligible"`
+		} `json:"reset_redemption_preview"`
+		ResetUsePreview *struct {
+			Eligible bool `json:"eligible"`
+		} `json:"reset_use_preview"`
 	}
 	if err := platformencoding.Unmarshal(response.Data, &payload); err != nil {
 		t.Fatalf("failed to decode self payload: %v", err)
@@ -210,6 +217,43 @@ func TestGetSubscriptionSelfReturnsOverview(t *testing.T) {
 	if payload.BillingPreference != "subscription_first" {
 		t.Fatalf("expected subscription_first preference, got %q", payload.BillingPreference)
 	}
+	require.NotNil(t, payload.RedemptionPreview)
+	require.False(t, payload.RedemptionPreview.Eligible)
+	require.NotNil(t, payload.ResetUsePreview)
+	require.False(t, payload.ResetUsePreview.Eligible)
+}
+
+func TestRedeemSubscriptionResetOpportunityContractAndInvalidRequests(t *testing.T) {
+	db := setupCommerceHTTPTestDB(t)
+	user := &identityschema.User{Id: 88001, Username: "reset-redeem", AffCode: "redeem88001", Status: constant.UserStatusEnabled}
+	require.NoError(t, db.Create(user).Error)
+	plan := &commerceschema.SubscriptionPlan{Title: "Minimum pack", Enabled: true, PlanType: commerceschema.SubscriptionPlanTypeCreditPack, PriceAmount: 64, TotalAmount: 6400}
+	require.NoError(t, db.Create(plan).Error)
+	require.NoError(t, db.Create(&commerceschema.SubscriptionResetOpportunityAccount{UserId: user.Id, EarnedTotal: 1, AvailableTotal: 1}).Error)
+	for _, body := range []map[string]any{{}, {"request_id": 123}} {
+		ctx, recorder := newCommerceContext(t, stdhttp.MethodPost, "/api/subscription/self/reset-opportunity/redeem", body, user.Id)
+		redeemSubscriptionResetOpportunity(ctx)
+		require.False(t, decodeCommerceResponse(t, recorder).Success)
+	}
+	ctx, recorder := newCommerceContext(t, stdhttp.MethodPost, "/api/subscription/self/reset-opportunity/redeem", map[string]any{"request_id": "http-redeem"}, user.Id)
+	redeemSubscriptionResetOpportunity(ctx)
+	response := decodeCommerceResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+	var payload struct {
+		RequestID        string `json:"request_id"`
+		SubscriptionID   int    `json:"subscription_id"`
+		PlanID           int    `json:"plan_id"`
+		GrantedQuota     int64  `json:"granted_quota"`
+		ResetOpportunity struct {
+			AvailableCount int `json:"available_count"`
+		} `json:"reset_opportunity"`
+	}
+	require.NoError(t, json.Unmarshal(response.Data, &payload))
+	require.Equal(t, "http-redeem", payload.RequestID)
+	require.Positive(t, payload.SubscriptionID)
+	require.Equal(t, plan.Id, payload.PlanID)
+	require.Equal(t, plan.TotalAmount, payload.GrantedQuota)
+	require.Zero(t, payload.ResetOpportunity.AvailableCount)
 }
 
 func TestUpdateSubscriptionPreferencePersistsSetting(t *testing.T) {
@@ -422,19 +466,19 @@ func TestCreateSubscriptionClaudeConversionConsumesQuota(t *testing.T) {
 		t.Fatalf("failed to reload user: %v", err)
 	}
 	expectedQuota := int(30 * 0.6 * platformruntime.QuotaPerUnit)
-	if reloaded.ClaudeQuota != 0 {
-		t.Fatalf("conversion must not credit the ordinary wallet, got %d", reloaded.ClaudeQuota)
+	if reloaded.ClaudeQuota != expectedQuota {
+		t.Fatalf("conversion must credit the wallet principal, got %d want %d", reloaded.ClaudeQuota, expectedQuota)
 	}
-	var converted commerceschema.UserSubscription
-	if err := db.Where("user_id = ? AND credit_pack_granted_quota > 0", user.Id).First(&converted).Error; err != nil {
-		t.Fatalf("failed to load converted permanent package: %v", err)
+	var count int64
+	if err := db.Model(&commerceschema.UserSubscription{}).Where("user_id = ? AND credit_pack_granted_quota > 0", user.Id).Count(&count).Error; err != nil {
+		t.Fatalf("failed to count converted packages: %v", err)
 	}
-	if converted.CreditPackGrantedQuota != int64(expectedQuota) || converted.CreditPackPaidQuota != int64(expectedQuota) || converted.EndTime != 0 {
-		t.Fatalf("unexpected converted package: granted=%d paid=%d end_time=%d", converted.CreditPackGrantedQuota, converted.CreditPackPaidQuota, converted.EndTime)
+	if count != 0 {
+		t.Fatalf("conversion must not create a permanent package, got %d", count)
 	}
 }
 
-func TestUseSubscriptionResetOpportunityResetsUsage(t *testing.T) {
+func TestUseSubscriptionResetOpportunityRestoresLegacyPass(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)
 	user := &identityschema.User{
 		Id:          1,
@@ -487,7 +531,7 @@ func TestUseSubscriptionResetOpportunityResetsUsage(t *testing.T) {
 
 	response := decodeCommerceResponse(t, recorder)
 	if !response.Success {
-		t.Fatalf("expected reset opportunity success, got %#v", response)
+		t.Fatalf("legacy refresh endpoint must remain available: %s", response.Message)
 	}
 
 	var sub commerceschema.UserSubscription
@@ -495,6 +539,11 @@ func TestUseSubscriptionResetOpportunityResetsUsage(t *testing.T) {
 		t.Fatalf("failed to reload subscription: %v", err)
 	}
 	if sub.AmountUsed != 0 || sub.PeriodUsed != 0 {
-		t.Fatalf("expected subscription usage reset, got amount=%d period=%d", sub.AmountUsed, sub.PeriodUsed)
+		t.Fatalf("refresh did not restore legacy usage: amount=%d period=%d", sub.AmountUsed, sub.PeriodUsed)
 	}
+	var account commerceschema.SubscriptionResetOpportunityAccount
+	require.NoError(t, db.First(&account, "user_id = ?", user.Id).Error)
+	require.Zero(t, account.AvailableTotal)
+	require.Equal(t, 1, account.UsedTotal)
+	require.NotEmpty(t, account.LastUsedMonth)
 }

@@ -2,18 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  consumeSubscriptionResetOpportunity,
-  updateBillingPreference,
-} from '@/features/subscriptions/api'
+import { updateBillingPreference } from '@/features/subscriptions/api'
 import {
   getBillingPreferenceFromFundingSourceOrder,
   normalizeFundingSourceOrder,
 } from '@/features/subscriptions/billing'
-import {
-  getSubscriptionPlanSubtitle,
-  isCreditPackSubscription,
-} from '@/features/subscriptions/lib'
+import { getSubscriptionPlanSubtitle } from '@/features/subscriptions/lib'
 import type {
   FundingSource,
   PlanRecord,
@@ -27,7 +21,6 @@ import {
   type WalletPlanMeta,
 } from './wallet-panel-utils'
 import { WalletPeerTransferCard } from './wallet-peer-transfer-card'
-import { WalletResetOpportunityPanel } from './wallet-reset-opportunity-panel'
 
 const ALL_FUNDING_SOURCES: FundingSource[] = ['subscription', 'wallet']
 
@@ -55,7 +48,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
   >(['subscription', 'wallet'])
   const [draftOrderIds, setDraftOrderIds] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
-  const [usingResetOpportunity, setUsingResetOpportunity] = useState(false)
 
   const activeSubscriptions = useMemo(
     () => props.subscriptionData?.subscriptions ?? [],
@@ -100,21 +92,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
     [activeSubscriptions, draftOrderIds]
   )
 
-  const currentSubscription = orderedSubscriptions.find(
-    (record) => !isCreditPackSubscription(record.subscription)
-  )?.subscription
-  const currentSubscriptionPlanMeta = currentSubscription
-    ? planMetaMap.get(currentSubscription.plan_id)
-    : undefined
-  const resetOpportunity = props.subscriptionData?.reset_opportunity ?? {
-    available_count: 0,
-    earned_total: 0,
-    used_total: 0,
-    used_this_month: false,
-    current_month: '',
-    last_used_month: '',
-  }
-
   const disabledFundingSources = ALL_FUNDING_SOURCES.filter(
     (source) => !draftFundingSourceOrder.includes(source)
   )
@@ -123,11 +100,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
   const isLoadingPanels = Boolean(
     props.loading || props.subscriptionLoading || props.plansLoading
   )
-  const canUseResetOpportunity =
-    resetOpportunity.available_count > 0 &&
-    !resetOpportunity.used_this_month &&
-    !!currentSubscription
-
   const moveFundingSource = (source: FundingSource, direction: -1 | 1) => {
     setDraftFundingSourceOrder((current) => {
       const next = [...current]
@@ -203,33 +175,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
     }
   }
 
-  const handleUseResetOpportunity = async () => {
-    if (!canUseResetOpportunity || usingResetOpportunity) return
-    setUsingResetOpportunity(true)
-    try {
-      const response = await consumeSubscriptionResetOpportunity()
-      if (!response.success || !response.data) {
-        toast.error(
-          response.message || t('Failed to use the quota reset opportunity.')
-        )
-        return
-      }
-      toast.success(
-        t('Cleared used quota for {{plan}}.', {
-          plan: currentSubscriptionPlanMeta?.title || t('Current subscription'),
-        })
-      )
-      await props.onSubscriptionRefresh?.()
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('subscription:changed'))
-      }
-    } catch {
-      toast.error(t('Failed to use the quota reset opportunity.'))
-    } finally {
-      setUsingResetOpportunity(false)
-    }
-  }
-
   if (props.loading && props.section !== 'funding') {
     return (
       <div className='grid gap-4 lg:grid-cols-2'>
@@ -289,17 +234,6 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
 
   return (
     <div className='space-y-4'>
-      {(resetOpportunity.earned_total > 0 ||
-        resetOpportunity.used_total > 0) && (
-        <WalletResetOpportunityPanel
-          resetOpportunity={resetOpportunity}
-          currentSubscriptionTitle={currentSubscriptionPlanMeta?.title}
-          canUseResetOpportunity={canUseResetOpportunity}
-          usingResetOpportunity={usingResetOpportunity}
-          onUseResetOpportunity={() => void handleUseResetOpportunity()}
-        />
-      )}
-
       <WalletBillingOrderPanel
         draftFundingSourceOrder={draftFundingSourceOrder}
         disabledFundingSources={disabledFundingSources}

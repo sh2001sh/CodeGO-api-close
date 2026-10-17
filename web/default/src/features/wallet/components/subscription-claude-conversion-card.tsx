@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ArrowRightLeft, Loader2, Percent } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useSystemConfigStore } from '@/stores/system-config-store'
-import { formatQuota, formatUsdAmount } from '@/lib/format'
+import { formatNumber, formatQuota } from '@/lib/format'
+import { handleServerError } from '@/lib/handle-server-error'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,7 +53,8 @@ export function SubscriptionClaudeConversionCard(
       (props.subscriptionData?.subscriptions ?? []).filter(
         (item) =>
           !isCreditPackSubscription(item.subscription) &&
-          item.subscription.conversion_preview?.eligible === true
+          item.subscription.conversion_preview?.eligible === true &&
+          item.subscription.conversion_preview?.target_type === 'wallet'
       ),
     [props.subscriptionData]
   )
@@ -74,6 +76,8 @@ export function SubscriptionClaudeConversionCard(
   const [conversionPercent, setConversionPercent] = useState(0)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
+  const [requestId, setRequestId] = useState(buildRequestId)
 
   const selected =
     eligibleSubscriptions.find((item) => item.subscription.id === selectedId) ??
@@ -97,9 +101,14 @@ export function SubscriptionClaudeConversionCard(
     0,
     convertsAllRemaining ? 0 : unusedPercent - selectedConversionPercent
   )
-  const estimatedQuota = Math.floor(
+  const estimatedBaseQuota = Math.floor(
     Number(preview?.plan_price_amount || 0) * selectedRatio * quotaPerUnit
   )
+  const bonusPercent = Number(preview?.bonus_percent || 0)
+  const estimatedBonusQuota = Math.floor(
+    (estimatedBaseQuota * bonusPercent) / 100
+  )
+  const estimatedQuota = estimatedBaseQuota + estimatedBonusQuota
   const endsPass = convertsAllRemaining
   const quickPercentages = Array.from(
     new Set([25, 50, maxPercent].filter((value) => value <= maxPercent))
@@ -108,34 +117,35 @@ export function SubscriptionClaudeConversionCard(
   const updatePercent = (value: number) => {
     if (!Number.isFinite(value)) return
     setConversionPercent(Math.min(maxPercent, Math.max(1, Math.round(value))))
+    setRequestId(buildRequestId())
   }
 
   const submit = async () => {
-    if (!selected || !preview?.eligible) return
+    if (!selected || !preview?.eligible || submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
       const result = await createSubscriptionClaudeConversion({
         subscriptionId: selected.subscription.id,
         conversionPercent: selectedConversionPercent,
-        requestId: buildRequestId(),
+        requestId,
       })
       if (!result.success || !result.data) {
         toast.error(result.message || t('Monthly pass conversion failed.'))
         return
       }
       toast.success(
-        result.data.subscription_ended
-          ? t('已将剩余旧套餐转换为 {{amount}} 新套餐额度', {
-              amount: formatQuota(result.data.target_quota),
-            })
-          : t('已转换 {{percent}}%，获得 {{amount}} 新套餐额度', {
-              percent: result.data.conversion_percent,
-              amount: formatQuota(result.data.target_quota),
-            })
+        t('已转入钱包 {{amount}}', {
+          amount: formatQuota(result.data.target_quota),
+        })
       )
       setConfirmOpen(false)
+      setRequestId(buildRequestId())
       await props.onRefresh?.()
+    } catch (error) {
+      handleServerError(error)
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -157,8 +167,69 @@ export function SubscriptionClaudeConversionCard(
     <section className='space-y-4'>
       <div className='flex items-center gap-2'>
         <ArrowRightLeft className='text-primary size-4' aria-hidden='true' />
-        <h3 className='text-sm font-semibold'>{t('旧套餐转新套餐')}</h3>
+        <h3 className='text-sm font-semibold'>{t('旧套餐转余额')}</h3>
+        {bonusPercent > 0 && (
+          <span className='bg-primary/10 text-primary ml-auto rounded-full px-3 py-1 text-xs font-medium'>
+            {t('集享增额 +{{percent}}%', { percent: bonusPercent })}
+          </span>
+        )}
       </div>
+
+      <details className='bg-muted/50 rounded-xl p-4 text-sm'>
+        <summary className='cursor-pointer font-medium'>
+          {t('转换规则与 299 套餐示例')}
+        </summary>
+        <dl className='mt-4 grid gap-4 leading-7'>
+          <div>
+            <dt className='font-medium'>{t('折算方式')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '基础余额 = 折算基数 × 转换额度占旧套餐总额度的比例；集享增额 = 基础余额 × 对应集享增额比例；钱包到账 = 基础余额 + 集享增额。全部转换按旧套餐剩余额度 ÷ 总额度计算，与剩余天数无关。金额以最小计费单位向下取整。'
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className='font-medium'>{t('集享增额')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '按该旧套餐所属集享计划的有效付费参与人数计算已达成档位：3 至 4 人增额 3%，5 人及以上增额 5%，未达 3 人无增额。占位成员和未成功付款成员不计入，实际比例以转换预览为准。'
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className='font-medium'>{t('折算基数')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '采用该旧套餐对应的单笔成功付款金额数值；无付款订单的赠送套餐沿用原方案价格。当前转换按金额数值折算 credits，不使用货币汇率。多笔续费或升级补差记录需先核定。'
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className='font-medium'>{t('299 套餐示例')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '折算基数为 299：未参与集享且全部未使用，可转 299 credits；剩余 50% 可转 149.5 credits。集享增额为 3% 时，全部未使用到账 307.97 credits；增额为 5% 时到账 313.95 credits。'
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className='font-medium'>{t('转换后权益')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '基础金额与集享增额分别记账，一同计入可用钱包，按钱包价格消费。转换同步扣减旧套餐额度；全部转换后旧套餐结束，部分转换保留原有效期。转换金额及集享增额不作为新增现金实付，不产生邀请返利或现金退款。操作无法撤销；历史转换记录保持原权益。'
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className='font-medium'>{t('刷新限制')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '旧套餐有效期内已使用邀请刷新的，当前不支持转换。未使用的刷新次数可在“刷新次数兑套餐”中兑换最低档套餐，独立于旧套餐转余额。实际可转换额度以确认窗口和服务端校验为准。'
+              )}
+            </dd>
+          </div>
+        </dl>
+      </details>
 
       {eligibleSubscriptions.length === 0 ? (
         <div className='text-muted-foreground space-y-1 text-sm leading-6'>
@@ -178,12 +249,14 @@ export function SubscriptionClaudeConversionCard(
             {eligibleSubscriptions.map((item) => {
               const itemPreview = item.subscription.conversion_preview
               const meta = props.planTitles?.[item.subscription.plan_id]
-              const selectedItem = item.subscription.id === selectedId
+              const selectedItem =
+                item.subscription.id === selected?.subscription.id
               return (
                 <button
                   key={item.subscription.id}
                   type='button'
                   onClick={() => {
+                    setRequestId(buildRequestId())
                     setSelectedId(item.subscription.id)
                     setConversionPercent(
                       itemPreview?.max_conversion_percent ?? 1
@@ -199,6 +272,7 @@ export function SubscriptionClaudeConversionCard(
                   <div className='flex items-center justify-between gap-3'>
                     <span className='text-sm font-medium'>
                       {meta?.title ||
+                        item.plan?.title ||
                         `${t('Monthly pass')} #${item.subscription.id}`}
                     </span>
                     <span className='text-muted-foreground text-xs'>
@@ -210,10 +284,8 @@ export function SubscriptionClaudeConversionCard(
                     </span>
                   </div>
                   <div className='text-muted-foreground mt-1 text-xs'>
-                    {t('实付 {{price}} · 已用 {{used}}%', {
-                      price: formatUsdAmount(
-                        itemPreview?.plan_price_amount || 0
-                      ),
+                    {t('折算基数 {{price}} · 已用 {{used}}%', {
+                      price: formatNumber(itemPreview?.plan_price_amount || 0),
                       used: (
                         100 -
                         Number(itemPreview?.unused_ratio || 0) * 100
@@ -225,7 +297,7 @@ export function SubscriptionClaudeConversionCard(
             })}
           </div>
 
-          <div className='space-y-3 rounded-md border p-3'>
+          <div className='bg-background/70 space-y-4 rounded-xl p-4 sm:p-5'>
             <div className='flex items-center justify-between gap-3'>
               <label
                 htmlFor='monthly-pass-conversion-percent'
@@ -270,7 +342,7 @@ export function SubscriptionClaudeConversionCard(
                       : 'outline'
                   }
                   size='sm'
-                  onClick={() => setConversionPercent(value)}
+                  onClick={() => updatePercent(value)}
                 >
                   {value === maxPercent
                     ? t('Convert all remaining')
@@ -279,7 +351,21 @@ export function SubscriptionClaudeConversionCard(
               ))}
             </div>
             <dl className='grid grid-cols-2 gap-x-4 gap-y-2 text-sm'>
-              <dt className='text-muted-foreground'>{t('Estimated credit')}</dt>
+              <dt className='text-muted-foreground'>{t('基础余额')}</dt>
+              <dd className='text-right tabular-nums'>
+                {formatQuota(estimatedBaseQuota)}
+              </dd>
+              {bonusPercent > 0 && (
+                <>
+                  <dt className='text-muted-foreground'>
+                    {t('集享增额 +{{percent}}%', { percent: bonusPercent })}
+                  </dt>
+                  <dd className='text-primary text-right tabular-nums'>
+                    +{formatQuota(estimatedBonusQuota)}
+                  </dd>
+                </>
+              )}
+              <dt className='font-medium'>{t('钱包到账')}</dt>
               <dd className='text-right font-semibold tabular-nums'>
                 {formatQuota(estimatedQuota)}
               </dd>
@@ -320,17 +406,20 @@ export function SubscriptionClaudeConversionCard(
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent className='commerce-dialog'>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('Confirm monthly pass conversion')}
-            </AlertDialogTitle>
+            <AlertDialogTitle>{t('确认旧套餐转余额')}</AlertDialogTitle>
             <AlertDialogDescription>
               {t(
-                '将 {{plan}} 的 {{percent}}% 转为 {{credit}} 永久新套餐额度，扣除旧套餐 {{quota}}，旧套餐剩余 {{remaining}}%。转换后旧套餐无法使用邀请刷新。{{ending}} 此操作无法撤销。',
+                '将 {{plan}} 的 {{percent}}% 转入钱包：基础 {{base}}，集享增额 {{bonus}}，合计 {{credit}}。扣除旧套餐 {{quota}}，旧套餐剩余 {{remaining}}%。{{ending}} 此操作无法撤销。',
                 {
+                  base: formatQuota(estimatedBaseQuota),
+                  bonus: formatQuota(estimatedBonusQuota),
                   percent: convertsAllRemaining
                     ? unusedPercent.toFixed(2)
                     : selectedConversionPercent,
-                  plan: planMeta?.title || t('monthly pass'),
+                  plan:
+                    planMeta?.title ||
+                    selected?.plan?.title ||
+                    t('monthly pass'),
                   credit: formatQuota(estimatedQuota),
                   quota: formatSubscriptionQuotaAmount(
                     convertsAllRemaining

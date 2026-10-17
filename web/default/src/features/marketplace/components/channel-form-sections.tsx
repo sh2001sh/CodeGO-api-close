@@ -199,15 +199,60 @@ function ChannelCreditPackPolicy(props: { form: ChannelForm }) {
         </div>
         <div className='flex items-baseline justify-between gap-3'>
           <dt className='text-muted-foreground'>{t('套餐最高费率')}</dt>
-          <dd className='font-medium tabular-nums'>10.45%</dd>
+          <dd className='font-medium tabular-nums'>11%</dd>
         </div>
         <div className='flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 sm:col-span-2'>
           <dt className='text-muted-foreground'>{t('赠额成本分担')}</dt>
-          <dd className='font-medium tabular-nums'>
-            {t('渠道 60% / 官方 40%')}
-          </dd>
+          <dd className='font-medium tabular-nums'>{t('套餐增额率 × 60%')}</dd>
         </div>
       </dl>
+      <details className='bg-muted/50 rounded-xl p-4 text-sm'>
+        <summary className='cursor-pointer font-medium'>
+          {t('套餐增额分担怎么算')}
+        </summary>
+        <dl className='mt-4 grid gap-4 leading-7'>
+          <div>
+            <dt className='font-medium'>{t('增额成本')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '套餐增额率 = 套餐赠额 ÷ 套餐实付额度；附加手续费率 = 套餐增额率 × 60%；综合手续费率 = 5% + 附加手续费率。'
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className='font-medium'>{t('渠道净收益')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '渠道净收益 = 结算毛额 − 5% 基础佣金 − 套餐增额分担费 − 邀请返利。增额分担费 = 结算毛额 × 套餐增额率 × 60%；邀请返利按合资格实付消费计算。'
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className='font-medium'>{t('增额 3% 示例')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '套餐增额 3%，附加费率为 3% × 60% = 1.8%，综合手续费率为 6.8%。结算毛额 100 credits：基础佣金 5、增额分担费 1.8，邀请返利为 0 时，渠道净收益 93.2 credits。'
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className='font-medium'>{t('各档费率')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '增额 5% / 6% / 7% / 8% / 10%，综合手续费率分别为 8% / 8.6% / 9.2% / 9.8% / 11%；邀请返利另计。实际金额按每笔最小计费单位四舍五入，历史日志按原结算快照展示。'
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className='font-medium'>{t('接入范围')}</dt>
+            <dd className='text-muted-foreground'>
+              {t(
+                '官方渠道默认支持套餐；市场渠道由渠道主开启新套餐接入。旧套餐转余额的集享增额由平台提供，按钱包结算，不收取新套餐增额分担。'
+              )}
+            </dd>
+          </div>
+        </dl>
+      </details>
     </div>
   )
 }

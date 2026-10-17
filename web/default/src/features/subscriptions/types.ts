@@ -111,6 +111,12 @@ export const userSubscriptionSchema = z.object({
       unused_ratio: z.number(),
       max_conversion_percent: z.number(),
       preview_quota: z.number(),
+      base_quota: z.number().optional(),
+      bonus_quota: z.number().optional(),
+      bonus_percent: z.number().optional(),
+      target_type: z.string().optional(),
+      group_buy_id: z.number().optional(),
+      group_buy_member_count: z.number().optional(),
       ineligible_reason: z.string().optional(),
     })
     .optional(),
@@ -145,6 +151,36 @@ export interface SubscriptionResetOpportunityUseResult {
   cleared_used_amount: number
 }
 
+export interface SubscriptionResetRedemptionPreview {
+  eligible: boolean
+  available_count: number
+  plan_id: number
+  plan_title: string
+  granted_quota: number
+  base_quota: number
+  bonus_quota: number
+  price_amount: number
+  currency: string
+  ineligible_reason?: string
+}
+
+export interface SubscriptionResetUsePreview {
+  eligible: boolean
+  subscription_id: number
+  plan_title: string
+  cleared_used_amount: number
+  ineligible_reason?: string
+}
+
+export interface SubscriptionResetRedemptionResult {
+  request_id: string
+  subscription_id: number
+  plan_id: number
+  granted_quota: number
+  reset_opportunity: SubscriptionResetOpportunitySummary
+  replayed: boolean
+}
+
 export interface SubscriptionClaudeConversionConfig {
   enabled: boolean
 }
@@ -158,6 +194,10 @@ export interface SubscriptionClaudeConversionRecord {
   status: string
   source_quota: number
   target_quota: number
+  base_quota?: number
+  bonus_quota?: number
+  bonus_percent?: number
+  target_type?: string
   plan_price_amount: number
   unused_ratio: number
   conversion_percent: number
@@ -170,6 +210,10 @@ export interface SubscriptionClaudeConversionResult {
   target_credit_pack_subscription_id?: number
   source_quota: number
   target_quota: number
+  base_quota?: number
+  bonus_quota?: number
+  bonus_percent?: number
+  target_type?: string
   quota_after: number
   amount_used_after: number
   period_used_after: number
@@ -289,6 +333,8 @@ export interface SelfSubscriptionData {
   subscriptions: UserSubscriptionRecord[]
   all_subscriptions: UserSubscriptionRecord[]
   reset_opportunity: SubscriptionResetOpportunitySummary
+  reset_redemption_preview?: SubscriptionResetRedemptionPreview
+  reset_use_preview?: SubscriptionResetUsePreview
   conversion_config: SubscriptionClaudeConversionConfig
   recent_conversions: SubscriptionClaudeConversionRecord[]
 }

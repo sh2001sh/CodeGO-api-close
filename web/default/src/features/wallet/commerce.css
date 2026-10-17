@@ -196,6 +196,7 @@
 
 .commerce-workspace [data-slot='tabs-list'].commerce-wallet-nav {
   display: flex;
+  flex-wrap: wrap;
   width: fit-content;
   max-width: 100%;
   height: auto;
@@ -861,6 +862,43 @@ fieldset.commerce-recharge-group > legend {
   padding: 20px;
   border-radius: 12px;
   background: var(--commerce-soft);
+}
+
+.commerce-invite-rules {
+  min-width: 0;
+  padding: clamp(20px, 3vw, 32px);
+  border-radius: 16px;
+  background: var(--commerce-soft);
+}
+.commerce-invite-rules h2 {
+  margin-bottom: 24px;
+  font-size: 24px;
+  font-weight: 600;
+}
+.commerce-invite-rules dl {
+  display: grid;
+  gap: 20px;
+}
+.commerce-invite-rules dl > div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 8px 24px;
+}
+.commerce-invite-rules dt {
+  font-weight: 600;
+}
+.commerce-invite-rules dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--muted-foreground);
+}
+@media (max-width: 540px) {
+  .commerce-invite-rules dl > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .commerce-invite-metrics dt {

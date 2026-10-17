@@ -14,7 +14,7 @@ type SiteSeoProps = {
 const SITE_NAME = 'CodeGo'
 const SITE_ALTERNATE_NAME = 'Code Go'
 const SITE_ORIGIN = 'https://codegoai.com'
-const DEFAULT_OG_IMAGE = `${SITE_ORIGIN}/code-go-logo.svg`
+const DEFAULT_OG_IMAGE = `${SITE_ORIGIN}/codego-mark.svg`
 
 function ensureMeta(
   selector: string,

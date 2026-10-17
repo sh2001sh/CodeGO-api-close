@@ -415,6 +415,26 @@ export interface TokenOption {
   group?: string | null
 }
 
+export interface MarketplaceOwnerIncomeBreakdown {
+  algorithm_version: string | null
+  snapshot_status: 'recorded' | 'historical_partial'
+  billing_source: string
+  subscription_id: number | null
+  subscription_plan_id: number | null
+  subscription_plan_title: string | null
+  subscription_type: 'credit_pack' | 'legacy_subscription' | null
+  settlement_gross_amount: number | null
+  base_commission_amount: number | null
+  base_commission_rate_bps: number | null
+  package_bonus_rate: number | null
+  channel_share_bps: number | null
+  package_surcharge_rate: number | null
+  package_surcharge_amount: number | null
+  referral_rebate_amount: number | null
+  owner_net_amount: number | null
+  formula: string | null
+}
+
 export interface MarketplaceOwnerUsageLog {
   id: number
   channel_id: string
@@ -450,6 +470,7 @@ export interface MarketplaceOwnerUsageLog {
   reclaimed_income: number
   available_at?: string | null
   released_at?: string | null
+  income_breakdown?: MarketplaceOwnerIncomeBreakdown | null
 }
 
 export interface MarketplaceOwnerUsageLogResult {

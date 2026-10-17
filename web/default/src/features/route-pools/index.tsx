@@ -183,6 +183,7 @@ export function RoutePoolsContent() {
 
       <RoutePoolGroupList
         groups={groups.data ?? []}
+        selectedGroup={selected?.group}
         loading={groups.isLoading}
         savingGroup={
           saveGroup.isPending ? saveGroup.variables?.group : undefined

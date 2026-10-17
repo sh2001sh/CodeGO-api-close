@@ -89,6 +89,15 @@ func getPerfMetrics(modelName string, group string, startTs int64, endTs int64) 
 	return metrics, err
 }
 
+func getPerfMetricsForGroups(modelName string, groups []string, startTs, endTs int64) ([]perfMetricRecord, error) {
+	var metrics []perfMetricRecord
+	err := platformdb.DB.Model(&perfMetricRecord{}).
+		Where("model_name = ? AND bucket_ts >= ? AND bucket_ts <= ?", modelName, startTs, endTs).
+		Where(groupColumnName()+" IN ?", groups).
+		Order("bucket_ts ASC").Find(&metrics).Error
+	return metrics, err
+}
+
 func getPerfMetricsSummaryAll(startTs int64, endTs int64) ([]perfMetricSummaryRow, error) {
 	var summaries []perfMetricSummaryRow
 	err := platformdb.DB.Model(&perfMetricRecord{}).

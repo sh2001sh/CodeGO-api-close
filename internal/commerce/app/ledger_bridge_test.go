@@ -94,15 +94,12 @@ func TestConvertMonthlyPassToUnifiedCreditCreditsUnifiedLedger(t *testing.T) {
 
 	var savedUser identityschema.User
 	require.NoError(t, db.Where("id = ?", user.Id).First(&savedUser).Error)
-	assert.Equal(t, 90, savedUser.ClaudeQuota)
-	var target commerceschema.UserSubscription
-	require.NoError(t, db.First(&target, result.TargetCreditPackSubscriptionId).Error)
-	assert.Zero(t, target.EndTime)
-	assert.EqualValues(t, result.TargetQuota, target.CreditPackGrantedQuota)
-	assert.Equal(t, target.CreditPackGrantedQuota, target.CreditPackPaidQuota)
+	assert.Equal(t, 90+result.TargetQuota, savedUser.ClaudeQuota)
+	assert.Zero(t, result.TargetCreditPackSubscriptionId)
+	assert.Equal(t, "wallet", result.TargetType)
 	var account billingschema.BillingAccount
-	require.NoError(t, db.Where("owner_type = ? AND owner_id = ? AND account_type = ?", "user_subscription", target.Id, "subscription").First(&account).Error)
+	require.NoError(t, db.Where("owner_type = ? AND owner_id = ? AND account_type = ?", "user", user.Id, "claude_wallet").First(&account).Error)
 	var snapshot billingschema.BillingBalanceSnapshot
 	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)
-	assert.Equal(t, target.CreditPackGrantedQuota, snapshot.AvailableBalance)
+	assert.EqualValues(t, savedUser.ClaudeQuota, snapshot.AvailableBalance)
 }

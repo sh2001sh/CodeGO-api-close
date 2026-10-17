@@ -22,7 +22,16 @@ import { Wallet } from '@/features/wallet'
 
 const walletSearchSchema = z.object({
   show_history: z.boolean().optional(),
-  section: z.enum(['funding', 'transfer', 'billing', 'invoices']).optional(),
+  section: z
+    .enum([
+      'funding',
+      'conversion',
+      'reset-redemption',
+      'transfer',
+      'billing',
+      'invoices',
+    ])
+    .optional(),
 })
 
 export const Route = createFileRoute('/_authenticated/wallet/')({

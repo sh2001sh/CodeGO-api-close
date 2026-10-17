@@ -70,7 +70,7 @@ export function RoutePoolInsights({
         {metrics?.members.map((member) => (
           <div
             key={member.channel_id}
-            className='route-insight-member border-b py-2 last:border-0'
+            className='route-insight-member'
             data-eligible={member.eligible}
           >
             <div className='flex justify-between gap-2'>

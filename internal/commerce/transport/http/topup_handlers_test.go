@@ -58,6 +58,7 @@ func setupCommerceHTTPTestDB(t *testing.T) *gorm.DB {
 		&billingschema.BillingReservation{},
 		&billingschema.BillingSettlement{},
 		&billingschema.BillingOutboxEvent{},
+		&billingschema.FundingLot{},
 		&commerceschema.SubscriptionPlan{},
 		&commerceschema.SubscriptionOrder{},
 		&commerceschema.UserSubscription{},

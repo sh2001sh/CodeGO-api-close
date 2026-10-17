@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sh2001sh/new-api/internal/billing/schema"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
@@ -42,4 +43,22 @@ func TestRecordRequestEconomicsUpsertsRepeatedRequest(t *testing.T) {
 	require.Equal(t, int64(2), records[0].RoutePoolID)
 	require.Equal(t, int64(200), records[0].ActualAmount)
 	require.InDelta(t, 0.15, records[0].ProcurementCostMultiplier, 0.0001)
+}
+
+func TestResetRedemptionConsumptionHasCostWithoutCashRevenue(t *testing.T) {
+	db, _ := referralTestDB(t)
+	require.NoError(t, db.AutoMigrate(&billingschema.RequestEconomics{}))
+	sub := commerceschema.UserSubscription{UserId: 2, Source: "reset_redemption", CreditPackGrantedQuota: 1000, CreditPackPaidQuota: 1000}
+	require.NoError(t, db.Create(&sub).Error)
+	info := &gatewayruntime.RelayInfo{RequestId: "reset-redemption-economics", SubscriptionId: sub.Id, BillingSource: BillingSourceSubscription, CreditPackGrantedQuota: 1000, CreditPackPaidQuota: 1000, ProcurementCostMultiplier: 0.1}
+	require.NoError(t, RecordRequestEconomics(info, 200))
+	var record billingschema.RequestEconomics
+	require.NoError(t, db.First(&record, "request_id = ?", info.RequestId).Error)
+	require.Zero(t, record.RevenueMultiplier)
+	require.EqualValues(t, 200, record.ActualAmount)
+	require.InDelta(t, 0.1, record.ProcurementCostMultiplier, 0.00001)
+	report, err := DailyFundingEconomics(time.Now(), 1)
+	require.NoError(t, err)
+	require.Zero(t, report.RecognizedRevenue)
+	require.EqualValues(t, 20, report.RecognizedCost)
 }

@@ -1,3 +1,4 @@
+import { CanceledError } from 'axios'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { api } from '@/lib/api'
@@ -6,7 +7,50 @@ import {
   getMyMarketplaceBargainRequests,
   getOwnerMultipliers,
   getTokenOptions,
+  getMyMarketplaceChannelIndex,
+  getMyMarketplaceChannelPage,
 } from './api'
+
+test('remounted owner queries do not reuse an aborted request', async () => {
+  const previousAdapter = api.defaults.adapter
+  let requests = 0
+  api.defaults.adapter = async (config) => {
+    requests++
+    if (config.signal?.aborted) throw new CanceledError()
+    await new Promise<void>((resolve, reject) => {
+      config.signal?.addEventListener?.(
+        'abort',
+        () => reject(new CanceledError()),
+        { once: true }
+      )
+      setTimeout(resolve, 5)
+    })
+    return {
+      data: { success: true, data: [] },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config,
+    }
+  }
+  try {
+    for (const query of [
+      getMyMarketplaceChannelIndex,
+      (signal?: AbortSignal) =>
+        getMyMarketplaceChannelPage(['channel-fixture'], signal),
+    ]) {
+      const controller = new AbortController()
+      const first = query(controller.signal)
+      const rejected = assert.rejects(first, /canceled/i)
+      controller.abort()
+      assert.deepEqual(await query(new AbortController().signal), [])
+      await rejected
+    }
+    assert.ok(requests >= 2)
+  } finally {
+    api.defaults.adapter = previousAdapter
+  }
+})
 
 test('owner and admin lists request the selected page instead of the first page', async () => {
   const previousAdapter = api.defaults.adapter

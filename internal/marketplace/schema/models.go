@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"time"
 
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -272,34 +273,35 @@ func (ChannelFeedback) TableName() string {
 }
 
 type Settlement struct {
-	ID                              string     `json:"id" gorm:"column:id;primaryKey;size:64"`
-	RequestID                       string     `json:"request_id" gorm:"column:request_id;size:64;uniqueIndex;not null"`
-	GroupID                         string     `json:"group_id" gorm:"column:group_id;size:64;index;index:idx_marketplace_settlements_owner_group_created,priority:2;not null"`
-	OwnerUserID                     int        `json:"owner_user_id" gorm:"column:owner_user_id;index;index:idx_marketplace_settlements_owner_group_created,priority:1;not null"`
-	ConsumerUserID                  int        `json:"consumer_user_id" gorm:"column:consumer_user_id;index;not null"`
-	BillingSource                   string     `json:"billing_source" gorm:"column:billing_source;size:24;not null;default:wallet"`
-	ConsumerAmount                  int64      `json:"consumer_amount" gorm:"column:consumer_amount;not null"`
-	SettlementGrossAmount           int64      `json:"settlement_gross_amount" gorm:"column:settlement_gross_amount;not null;default:0"`
-	PlatformCommission              int64      `json:"platform_commission" gorm:"column:platform_commission;not null"`
-	TransactionFee                  int64      `json:"transaction_fee" gorm:"column:transaction_fee;not null"`
-	ReferralRebateAmount            int64      `json:"referral_rebate_amount" gorm:"column:referral_rebate_amount;not null;default:0"`
-	ReferralRebatePending           bool       `json:"referral_rebate_pending" gorm:"column:referral_rebate_pending;not null;default:false"`
-	CreditPackGrantedQuota          int64      `json:"credit_pack_granted_quota" gorm:"column:credit_pack_granted_quota;not null;default:0"`
-	CreditPackPaidQuota             int64      `json:"credit_pack_paid_quota" gorm:"column:credit_pack_paid_quota;not null;default:0"`
-	CreditPackChannelShareBPS       int64      `json:"credit_pack_channel_share_bps" gorm:"column:credit_pack_channel_share_bps;not null;default:0"`
-	CreditPackDiscountAmount        int64      `json:"credit_pack_discount_amount" gorm:"column:credit_pack_discount_amount;not null;default:0"`
-	CreditPackPlatformSubsidyAmount int64      `json:"credit_pack_platform_subsidy_amount" gorm:"column:credit_pack_platform_subsidy_amount;not null;default:0"`
-	OwnerNetAmount                  int64      `json:"owner_net_amount" gorm:"column:owner_net_amount;not null"`
-	ReclaimedAmount                 int64      `json:"reclaimed_amount" gorm:"column:reclaimed_amount;not null;default:0"`
-	Multiplier                      float64    `json:"multiplier" gorm:"column:multiplier;not null"`
-	SubscriptionMultiplier          float64    `json:"subscription_multiplier" gorm:"column:subscription_multiplier;not null;default:0"`
-	Status                          string     `json:"status" gorm:"column:status;size:24;index;not null"`
-	PendingAccountID                string     `json:"-" gorm:"column:pending_account_id;size:64"`
-	AvailableAt                     time.Time  `json:"available_at" gorm:"column:available_at;index"`
-	ReleasedAt                      *time.Time `json:"released_at" gorm:"column:released_at"`
-	ReclaimedAt                     *time.Time `json:"reclaimed_at" gorm:"column:reclaimed_at"`
-	ForfeitedAt                     *time.Time `json:"forfeited_at" gorm:"column:forfeited_at"`
-	CreatedAt                       time.Time  `json:"created_at" gorm:"column:created_at;index:idx_marketplace_settlements_owner_group_created,priority:3;autoCreateTime"`
+	IncomeSnapshot                  json.RawMessage `json:"-" gorm:"-"`
+	ID                              string          `json:"id" gorm:"column:id;primaryKey;size:64"`
+	RequestID                       string          `json:"request_id" gorm:"column:request_id;size:64;uniqueIndex;not null"`
+	GroupID                         string          `json:"group_id" gorm:"column:group_id;size:64;index;index:idx_marketplace_settlements_owner_group_created,priority:2;not null"`
+	OwnerUserID                     int             `json:"owner_user_id" gorm:"column:owner_user_id;index;index:idx_marketplace_settlements_owner_group_created,priority:1;not null"`
+	ConsumerUserID                  int             `json:"consumer_user_id" gorm:"column:consumer_user_id;index;not null"`
+	BillingSource                   string          `json:"billing_source" gorm:"column:billing_source;size:24;not null;default:wallet"`
+	ConsumerAmount                  int64           `json:"consumer_amount" gorm:"column:consumer_amount;not null"`
+	SettlementGrossAmount           int64           `json:"settlement_gross_amount" gorm:"column:settlement_gross_amount;not null;default:0"`
+	PlatformCommission              int64           `json:"platform_commission" gorm:"column:platform_commission;not null"`
+	TransactionFee                  int64           `json:"transaction_fee" gorm:"column:transaction_fee;not null"`
+	ReferralRebateAmount            int64           `json:"referral_rebate_amount" gorm:"column:referral_rebate_amount;not null;default:0"`
+	ReferralRebatePending           bool            `json:"referral_rebate_pending" gorm:"column:referral_rebate_pending;not null;default:false"`
+	CreditPackGrantedQuota          int64           `json:"credit_pack_granted_quota" gorm:"column:credit_pack_granted_quota;not null;default:0"`
+	CreditPackPaidQuota             int64           `json:"credit_pack_paid_quota" gorm:"column:credit_pack_paid_quota;not null;default:0"`
+	CreditPackChannelShareBPS       int64           `json:"credit_pack_channel_share_bps" gorm:"column:credit_pack_channel_share_bps;not null;default:0"`
+	CreditPackDiscountAmount        int64           `json:"credit_pack_discount_amount" gorm:"column:credit_pack_discount_amount;not null;default:0"`
+	CreditPackPlatformSubsidyAmount int64           `json:"credit_pack_platform_subsidy_amount" gorm:"column:credit_pack_platform_subsidy_amount;not null;default:0"`
+	OwnerNetAmount                  int64           `json:"owner_net_amount" gorm:"column:owner_net_amount;not null"`
+	ReclaimedAmount                 int64           `json:"reclaimed_amount" gorm:"column:reclaimed_amount;not null;default:0"`
+	Multiplier                      float64         `json:"multiplier" gorm:"column:multiplier;not null"`
+	SubscriptionMultiplier          float64         `json:"subscription_multiplier" gorm:"column:subscription_multiplier;not null;default:0"`
+	Status                          string          `json:"status" gorm:"column:status;size:24;index;not null"`
+	PendingAccountID                string          `json:"-" gorm:"column:pending_account_id;size:64"`
+	AvailableAt                     time.Time       `json:"available_at" gorm:"column:available_at;index"`
+	ReleasedAt                      *time.Time      `json:"released_at" gorm:"column:released_at"`
+	ReclaimedAt                     *time.Time      `json:"reclaimed_at" gorm:"column:reclaimed_at"`
+	ForfeitedAt                     *time.Time      `json:"forfeited_at" gorm:"column:forfeited_at"`
+	CreatedAt                       time.Time       `json:"created_at" gorm:"column:created_at;index:idx_marketplace_settlements_owner_group_created,priority:3;autoCreateTime"`
 }
 
 func (Settlement) TableName() string { return tableName("settlements") }

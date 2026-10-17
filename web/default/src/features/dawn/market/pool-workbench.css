@@ -5,13 +5,10 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 .dawn.exchange-market .poolpanel.pool-workbench {
   border: 0;
   border-radius: 20px;
-  background: color-mix(in srgb, var(--surface-glass) 96%, transparent);
+  background: var(--bg-subtle);
   box-shadow:
     0 16px 40px rgb(30 40 55 / 10%),
-    inset 0 0 0 1px var(--hairline-light),
-    inset 0 1px 0 rgb(255 255 255 / 75%);
-  backdrop-filter: blur(24px) saturate(125%);
-  -webkit-backdrop-filter: blur(24px) saturate(125%);
+    inset 0 0 0 1px var(--hairline-light);
   isolation: isolate;
 }
 
@@ -21,45 +18,44 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   background: transparent;
 }
 
-.dawn.exchange-market .pool-workbench .pool-eyebrow {
+.dawn.exchange-market .pool-workbench .pool-title-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  color: var(--dawn-ink2);
-  font: 12px var(--dawn-mono);
-  letter-spacing: 0.08em;
+  gap: 10px;
 }
 
-.dawn.exchange-market .pool-workbench .pool-eyebrow svg {
+.dawn.exchange-market .pool-workbench .pool-title-row > svg {
   color: var(--dawn-copper);
+  flex-shrink: 0;
 }
 
 .dawn.exchange-market .pool-workbench .ph h3 {
-  margin: 10px 0 4px;
-  font-size: 22px;
+  margin: 0;
+  font-size: 20px;
   line-height: 1.2;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.025em;
   overflow-wrap: anywhere;
 }
 
 .dawn.exchange-market .pool-workbench .ph .psub {
   font-size: 12px;
   letter-spacing: 0;
+  margin-top: 8px;
 }
 
 .dawn.exchange-market .pool-workbench .pb {
-  padding: 18px 20px 20px;
+  padding: 20px;
   max-height: none;
   overflow: visible;
 }
 
 .dawn.exchange-market .pool-workbench .toolbar {
-  gap: 7px;
-  margin-bottom: 15px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .dawn.exchange-market .pool-workbench .toolbar .row {
-  gap: 6px;
+  gap: 8px;
 }
 
 .dawn.exchange-market
@@ -67,8 +63,8 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   :is(input:not([type='checkbox']):not([type='range']), select) {
   min-height: 44px;
   border: 0;
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--surface-card) 80%, transparent);
+  border-radius: 12px;
+  background: var(--surface-card);
   box-shadow: none;
   font-size: 12px;
   transition:
@@ -92,7 +88,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   min-height: 44px;
   padding: 8px;
   border: 0;
-  background: color-mix(in srgb, var(--surface-card) 75%, transparent);
+  background: var(--surface-card);
 }
 
 .dawn.exchange-market .pool-workbench .btn {
@@ -114,9 +110,9 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  padding: 14px 10px;
+  padding: 16px 12px;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--surface-card) 76%, transparent);
+  background: var(--surface-card);
 }
 
 .dawn.exchange-market .pool-workbench .pool-telemetry > div {
@@ -149,7 +145,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   font-size: clamp(16px, 1.25vw, 20px);
   line-height: 1.2;
   font-weight: 650;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.025em;
 }
 
 .dawn.exchange-market .pool-workbench .pool-telemetry .ok {
@@ -161,7 +157,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 12px 2px 9px;
+  padding: 12px 0 16px;
   color: var(--dawn-ink2);
   font-size: 12px;
 }
@@ -169,7 +165,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 .dawn.exchange-market .pool-workbench .pool-composition > span {
   border-radius: 8px;
   padding: 3px 6px;
-  background: color-mix(in srgb, var(--surface-card) 45%, transparent);
+  background: var(--surface-card);
 }
 
 .dawn.exchange-market .pool-workbench .pool-composition b {
@@ -187,7 +183,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 }
 
 .dawn.exchange-market .pool-workbench .pool-head {
-  padding: 7px 2px 10px;
+  padding: 0 2px 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -196,7 +192,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 .dawn.exchange-market .pool-workbench .pool-node-list {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -205,11 +201,11 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 .dawn.exchange-market .pool-workbench .pool-item {
   position: relative;
   margin: 0;
-  padding: 11px 10px 12px;
+  padding: 8px 12px 10px;
   border: 0;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
-  box-shadow: 0 2px 4px rgb(24 24 28 / 0.025);
+  background: var(--surface-card);
+  box-shadow: 0 2px 5px rgb(24 24 28 / 4%);
 }
 
 .dawn.exchange-market .pool-workbench .pool-item .r1 {
@@ -259,14 +255,14 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   font-family: var(--dawn-mono);
   font-size: 12px;
   font-weight: 550;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.015em;
 }
 
 .dawn.exchange-market .pool-workbench .pool-item .ord {
   grid-column: 1 / -1;
   justify-content: flex-end;
-  border-top: 1px solid var(--hairline-light);
-  padding-top: 4px;
+  border: 0;
+  padding-top: 0;
   gap: 0;
   margin-left: 0;
 }
@@ -291,7 +287,11 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 .dawn.exchange-market .pool-workbench .pool-node-source {
   display: flex;
   gap: 8px;
-  margin: 8px 0 0;
+  min-width: 0;
+  margin: 0;
+  flex: 1;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
   color: var(--dawn-ink2);
   font-size: 12px;
 }
@@ -302,7 +302,10 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 .dawn.exchange-market .pool-workbench .pool-item .r2 {
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 4px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
 }
 
 .dawn.exchange-market .pool-workbench .pool-item .r2 div {
@@ -319,7 +322,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   border-radius: 16px;
   padding: 26px 14px;
   margin-top: 12px;
-  background: color-mix(in srgb, var(--surface-card) 65%, transparent);
+  background: var(--surface-card);
   font-size: 12px;
 }
 
@@ -517,15 +520,56 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 .dawn.exchange-market .pool-workbench .pool-autobuild-settings {
   border: 0;
   border-radius: 12px;
-  padding: 11px 12px;
-  margin-bottom: 14px;
-  background: color-mix(in srgb, var(--surface-card) 60%, transparent);
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  background: var(--surface-card);
   box-shadow: none;
 }
 
 .dawn.exchange-market .pool-workbench .pool-autobuild-settings > button {
   min-height: 44px;
   flex-wrap: wrap;
+}
+
+.dawn.exchange-market .pool-workbench .pool-selection-row > select.iname {
+  color: var(--primary-foreground);
+  background: var(--primary);
+  font-weight: 600;
+}
+
+.dawn.exchange-market .pool-workbench select option {
+  color: var(--ink-primary);
+  background: var(--surface-card);
+}
+
+.dawn.exchange-market .pool-workbench .pool-node-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.dawn.exchange-market .pool-workbench .pool-node-footer .ord {
+  display: flex;
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .dawn.exchange-market .pool-workbench .toolbar .row {
+    display: flex;
+    flex-wrap: nowrap;
+  }
+  .dawn.exchange-market .pool-workbench .toolbar .row > .iname {
+    flex: 1;
+    width: 0;
+  }
+  .dawn.exchange-market .pool-workbench .toolbar .row > select:not(.iname) {
+    flex: 0 1 118px;
+  }
+  .dawn.exchange-market .pool-workbench .toolbar .row > button {
+    flex-shrink: 0;
+  }
 }
 
 @keyframes pool-test-spin {

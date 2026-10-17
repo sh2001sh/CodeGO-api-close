@@ -158,6 +158,7 @@ func TestCreditPackConversionUsesActualLegacyPayment(t *testing.T) {
 	priced, err := legacyConversionPaidPlanTx(db, plan, sub)
 	require.NoError(t, err)
 	quote := calculateMonthlyPassConversionQuote(priced, sub, time.Now().Unix(), 60)
+	require.Equal(t, quotaUnitsFromUSD(19.2), int64(quote.baseQuota))
 	require.Equal(t, quotaUnitsFromUSD(19.2), int64(quote.targetQuota))
 	require.Equal(t, 50.0, plan.PriceAmount)
 	// Retired invitation rewards cannot create new refresh balances.
@@ -300,37 +301,28 @@ func TestCreditPackConversionMovesRemainingValueWithoutWalletDoubleSpend(t *test
 	ensureSubscriptionPreConsumeRecordSchema(t)
 	conversion, err := ConvertMonthlyPassToUnifiedCredit("convert-new-source", user.Id, old.Id, 50)
 	require.NoError(t, err)
-	var pack commerceschema.UserSubscription
-	require.NoError(t, db.First(&pack, conversion.TargetCreditPackSubscriptionId).Error)
-	require.Equal(t, quotaUnitsFromUSD(32), pack.CreditPackGrantedQuota)
-	require.Equal(t, pack.CreditPackGrantedQuota, pack.CreditPackPaidQuota, "conversion does not grant a second promotional bonus")
-	require.Zero(t, pack.EndTime)
+	require.Zero(t, conversion.TargetCreditPackSubscriptionId)
+	require.Equal(t, "wallet", conversion.TargetType)
+	require.Equal(t, quotaUnitsFromUSD(32), int64(conversion.BaseQuota))
+	require.Zero(t, conversion.BonusQuota)
 	_, err = PreConsumeUserSubscription("converted-no-old", user.Id, "gpt-5", 1)
 	require.Error(t, err)
-	spend, err := PreConsumeCreditPack("converted-use-new", user.Id, "gpt-5", 100)
-	require.NoError(t, err)
-	require.Equal(t, pack.Id, spend.UserSubscriptionId)
-	_, err = ConvertMonthlyPassToUnifiedCredit("convert-pack-again", user.Id, pack.Id, 100)
-	require.Error(t, err)
+	_, err = PreConsumeCreditPack("converted-use-new", user.Id, "gpt-5", 100)
+	require.Error(t, err, "conversion must not create a credit-pack balance")
 	replay, err := ConvertMonthlyPassToUnifiedCredit("convert-new-source", user.Id, old.Id, 50)
 	require.NoError(t, err)
-	require.Equal(t, pack.Id, replay.TargetCreditPackSubscriptionId)
+	require.Equal(t, conversion.TargetQuota, replay.TargetQuota)
+	require.Zero(t, replay.TargetCreditPackSubscriptionId)
 	var count int64
 	require.NoError(t, db.Model(&commerceschema.UserSubscription{}).Where("credit_pack_granted_quota > 0 AND user_id = ?", user.Id).Count(&count).Error)
-	require.EqualValues(t, 1, count)
+	require.Zero(t, count)
 	var wallet billingschema.BillingAccount
 	query := db.Where("owner_type = ? AND owner_id = ? AND account_type = ?", "user", user.Id, "claude_wallet").Find(&wallet)
 	require.NoError(t, query.Error)
-	require.Zero(t, query.RowsAffected, "conversion must not mint a wallet account")
-	var targetAccount billingschema.BillingAccount
-	require.NoError(t, db.Where("owner_type = ? AND owner_id = ? AND account_type = ?", "user_subscription", pack.Id, "subscription").First(&targetAccount).Error)
+	require.EqualValues(t, 1, query.RowsAffected)
 	var snapshot billingschema.BillingBalanceSnapshot
-	require.NoError(t, db.Where("account_id = ?", targetAccount.AccountID).First(&snapshot).Error)
-	require.Equal(t, pack.CreditPackGrantedQuota-100, snapshot.AvailableBalance)
-	require.NoError(t, RefundSubscriptionPreConsume("converted-use-new"))
-	var refreshed billingschema.BillingBalanceSnapshot
-	require.NoError(t, db.Where("account_id = ?", targetAccount.AccountID).First(&refreshed).Error)
-	require.Equal(t, pack.CreditPackGrantedQuota, refreshed.AvailableBalance)
+	require.NoError(t, db.Where("account_id = ?", wallet.AccountID).First(&snapshot).Error)
+	require.EqualValues(t, user.ClaudeQuota+conversion.TargetQuota, snapshot.AvailableBalance)
 }
 
 func TestCreditPackPurchaseThroughRealBillingSessionUsesOneTimesLedgerDebit(t *testing.T) {

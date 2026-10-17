@@ -1,12 +1,64 @@
 package settlement
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPaidBonusFeePolicyUsesPurchaseBonusRate(t *testing.T) {
+	for _, bonus := range []int64{0, 3, 5, 6, 7, 8, 10} {
+		t.Run(fmt.Sprint(bonus), func(t *testing.T) {
+			db := openSettlementTestDB(t)
+			params := RecordParams{
+				RequestID: "paid-bonus", GroupID: "group", OwnerUserID: 10, ConsumerUserID: 20,
+				BillingSource: "subscription", ConsumerDebitAmount: 100000, SettlementGrossAmount: 100000,
+				CreditPackGrantedQuota: 100000 + bonus*1000, CreditPackPaidQuota: 100000, CreditPackChannelShareBPS: 6000,
+				FeePolicyVersion: FeePolicyPaidBonusV2, SubscriptionID: 44, SubscriptionPlanID: 9, SubscriptionPlanTitle: "Purchased pack",
+			}
+			require.NoError(t, Record(params))
+			var item marketplaceschema.Settlement
+			require.NoError(t, db.First(&item, "request_id = ?", params.RequestID).Error)
+			require.EqualValues(t, 5000, item.PlatformCommission)
+			require.EqualValues(t, bonus*600, item.TransactionFee)
+			require.EqualValues(t, 95000-bonus*600, item.OwnerNetAmount)
+			var entry billingschema.BillingLedgerEntry
+			require.NoError(t, db.First(&entry, "idempotency_key = ?", "marketplace-pending:"+params.RequestID).Error)
+			var snapshot IncomeSnapshot
+			require.NoError(t, json.Unmarshal(entry.Metadata, &snapshot))
+			require.Equal(t, FeePolicyPaidBonusV2, snapshot.AlgorithmVersion)
+			require.Equal(t, 44, snapshot.SubscriptionID)
+			require.Equal(t, "Purchased pack", snapshot.SubscriptionPlanTitle)
+			require.InDelta(t, float64(bonus)/100*.6, snapshot.PackageSurchargeRate, 1e-12)
+			originalMetadata := string(entry.Metadata)
+			params.SubscriptionPlanTitle = "Changed plan"
+			params.CreditPackGrantedQuota = 120000
+			require.NoError(t, Record(params))
+			require.NoError(t, db.First(&entry, "entry_id = ?", entry.EntryID).Error)
+			require.Equal(t, originalMetadata, string(entry.Metadata))
+			require.NoError(t, db.First(&item, "id = ?", item.ID).Error)
+			require.EqualValues(t, bonus*600, item.TransactionFee)
+		})
+	}
+}
+
+func TestPaidBonusPolicyRejectsOverflowAndUnknownVersions(t *testing.T) {
+	for _, params := range []RecordParams{
+		{FeePolicyVersion: FeePolicyPaidBonusV2, CreditPackGrantedQuota: 9000000000000000000, CreditPackPaidQuota: 1, CreditPackChannelShareBPS: 6000},
+		{FeePolicyVersion: "future-unknown"},
+	} {
+		db := openSettlementTestDB(t)
+		params.RequestID, params.GroupID, params.OwnerUserID, params.SettlementGrossAmount = "invalid", "group", 10, 9000000000000000000
+		require.Error(t, Record(params))
+		var count int64
+		require.NoError(t, db.Model(&billingschema.BillingLedgerEntry{}).Count(&count).Error)
+		require.Zero(t, count)
+	}
+}
 
 func TestRecordCreditPackSharesBonusCostAndKeepsPurchaseSnapshot(t *testing.T) {
 	db := openSettlementTestDB(t)
@@ -21,6 +73,7 @@ func TestRecordCreditPackSharesBonusCostAndKeepsPurchaseSnapshot(t *testing.T) {
 	require.NoError(t, Record(params))
 	// A replay retains the original fee policy and cannot credit the ledger twice.
 	params.CreditPackChannelShareBPS = 7000
+	params.FeePolicyVersion = FeePolicyPaidBonusV2
 	require.NoError(t, Record(params))
 
 	var item marketplaceschema.Settlement
@@ -48,6 +101,23 @@ func TestRecordCreditPackSharesBonusCostAndKeepsPurchaseSnapshot(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Model(&marketplaceschema.Settlement{}).Count(&count).Error)
 	require.EqualValues(t, 1, count)
+}
+
+func TestPaidBonusFeeRoundingAndLargeIntermediates(t *testing.T) {
+	for _, test := range []struct{ gross, granted, paid, share, discount, fee int64 }{
+		{5, 120, 100, 6000, 1, 1},
+		{6, 110, 100, 6000, 1, 0},
+		{8800000000000000000, 8800000000000000000, 8000000000000000000, 6000, 800000000000000000, 528000000000000000},
+		{100, 0, 0, 0, 0, 0},
+	} {
+		discount, fee, err := creditPackCharges(RecordParams{
+			FeePolicyVersion: FeePolicyPaidBonusV2, BillingSource: "wallet", SettlementGrossAmount: test.gross,
+			CreditPackGrantedQuota: test.granted, CreditPackPaidQuota: test.paid, CreditPackChannelShareBPS: test.share,
+		})
+		require.NoError(t, err)
+		require.Equal(t, test.discount, discount)
+		require.Equal(t, test.fee, fee)
+	}
 }
 
 func TestRecordCreditPackPartialConsumptionAndUnchangedLegacyCharges(t *testing.T) {

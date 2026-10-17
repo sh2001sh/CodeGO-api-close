@@ -99,6 +99,7 @@ api.interceptors.response.use(
     return response
   },
   (error) => {
+    if (axios.isCancel(error)) return Promise.reject(error)
     const skip = error?.config?.skipErrorHandler
     if (!skip) {
       const status = error?.response?.status

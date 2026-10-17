@@ -81,13 +81,15 @@ func TestCreditPackReferralDebitsOwnerEarningsBeforeRelease(t *testing.T) {
 			require.NoError(t, err)
 			var market marketplaceschema.Settlement
 			require.NoError(t, db.First(&market, "request_id = ?", info.RequestId).Error)
-			require.EqualValues(t, 95500, market.OwnerNetAmount)
+			require.EqualValues(t, 94900, market.OwnerNetAmount)
+			require.EqualValues(t, 5500, market.PlatformCommission)
+			require.EqualValues(t, 6600, market.TransactionFee) // 110000 × 10% purchase bonus × 60%.
 			require.EqualValues(t, 3000, market.ReferralRebateAmount)
 			require.False(t, market.ReferralRebatePending)
 			require.EqualValues(t, 110000, market.PlatformCommission+market.TransactionFee+market.ReferralRebateAmount+market.OwnerNetAmount)
 			var pending billingschema.BillingBalanceSnapshot
 			require.NoError(t, db.First(&pending, "account_id = ?", market.PendingAccountID).Error)
-			require.EqualValues(t, 95500, pending.AvailableBalance)
+			require.EqualValues(t, 94900, pending.AvailableBalance)
 			var receipt billingschema.ReferralConsumptionRebate
 			require.NoError(t, db.First(&receipt, "settlement_id = ?", native.SettlementID).Error)
 			require.Equal(t, market.ID, receipt.MarketplaceSettlementID)
@@ -106,7 +108,7 @@ func TestCreditPackReferralDebitsOwnerEarningsBeforeRelease(t *testing.T) {
 			_, err = marketplacesettlement.ReleasePending(marketplacesettlement.ReleaseFilter{})
 			require.NoError(t, err)
 			require.NoError(t, db.First(&inviter, 1).Error)
-			require.Equal(t, 98500, inviter.ClaudeQuota) // Same controller: 95.5 + 3 = 98.5.
+			require.Equal(t, 97900, inviter.ClaudeQuota) // Same controller: 94.9 + 3 = 97.9.
 		})
 	}
 }
@@ -135,8 +137,54 @@ func TestCreditPackReferralMultipleReservationsKeepGateUntilEveryReceipt(t *test
 	require.EqualValues(t, 3, total.Rebate)
 	var market marketplaceschema.Settlement
 	require.NoError(t, db.First(&market, "request_id = ?", info.RequestId).Error)
-	require.EqualValues(t, 95, market.OwnerNetAmount) // Integer fee rounding: 110 - 6 - 6 - 3.
+	require.EqualValues(t, 94, market.OwnerNetAmount) // Integer fee rounding: 110 - 6 - 7 - 3.
 	require.EqualValues(t, 3, market.ReferralRebateAmount)
+}
+
+func TestHistoricalCreditPackOutboxKeepsUnversionedFeeAndIdentityUnknown(t *testing.T) {
+	db, now := referralTestDB(t)
+	sub, accountID := referralPackAccount(t, db, 110000, 100000)
+	const request = "cp:historical-policy"
+	native := referralSettle(t, db, accountID, request, "subscription:"+request, 110000, 110000, now)
+	info := referralPackRelayInfo(sub, accountID, request, "original-historical", true)
+	require.NoError(t, attachCreditPackReferralContext(info, 110000))
+	var event billingschema.BillingOutboxEvent
+	require.NoError(t, db.First(&event, "aggregate_id = ?", native.SettlementID).Error)
+	var payload map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(event.Payload, &payload))
+	var ctx map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(payload["referral_context"], &ctx))
+	var marketParams map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(ctx["marketplace"], &marketParams))
+	// These keys did not exist in already persisted historical outbox payloads.
+	for _, key := range []string{"FeePolicyVersion", "SubscriptionID", "SubscriptionPlanID", "SubscriptionPlanTitle"} {
+		delete(marketParams, key)
+	}
+	var err error
+	ctx["marketplace"], err = json.Marshal(marketParams)
+	require.NoError(t, err)
+	payload["referral_context"], err = json.Marshal(ctx)
+	require.NoError(t, err)
+	encoded, err := json.Marshal(payload)
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&event).Update("payload", encoded).Error)
+	_, err = processLedgerOutboxAccount(context.Background(), accountID)
+	require.NoError(t, err)
+	var market marketplaceschema.Settlement
+	require.NoError(t, db.First(&market, "request_id = ?", info.RequestId).Error)
+	require.EqualValues(t, 6000, market.TransactionFee) // Historical granted denominator.
+	require.EqualValues(t, 95500, market.OwnerNetAmount)
+	// A subsequent live V2 replay cannot rewrite the existing financial record.
+	require.NoError(t, marketplacesettlement.Record(marketplaceSettlementParams(info, 110000)))
+	require.NoError(t, db.First(&market, "id = ?", market.ID).Error)
+	require.EqualValues(t, 6000, market.TransactionFee)
+	var entry billingschema.BillingLedgerEntry
+	require.NoError(t, db.First(&entry, "idempotency_key = ?", "marketplace-pending:"+info.RequestId).Error)
+	var snapshot marketplacesettlement.IncomeSnapshot
+	require.NoError(t, json.Unmarshal(entry.Metadata, &snapshot))
+	require.Equal(t, "granted_bonus_share_v1", snapshot.AlgorithmVersion)
+	require.Zero(t, snapshot.SubscriptionID)
+	require.Empty(t, snapshot.SubscriptionPlanTitle)
 }
 
 func TestCreditPackReferralMissingOfficialEvidenceAndFundingFailureAreRetryable(t *testing.T) {
@@ -171,13 +219,13 @@ func TestCreditPackReferralMissingOfficialEvidenceAndFundingFailureAreRetryable(
 	require.Zero(t, receiptCount)
 	require.NoError(t, db.First(&market, "request_id = ?", info.RequestId).Error)
 	require.True(t, market.ReferralRebatePending)
-	require.EqualValues(t, 98500, market.OwnerNetAmount)
+	require.EqualValues(t, 97900, market.OwnerNetAmount)
 	require.NoError(t, db.Callback().Create().Remove(callback))
 	_, err = processLedgerOutboxAccount(context.Background(), accountID)
 	require.NoError(t, err)
 	require.NoError(t, db.First(&market, "request_id = ?", info.RequestId).Error)
 	require.False(t, market.ReferralRebatePending)
-	require.EqualValues(t, 95500, market.OwnerNetAmount)
+	require.EqualValues(t, 94900, market.OwnerNetAmount)
 }
 
 func TestCreditPackReferralNoInviteStillCompletesOwnerGate(t *testing.T) {
@@ -193,7 +241,7 @@ func TestCreditPackReferralNoInviteStillCompletesOwnerGate(t *testing.T) {
 	require.NoError(t, db.First(&market, "request_id = ?", info.RequestId).Error)
 	require.False(t, market.ReferralRebatePending)
 	require.Zero(t, market.ReferralRebateAmount)
-	require.EqualValues(t, 98500, market.OwnerNetAmount)
+	require.EqualValues(t, 97900, market.OwnerNetAmount)
 	var receipt billingschema.ReferralConsumptionRebate
 	require.NoError(t, db.First(&receipt).Error)
 	require.Equal(t, "referral_not_eligible", receipt.ExclusionReason)

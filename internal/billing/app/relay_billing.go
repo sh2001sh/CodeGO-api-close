@@ -147,6 +147,10 @@ func marketplaceSettlementParams(relayInfo *relaycommon.RelayInfo, consumerDebit
 		CreditPackGrantedQuota:    relayInfo.CreditPackGrantedQuota,
 		CreditPackPaidQuota:       relayInfo.CreditPackPaidQuota,
 		CreditPackChannelShareBPS: relayInfo.CreditPackChannelShareBPS,
+		FeePolicyVersion:          marketplacesettlement.FeePolicyPaidBonusV2,
+		SubscriptionID:            relayInfo.SubscriptionId,
+		SubscriptionPlanID:        relayInfo.SubscriptionPlanId,
+		SubscriptionPlanTitle:     relayInfo.SubscriptionPlanTitle,
 	}
 }
 

@@ -14,7 +14,7 @@ export function SiteFooter() {
       <div className='site-footer-inner'>
         <div className='site-footer-directory'>
           <Link className='site-footer-brand' to='/'>
-            <img src='/code-go-logo.svg' width='36' height='36' alt='' />
+            <img src='/codego-mark.svg' width='36' height='36' alt='' />
             <span>{normalizeSystemName()}</span>
           </Link>
 

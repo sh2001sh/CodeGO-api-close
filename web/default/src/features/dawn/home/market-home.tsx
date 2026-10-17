@@ -47,12 +47,12 @@ function getModelMeta(id: string, vendor?: string) {
   if (lower.includes('gemini') || lower.includes('google')) {
     return {
       provider: 'Google',
-      logo: '/code-go-logo.svg',
+      logo: '/codego-mark.svg',
     }
   }
   return {
     provider: vendor || 'AI Model',
-    logo: '/code-go-logo.svg',
+    logo: '/codego-mark.svg',
   }
 }
 

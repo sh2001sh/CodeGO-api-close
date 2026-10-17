@@ -33,7 +33,7 @@ export function CreditPackRules() {
         <dt className='text-foreground font-semibold'>{t('历史权益')}</dt>
         <dd className='text-muted-foreground mt-1'>
           {t(
-            '旧套餐已停止新售，已购权益保留原有效期、倍率与扣费规则。历史刷新权益仅适用于符合条件的旧套餐。'
+            '旧套餐已停止新售，已购权益保留原有效期、倍率与扣费规则。可用刷新次数可用于符合条件的旧套餐刷新（每月最多 1 次），或每 1 次兑换 1 份当前最低档新套餐；两种操作共用次数，成功后各扣除 1 次。'
           )}
         </dd>
       </div>

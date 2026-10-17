@@ -16,141 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import i18n from '@/i18n/config'
-import { useTranslation, Trans } from 'react-i18next'
-import { COMPANY } from '@/lib/company'
+import { Link } from '@tanstack/react-router'
+import { ArrowUpRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { COMMUNITY_LINKS, COMPANY } from '@/lib/company'
+import { DEFAULT_LOGO } from '@/lib/constants'
 import { getPublicPageSeoEntry } from '@/lib/public-page-seo'
-import { Markdown } from '@/components/ui/markdown'
-import { CompanyIdentity } from '@/components/company-identity'
 import { PublicLayout } from '@/components/layout'
 import { SiteSeo } from '@/components/seo'
 import '@/features/docs/reading.css'
-import { getAboutContent } from './api'
+import './about.css'
 
 const aboutSeo = getPublicPageSeoEntry('/about')
 
-function AboutHero() {
-  const { t } = useTranslation()
-  return (
-    <div className='solaris-about-header space-y-4'>
-      <div className='space-y-3'>
-        <h1 className='text-foreground text-4xl font-semibold tracking-tight md:text-5xl'>
-          {t(aboutSeo.h1)}
-        </h1>
-        <CompanyIdentity />
-        <dl className='border-border grid gap-6 border-y py-6 sm:grid-cols-[160px_minmax(0,1fr)]'>
-          <dt className='text-muted-foreground'>
-            {t('Business registration number')}
-          </dt>
-          <dd className='font-mono'>{COMPANY.registrationNumber}</dd>
-          <dt className='text-muted-foreground'>{t('Registered address')}</dt>
-          <dd>
-            <address className='not-italic'>{COMPANY.address}</address>
-          </dd>
-        </dl>
-      </div>
-    </div>
-  )
-}
-
-function SupportGroupCard() {
-  useTranslation()
-  return (
-    <div className='solaris-support-card border-border bg-card text-card-foreground overflow-hidden rounded-[20px] border'>
-      <div className='grid gap-6 p-6 md:grid-cols-[minmax(0,1fr)_240px] md:items-center'>
-        <div className='space-y-3'>
-          <h2 className='text-foreground text-2xl font-semibold tracking-tight'>
-            <Trans i18nKey={'售后 QQ 群'} />
-          </h2>
-          <div className='bg-muted/60 text-foreground rounded-lg px-4 py-3 text-sm leading-7'>
-            <Trans i18nKey={'群号：'} />
-            <span className='font-semibold'>996040309</span>
-          </div>
-        </div>
-
-        <div className='border-border bg-background mx-auto w-full max-w-[220px] rounded-xl border p-3'>
-          <img
-            src='/guide/16-support-qq-group.png'
-            alt={i18n.t('Code Go 售后 QQ 群二维码')}
-            className='h-auto w-full rounded-lg'
-            loading='lazy'
-          />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function isValidUrl(value: string) {
-  try {
-    const url = new URL(value)
-    return url.protocol === 'http:' || url.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-function isLikelyHtml(value: string) {
-  return /<\/?[a-z][\s\S]*>/i.test(value)
-}
-
 export function About() {
   const { t } = useTranslation()
-  const { data, isError, isLoading } = useQuery({
-    queryKey: ['about-content'],
-    queryFn: getAboutContent,
-  })
-
-  const rawContent = data?.data?.trim() ?? ''
-  const hasContent = rawContent.length > 0
-  const isUrl = hasContent && isValidUrl(rawContent)
-  const isHtml = hasContent && !isUrl && isLikelyHtml(rawContent)
-
-  if (isLoading || !hasContent || isError) {
-    return (
-      <PublicLayout>
-        <SiteSeo
-          title={aboutSeo.title}
-          description={aboutSeo.description}
-          keywords={aboutSeo.keywords}
-          canonicalPath={aboutSeo.path}
-        />
-        <div className='market-reading market-reading-width space-y-8'>
-          <AboutHero />
-          <SupportGroupCard />
-          <Markdown className='codego-public-prose prose-neutral dark:prose-invert max-w-none'>
-            {t('about.fallbackMarkdown')}
-          </Markdown>
-        </div>
-      </PublicLayout>
-    )
-  }
-
-  if (isUrl) {
-    return (
-      <PublicLayout showMainContainer={false}>
-        <SiteSeo
-          title={aboutSeo.title}
-          description={aboutSeo.description}
-          keywords={aboutSeo.keywords}
-          canonicalPath={aboutSeo.path}
-        />
-        <div className='market-reading space-y-4 px-5 py-12 md:px-8'>
-          <div className='market-reading market-reading-width space-y-8'>
-            <AboutHero />
-            <SupportGroupCard />
-          </div>
-          <iframe
-            src={rawContent}
-            className='h-[calc(100vh-18rem)] w-full border-0'
-            title={i18n.t('Code Go 关于内容')}
-          />
-        </div>
-      </PublicLayout>
-    )
-  }
-
   return (
     <PublicLayout>
       <SiteSeo
@@ -159,20 +39,71 @@ export function About() {
         keywords={aboutSeo.keywords}
         canonicalPath={aboutSeo.path}
       />
-      <div className='market-reading market-reading-width space-y-8'>
-        <AboutHero />
-        <SupportGroupCard />
-        {isHtml ? (
-          <div
-            className='prose prose-neutral dark:prose-invert max-w-none'
-            dangerouslySetInnerHTML={{ __html: rawContent }}
-          />
-        ) : (
-          <Markdown className='codego-public-prose prose-neutral dark:prose-invert max-w-none'>
-            {rawContent}
-          </Markdown>
-        )}
-      </div>
+      <article className='market-reading market-reading-width codego-about'>
+        <header className='codego-about-heading'>
+          <h1>{t(aboutSeo.h1)}</h1>
+          <img src={DEFAULT_LOGO} width='80' height='80' alt='' />
+        </header>
+        <div className='codego-about-product'>
+          {aboutSeo.sections.map((section) => (
+            <section key={section.heading}>
+              <h2>{t(section.heading)}</h2>
+              {section.paragraphs.map((paragraph) => (
+                <p key={paragraph}>{t(paragraph)}</p>
+              ))}
+            </section>
+          ))}
+          <nav className='codego-about-links' aria-label={t('产品')}>
+            <Link to='/pricing'>
+              {t('模型')}
+              <ArrowUpRight aria-hidden />
+            </Link>
+            <Link to='/market'>
+              {t('市场')}
+              <ArrowUpRight aria-hidden />
+            </Link>
+            <Link to='/docs'>
+              {t('文档')}
+              <ArrowUpRight aria-hidden />
+            </Link>
+          </nav>
+        </div>
+        <section
+          className='codego-about-company'
+          aria-labelledby='company-title'
+        >
+          <h2 id='company-title'>{COMPANY.name}</h2>
+          <dl>
+            <div>
+              <dt>{t('公司名称')}</dt>
+              <dd>{t('码高智能有限公司')}</dd>
+            </div>
+            <div>
+              <dt>{t('Business registration number')}</dt>
+              <dd className='tabular-nums'>{COMPANY.registrationNumber}</dd>
+            </div>
+            <div>
+              <dt>{t('Registered address')}</dt>
+              <dd>
+                <address>{COMPANY.address}</address>
+              </dd>
+            </div>
+          </dl>
+          <nav className='codego-about-links' aria-label={t('Community')}>
+            {COMMUNITY_LINKS.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                target='_blank'
+                rel='noopener noreferrer'
+              >
+                {link.label === 'Community' ? t('Community') : link.label}
+                <ArrowUpRight aria-hidden />
+              </a>
+            ))}
+          </nav>
+        </section>
+      </article>
     </PublicLayout>
   )
 }

@@ -55,8 +55,8 @@ function pageFrame({ title, description, canonicalPath, keywords, ogType = 'arti
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" type="image/svg+xml" href="/code-go-logo.svg?v=3" />
-  <link rel="apple-touch-icon" href="/code-go-logo.svg?v=3" />
+  <link rel="icon" type="image/svg+xml" href="/codego-mark.svg" />
+  <link rel="apple-touch-icon" href="/codego-mark.svg" />
   <title>${escapeHtml(title)}</title>
   <meta name="title" content="${escapeHtml(title)}" />
   <meta name="description" content="${escapeHtml(description)}" />
@@ -69,11 +69,11 @@ function pageFrame({ title, description, canonicalPath, keywords, ogType = 'arti
   <meta property="og:type" content="${ogType}" />
   <meta property="og:url" content="${canonical}" />
   <meta property="og:site_name" content="CodeGo" />
-  <meta property="og:image" content="${baseUrl}/code-go-logo.svg" />
+  <meta property="og:image" content="${baseUrl}/codego-mark.svg" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${escapeHtml(title)}" />
   <meta name="twitter:description" content="${escapeHtml(description)}" />
-  <meta name="twitter:image" content="${baseUrl}/code-go-logo.svg" />
+  <meta name="twitter:image" content="${baseUrl}/codego-mark.svg" />
   <style>
     ${publicSans ? `@font-face { font-family: 'Public Sans Variable'; font-style: normal; font-weight: 100 900; font-display: swap; src: url('/static/font/${publicSans}') format('woff2'); }` : ''}
     :root { color-scheme: light; ${lightTopicTokens} }
@@ -102,7 +102,7 @@ function pageFrame({ title, description, canonicalPath, keywords, ogType = 'arti
 <body>
   <a class="skip-link" href="#content">跳转到主内容</a>
   <header class="topic-topbar"><div class="topic-topbar-inner">
-    <a class="topic-brand" href="/"><img src="/code-go-logo.svg" alt="" /><span>CodeGo</span></a>
+    <a class="topic-brand" href="/"><img src="/codego-mark.svg" alt="" /><span>CodeGo</span></a>
     <nav aria-label="主导航"><a href="/">主页</a><a href="/pricing">模型</a><a href="/market">市场</a><a href="/docs">文档</a><a href="https://community.codegoai.com" target="_blank" rel="noopener noreferrer">社区</a><a href="/rankings">排行榜</a><a href="/dashboard/overview">控制台</a></nav>
   </div></header>
   <main id="content" tabindex="-1" class="market-reading topic-reading"><div class="topic-layout">${body}</div></main>

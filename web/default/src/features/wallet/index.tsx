@@ -16,15 +16,28 @@ import { RechargeFormCard } from './components/recharge-form-card'
 import { SubscriptionClaudeConversionCard } from './components/subscription-claude-conversion-card'
 import { WalletAccountOverview } from './components/wallet-account-overview'
 import { WalletPagePanels } from './components/wallet-page-panels'
+import { WalletResetOpportunityPanel } from './components/wallet-reset-opportunity-panel'
 import { WalletTransferHistorySheet } from './components/wallet-transfer-history-sheet'
 import { WalletWorkspaceShell } from './components/wallet-workspace-shell'
 import { useWalletWorkspace } from './hooks/use-wallet-workspace'
 
 interface WalletProps {
   initialShowHistory?: boolean
-  initialSection?: 'funding' | 'transfer' | 'billing' | 'invoices'
+  initialSection?:
+    | 'funding'
+    | 'conversion'
+    | 'reset-redemption'
+    | 'transfer'
+    | 'billing'
+    | 'invoices'
   onSectionChange: (
-    section: 'funding' | 'transfer' | 'billing' | 'invoices'
+    section:
+      | 'funding'
+      | 'conversion'
+      | 'reset-redemption'
+      | 'transfer'
+      | 'billing'
+      | 'invoices'
   ) => void
 }
 
@@ -109,13 +122,25 @@ export function Wallet(props: WalletProps) {
               value={activeSection}
               onValueChange={(value) =>
                 setActiveSection(
-                  value as 'funding' | 'transfer' | 'billing' | 'invoices'
+                  value as
+                    | 'funding'
+                    | 'conversion'
+                    | 'reset-redemption'
+                    | 'transfer'
+                    | 'billing'
+                    | 'invoices'
                 )
               }
             >
               <TabsList variant='line' className='commerce-wallet-nav'>
                 <TabsTrigger value='funding'>
                   {t('Top up and redeem')}
+                </TabsTrigger>
+                <TabsTrigger value='conversion'>
+                  {t('旧套餐转余额')}
+                </TabsTrigger>
+                <TabsTrigger value='reset-redemption'>
+                  {t('刷新权益')}
                 </TabsTrigger>
                 <TabsTrigger value='invoices'>
                   {t('invoice.commercial')}
@@ -173,27 +198,44 @@ export function Wallet(props: WalletProps) {
                       workspace.topupInfo?.enable_waffo_pancake_topup
                     }
                   />
-
-                  {workspace.subscriptionData?.subscriptions?.some(
-                    (item) =>
-                      !isCreditPackSubscription(item.subscription) &&
-                      item.subscription.conversion_preview?.eligible === true
-                  ) && (
-                    <div className='app-page-shell p-4'>
-                      <SubscriptionClaudeConversionCard
-                        subscriptionData={workspace.subscriptionData}
-                        loading={workspace.subscriptionLoading}
-                        mode='wallet'
-                        onRefresh={async () => {
-                          await Promise.all([
-                            workspace.fetchSubscriptionData(),
-                            workspace.fetchUser(),
-                          ])
-                        }}
-                      />
-                    </div>
-                  )}
                 </div>
+              </TabsContent>
+
+              <TabsContent value='conversion'>
+                <div className='bg-muted/30 rounded-2xl p-5 sm:p-7'>
+                  <SubscriptionClaudeConversionCard
+                    subscriptionData={
+                      workspace.subscriptionError
+                        ? null
+                        : workspace.subscriptionData
+                    }
+                    loading={workspace.subscriptionLoading}
+                    mode='wallet'
+                    onRefresh={async () => {
+                      await Promise.all([
+                        workspace.fetchSubscriptionData(),
+                        workspace.fetchUser(),
+                      ])
+                    }}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value='reset-redemption'>
+                <WalletResetOpportunityPanel
+                  subscriptionData={
+                    workspace.subscriptionError
+                      ? null
+                      : workspace.subscriptionData
+                  }
+                  loading={workspace.subscriptionLoading}
+                  onRefresh={async () => {
+                    await Promise.all([
+                      workspace.fetchSubscriptionData(),
+                      workspace.fetchUser(),
+                    ])
+                  }}
+                />
               </TabsContent>
 
               <TabsContent value='invoices'>

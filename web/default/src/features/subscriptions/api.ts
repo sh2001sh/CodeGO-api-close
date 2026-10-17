@@ -30,6 +30,7 @@ import type {
   SubscriptionPayRequest,
   SelfSubscriptionData,
   SubscriptionResetOpportunityUseResult,
+  SubscriptionResetRedemptionResult,
   SubscriptionOrderStatus,
   SubscriptionClaudeConversionRecord,
   SubscriptionClaudeConversionResult,
@@ -258,6 +259,18 @@ export async function consumeSubscriptionResetOpportunity(): Promise<
   ApiResponse<SubscriptionResetOpportunityUseResult>
 > {
   const res = await api.post('/api/subscription/self/reset-opportunity/use')
+  return res.data
+}
+
+export async function redeemSubscriptionResetOpportunity(
+  requestId: string
+): Promise<ApiResponse<SubscriptionResetRedemptionResult>> {
+  const res = await api.post(
+    '/api/subscription/self/reset-opportunity/redeem',
+    {
+      request_id: requestId,
+    }
+  )
   return res.data
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
@@ -46,6 +47,15 @@ func RecordRequestEconomics(relayInfo *gatewayruntime.RelayInfo, amount int) err
 	revenueMultiplier := 0.0
 	if relayInfo.CreditPackGrantedQuota > 0 {
 		revenueMultiplier = float64(relayInfo.CreditPackPaidQuota) / float64(relayInfo.CreditPackGrantedQuota)
+		if relayInfo.SubscriptionId > 0 {
+			var sub commerceschema.UserSubscription
+			if err := platformdb.DB.Select("source").First(&sub, relayInfo.SubscriptionId).Error; err != nil {
+				return err
+			}
+			if sub.Source == "reset_redemption" {
+				revenueMultiplier = 0
+			}
+		}
 	} else if relayInfo.BillingSource == BillingSourceSubscription {
 		var policy billingschema.FundingSourcePolicy
 		if err := platformdb.DB.Where("source = ?", billingschema.FundingSourceSubscription).First(&policy).Error; err == nil {
@@ -205,7 +215,7 @@ func recordFundingLotTx(tx *gorm.DB, accountID string, amount int64, idempotency
 	}
 	source := fundingSourceFromReason(reasonCode)
 	multiplier := 0.0
-	if reasonCode != "referral_consumption_rebate" && tx.Migrator().HasTable(&billingschema.FundingSourcePolicy{}) {
+	if reasonCode != "referral_consumption_rebate" && reasonCode != "subscription_conversion_base" && reasonCode != "subscription_conversion_gift" && tx.Migrator().HasTable(&billingschema.FundingSourcePolicy{}) {
 		var policy billingschema.FundingSourcePolicy
 		if err := tx.Where("source = ?", source).First(&policy).Error; err == nil {
 			multiplier = policy.RevenueMultiplier

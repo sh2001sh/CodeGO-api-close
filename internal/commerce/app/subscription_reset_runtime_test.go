@@ -256,6 +256,11 @@ func TestUseUserSubscriptionResetOpportunity_ClearsCurrentSubscriptionAndLimitsM
 	})
 	require.NoError(t, err)
 
+	preview, err := BuildSubscriptionResetUsePreview(7201)
+	require.NoError(t, err)
+	require.True(t, preview.Eligible)
+	require.Equal(t, 7302, preview.SubscriptionID)
+	require.EqualValues(t, 180, preview.ClearedUsedAmount)
 	result, err := UseUserSubscriptionResetOpportunity(7201)
 	require.NoError(t, err)
 	assert.Equal(t, 7302, result.UserSubscriptionId)
@@ -264,6 +269,10 @@ func TestUseUserSubscriptionResetOpportunity_ClearsCurrentSubscriptionAndLimitsM
 	assert.Equal(t, 1, result.ResetOpportunity.AvailableCount)
 	assert.Equal(t, 1, result.ResetOpportunity.UsedTotal)
 	assert.True(t, result.ResetOpportunity.UsedThisMonth)
+	preview, err = BuildSubscriptionResetUsePreview(7201)
+	require.NoError(t, err)
+	require.False(t, preview.Eligible)
+	require.Equal(t, commerceschema.ErrSubscriptionResetOpportunityMonthlyUsed.Error(), preview.IneligibleReason)
 
 	var current commerceschema.UserSubscription
 	require.NoError(t, db.Where("id = ?", 7302).First(&current).Error)

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import i18n from '@/i18n/config'
 import { ChevronDown, ChevronRight, Save } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
@@ -10,6 +10,7 @@ import type { RoutePoolGroup } from '../types'
 
 type RoutePoolGroupListProps = {
   groups: RoutePoolGroup[]
+  selectedGroup?: string
   loading: boolean
   savingGroup?: string
   onSelectGroup: (group: string) => void
@@ -18,6 +19,7 @@ type RoutePoolGroupListProps = {
 
 export function RoutePoolGroupList({
   groups,
+  selectedGroup,
   loading,
   savingGroup,
   onSelectGroup,
@@ -47,6 +49,7 @@ export function RoutePoolGroupList({
         <RoutePoolGroupCard
           key={group.group}
           group={group}
+          selected={selectedGroup === group.group}
           saving={savingGroup === group.group}
           onSelect={onSelectGroup}
           onSave={onSave}
@@ -58,16 +61,19 @@ export function RoutePoolGroupList({
 
 function RoutePoolGroupCard({
   group,
+  selected,
   saving,
   onSelect,
   onSave,
 }: {
   group: RoutePoolGroup
+  selected: boolean
   saving: boolean
   onSelect: (group: string) => void
   onSave: (group: RoutePoolGroup) => void
 }) {
   useTranslation()
+  const fieldId = useId()
   const [expanded, setExpanded] = useState(false)
   const [draft, setDraft] = useState(group)
   const [previousGroup, setPreviousGroup] = useState(group)
@@ -89,7 +95,12 @@ function RoutePoolGroupCard({
       ),
     }))
   return (
-    <Card className='route-pool-group' onClick={() => onSelect(draft.group)}>
+    <Card
+      className='route-pool-group'
+      data-selected={selected}
+      data-expanded={expanded}
+      onClick={() => onSelect(draft.group)}
+    >
       <CardHeader className='gap-3 py-4 sm:flex-row sm:items-center sm:justify-between'>
         <div className='min-w-0'>
           <CardTitle className='route-group-title flex items-center gap-2 text-base'>
@@ -105,7 +116,13 @@ function RoutePoolGroupCard({
                 <ChevronRight className='size-4' />
               )}
             </button>
-            <span className='route-group-name'>{draft.group}</span>
+            <button
+              className='route-group-select route-group-name'
+              aria-pressed={selected}
+              onClick={() => onSelect(draft.group)}
+            >
+              {draft.group}
+            </button>
             <span
               className={
                 draft.algorithm_active
@@ -175,8 +192,8 @@ function RoutePoolGroupCard({
         </div>
       </CardHeader>
       {expanded && (
-        <CardContent className='border-t pt-0'>
-          <div className='divide-y'>
+        <CardContent className='route-group-members'>
+          <div className='route-member-list'>
             {draft.channels.map((channel) => (
               <div key={channel.channel_id} className='route-member-row'>
                 <div className='min-w-0'>
@@ -192,10 +209,14 @@ function RoutePoolGroupCard({
                   </p>
                 </div>
                 <div>
-                  <p className='text-muted-foreground text-xs'>
+                  <label
+                    htmlFor={`${fieldId}-${channel.channel_id}-cost`}
+                    className='text-muted-foreground text-xs'
+                  >
                     <Trans i18nKey={'采购倍率'} />
-                  </p>
+                  </label>
                   <Input
+                    id={`${fieldId}-${channel.channel_id}-cost`}
                     type='number'
                     min='0.0001'
                     step='0.0001'
@@ -208,10 +229,14 @@ function RoutePoolGroupCard({
                   />
                 </div>
                 <div>
-                  <p className='text-muted-foreground text-xs'>
+                  <label
+                    htmlFor={`${fieldId}-${channel.channel_id}-models`}
+                    className='text-muted-foreground text-xs'
+                  >
                     <Trans i18nKey={'模型覆盖 JSON'} />
-                  </p>
+                  </label>
                   <Input
+                    id={`${fieldId}-${channel.channel_id}-models`}
                     className='font-mono text-xs'
                     value={channel.model_cost_overrides}
                     onChange={(event) =>
@@ -222,10 +247,14 @@ function RoutePoolGroupCard({
                   />
                 </div>
                 <div>
-                  <p className='text-muted-foreground text-xs'>
+                  <label
+                    htmlFor={`${fieldId}-${channel.channel_id}-domain`}
+                    className='text-muted-foreground text-xs'
+                  >
                     <Trans i18nKey={'故障域'} />
-                  </p>
+                  </label>
                   <Input
+                    id={`${fieldId}-${channel.channel_id}-domain`}
                     className='font-mono text-xs'
                     placeholder={i18n.t('自动按上游主机归类')}
                     value={channel.fault_domain}

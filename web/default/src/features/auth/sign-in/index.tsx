@@ -48,7 +48,7 @@ export function SignIn() {
         <div className='market-auth-header'>
           <div className='market-auth-brand-emblem' aria-hidden='true'>
             <img
-              src='/code-go-logo.svg'
+              src='/codego-mark.svg'
               alt=''
               width='32'
               height='32'

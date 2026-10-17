@@ -7,6 +7,7 @@ import { formatQuota, formatUseTime } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { MarketplaceOwnerUsageLog } from '@/features/marketplace/types'
+import { OwnerBillingSource } from './owner-income-breakdown'
 
 export function useOwnerChannelLogColumns(
   onInspect: (item: MarketplaceOwnerUsageLog) => void
@@ -106,9 +107,14 @@ export function useOwnerChannelLogColumns(
         accessorKey: 'consumer_amount',
         header: t('用户扣费'),
         cell: ({ row }) => (
-          <span className='font-mono text-xs font-medium tabular-nums'>
-            {formatQuota(row.original.consumer_amount)}
-          </span>
+          <div className='max-w-48 space-y-1'>
+            <span className='font-mono text-xs font-medium tabular-nums'>
+              {formatQuota(row.original.consumer_amount)}
+            </span>
+            <div className='text-muted-foreground'>
+              <OwnerBillingSource breakdown={row.original.income_breakdown} />
+            </div>
+          </div>
         ),
         meta: { label: t('用户扣费') },
       },

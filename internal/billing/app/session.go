@@ -183,6 +183,12 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		s.tokenConsumed = effectiveQuota
 	}
 	if tokenErr != nil {
+		// Do not hide a concurrent funding/compensation failure behind token
+		// insufficiency: callers may otherwise fall back to another source.
+		if fundingErr != nil && newFundingInsufficientError(s.funding.Source(), fundingErr) == nil &&
+			!strings.Contains(fundingErr.Error(), "no active subscription") && !strings.Contains(fundingErr.Error(), "subscription quota insufficient") {
+			return types.NewError(errors.Join(tokenErr, fundingErr), types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
 		// Funding may have completed concurrently. Release that reservation before
 		// returning so both sources remain balanced on a failed request.
 		if fundingErr == nil {
@@ -210,6 +216,7 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 					fundingErr.Error(),
 					rollbackErr.Error(),
 				))
+				return types.NewError(errors.Join(fundingErr, rollbackErr), types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 			}
 			s.tokenConsumed = 0
 		}

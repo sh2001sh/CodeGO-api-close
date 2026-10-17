@@ -54,6 +54,29 @@ type OwnerUsageLogItem struct {
 	IncomeStatus       string                 `json:"income_status"`
 	AvailableAt        *time.Time             `json:"available_at,omitempty"`
 	ReleasedAt         *time.Time             `json:"released_at,omitempty"`
+	IncomeBreakdown    *OwnerIncomeBreakdown  `json:"income_breakdown,omitempty"`
+}
+
+// Unknown historical fields stay null; current plan configuration is never a
+// source for a past request's identity, amounts or rates.
+type OwnerIncomeBreakdown struct {
+	AlgorithmVersion       *string  `json:"algorithm_version"`
+	SnapshotStatus         string   `json:"snapshot_status"`
+	BillingSource          string   `json:"billing_source"`
+	SubscriptionID         *int     `json:"subscription_id"`
+	SubscriptionPlanID     *int     `json:"subscription_plan_id"`
+	SubscriptionPlanTitle  *string  `json:"subscription_plan_title"`
+	SubscriptionType       *string  `json:"subscription_type"`
+	SettlementGrossAmount  *int64   `json:"settlement_gross_amount"`
+	BaseCommissionAmount   *int64   `json:"base_commission_amount"`
+	BaseCommissionRateBPS  *int64   `json:"base_commission_rate_bps"`
+	PackageBonusRate       *float64 `json:"package_bonus_rate"`
+	ChannelShareBPS        *int64   `json:"channel_share_bps"`
+	PackageSurchargeRate   *float64 `json:"package_surcharge_rate"`
+	PackageSurchargeAmount *int64   `json:"package_surcharge_amount"`
+	ReferralRebateAmount   *int64   `json:"referral_rebate_amount"`
+	OwnerNetAmount         *int64   `json:"owner_net_amount"`
+	Formula                *string  `json:"formula"`
 }
 
 type OwnerUsageLogResult struct {

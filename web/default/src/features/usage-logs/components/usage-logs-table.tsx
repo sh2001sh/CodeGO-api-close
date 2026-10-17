@@ -188,7 +188,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         isFetching={isFetching}
         emptyTitle={t('No Logs Found')}
         skeletonKeyPrefix='usage-log-skeleton'
-        tableClassName='max-h-[calc(100dvh-13rem)] overflow-auto sm:max-h-[calc(100dvh-14rem)]'
+        tableClassName='usage-logs-scroll-viewport max-h-[calc(100dvh-13rem)] overflow-auto sm:max-h-[calc(100dvh-14rem)]'
         tableHeaderClassName='bg-muted/30 sticky top-0 z-10'
         toolbar={
           isCommon ? (

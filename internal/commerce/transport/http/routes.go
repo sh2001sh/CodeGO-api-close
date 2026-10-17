@@ -36,6 +36,7 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		subscriptionRoute.POST("/orders/:trade_no/cancel", middleware.CriticalRateLimit(), cancelSubscriptionOrder)
 		subscriptionRoute.PUT("/self/preference", updateSubscriptionPreference)
 		subscriptionRoute.POST("/self/reset-opportunity/use", middleware.CriticalRateLimit(), useSubscriptionResetOpportunity)
+		subscriptionRoute.POST("/self/reset-opportunity/redeem", middleware.CriticalRateLimit(), redeemSubscriptionResetOpportunity)
 		subscriptionRoute.POST("/fuel/quote", quoteSubscriptionFuel)
 		subscriptionRoute.POST("/fuel/purchase", middleware.CriticalRateLimit(), purchaseSubscriptionFuel)
 		subscriptionRoute.POST("/epay/pay", middleware.CriticalRateLimit(), RequestSubscriptionEpay)

@@ -1,6 +1,60 @@
 package app
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
+	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
+	"github.com/stretchr/testify/require"
+)
+
+func TestBackfillCreditPackUsesOnlyFrozenPurchaseAndPolicy(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingAccount{}, &billingschema.BillingBalanceSnapshot{}, &billingschema.BillingOutboxEvent{}))
+	internalID := 101
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "channel", OwnerUserID: 10, InternalChannelID: &internalID}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "group", ChannelID: "channel", OwnerUserID: 10, Multiplier: 9}).Error)
+	require.NoError(t, logDB.Create([]auditschema.Log{
+		{RequestId: "new-pack", UserId: 20, ChannelId: internalID, Type: auditschema.LogTypeConsume, Quota: 100000,
+			Other: `{"marketplace_group_id":"group","billing_source":"subscription","subscription_billing_version":"credit_pack","credit_pack_granted_quota":103000,"credit_pack_paid_quota":100000,"credit_pack_channel_share_bps":6000,"marketplace_fee_policy_version":"paid_bonus_rate_v2","subscription_id":44,"subscription_plan_id":9,"subscription_plan_title":"Frozen pack"}`},
+		{RequestId: "missing-snapshot", UserId: 20, ChannelId: internalID, Type: auditschema.LogTypeConsume, Quota: 100000,
+			Other: `{"marketplace_group_id":"group","billing_source":"subscription","subscription_billing_version":"credit_pack"}`},
+		{RequestId: "old-pack", UserId: 20, ChannelId: internalID, Type: auditschema.LogTypeConsume, Quota: 110000,
+			Other: `{"marketplace_group_id":"group","billing_source":"subscription","subscription_billing_version":"credit_pack","credit_pack_granted_quota":110000,"credit_pack_paid_quota":100000,"credit_pack_channel_share_bps":6000}`},
+	}).Error)
+	dry, err := BackfillMissingSettlements(0, false)
+	require.NoError(t, err)
+	require.Equal(t, 3, dry.Candidates)
+	require.Equal(t, 1, dry.Invalid)
+	require.Zero(t, dry.Created)
+	report, err := BackfillMissingSettlements(0, true)
+	require.NoError(t, err)
+	require.Equal(t, 2, report.Created)
+	require.Equal(t, 1, report.Invalid)
+	var newPack, oldPack marketplaceschema.Settlement
+	require.NoError(t, db.First(&newPack, "request_id = ?", "new-pack").Error)
+	require.NoError(t, db.First(&oldPack, "request_id = ?", "old-pack").Error)
+	require.EqualValues(t, 100000, newPack.SettlementGrossAmount)
+	require.EqualValues(t, 5000, newPack.PlatformCommission)
+	require.EqualValues(t, 1800, newPack.TransactionFee)
+	require.EqualValues(t, 93200, newPack.OwnerNetAmount)
+	require.Zero(t, newPack.Multiplier, "current group multiplier must not replace missing credit pack audit evidence")
+	require.True(t, newPack.ReferralRebatePending)
+	require.EqualValues(t, 6000, oldPack.TransactionFee)
+	var entry billingschema.BillingLedgerEntry
+	require.NoError(t, db.First(&entry, "idempotency_key = ?", "marketplace-pending:new-pack").Error)
+	var snapshot marketplacesettlement.IncomeSnapshot
+	require.NoError(t, json.Unmarshal(entry.Metadata, &snapshot))
+	require.Equal(t, "Frozen pack", snapshot.SubscriptionPlanTitle)
+	require.Equal(t, 44, snapshot.SubscriptionID)
+	replay, err := BackfillMissingSettlements(0, true)
+	require.NoError(t, err)
+	require.Equal(t, 2, replay.Existing)
+	require.Zero(t, replay.Created)
+}
 
 func TestSettlementBackfillBatchFitsPostgresParameterLimit(t *testing.T) {
 	const postgresExtendedProtocolParameterLimit = 65535

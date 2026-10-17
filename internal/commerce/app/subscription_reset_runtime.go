@@ -197,54 +197,11 @@ func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.Subscripti
 			return commerceschema.ErrSubscriptionResetOpportunityMonthlyUsed
 		}
 
-		var subs []commerceschema.UserSubscription
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("user_id = ? AND status = ? AND end_time > ? AND credit_pack_granted_quota = 0 AND plan_id IN (SELECT id FROM subscription_plans WHERE plan_type <> ?)", userID, "active", now, commerceschema.SubscriptionPlanTypeCreditPack).
-			Order("end_time asc, id asc").
-			Find(&subs).Error; err != nil {
-			return err
-		}
-		if len(subs) == 0 {
-			return commerceschema.ErrSubscriptionResetOpportunityNoActiveSub
-		}
-		subs, err = orderActiveUserSubscriptionsWithExplicitOrderTx(tx, subs, explicitOrder)
+		target, err := selectSubscriptionResetTargetTx(tx, userID, now, explicitOrder, true)
 		if err != nil {
 			return err
 		}
-		if len(subs) == 0 {
-			return commerceschema.ErrSubscriptionResetOpportunityNoActiveSub
-		}
-		activeIDs := make([]int, 0, len(subs))
-		activeCycleStarts := make(map[int]int64, len(subs))
-		for _, candidate := range subs {
-			activeIDs = append(activeIDs, candidate.Id)
-			activeCycleStarts[candidate.Id] = candidate.StartTime
-		}
-		var conversions []commerceschema.SubscriptionClaudeConversion
-		if err := tx.
-			Where("user_subscription_id IN ? AND status = ?", activeIDs, commerceschema.SubscriptionClaudeConversionStatusCompleted).
-			Find(&conversions).Error; err != nil {
-			return err
-		}
-		converted := make(map[int]struct{}, len(conversions))
-		for _, conversion := range conversions {
-			cycleStart, active := activeCycleStarts[conversion.UserSubscriptionId]
-			if active && conversion.CreatedAt >= cycleStart {
-				converted[conversion.UserSubscriptionId] = struct{}{}
-			}
-		}
-		eligibleSubs := subs[:0]
-		for _, candidate := range subs {
-			if _, wasConverted := converted[candidate.Id]; !wasConverted {
-				eligibleSubs = append(eligibleSubs, candidate)
-			}
-		}
-		if len(eligibleSubs) == 0 {
-			return commerceschema.ErrSubscriptionResetOpportunityConverted
-		}
-		subs = eligibleSubs
-
-		sub := subs[0]
+		sub := *target
 		result.UserSubscriptionId = sub.Id
 		result.AmountUsedBefore = sub.AmountUsed
 		result.PeriodUsedBefore = sub.PeriodUsed
@@ -310,4 +267,111 @@ func UseUserSubscriptionResetOpportunity(userID int) (*commerceschema.Subscripti
 	}
 	platformobservability.SysLog(resetLog)
 	return result, nil
+}
+
+// selectSubscriptionResetTargetTx keeps preview and execution on the same target
+// policy. Execution locks subscription rows after the shared opportunity row.
+func selectSubscriptionResetTargetTx(tx *gorm.DB, userID int, now int64, explicitOrder []int, lock bool) (*commerceschema.UserSubscription, error) {
+	query := tx
+	if lock {
+		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var subs []commerceschema.UserSubscription
+	if err := query.
+		Where("user_id = ? AND status = ? AND end_time > ? AND credit_pack_granted_quota = 0 AND plan_id IN (SELECT id FROM subscription_plans WHERE plan_type <> ?)", userID, "active", now, commerceschema.SubscriptionPlanTypeCreditPack).
+		Order("end_time asc, id asc").
+		Find(&subs).Error; err != nil {
+		return nil, err
+	}
+	if len(subs) == 0 {
+		return nil, commerceschema.ErrSubscriptionResetOpportunityNoActiveSub
+	}
+	subs, err := orderActiveUserSubscriptionsWithExplicitOrderTx(tx, subs, explicitOrder)
+	if err != nil {
+		return nil, err
+	}
+	if len(subs) == 0 {
+		return nil, commerceschema.ErrSubscriptionResetOpportunityNoActiveSub
+	}
+	activeIDs := make([]int, 0, len(subs))
+	activeCycleStarts := make(map[int]int64, len(subs))
+	for _, candidate := range subs {
+		activeIDs = append(activeIDs, candidate.Id)
+		activeCycleStarts[candidate.Id] = candidate.StartTime
+	}
+	var conversions []commerceschema.SubscriptionClaudeConversion
+	if err := tx.
+		Where("user_subscription_id IN ? AND status = ?", activeIDs, commerceschema.SubscriptionClaudeConversionStatusCompleted).
+		Find(&conversions).Error; err != nil {
+		return nil, err
+	}
+	converted := make(map[int]struct{}, len(conversions))
+	for _, conversion := range conversions {
+		cycleStart, active := activeCycleStarts[conversion.UserSubscriptionId]
+		if active && conversion.CreatedAt >= cycleStart {
+			converted[conversion.UserSubscriptionId] = struct{}{}
+		}
+	}
+	eligibleSubs := subs[:0]
+	for _, candidate := range subs {
+		if _, wasConverted := converted[candidate.Id]; !wasConverted {
+			eligibleSubs = append(eligibleSubs, candidate)
+		}
+	}
+	if len(eligibleSubs) == 0 {
+		return nil, commerceschema.ErrSubscriptionResetOpportunityConverted
+	}
+	return &eligibleSubs[0], nil
+}
+
+type SubscriptionResetUsePreview struct {
+	Eligible          bool   `json:"eligible"`
+	SubscriptionID    int    `json:"subscription_id"`
+	PlanTitle         string `json:"plan_title"`
+	ClearedUsedAmount int64  `json:"cleared_used_amount"`
+	IneligibleReason  string `json:"ineligible_reason,omitempty"`
+}
+
+// BuildSubscriptionResetUsePreview reads existing refresh eligibility without
+// creating an opportunity account or changing any subscription quota.
+func BuildSubscriptionResetUsePreview(userID int) (*SubscriptionResetUsePreview, error) {
+	preview := &SubscriptionResetUsePreview{}
+	summary, err := GetUserSubscriptionResetOpportunity(userID)
+	if err != nil {
+		return nil, err
+	}
+	if summary.AvailableCount <= 0 {
+		preview.IneligibleReason = commerceschema.ErrSubscriptionResetOpportunityUnavailable.Error()
+		return preview, nil
+	}
+	if summary.UsedThisMonth {
+		preview.IneligibleReason = commerceschema.ErrSubscriptionResetOpportunityMonthlyUsed.Error()
+		return preview, nil
+	}
+	setting, err := identitystore.LoadUserSetting(userID, false)
+	if err != nil {
+		setting = dto.UserSetting{}
+	}
+	now := commercestore.GetDBTimestamp()
+	sub, err := selectSubscriptionResetTargetTx(platformdb.DB, userID, now, commercedomain.NormalizePositiveIntSlice(setting.SubscriptionOrderIds), false)
+	if err != nil {
+		if errors.Is(err, commerceschema.ErrSubscriptionResetOpportunityNoActiveSub) || errors.Is(err, commerceschema.ErrSubscriptionResetOpportunityConverted) {
+			preview.IneligibleReason = err.Error()
+			return preview, nil
+		}
+		return nil, err
+	}
+	plan, err := getSubscriptionPlanRecordTx(platformdb.DB, sub.PlanId)
+	if err != nil {
+		return nil, err
+	}
+	base := min(max(plan.TotalAmount, 0), sub.AmountTotal)
+	bonus, err := currentCycleGroupBuyBonusQuotaTx(platformdb.DB, sub.Id, sub.StartTime, now)
+	if err != nil {
+		return nil, err
+	}
+	bonus = min(bonus, max(sub.AmountTotal-base, 0))
+	preview.Eligible, preview.SubscriptionID, preview.PlanTitle = true, sub.Id, plan.Title
+	preview.ClearedUsedAmount = min(sub.AmountUsed, base+bonus)
+	return preview, nil
 }

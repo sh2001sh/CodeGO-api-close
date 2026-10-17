@@ -7,8 +7,10 @@ import (
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
+	"strings"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strconv"
 )
 
@@ -51,6 +53,7 @@ func ListUsers(pageInfo *platformpagination.PageInfo) ([]*identityschema.User, i
 }
 
 func SearchUsers(keyword string, group string, startIdx int, num int) ([]*identityschema.User, int64, error) {
+	keyword = strings.TrimSpace(keyword)
 	tx := platformdb.DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -66,25 +69,20 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*identi
 		total int64
 	)
 	query := tx.Unscoped().Model(&identityschema.User{})
-	likeCondition := "external_id LIKE ? OR username LIKE ? OR email LIKE ? OR display_name LIKE ?"
-	keywordInt, err := strconv.Atoi(keyword)
-	if err == nil {
+	pattern := "%" + strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(strings.ToLower(keyword)) + "%"
+	likeCondition := "LOWER(external_id) LIKE ? ESCAPE '!' OR LOWER(username) LIKE ? ESCAPE '!' OR LOWER(email) LIKE ? ESCAPE '!' OR LOWER(display_name) LIKE ? ESCAPE '!'"
+	args := []any{pattern, pattern, pattern, pattern}
+	order := clause.OrderBy{Expression: clause.Expr{
+		SQL: "CASE WHEN LOWER(external_id) = ? THEN 0 ELSE 1 END, id DESC", Vars: []any{strings.ToLower(keyword)},
+	}}
+	if keywordInt, err := strconv.Atoi(keyword); err == nil {
 		likeCondition = "id = ? OR " + likeCondition
-		if group != "" {
-			query = query.Where("("+likeCondition+") AND "+userGroupColumn()+" = ?",
-				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
-		} else {
-			query = query.Where(likeCondition,
-				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
-		}
-	} else {
-		if group != "" {
-			query = query.Where("("+likeCondition+") AND "+userGroupColumn()+" = ?",
-				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
-		} else {
-			query = query.Where(likeCondition,
-				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
-		}
+		args = append([]any{keywordInt}, args...)
+		order.Expression = clause.Expr{SQL: "CASE WHEN id = ? OR LOWER(external_id) = ? THEN 0 ELSE 1 END, id DESC", Vars: []any{keywordInt, strings.ToLower(keyword)}}
+	}
+	query = query.Where("("+likeCondition+")", args...)
+	if group != "" {
+		query = query.Where(userGroupColumn()+" = ?", group)
 	}
 
 	// A narrow window query evaluates substring filters once. Fetching the page
@@ -94,7 +92,7 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*identi
 			ID    int
 			Total int64
 		}
-		if err := query.Session(&gorm.Session{}).Select("id, COUNT(*) OVER() AS total").Order("id desc").Limit(num).Offset(startIdx).Scan(&matches).Error; err != nil {
+		if err := query.Session(&gorm.Session{}).Select("id, COUNT(*) OVER() AS total").Order(order).Limit(num).Offset(startIdx).Scan(&matches).Error; err != nil {
 			tx.Rollback()
 			return nil, 0, err
 		}
@@ -122,7 +120,7 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*identi
 		tx.Rollback()
 		return nil, 0, err
 	}
-	if err := query.Omit("password").Order("id desc").Limit(num).Offset(startIdx).Find(&users).Error; err != nil {
+	if err := query.Omit("password").Order(order).Limit(num).Offset(startIdx).Find(&users).Error; err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}

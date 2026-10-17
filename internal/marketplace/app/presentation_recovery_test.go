@@ -78,6 +78,7 @@ func TestCodexContradictoryPresentationFieldsRemainPending(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
 	group := seedPublicShopProduct(t, db, "contradictory-fields", 10)
+	require.NoError(t, db.Model(&group).Update("moderation_status", "pending").Error)
 	ctx, err := prepareTrustedPresentationTestProbe(t, &marketplaceschema.Channel{ID: group.ChannelID})
 	require.NoError(t, err)
 	require.NoError(t, validatePresentationProbeResponse(ctx, "codex", "gpt-5", []byte(`{"output":[{"type":"message","content":[{"type":"output_text","text":"AD"}]}],"output_text":"SAFE"}`)))
@@ -134,6 +135,7 @@ func TestPresentationInconclusiveVerdictPreservesConnectivityAndErrorDetection(t
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
 	group := seedPublicShopProduct(t, db, "pending-review", 10)
+	require.NoError(t, db.Model(&group).Update("moderation_status", "pending").Error)
 	for _, item := range []struct{ body, wantError string }{
 		{`{"choices":[{"message":{"content":"SAFE because no ads"}}]}`, ""},
 		{`{"error":{"message":"quota exceeded"}}`, "上游返回失败内容"},
@@ -156,6 +158,62 @@ func TestPresentationInconclusiveVerdictPreservesConnectivityAndErrorDetection(t
 			require.ErrorContains(t, err, item.wantError)
 		}
 		require.Equal(t, 1, requests)
+	}
+}
+
+func TestPresentationRecheckCannotRevokeUnchangedApprovalOnUnavailableOrInconclusiveReview(t *testing.T) {
+	for _, scenario := range []string{"unconfigured", "unavailable", "timeout", "invalid_json", "inconclusive", "explicit_ad"} {
+		t.Run(scenario, func(t *testing.T) {
+			db := openMarketplaceAppTestDB(t)
+			group := seedPublicShopProduct(t, db, "approved-recheck", 10)
+			require.NoError(t, db.Model(&group).Update("moderation_reason", "人工复核通过").Error)
+			t.Setenv("PROMPT_AUDIT_ENDPOINTS_JSON", "")
+			t.Setenv("PROMPT_AUDIT_BASE_URL", "")
+			t.Setenv("PROMPT_AUDIT_MODE", "off")
+			if scenario != "unconfigured" {
+				server := marketplaceTestUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					switch scenario {
+					case "unavailable":
+						w.WriteHeader(http.StatusServiceUnavailable)
+					case "timeout":
+						select {
+						case <-r.Context().Done():
+						case <-time.After(200 * time.Millisecond):
+						}
+					case "invalid_json":
+						_, _ = w.Write([]byte("invalid json"))
+					case "explicit_ad":
+						_, _ = w.Write(presentationTextResponse(t, "AD"))
+					default:
+						_, _ = w.Write(presentationTextResponse(t, "SAFE because no ads"))
+					}
+				}))
+				defer server.Close()
+				t.Setenv("PROMPT_AUDIT_MODE", "blocking")
+				t.Setenv("PROMPT_AUDIT_BASE_URL", server.URL)
+				t.Setenv("PROMPT_AUDIT_API_KEY", "platform-test-only")
+				t.Setenv("PROMPT_AUDIT_MODEL", "gpt-5")
+				t.Setenv("PROMPT_AUDIT_TIMEOUT_MS", "100")
+			}
+			_, err := preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
+			require.NoError(t, err)
+			require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
+			if scenario == "explicit_ad" {
+				require.Equal(t, "failed", group.ModerationStatus)
+				return
+			}
+			require.Equal(t, "passed", group.ModerationStatus)
+			require.Equal(t, "人工复核通过", group.ModerationReason)
+			// Editing invalidates approval; an unavailable review cannot publish
+			// the changed revision using the old decision.
+			name := "修订名称"
+			_, err = UpdateOwnerChannel(10, group.ChannelID, UpdateChannelRequest{CustomName: &name})
+			require.NoError(t, err)
+			_, err = preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
+			require.NoError(t, err)
+			require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
+			require.Equal(t, "pending", group.ModerationStatus)
+		})
 	}
 }
 

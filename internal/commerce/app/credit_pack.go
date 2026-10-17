@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/sh2001sh/new-api/constant"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
@@ -106,9 +107,10 @@ func attachCreditPackTopupQuota(topups []*commerceschema.TopUp) error {
 	return nil
 }
 
-// Multiple historical payments do not store a complete price/carry-over snapshot;
-// an upgrade's last payment can be only its difference. Fail visibly instead of
-// mistaking that difference for the entire pass's value.
+// A single payment supplies its paid-price snapshot. Renewed/upgraded legacy
+// passes use the current legacy plan's price as their whole-pass basis: neither
+// summing historical payments nor using the last upgrade difference values the
+// remaining quota correctly. The conversion receipt freezes the selected basis.
 func legacyConversionPaidPlanTx(tx *gorm.DB, plan *commerceschema.SubscriptionPlan, sub *commerceschema.UserSubscription) (*commerceschema.SubscriptionPlan, error) {
 	if plan == nil || sub == nil || tx == nil {
 		return plan, nil
@@ -122,8 +124,14 @@ func legacyConversionPaidPlanTx(tx *gorm.DB, plan *commerceschema.SubscriptionPl
 	if len(orders) == 0 {
 		return plan, nil
 	}
-	if len(orders) > 1 || orders[0].Money <= 0 {
-		return nil, errors.New("历史续费或升级补差金额需核定后转换")
+	if len(orders) > 1 {
+		if plan.PriceAmount <= 0 || math.IsNaN(plan.PriceAmount) || math.IsInf(plan.PriceAmount, 0) {
+			return nil, errors.New("旧套餐折算价格无效")
+		}
+		return plan, nil
+	}
+	if orders[0].Money <= 0 || math.IsNaN(orders[0].Money) || math.IsInf(orders[0].Money, 0) {
+		return nil, errors.New("旧套餐付款金额无效")
 	}
 	copy := *plan
 	copy.PriceAmount = orders[0].Money

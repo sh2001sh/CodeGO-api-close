@@ -106,12 +106,11 @@ export function WalletPeerTransferPanel(props: {
               id='wallet-transfer-recipient'
               value={props.recipientId}
               disabled={props.disabled || props.recipientLoading}
-              maxLength={6}
               autoComplete='off'
               className='font-mono tracking-widest uppercase'
               placeholder='ABC123'
               onChange={(event) =>
-                props.onRecipientIdChange(event.target.value.toUpperCase())
+                props.onRecipientIdChange(event.target.value.trim().toUpperCase())
               }
               onKeyDown={(event) => {
                 if (event.key === 'Enter') props.onLookupRecipient()

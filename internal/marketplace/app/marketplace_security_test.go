@@ -258,6 +258,7 @@ func TestMarketplaceReviewUsesOnlyPlatformEndpointAndUnknownStaysPending(t *test
 		t.Run(verdict, func(t *testing.T) {
 			db := openMarketplaceAppTestDB(t)
 			group := seedPublicShopProduct(t, db, "trusted-review", 10)
+			require.NoError(t, db.Model(&group).Update("moderation_status", "pending").Error)
 			calls := 0
 			server := marketplaceTestUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls++

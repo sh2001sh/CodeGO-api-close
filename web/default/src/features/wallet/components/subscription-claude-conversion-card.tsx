@@ -200,7 +200,7 @@ export function SubscriptionClaudeConversionCard(
             <dt className='font-medium'>{t('折算基数')}</dt>
             <dd className='text-muted-foreground'>
               {t(
-                '采用该旧套餐对应的单笔成功付款金额数值；无付款订单的赠送套餐沿用原方案价格。当前转换按金额数值折算 credits，不使用货币汇率。多笔续费或升级补差记录需先核定。'
+                '单笔付款采用实付金额；多笔续费或升级补差采用该旧套餐方案价格，按剩余额度占总额度的比例折算。无付款订单的赠送套餐沿用方案价格。当前转换按金额数值折算 credits，不使用货币汇率，折算基数以预览为准。'
               )}
             </dd>
           </div>

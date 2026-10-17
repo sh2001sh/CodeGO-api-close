@@ -87,6 +87,36 @@ func TestWalletConversionAndResetRedemptionPostgres(t *testing.T) {
 		require.NoError(t, db.Model(&commerceschema.SubscriptionClaudeConversion{}).Where("user_id = ?", user.Id).Count(&count).Error)
 		require.EqualValues(t, 1, count)
 	})
+	t.Run("renewed legacy remainder twelve callers one wallet credit", func(t *testing.T) {
+		user, plan, sub := seed(t)
+		sub.AmountUsed = sub.AmountTotal / 2
+		require.NoError(t, db.Save(&sub).Error)
+		for i, paid := range []float64{199, 100} {
+			require.NoError(t, db.Create(&commerceschema.SubscriptionOrder{
+				UserId: user.Id, PlanId: plan.Id, TargetSubscriptionId: sub.Id,
+				TradeNo: fmt.Sprintf("pg-renewed-%d-%d", sub.Id, i), Money: paid,
+				Status: constant.TopUpStatusSuccess,
+			}).Error)
+		}
+		preview := BuildSubscriptionClaudeConversionPreview(&plan, &sub)
+		require.True(t, preview.Eligible)
+		require.EqualValues(t, quotaUnitsFromUSD(149.5), preview.BaseQuota)
+		key := fmt.Sprintf("pg-renewed-convert-%d", sub.Id)
+		for _, err := range runConcurrent(func(_ int) error {
+			_, err := ConvertMonthlyPassToUnifiedCredit(key, user.Id, sub.Id, 50)
+			return err
+		}) {
+			require.NoError(t, err)
+		}
+		var saved identityschema.User
+		require.NoError(t, db.First(&saved, user.Id).Error)
+		require.EqualValues(t, 100+quotaUnitsFromUSD(149.5), saved.ClaudeQuota)
+		var count int64
+		require.NoError(t, db.Model(&commerceschema.SubscriptionClaudeConversion{}).Where("user_id = ?", user.Id).Count(&count).Error)
+		require.EqualValues(t, 1, count)
+		_, err = ConvertMonthlyPassToUnifiedCredit(key+"-different", user.Id, sub.Id, 50)
+		require.Error(t, err)
+	})
 	t.Run("distinct conversion keys cannot double spend", func(t *testing.T) {
 		user, _, sub := seed(t)
 		results := runConcurrent(func(i int) error {

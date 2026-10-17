@@ -432,20 +432,31 @@ func TestCreditPackBillingSelectsPackBeforeLegacyTenfoldExceedsKeyBalance(t *tes
 	require.EqualValues(t, 80, pack.AmountUsed)
 }
 
-func TestCreditPackConversionRejectsAmbiguousHistoricalUpgradePayments(t *testing.T) {
-	db, user, plan, sub := setupMonthlyPassConversionTest(t, 72171, 72172, 72173, 128, 25)
+func TestCreditPackConversionUsesRemainingQuotaForHistoricalUpgradePayments(t *testing.T) {
+	db, user, plan, sub := setupMonthlyPassConversionTest(t, 72171, 72172, 72173, 299, 50)
 	for index, money := range []float64{64, 20} {
 		order := &commerceschema.SubscriptionOrder{UserId: user.Id, PlanId: plan.Id, TargetSubscriptionId: sub.Id, TradeNo: "historical-upgrade-" + string(rune('a'+index)), Money: money, Status: constant.TopUpStatusSuccess}
 		require.NoError(t, db.Create(order).Error)
 	}
 	preview := BuildSubscriptionClaudeConversionPreview(plan, sub)
-	require.False(t, preview.Eligible)
-	require.Contains(t, preview.IneligibleReason, "补差金额需核定")
-	_, err := ConvertMonthlyPassToUnifiedCredit("ambiguous-upgrade-conversion", user.Id, sub.Id, 75)
-	require.ErrorContains(t, err, "补差金额需核定")
+	require.True(t, preview.Eligible)
+	require.EqualValues(t, 299, preview.PlanPriceAmount)
+	require.EqualValues(t, quotaUnitsFromUSD(149.5), preview.BaseQuota)
+	result, err := ConvertMonthlyPassToUnifiedCredit("historical-upgrade-conversion", user.Id, sub.Id, 50)
+	require.NoError(t, err)
+	require.EqualValues(t, preview.BaseQuota, result.TargetQuota)
+	replayed, err := ConvertMonthlyPassToUnifiedCredit("historical-upgrade-conversion", user.Id, sub.Id, 50)
+	require.NoError(t, err)
+	require.Equal(t, result.Conversion.Id, replayed.Conversion.Id)
+	_, err = ConvertMonthlyPassToUnifiedCredit("historical-upgrade-conversion-new-key", user.Id, sub.Id, 50)
+	require.Error(t, err)
 	var saved commerceschema.UserSubscription
 	require.NoError(t, db.First(&saved, sub.Id).Error)
-	require.Equal(t, sub.AmountUsed, saved.AmountUsed)
+	require.Equal(t, saved.AmountTotal, saved.AmountUsed)
+	require.Equal(t, "cancelled", saved.Status)
+	var savedUser identityschema.User
+	require.NoError(t, db.First(&savedUser, user.Id).Error)
+	require.EqualValues(t, 100+preview.BaseQuota, savedUser.ClaudeQuota)
 	var count int64
 	require.NoError(t, db.Model(&commerceschema.UserSubscription{}).Where("user_id = ? AND credit_pack_granted_quota > 0", user.Id).Count(&count).Error)
 	require.Zero(t, count)

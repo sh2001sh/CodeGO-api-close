@@ -157,6 +157,7 @@ func TestChannelConnectivityCannotModerateAndTrustedReviewRejectsStaleResults(t 
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
 	group := seedPublicShopProduct(t, db, "probe-product", 10)
+	require.NoError(t, db.Model(&group).Update("moderation_status", "pending").Error)
 	channel := &marketplaceschema.Channel{ID: group.ChannelID}
 	ctx, err := preparePresentationProbe(context.Background(), channel)
 	require.NoError(t, err)
@@ -221,6 +222,7 @@ func TestUserConnectivityTestCannotSupplyPresentationVerdict(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
 	group := seedPublicShopProduct(t, db, "batch-presentation", 10)
+	require.NoError(t, db.Model(&group).Update("moderation_status", "pending").Error)
 	prompt, validate, err := batchPresentationProbe(group.ChannelID, "gpt-5")
 	require.NoError(t, err)
 	require.Empty(t, prompt)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
@@ -58,8 +58,12 @@ export function ChannelEditorForm(props: {
     defaultValues: initialValues,
   })
   const selectedModels = form.watch('declared_models')
+  const loadedChannelID = useRef(props.channel?.id)
 
   useEffect(() => {
+    // Polling replaces channel records without replacing the user's draft.
+    if (loadedChannelID.current === props.channel?.id) return
+    loadedChannelID.current = props.channel?.id
     const values = props.channel
       ? channelFormDefaultsForEdit(props.channel)
       : channelFormDefaults

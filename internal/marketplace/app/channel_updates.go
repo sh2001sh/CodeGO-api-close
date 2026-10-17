@@ -48,7 +48,11 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 	}
 	if reverify || changed {
 		reverify = true
+		originalStatus, originalLifecycle := channel.Status, group.LifecycleStatus
 		invalidateChannelVerification(channel, group)
+		if originalStatus == marketplacedomain.LifecycleSuspended || originalStatus == marketplacedomain.LifecycleDisabled {
+			channel.Status, group.LifecycleStatus = originalStatus, originalLifecycle
+		}
 	}
 	normalizeInternalGroupName(group, channel.ID, channel.SubmittedSourceLabel)
 	return reverify, nil
@@ -135,6 +139,9 @@ func applyChannelPresentationUpdate(channel *marketplaceschema.Channel, group *m
 }
 
 func applyAutoProbeUpdate(channel *marketplaceschema.Channel, req UpdateChannelRequest) error {
+	if req.AutoProbeEnabled == nil && req.AutoProbeIntervalMinutes == nil && req.AutoProbeModel == nil && req.DeclaredModels == nil {
+		return nil
+	}
 	enabled := channel.AutoProbeEnabled
 	interval := channel.AutoProbeIntervalMinutes
 	model := channel.AutoProbeModel

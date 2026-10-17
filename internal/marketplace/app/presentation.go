@@ -5,6 +5,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -12,7 +13,11 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-var publicContactPattern = regexp.MustCompile(`(?i)(https?|www|[a-z0-9][a-z0-9-]*\.(com|cn|net|org|io|me|top|xyz|shop|cfd|cc|vip|app|dev|ai|link|site|online|store)|t\.me|@|[0-9]{7,})`)
+var (
+	publicContactPattern = regexp.MustCompile(`(?i)(h(?:tt|xx)ps?://|www\.|[a-z0-9][a-z0-9-]*\.(com|cn|net|org|io|me|top|xyz|shop|cfd|cc|vip|app|dev|ai|link|site|online|store)(?:$|[^a-z0-9-])|t\.me(?:$|[^a-z0-9-])|[a-z0-9._+%-]+@[a-z0-9.-]+\.[a-z]{2,})`)
+	publicMobilePattern  = regexp.MustCompile(`(?:^|[^0-9])(?:86)?1[3-9][0-9]{9}(?:$|[^0-9])`)
+	publicVXPattern      = regexp.MustCompile(`(?:^|[^a-z0-9])vx`)
+)
 
 func normalizePublicText(value string, limit int, name bool) (string, error) {
 	value = strings.TrimSpace(norm.NFKC.String(value))
@@ -38,15 +43,37 @@ func normalizePublicText(value string, limit int, name bool) (string, error) {
 		}
 	}
 	text := compact.String()
-	if publicContactPattern.MatchString(text) {
+	if publicContactPattern.MatchString(text) || publicMobilePattern.MatchString(text) || publicNumericContact(value) {
 		return "", errors.New("名称、备注和标签不能包含网址或联系方式")
 	}
-	for _, keyword := range []string{"微信", "微 信", "薇信", "威信", "加v", "加微", "加群", "加我", "私聊", "私信", "联系", "扣扣", "企鹅群", "qq群", "qq号", "vx", "wechat", "telegram", "whatsapp", "discord", "引流", "站外", "扫码", "二维码", "访问网站", "点击链接"} {
+	if publicVXPattern.MatchString(text) {
+		return "", errors.New("名称、备注和标签不能包含联系方式或站外引流广告")
+	}
+	for _, keyword := range []string{"微信", "微 信", "薇信", "威信", "加v", "加微", "加群", "加我", "私聊", "私信", "联系", "扣扣", "企鹅群", "qq群", "qq号", "wechat", "telegram", "whatsapp", "discord", "引流", "站外", "扫码", "二维码", "访问网站", "点击链接"} {
 		if strings.Contains(text, strings.ReplaceAll(keyword, " ", "")) {
 			return "", errors.New("名称、备注和标签不能包含联系方式或站外引流广告")
 		}
 	}
 	return value, nil
+}
+
+// Dates and model version suffixes are technical metadata, not phone numbers.
+// Unlabelled numeric-only contact strings still require semantic-free rejection.
+func publicNumericContact(value string) bool {
+	for _, layout := range []string{"2006-01-02", "2006/01/02", "2006.01.02", "20060102"} {
+		if _, err := time.Parse(layout, value); err == nil {
+			return false
+		}
+	}
+	digits := 0
+	for _, char := range value {
+		if char >= '0' && char <= '9' {
+			digits++
+		} else if !unicode.IsSpace(char) && !strings.ContainsRune("+-().", char) {
+			return false
+		}
+	}
+	return digits >= 7
 }
 
 func normalizeGroupTags(tags []string) ([]string, error) {

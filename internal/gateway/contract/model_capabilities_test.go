@@ -2,6 +2,23 @@ package contract
 
 import "testing"
 
+func TestGeminiNativeImageModelsKeepNativeEndpointSemantics(t *testing.T) {
+	t.Parallel()
+	for _, model := range []string{"gemini-3.1-flash-image-preview", "gemini-3-pro-image-preview", "gemini-2.5-flash-image", "google/gemini-2.5-flash-image-preview", "models/gemini-3.1-flash-image-preview"} {
+		if !IsGeminiNativeImageModel(model) {
+			t.Fatalf("expected native image capability: %s", model)
+		}
+		if IsImageGenerationModel(model) {
+			t.Fatalf("must not route native image model to OpenAI images or Imagen predict: %s", model)
+		}
+	}
+	for _, model := range []string{"gemini-2.5-pro", "gemini-3.1-flash", "gpt-image-2", "gemini-image-captioning", "my-gemini-3.1-flash-image-preview"} {
+		if IsGeminiNativeImageModel(model) {
+			t.Fatalf("unexpected native image capability: %s", model)
+		}
+	}
+}
+
 func TestIsOpenAIResponseOnlyModel(t *testing.T) {
 	t.Parallel()
 

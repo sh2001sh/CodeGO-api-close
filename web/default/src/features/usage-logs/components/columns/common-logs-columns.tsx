@@ -462,7 +462,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     )}
                   </div>
                   {log.channel_name && (
-                    <span className='text-muted-foreground/70 truncate text-[11px]'>
+                    <span className='text-muted-foreground truncate text-[11px]'>
                       {channelName}
                     </span>
                   )}
@@ -614,7 +614,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           </TooltipProvider>
           {metaParts.length > 0 && (
             <span
-              className='text-muted-foreground/60 truncate text-[11px]'
+              className='text-muted-foreground truncate text-[11px]'
               title={metaParts.join(' · ')}
             >
               {metaParts.join(' · ')}
@@ -759,13 +759,13 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     </Tooltip>
                   </TooltipProvider>
                 ) : (
-                  <span className='border-border/60 text-muted-foreground/50 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px]'>
+                  <span className='border-border/60 text-muted-foreground inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px]'>
                     N/A
                   </span>
                 ))}
             </div>
             <div className='flex items-center gap-1 text-[11px]'>
-              <span className='text-muted-foreground/60'>
+              <span className='text-muted-foreground'>
                 {log.is_stream ? t('Stream') : t('Non-stream')}
                 {tokensPerSecond != null && (
                   <TooltipProvider delay={300}>
@@ -860,13 +860,13 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
               <div className='flex items-center gap-1 text-[11px]'>
                 {cacheReadTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
+                  <span className='text-muted-foreground'>
                     {t('Cache')}↓{' '}
                     {cacheReadTokens.toLocaleString(getIntlLocale())}
                   </span>
                 )}
                 {cacheWriteTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
+                  <span className='text-muted-foreground'>
                     ↑ {cacheWriteTokens.toLocaleString(getIntlLocale())}
                   </span>
                 )}
@@ -950,7 +950,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   className={cn(
                     'truncate leading-snug group-hover:underline',
                     primary.muted
-                      ? 'text-muted-foreground/60'
+                      ? 'text-muted-foreground'
                       : primary.danger
                         ? 'text-destructive'
                         : 'text-foreground'
@@ -958,7 +958,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 >
                   {primary.text}
                   {hasMore && (
-                    <span className='text-muted-foreground/40 ml-0.5'>
+                    <span className='text-muted-foreground ml-0.5'>
                       +{segments.length - 1}
                     </span>
                   )}
@@ -968,7 +968,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   {log.content}
                 </span>
               ) : (
-                <span className='text-muted-foreground/40'>—</span>
+                <span className='text-muted-foreground'>—</span>
               )}
             </button>
             <DetailsDialog

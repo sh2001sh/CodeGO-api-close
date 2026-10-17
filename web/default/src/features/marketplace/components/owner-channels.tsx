@@ -11,6 +11,7 @@ import {
   CircleDollarSign,
   Clock3,
   PauseCircle,
+  Pencil,
   Plus,
   RefreshCcw,
   Search,
@@ -42,6 +43,8 @@ export function OwnerChannels(props: { onAdd: () => void }) {
   const [status, setStatus] = useState('')
   const [pagination, setPagination] = useState({ scope: '', page: 1 })
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)
+  const [presentationEditing, setPresentationEditing] =
+    useState<MarketplaceChannel | null>(null)
   const [deleting, setDeleting] = useState<MarketplaceChannel | null>(null)
   const [expandedChannelIDs, setExpandedChannelIDs] = useState<Set<string>>(
     new Set()
@@ -308,6 +311,17 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                             variant='outline'
                             size='sm'
                             className='h-8 px-2'
+                            onClick={() => setPresentationEditing(channel)}
+                          >
+                            <Pencil aria-hidden />
+                            {t('商品展示')}
+                          </Button>
+                        )}
+                        {!channel.deleted_at && (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            className='h-8 px-2'
                             onClick={() => setEditing(channel)}
                           >
                             {t('编辑渠道')}
@@ -415,6 +429,14 @@ export function OwnerChannels(props: { onAdd: () => void }) {
           </p>
         </details>
       </section>
+      <ChannelEditDialog
+        channel={presentationEditing}
+        open={presentationEditing != null}
+        presentationOnly
+        onOpenChange={(open) => {
+          if (!open) setPresentationEditing(null)
+        }}
+      />
       <ChannelEditDialog
         channel={editing}
         open={editing != null}

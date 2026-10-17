@@ -178,6 +178,26 @@
   flex: 1 1 240px;
 }
 
+.dawn.exchange-market .market-search-input {
+  position: relative;
+  min-width: 0;
+}
+
+.dawn.exchange-market .filters .market-search-input input {
+  padding-right: 48px;
+}
+
+.dawn.exchange-market .market-search-input button {
+  position: absolute;
+  inset: 2px 2px 2px auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  color: var(--ink-secondary);
+}
+
 .dawn.exchange-market .market-tag-field {
   flex: 0 1 120px;
 }

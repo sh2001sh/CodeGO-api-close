@@ -9,14 +9,26 @@ import (
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func syncInternalChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group) error {
 	if channel == nil || group == nil || channel.InternalChannelID == nil {
 		return nil
 	}
-	internal, err := gatewaystore.LoadChannelByID(*channel.InternalChannelID, true)
-	if err != nil {
+	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		return syncInternalChannelWithDB(tx, channel, group)
+	}); err != nil {
+		return err
+	}
+	refreshInternalChannelRuntime(*channel.InternalChannelID)
+	return nil
+}
+
+func syncInternalChannelWithDB(tx *gorm.DB, channel *marketplaceschema.Channel, group *marketplaceschema.Group) error {
+	var internal gatewayschema.Channel
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&internal, *channel.InternalChannelID).Error; err != nil {
 		return err
 	}
 	baseURL := channel.BaseURLCiphertext
@@ -34,24 +46,20 @@ func syncInternalChannel(channel *marketplaceschema.Channel, group *marketplaces
 	internal.CreditPackSupported = channel.CreditPackSupported
 	internal.MultiplierCardUserEnabled = channel.MultiplierCardUserEnabled
 	internal.ChannelInfo.ResponsesCapabilities = decodeMarketplaceCapabilities(channel.TransportCapabilities)
-	if err := gatewaystore.UpdateChannel(internal); err != nil {
+	// The internal status is owned by lifecycle controls. Keep the locked
+	// value so a presentation edit cannot undo a concurrent pause.
+	if err := tx.Omit("status").Save(&internal).Error; err != nil {
 		return err
 	}
-	// The generic partial update skips zero values. Marketplace limits and
-	// credit-pack opt-in are authoritative, including zero caps and false.
-	if err := platformdb.DB.Model(internal).Updates(map[string]interface{}{
-		"marketplace_max_concurrency":      channel.MaxConcurrency,
-		"marketplace_user_max_concurrency": channel.UserMaxConcurrency,
-		"credit_pack_supported":            channel.CreditPackSupported,
-	}).Error; err != nil {
-		return err
-	}
+	return gatewaystore.UpdateChannelAbilities(&internal, tx)
+}
+
+func refreshInternalChannelRuntime(internalID int) {
 	// UpdateChannel persists the credential but intentionally does not rebuild
 	// the gateway's in-memory routing snapshot. Refresh it before the next
 	// request so replacing A with B cannot keep sending A from channelsIDM.
 	gatewaystore.InitChannelCache()
 	gatewaystore.NotifyChannelCacheChanged()
 	platformhttpx.ResetProxyClientCache()
-	gatewayruntime.InvalidateChannelAffinityForChannel(internal.Id)
-	return nil
+	gatewayruntime.InvalidateChannelAffinityForChannel(internalID)
 }

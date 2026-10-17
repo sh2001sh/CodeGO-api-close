@@ -16,8 +16,10 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func probeMarketplaceChannel(
@@ -38,7 +40,9 @@ func probeMarketplaceChannelModels(
 ) ([]ModelVerificationResult, error) {
 	var moderationErr error
 	ctx, moderationErr = preparePresentationProbe(ctx, channel)
-	if moderationErr != nil { return nil, moderationErr }
+	if moderationErr != nil {
+		return nil, moderationErr
+	}
 	if reportStage != nil {
 		reportStage("basic_security")
 	}
@@ -193,13 +197,6 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 	if len(rejectedModels) > 0 && probeErr == nil {
 		probeErr = fmt.Errorf("%d 个声明模型未通过连通性检测", len(rejectedModels))
 	}
-	if probeErr == nil {
-		if channel.InternalChannelID == nil {
-			probeErr = createInternalChannel(channel, group)
-		} else {
-			probeErr = syncInternalChannel(channel, group)
-		}
-	}
 	summary := verificationSummary(results, probeErr)
 	if probeErr != nil {
 		status = marketplacedomain.VerificationFailed
@@ -218,7 +215,14 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 		lifecycle = marketplacedomain.LifecycleActive
 	}
 	hash := sha256.Sum256([]byte(run.ID + channel.ID + status + now.Format(time.RFC3339Nano)))
-	_ = platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		// Match queue/edit lock order. Recheck lifecycle and run before any
+		// internal routing side effect; a cancelled or disabled run cannot
+		// publish a gateway channel using its old in-memory snapshot.
+		var currentChannel marketplaceschema.Channel
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&currentChannel, "id = ?", channel.ID).Error; err != nil {
+			return err
+		}
 		runUpdate := tx.Model(run).Where("status = ?", marketplacedomain.VerificationRunning).Updates(map[string]any{
 			"status": connectivityStatus, "stage": "protocol", "summary": summary,
 			"evidence_hash": hex.EncodeToString(hash[:]), "completed_at": now, "expires_at": expires,
@@ -229,7 +233,23 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 		if runUpdate.RowsAffected == 0 {
 			return errVerificationNotRunning
 		}
-		updates := map[string]any{"verification_status": status, "lifecycle_status": lifecycle}
+		var currentGroup marketplaceschema.Group
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&currentGroup, "id = ?", group.ID).Error; err != nil {
+			return err
+		}
+		*channel, *group = currentChannel, currentGroup
+		if probeErr == nil && channel.Status != marketplacedomain.LifecycleSuspended && channel.Status != marketplacedomain.LifecycleDisabled {
+			var syncErr error
+			if channel.InternalChannelID == nil {
+				syncErr = createInternalChannelWithDB(tx, channel, group)
+			} else {
+				syncErr = syncInternalChannelWithDB(tx, channel, group)
+			}
+			if syncErr != nil {
+				return syncErr
+			}
+		}
+		updates := map[string]any{"verification_status": status, "lifecycle_status": gorm.Expr("CASE WHEN lifecycle_status IN ? THEN lifecycle_status ELSE ? END", []string{marketplacedomain.LifecycleSuspended, marketplacedomain.LifecycleDisabled}, lifecycle)}
 		if status == marketplacedomain.VerificationPassed {
 			updates["verification_due_at"] = expires
 			updates["published_at"] = now
@@ -238,12 +258,18 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 			return err
 		}
 		channelUpdates := map[string]any{
-			"status":                       lifecycle,
+			"status":                       gorm.Expr("CASE WHEN status IN ? THEN status ELSE ? END", []string{marketplacedomain.LifecycleSuspended, marketplacedomain.LifecycleDisabled}, lifecycle),
 			"connectivity_test_status":     connectivityStatus,
 			"connectivity_test_checked_at": now,
 		}
 		return tx.Model(channel).Updates(channelUpdates).Error
 	})
+	if err != nil && !errors.Is(err, errVerificationNotRunning) && !errors.Is(err, gorm.ErrRecordNotFound) {
+		platformobservability.SysError("complete marketplace verification: " + err.Error())
+	}
+	if err == nil && channel.InternalChannelID != nil {
+		refreshInternalChannelRuntime(*channel.InternalChannelID)
+	}
 }
 
 func requiredVerificationState(channel *marketplaceschema.Channel) (string, string) {

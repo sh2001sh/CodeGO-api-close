@@ -109,12 +109,26 @@ const DEFAULT_FILTERS: GroupFilters = {
   page_size: 20,
 }
 
+type MarketBrowseView = 'products' | 'shops'
+
+function readMarketSearches(): Record<MarketBrowseView, string> {
+  const params = new URLSearchParams(window.location.search)
+  const shopsActive = params.get('browse') === 'shops'
+  const legacySearch = params.get('search') ?? ''
+  return {
+    products: params.get('group_search') ?? (shopsActive ? '' : legacySearch),
+    shops: params.get('shop_search') ?? (shopsActive ? legacySearch : ''),
+  }
+}
+
 function readMarketFilters(): GroupFilters {
   const params = new URLSearchParams(window.location.search)
   const hours = Number(params.get('window_hours'))
+  const searches = readMarketSearches()
   return {
     ...DEFAULT_FILTERS,
-    search: params.get('search') ?? '',
+    search:
+      params.get('browse') === 'shops' ? searches.shops : searches.products,
     models: params.getAll('models'),
     source: params.get('source') ?? '',
     tag: params.get('tag') ?? '',
@@ -233,7 +247,7 @@ export function DawnMarket() {
   }, [multiplierNotices.data, readMultiplierNotice])
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [browseBy, setBrowseBy] = useState<'products' | 'shops'>(() =>
+  const [browseBy, setBrowseBy] = useState<MarketBrowseView>(() =>
     new URLSearchParams(window.location.search).get('browse') === 'shops'
       ? 'shops'
       : 'products'
@@ -243,7 +257,15 @@ export function DawnMarket() {
     () => new URLSearchParams(window.location.search).get('shop_name') ?? ''
   )
   const [filters, setFilters] = useState<GroupFilters>(readMarketFilters)
-  const [search, setSearch] = useState(() => readMarketFilters().search)
+  const [searches, setSearches] = useState(readMarketSearches)
+  const search = searches[browseBy]
+  const searchPlaceholder =
+    browseBy === 'shops'
+      ? t('搜索店铺名称或店铺 ID')
+      : t('搜索分组名称、渠道 ID 或模型')
+  const setSearch = (value: string) => {
+    setSearches((current) => ({ ...current, [browseBy]: value }))
+  }
   const [activePoolID, setActivePoolID] = useState(readActiveRoutePoolID)
   const [poolPanelMode, setPoolPanelMode] = useState<PoolPanelMode>('pool')
   const [selected, setSelected] = useState<string | null>(null)
@@ -276,7 +298,9 @@ export function DawnMarket() {
   useEffect(() => {
     const url = new URL(window.location.href)
     const values: Record<string, string> = {
-      search: filters.search,
+      search: searches[browseBy].trim(),
+      group_search: searches.products.trim(),
+      shop_search: searches.shops.trim(),
       source: filters.source,
       tag: filters.tag ?? '',
       shop_id: filters.shop_id ? String(filters.shop_id) : '',
@@ -300,7 +324,7 @@ export function DawnMarket() {
       '',
       `${url.pathname}${url.search}${url.hash}`
     )
-  }, [filters, browseBy, activeShopName])
+  }, [filters, browseBy, activeShopName, searches])
 
   useEffect(() => {
     if (filters.page <= 1) return
@@ -317,7 +341,7 @@ export function DawnMarket() {
       setFilters((current) => ({ ...current, search: search.trim(), page: 1 }))
     }, 180)
     return () => window.clearTimeout(timer)
-  }, [search])
+  }, [search, browseBy])
 
   useEffect(() => {
     if (inviteHandledRef.current) return
@@ -736,6 +760,7 @@ export function DawnMarket() {
                     setBrowseBy('products')
                     setFilters((current) => ({
                       ...current,
+                      search: searches.products.trim(),
                       page: 1,
                       sort: 'score',
                       direction: 'desc',
@@ -753,6 +778,7 @@ export function DawnMarket() {
                     setActiveShopName('')
                     setFilters((current) => ({
                       ...current,
+                      search: searches.shops.trim(),
                       shop_id: undefined,
                       page: 1,
                       sort: 'rating',
@@ -773,15 +799,36 @@ export function DawnMarket() {
                 <SlidersHorizontal size={16} aria-hidden='true' />
                 {t('筛选')}
               </button>
-              <label className='market-search-field'>
-                <span>{t('搜索')}</span>
-                <input
-                  aria-label={t('搜索商品、店铺、模型或标签')}
-                  placeholder={t('搜索商品、店铺、模型或标签')}
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </label>
+              <div className='market-search-field'>
+                <label htmlFor='market-search'>
+                  {browseBy === 'shops' ? t('店铺名称') : t('Group name')}
+                </label>
+                <div className='market-search-input'>
+                  <input
+                    id='market-search'
+                    aria-label={searchPlaceholder}
+                    placeholder={searchPlaceholder}
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+                  {search && (
+                    <button
+                      type='button'
+                      aria-label={t('Clear search')}
+                      onClick={() => {
+                        setSearch('')
+                        setFilters((current) => ({
+                          ...current,
+                          search: '',
+                          page: 1,
+                        }))
+                      }}
+                    >
+                      <X size={16} aria-hidden='true' />
+                    </button>
+                  )}
+                </div>
+              </div>
               <div
                 id='market-advanced-filters'
                 className='market-advanced-filters'
@@ -999,6 +1046,7 @@ export function DawnMarket() {
                     setActiveShopName(shop.name)
                     setFilters((current) => ({
                       ...current,
+                      search: searches.products.trim(),
                       shop_id: shop.id,
                       page: 1,
                       sort: 'score',
@@ -1033,6 +1081,7 @@ export function DawnMarket() {
                           setActiveShopName('')
                           setFilters((current) => ({
                             ...current,
+                            search: searches.shops.trim(),
                             shop_id: undefined,
                             page: 1,
                             sort: 'rating',

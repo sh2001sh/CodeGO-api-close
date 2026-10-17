@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,12 @@ import (
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+const (
+	presentationSemanticADReason   = "模型发现名称、备注或标签包含广告，请修改后重新检测"
+	presentationSemanticSafeReason = "名称、备注和标签通过模型广告检查"
 )
 
 type presentationProbeKey struct{}
@@ -81,20 +88,39 @@ func (probe *presentationProbe) record(ctx context.Context, status, reason strin
 	return platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// A shop edit changes the shared content reviewed by every channel probe.
 		var shop marketplaceschema.Shop
-		err := tx.Where("owner_user_id = ?", probe.Group.OwnerUserID).First(&shop).Error
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("owner_user_id = ?", probe.Group.OwnerUserID).First(&shop).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 		if shop.Name != probe.Shop.Name || shop.Description != probe.Shop.Description || !shop.UpdatedAt.Equal(probe.Shop.UpdatedAt) {
 			return nil
 		}
+		var current marketplaceschema.Group
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id = ?", probe.Group.ID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		checkedAt := time.Now().UTC().Truncate(time.Microsecond)
+		if current.ModerationCheckedAt != nil && !checkedAt.After(*current.ModerationCheckedAt) {
+			checkedAt = current.ModerationCheckedAt.Add(time.Microsecond)
+		}
 		query := tx.Model(&marketplaceschema.Group{}).
 			Where("id = ? AND COALESCE(custom_name, '') = ? AND COALESCE(description, '') = ? AND COALESCE(tags, '') = ? AND updated_at = ?", probe.Group.ID, probe.Group.CustomName, probe.Group.Description, probe.Group.Tags, probe.Group.UpdatedAt)
-		if status != "failed" {
+		if status == "passed" && reason == presentationSemanticSafeReason && probe.Group.ModerationStatus == "failed" && probe.Group.ModerationReason == presentationSemanticADReason {
+			// A new explicit SAFE may recover an earlier semantic rejection. A
+			// result started before a later AD cannot clear that newer decision.
+			if probe.Group.ModerationCheckedAt == nil {
+				query = query.Where("COALESCE(moderation_status, '') <> ? OR (moderation_reason = ? AND moderation_checked_at IS NULL)", "failed", presentationSemanticADReason)
+			} else {
+				query = query.Where("COALESCE(moderation_status, '') <> ? OR (moderation_reason = ? AND moderation_checked_at = ?)", "failed", presentationSemanticADReason, probe.Group.ModerationCheckedAt)
+			}
+		} else if status != "failed" {
 			query = query.Where("COALESCE(moderation_status, '') <> ?", "failed")
 		}
 		// Do not advance updated_at: all models in this run review one revision.
-		update := query.UpdateColumns(map[string]any{"moderation_status": status, "moderation_reason": reason, "moderation_checked_at": time.Now().UTC()})
+		update := query.UpdateColumns(map[string]any{"moderation_status": status, "moderation_reason": reason, "moderation_checked_at": checkedAt})
 		if update.Error != nil {
 			return update.Error
 		}
@@ -104,7 +130,17 @@ func (probe *presentationProbe) record(ctx context.Context, status, reason strin
 		if shop.OwnerUserID > 0 && (shop.Name != "" || shop.Description != "") {
 			query := tx.Model(&marketplaceschema.Shop{}).Where("owner_user_id = ? AND updated_at = ?", shop.OwnerUserID, shop.UpdatedAt)
 			if status != "failed" {
-				query = query.Where("COALESCE(moderation_status, '') <> ?", "failed")
+				// Another channel may have rejected the shared shop content.
+				var failedGroups int64
+				if err := tx.Model(&marketplaceschema.Group{}).Where("owner_user_id = ? AND moderation_status = ?", shop.OwnerUserID, "failed").Count(&failedGroups).Error; err != nil {
+					return err
+				}
+				if failedGroups > 0 {
+					return nil
+				}
+				if status != "passed" || reason != presentationSemanticSafeReason {
+					query = query.Where("COALESCE(moderation_status, '') <> ?", "failed")
+				}
 			}
 			if err := query.UpdateColumn("moderation_status", status).Error; err != nil {
 				return err
@@ -116,7 +152,7 @@ func (probe *presentationProbe) record(ctx context.Context, status, reason strin
 
 func presentationProbeSupportsText(model string) bool {
 	model = strings.ToLower(model)
-	return !gatewaycontract.IsImageGenerationModel(model) && !strings.Contains(model, "embedding") && !strings.Contains(model, "rerank") && !strings.HasPrefix(model, "bge-") && !strings.HasPrefix(model, "m3e") && !strings.HasSuffix(model, gatewaystore.CompactModelSuffix)
+	return !gatewaycontract.IsImageGenerationModel(model) && !gatewaycontract.IsGeminiNativeImageModel(model) && !strings.Contains(model, "embedding") && !strings.Contains(model, "rerank") && !strings.HasPrefix(model, "bge-") && !strings.HasPrefix(model, "m3e") && !strings.HasSuffix(model, gatewaystore.CompactModelSuffix)
 }
 
 func validatePresentationProbeResponse(ctx context.Context, provider, model string, body []byte) error {
@@ -141,7 +177,12 @@ func validatePresentationProbeResponse(ctx context.Context, provider, model stri
 	case "codex":
 		content = payload["output"]
 		if text, ok := payload["output_text"].(string); ok && text != "" {
-			content = text
+			outputText := probeOutputText(content)
+			if outputText != "" && parsePresentationVerdict(outputText) != parsePresentationVerdict(text) {
+				content = outputText + " " + text
+			} else {
+				content = text
+			}
 		}
 	case "anthropic":
 		content = payload["content"]
@@ -150,11 +191,11 @@ func validatePresentationProbeResponse(ctx context.Context, provider, model stri
 	default:
 		content = payload["choices"]
 	}
-	verdict := strings.TrimSpace(probeOutputText(content))
+	verdict := parsePresentationVerdict(probeOutputText(content))
 	switch verdict {
 	case "AD":
 		probe.Failed = true
-		if err := probe.record(ctx, "failed", "模型发现名称、备注或标签包含广告，请修改后重新检测"); err != nil {
+		if err := probe.record(ctx, "failed", presentationSemanticADReason); err != nil {
 			return err
 		}
 		return errors.New("名称、备注或标签的模型广告检查未通过")
@@ -162,11 +203,73 @@ func validatePresentationProbeResponse(ctx context.Context, provider, model stri
 		if probe.Failed {
 			return errors.New("本轮已有模型发现公开内容包含广告")
 		}
-		return probe.record(ctx, "passed", "名称、备注和标签通过模型广告检查")
+		return probe.record(ctx, "passed", presentationSemanticSafeReason)
 	default:
 		if err := probe.record(ctx, "pending", "模型未返回有效的广告检查结论，请重新检测"); err != nil {
 			return err
 		}
-		return errors.New("连通性请求已返回，但模型未完成名称与备注广告检查")
+		// The transport already returned valid model output. An inconclusive
+		// moderation is pending, not a connectivity failure or an AD verdict.
+		return nil
+	}
+}
+
+func parsePresentationVerdict(text string) string {
+	text = strings.TrimSpace(text)
+	if len(text) > 256 {
+		return ""
+	}
+	if strings.HasPrefix(text, "```") {
+		line, rest, ok := strings.Cut(text, "\n")
+		if !ok || (line != "```" && line != "```text" && line != "```json") || !strings.HasSuffix(rest, "```") {
+			return ""
+		}
+		text = strings.TrimSpace(strings.TrimSuffix(rest, "```"))
+	}
+	if strings.HasPrefix(text, "{") {
+		// Exactly one known string field; token parsing rejects duplicate keys
+		// and extra fields instead of accepting the last contradictory verdict.
+		decoder := json.NewDecoder(strings.NewReader(text))
+		if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
+			return ""
+		}
+		key, err := decoder.Token()
+		if err != nil || (key != "verdict" && key != "result" && key != "status") {
+			return ""
+		}
+		var value string
+		if err := decoder.Decode(&value); err != nil {
+			return ""
+		}
+		if token, err := decoder.Token(); err != nil || token != json.Delim('}') {
+			return ""
+		}
+		if decoder.More() {
+			return ""
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			return ""
+		}
+		return barePresentationVerdict(value)
+	}
+	text = strings.TrimSpace(strings.TrimRight(text, ".。!！"))
+	for _, wrapper := range [][2]string{{"**", "**"}, {"__", "__"}, {"`", "`"}, {"\"", "\""}, {"'", "'"}, {"[", "]"}, {"(", ")"}} {
+		if len(text) > len(wrapper[0])+len(wrapper[1]) && strings.HasPrefix(text, wrapper[0]) && strings.HasSuffix(text, wrapper[1]) {
+			text = strings.TrimSpace(text[len(wrapper[0]) : len(text)-len(wrapper[1])])
+			break
+		}
+	}
+	return barePresentationVerdict(text)
+}
+
+func barePresentationVerdict(text string) string {
+	switch strings.ToUpper(strings.TrimSpace(text)) {
+	case "AD":
+		return "AD"
+	case "SAFE":
+		return "SAFE"
+	default:
+		return ""
 	}
 }

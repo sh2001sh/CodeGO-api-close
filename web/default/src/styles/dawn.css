@@ -1095,6 +1095,10 @@ For commercial licensing, please contact support@quantumnous.com.
   color: var(--dawn-ink2);
 }
 
+.dark .dawn :is(input, select, textarea) {
+  border-color: var(--hairline-strong);
+}
+
 .dawn .capline {
   display: flex;
   justify-content: space-between;

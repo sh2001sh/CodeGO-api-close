@@ -35,9 +35,10 @@ export function OwnerChannelActions(props: {
     (model) => !isImageGenerationModel(model)
   ).length
   const retryConnectivity =
-    failedConnectivityCount > 0 ||
-    (channel.connectivity_test_status === 'failed' &&
-      verifiableDeclaredCount > 0)
+    !['failed', 'pending'].includes(channel.moderation_status ?? '') &&
+    (failedConnectivityCount > 0 ||
+      (channel.connectivity_test_status === 'failed' &&
+        verifiableDeclaredCount > 0))
   const retryConnectivityCount =
     failedConnectivityCount > 0
       ? failedConnectivityCount

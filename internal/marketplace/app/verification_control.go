@@ -8,6 +8,7 @@ import (
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var errVerificationNotRunning = errors.New("检测任务已暂停或结束")
@@ -50,10 +51,18 @@ func statusInProgress(status string) bool {
 func pauseChannelVerificationState(channel *marketplaceschema.Channel) error {
 	now := time.Now().UTC()
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var current marketplaceschema.Channel
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id = ?", channel.ID).Error; err != nil {
+			return err
+		}
+		*channel = current
+		if !verificationInProgress(channel) {
+			return nil
+		}
 		if err := pauseActiveVerificationRunsWithDB(tx, channel.ID, now); err != nil {
 			return err
 		}
-		channelUpdates := map[string]any{"status": marketplacedomain.LifecycleDraft}
+		channelUpdates := map[string]any{"status": gorm.Expr("CASE WHEN status IN ? THEN status ELSE ? END", []string{marketplacedomain.LifecycleSuspended, marketplacedomain.LifecycleDisabled}, marketplacedomain.LifecycleDraft)}
 		if statusInProgress(channel.ConnectivityTestStatus) {
 			channelUpdates["connectivity_test_status"] = marketplacedomain.VerificationPaused
 		}
@@ -62,7 +71,7 @@ func pauseChannelVerificationState(channel *marketplaceschema.Channel) error {
 		}
 		return tx.Model(&marketplaceschema.Group{}).Where("channel_id = ?", channel.ID).
 			Updates(map[string]any{
-				"lifecycle_status":    marketplacedomain.LifecycleDraft,
+				"lifecycle_status":    gorm.Expr("CASE WHEN lifecycle_status IN ? THEN lifecycle_status ELSE ? END", []string{marketplacedomain.LifecycleSuspended, marketplacedomain.LifecycleDisabled}, marketplacedomain.LifecycleDraft),
 				"verification_status": marketplacedomain.VerificationPaused,
 				"verification_due_at": nil,
 			}).Error

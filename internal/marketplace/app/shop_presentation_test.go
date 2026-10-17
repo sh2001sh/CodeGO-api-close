@@ -37,13 +37,18 @@ func TestShopListingAggregatesBeyondProductPageAndFilters(t *testing.T) {
 	require.NoError(t, db.Delete(&marketplaceschema.Channel{}, "id = ?", deleted.ChannelID).Error)
 	_, err := UpdateOwnerShop(10, ShopProfileRequest{Name: "晨光模型店", Description: "提供稳定的编程模型"})
 	require.NoError(t, err)
-	for _, query := range []GroupQuery{{}, {Search: "晨光"}, {Tag: "编程"}, {Search: "gpt-5"}} {
+	for _, query := range []GroupQuery{{}, {Search: "晨光"}, {Tag: "编程"}, {Search: "稳定的"}, {Search: "10"}} {
 		shops, err := ListMarketplaceShops(query)
 		require.NoError(t, err)
 		require.Equal(t, 1, shops.Total)
 		require.Equal(t, 25, shops.Items[0].ChannelCount)
 		require.Equal(t, "晨光模型店", shops.Items[0].Name)
 		require.ElementsMatch(t, []string{"编程", "低延迟"}, shops.Items[0].Tags)
+	}
+	for _, search := range []string{"gpt-5", "推理渠道", "低延迟", "product-00"} {
+		shops, err := ListMarketplaceShops(GroupQuery{Search: search})
+		require.NoError(t, err)
+		require.Zero(t, shops.Total, search)
 	}
 	shops, err := ListMarketplaceShops(GroupQuery{Tag: "不存在"})
 	require.NoError(t, err)
@@ -251,7 +256,7 @@ func TestPresentationProbeHandlesNonTextAndShopEdits(t *testing.T) {
 	prompt, validate, err := batchPresentationProbe(group.ChannelID, "gpt-5")
 	require.NoError(t, err)
 	require.NotEmpty(t, prompt)
-	require.Error(t, validate([]byte(`{"choices":[{"message":{"content":"maybe"}}]}`)))
+	require.NoError(t, validate([]byte(`{"choices":[{"message":{"content":"maybe"}}]}`)))
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
 	require.Equal(t, "pending", group.ModerationStatus)
 }

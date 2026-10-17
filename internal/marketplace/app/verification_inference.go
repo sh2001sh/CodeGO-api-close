@@ -138,6 +138,24 @@ func inferenceProbeRequestWithPrompt(
 	provider, baseURL, model, prompt string,
 	maxOutputTokens int,
 ) (string, map[string]any, error) {
+	if gatewaycontract.IsGeminiNativeImageModel(model) {
+		// Native Gemini images use generateContent. Imagen alone uses predict.
+		if provider == "gemini" {
+			endpoint, err := geminiInferenceEndpoint(baseURL, strings.TrimPrefix(strings.TrimPrefix(model, "google/"), "models/"))
+			return endpoint, map[string]any{
+				"contents":         []map[string]any{{"parts": []map[string]string{{"text": "Generate a small orange circle on a white background."}}}},
+				"generationConfig": map[string]any{"responseModalities": []string{"TEXT", "IMAGE"}},
+			}, err
+		}
+		if provider == "anthropic" || provider == "codex" {
+			return "", nil, errors.New("该渠道类型不支持 Gemini 原生生图协议")
+		}
+		endpoint, err := apiEndpoint(baseURL, "/v1/chat/completions")
+		return endpoint, map[string]any{
+			"model": model, "modalities": []string{"image", "text"},
+			"messages": []map[string]string{{"role": "user", "content": "Generate a small orange circle on a white background."}},
+		}, err
+	}
 	if gatewaycontract.IsImageGenerationModel(model) {
 		return imageInferenceProbeRequest(provider, baseURL, model, prompt)
 	}
@@ -186,7 +204,7 @@ func imageInferenceProbeRequest(provider, baseURL, model, prompt string) (string
 }
 
 func marketplaceProbeTimeout(model string) time.Duration {
-	if !gatewaycontract.IsImageGenerationModel(model) {
+	if !gatewaycontract.IsImageGenerationModel(model) && !gatewaycontract.IsGeminiNativeImageModel(model) {
 		return marketplaceTextProbeTimeout
 	}
 	configured := time.Duration(platformconfig.ImageResponseHeaderTimeout) * time.Second
@@ -197,7 +215,7 @@ func marketplaceProbeTimeout(model string) time.Duration {
 }
 
 func marketplaceProbeKind(model string) string {
-	if gatewaycontract.IsImageGenerationModel(model) {
+	if gatewaycontract.IsImageGenerationModel(model) || gatewaycontract.IsGeminiNativeImageModel(model) {
 		return "生图模型"
 	}
 	return "文本模型"

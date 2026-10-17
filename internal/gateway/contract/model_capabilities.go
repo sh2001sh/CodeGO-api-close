@@ -55,6 +55,16 @@ func IsImageGenerationModel(modelName string) bool {
 	return false
 }
 
+// IsGeminiNativeImageModel identifies Gemini models that generate images through
+// generateContent (or compatible chat), rather than the Imagen predict API or
+// the OpenAI images endpoint. Keep this separate from endpoint routing above.
+func IsGeminiNativeImageModel(modelName string) bool {
+	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	modelName = strings.TrimPrefix(strings.TrimPrefix(modelName, "google/"), "models/")
+	return strings.HasPrefix(modelName, "gemini-") &&
+		(strings.HasSuffix(modelName, "-image") || strings.HasSuffix(modelName, "-image-preview") || strings.HasSuffix(modelName, "-image-generation"))
+}
+
 // IsOpenAITextModel reports whether a model should use the OpenAI tokenizer path.
 func IsOpenAITextModel(modelName string) bool {
 	modelName = strings.ToLower(modelName)

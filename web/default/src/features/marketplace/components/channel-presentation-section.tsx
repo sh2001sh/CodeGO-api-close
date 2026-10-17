@@ -1,14 +1,20 @@
-import type { UseFormReturn } from 'react-hook-form'
+import type { FieldErrors, UseFormRegisterReturn } from 'react-hook-form'
 import { Store } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import type { ChannelFormInput } from '../lib/channel-form'
+import type { ChannelPresentationInput } from '../lib/channel-form'
 import type { MarketplaceChannel } from '../types'
 import { FormField, FormSection } from './channel-form-layout'
 
 export function ChannelPresentationSection(props: {
-  form: UseFormReturn<ChannelFormInput>
+  form: {
+    register: (
+      name: keyof ChannelPresentationInput,
+      options?: { setValueAs: (value: string | string[]) => string[] }
+    ) => UseFormRegisterReturn
+    formState: { errors: FieldErrors<ChannelPresentationInput> }
+  }
   channel?: MarketplaceChannel
 }) {
   const { t } = useTranslation()

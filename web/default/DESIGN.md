@@ -19,7 +19,11 @@ colors:
   rose: "#BE234B"
   indigo: "#5146C8"
   dark-canvas: "#0D0D10"
-  dark-subtle: "#141418"
+  dark-subtle: "#17171E"
+  dark-card: "#212129"
+  dark-sunken: "#15151C"
+  dark-popover: "#292933"
+  dark-muted: "#A9A9B7"
   dark-ink: "#FAF8F5"
   dark-brand-ink: "#FDBA74"
 typography:
@@ -78,7 +82,7 @@ components:
 `--ink-primary`、`--ink-secondary` 分別承接正文與次層資料；附屬資料沿用來源中的 `--ink-muted`，其實際疊層與字級仍需驗證，不能推定為已合格的小字色。
 成功／警告／失敗／資訊使用 emerald／amber／rose／indigo，對應 `--telemetry-success/warning/error/info` 與各自 `-bg`。
 狀態必須同時有文字或圖示；未知與空值維持中性，不用成功色掩飾沒有資料。
-深色畫布與凹面使用前置資料的深色值，卡片與玻璃改為深色透明面；文字、邊線和遙測色使用獨立明度。
+深色畫布、側欄、實色卡片、凹面與浮層使用獨立明度；玻璃維持高不透明度。次層文字與佔位字使用可讀的灰紫色，資料文字不再疊加透明度；表單邊界使用 `--hairline-strong`，一般區塊保持輕邊界與表面分層。
 
 **The Solaris Signal Rule.** 暖白、淺灰與黑曜石組織主要視野；橙色集中於品牌、光線及指定交易狀態，功能狀態同時提供文字或圖示。
 

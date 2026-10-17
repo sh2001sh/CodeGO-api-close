@@ -107,11 +107,11 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
               {formatTimestampToDate(submitTime, 'seconds')}
             </span>
             {log.finish_time ? (
-              <span className='text-muted-foreground/60 font-mono text-[11px] tabular-nums'>
+              <span className='text-muted-foreground font-mono text-[11px] tabular-nums'>
                 {formatTimestampToDate(log.finish_time, 'seconds')}
               </span>
             ) : (
-              <span className='text-muted-foreground/50 text-[11px]'>-</span>
+              <span className='text-muted-foreground text-[11px]'>-</span>
             )}
           </div>
         )
@@ -175,7 +175,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         const log = row.original
         const taskId = row.getValue('task_id') as string
         if (!taskId) {
-          return <span className='text-muted-foreground/60 text-xs'>-</span>
+          return <span className='text-muted-foreground text-xs'>-</span>
         }
         return (
           <div className='flex max-w-[170px] flex-col gap-0.5'>
@@ -186,7 +186,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
               showDot={false}
               className='border-border/60 bg-muted/30 max-w-full truncate rounded-md border px-1.5 py-0.5 font-mono'
             />
-            <span className='text-muted-foreground/60 truncate text-[11px]'>
+            <span className='text-muted-foreground truncate text-[11px]'>
               {t(log.platform)} · {t(taskActionMapper.getLabel(log.action))}
             </span>
           </div>
@@ -272,7 +272,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         }
 
         if (!failReason) {
-          return <span className='text-muted-foreground/60 text-xs'>-</span>
+          return <span className='text-muted-foreground text-xs'>-</span>
         }
 
         return (

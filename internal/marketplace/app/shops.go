@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -123,6 +125,7 @@ func ListMarketplaceShops(query GroupQuery) (*ShopList, error) {
 	publicQuery := query
 	publicQuery.ViewerUserID = 0
 	publicQuery.IncludeAccess = false
+	publicQuery.Search = ""
 	groups, err := loadPublicGroupRows(publicQuery)
 	if err != nil {
 		return nil, err
@@ -154,8 +157,10 @@ func ListMarketplaceShops(query GroupQuery) (*ShopList, error) {
 		}
 		models := decodeModels(channel.DeclaredModels)
 		matchQuery := query
-		if query.Search != "" && strings.Contains(strings.ToLower(view.Name), strings.ToLower(strings.TrimSpace(query.Search))) {
-			matchQuery.Search = ""
+		matchQuery.Search = ""
+		search := strings.ToLower(strings.TrimSpace(query.Search))
+		if search != "" && search != strconv.Itoa(view.ID) && !strings.Contains(strings.ToLower(view.Name), search) && !strings.Contains(strings.ToLower(view.Description), search) {
+			continue
 		}
 		if !matchesGroupQuery(group, channel, models, matchQuery) {
 			continue
@@ -230,15 +235,29 @@ func UpdateOwnerShop(ownerID int, req ShopProfileRequest) (*ShopView, error) {
 	if err != nil {
 		return nil, err
 	}
-	profile := marketplaceschema.Shop{OwnerUserID: ownerID, Name: name, Description: description, ModerationStatus: "pending"}
-	var existing marketplaceschema.Shop
-	if err := platformdb.DB.Where("owner_user_id = ?", ownerID).First(&existing).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-	if existing.OwnerUserID > 0 && existing.Name == name && existing.Description == description {
-		return GetOwnerShop(ownerID)
-	}
-	if err := platformdb.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "owner_user_id"}}, DoUpdates: clause.AssignmentColumns([]string{"name", "description", "moderation_status", "updated_at"})}).Create(&profile).Error; err != nil {
+	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var existing marketplaceschema.Shop
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("owner_user_id = ?", ownerID).First(&existing).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if existing.OwnerUserID > 0 && existing.Name == name && existing.Description == description {
+			return nil
+		}
+		profile := marketplaceschema.Shop{OwnerUserID: ownerID, Name: name, Description: description, ModerationStatus: "pending"}
+		profile.UpdatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		if !profile.UpdatedAt.After(existing.UpdatedAt) {
+			profile.UpdatedAt = existing.UpdatedAt.Add(time.Microsecond)
+		}
+		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "owner_user_id"}}, DoUpdates: clause.AssignmentColumns([]string{"name", "description", "moderation_status", "updated_at"})}).Create(&profile).Error; err != nil {
+			return err
+		}
+		// Shared public content changed. Reopen review for this owner's groups
+		// without changing their service lifecycle, prices or connectivity data.
+		// Advancing the revision also prevents an old probe from writing back.
+		return tx.Model(&marketplaceschema.Group{}).Where("owner_user_id = ?", ownerID).Updates(map[string]any{
+			"moderation_status": "pending", "moderation_reason": "", "moderation_checked_at": nil, "updated_at": profile.UpdatedAt,
+		}).Error
+	}); err != nil {
 		return nil, err
 	}
 	return GetOwnerShop(ownerID)

@@ -11,9 +11,10 @@ import (
 )
 
 func validateMarketplaceProbeResponse(provider, model string, body []byte) error {
+	imageModel := gatewaycontract.IsImageGenerationModel(model) || gatewaycontract.IsGeminiNativeImageModel(model)
 	trimmed := bytes.TrimSpace(body)
 	if len(trimmed) == 0 {
-		if gatewaycontract.IsImageGenerationModel(model) {
+		if imageModel {
 			return errors.New("生图请求已返回成功状态，但没有返回生成结果")
 		}
 		return nil
@@ -23,12 +24,12 @@ func validateMarketplaceProbeResponse(provider, model string, body []byte) error
 	}
 	var payload any
 	if err := json.Unmarshal(trimmed, &payload); err != nil {
-		if !gatewaycontract.IsImageGenerationModel(model) {
+		if !imageModel {
 			return errors.New("上游推理响应不是有效 JSON")
 		}
 		return errors.New("生图请求返回了无法识别的响应格式")
 	}
-	if !gatewaycontract.IsImageGenerationModel(model) {
+	if !imageModel {
 		return validateTextProbePayload(provider, payload)
 	}
 	if !containsGeneratedImage(payload) {
@@ -219,6 +220,20 @@ func containsGeneratedImage(value any) bool {
 			}
 		}
 	case map[string]any:
+		// Gemini generateContent returns MIME-typed inlineData; accept image
+		// bytes only, never a text-only result or another inline media type.
+		for _, key := range []string{"inlineData", "inline_data"} {
+			if data, ok := typed[key].(map[string]any); ok {
+				mime, _ := data["mimeType"].(string)
+				if mime == "" {
+					mime, _ = data["mime_type"].(string)
+				}
+				bytes, _ := data["data"].(string)
+				if strings.HasPrefix(strings.ToLower(mime), "image/") && strings.TrimSpace(bytes) != "" {
+					return true
+				}
+			}
+		}
 		for key, item := range typed {
 			normalizedKey := strings.ToLower(strings.ReplaceAll(key, "_", ""))
 			switch normalizedKey {

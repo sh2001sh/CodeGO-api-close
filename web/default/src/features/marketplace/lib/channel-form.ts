@@ -101,6 +101,14 @@ export const channelFormSchema = z.object({
 
 export type ChannelFormInput = z.infer<typeof channelFormSchema>
 
+export const channelPresentationSchema = channelFormSchema.pick({
+  custom_name: true,
+  description: true,
+  tags: true,
+})
+
+export type ChannelPresentationInput = z.infer<typeof channelPresentationSchema>
+
 export const channelEditFormSchema = channelFormSchema.extend({
   base_url: z.union([z.literal(''), z.string().url().startsWith('https://')]),
   api_key: z.string(),

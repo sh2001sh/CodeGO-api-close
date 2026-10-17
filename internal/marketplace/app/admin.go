@@ -17,6 +17,7 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func ListAdminChannels(input AdminChannelQuery) ([]ChannelView, error) {
@@ -369,6 +370,23 @@ func rejectChannel(channel *marketplaceschema.Channel, group *marketplaceschema.
 }
 
 func createInternalChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group) error {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var current marketplaceschema.Channel
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id = ?", channel.ID).Error; err != nil {
+			return err
+		}
+		if current.Status == marketplacedomain.LifecycleSuspended || current.Status == marketplacedomain.LifecycleDisabled {
+			return nil
+		}
+		if current.InternalChannelID != nil {
+			channel.InternalChannelID = current.InternalChannelID
+			return nil
+		}
+		return createInternalChannelWithDB(tx, channel, group)
+	})
+}
+
+func createInternalChannelWithDB(tx *gorm.DB, channel *marketplaceschema.Channel, group *marketplaceschema.Group) error {
 	metadata, _ := json.Marshal(map[string]any{
 		"marketplace_channel_id": channel.ID, "marketplace_group_id": group.ID,
 		"source_type": group.SourceType, "credit_pool_policy": group.CreditPoolPolicy,
@@ -389,12 +407,14 @@ func createInternalChannel(channel *marketplaceschema.Channel, group *marketplac
 		OtherInfo: string(metadata),
 	}
 	internal.ChannelInfo.ResponsesCapabilities = decodeMarketplaceCapabilities(channel.TransportCapabilities)
-	if err := gatewaystore.CreateChannel(internal); err != nil {
+	if err := tx.Create(internal).Error; err != nil {
 		return err
 	}
-	result := platformdb.DB.Model(channel).Update("internal_channel_id", internal.Id)
+	if err := gatewaystore.AddChannelAbilities(internal, tx); err != nil {
+		return err
+	}
+	result := tx.Model(channel).Update("internal_channel_id", internal.Id)
 	if result.Error != nil || result.RowsAffected != 1 {
-		_ = gatewaystore.DeleteChannelByID(internal.Id)
 		if result.Error != nil {
 			return result.Error
 		}

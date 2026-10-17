@@ -209,37 +209,57 @@ func UpdateAdminChannel(channelID string, req AdminUpdateChannelRequest) (*Chann
 }
 
 func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest, consistencyStatus *string) (*ChannelView, error) {
-	previousModels := decodeModels(channel.DeclaredModels)
-	previousResults := decodeModelVerificationResults(channel.ModelVerificationResults)
-	previousProvider := channel.ProviderType
-	previousBaseURL := channel.BaseURLCiphertext
-	previousCredential := channel.CredentialCiphertext
-	reverify, err := applyChannelUpdate(channel, group, req)
-	if err != nil {
-		return nil, err
-	}
-	if consistencyStatus != nil {
-		if err := applyModelConsistencyStatus(channel, *consistencyStatus); err != nil {
-			return nil, err
-		}
-	}
-	modelsChanged := strings.Join(previousModels, "\x00") != strings.Join(decodeModels(channel.DeclaredModels), "\x00")
-	credentialTransportChanged := previousProvider != channel.ProviderType ||
-		previousBaseURL != channel.BaseURLCiphertext ||
-		previousCredential != channel.CredentialCiphertext
-	capabilitiesChanged := credentialTransportChanged || modelsChanged
-	if capabilitiesChanged {
-		markMarketplaceCapabilitiesPending(channel)
-	}
-	if reverify {
-		marketplaceVerificationTasks.cancelChannel(channel.ID)
-	}
-	if modelsChanged && !credentialTransportChanged {
-		channel.ModelVerificationResults = encodeModelVerificationResults(
-			mergeModelVerificationResults(decodeModels(channel.DeclaredModels), previousResults, nil),
-		)
-	}
+	var reverify, capabilitiesChanged bool
 	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		// Apply the patch to locked current records. A stale full-row save must
+		// not overwrite a newer review decision, shop edit, or admin pause.
+		var currentChannel marketplaceschema.Channel
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND owner_user_id = ?", channel.ID, channel.OwnerUserID).First(&currentChannel).Error; err != nil {
+			return err
+		}
+		var currentGroup marketplaceschema.Group
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND channel_id = ? AND owner_user_id = ?", group.ID, currentChannel.ID, currentChannel.OwnerUserID).First(&currentGroup).Error; err != nil {
+			return err
+		}
+		*channel, *group = currentChannel, currentGroup
+		previousModels := decodeModels(channel.DeclaredModels)
+		previousResults := decodeModelVerificationResults(channel.ModelVerificationResults)
+		previousProvider := channel.ProviderType
+		previousBaseURL := channel.BaseURLCiphertext
+		previousCredential := channel.CredentialCiphertext
+		var err error
+		reverify, err = applyChannelUpdate(channel, group, req)
+		if err != nil {
+			return err
+		}
+		if consistencyStatus != nil {
+			if err := applyModelConsistencyStatus(channel, *consistencyStatus); err != nil {
+				return err
+			}
+		}
+		modelsChanged := strings.Join(previousModels, "\x00") != strings.Join(decodeModels(channel.DeclaredModels), "\x00")
+		credentialTransportChanged := previousProvider != channel.ProviderType ||
+			previousBaseURL != channel.BaseURLCiphertext ||
+			previousCredential != channel.CredentialCiphertext
+		capabilitiesChanged = credentialTransportChanged || modelsChanged
+		if capabilitiesChanged {
+			markMarketplaceCapabilitiesPending(channel)
+		}
+		if modelsChanged && !credentialTransportChanged {
+			channel.ModelVerificationResults = encodeModelVerificationResults(
+				mergeModelVerificationResults(decodeModels(channel.DeclaredModels), previousResults, nil),
+			)
+		}
+		// Keep a distinct content revision even for rapid edit-and-undo saves.
+		// Database timestamp precision and host clocks can otherwise coincide.
+		revision := time.Now().UTC().Truncate(time.Microsecond)
+		if !revision.After(group.UpdatedAt) {
+			revision = group.UpdatedAt.Add(time.Microsecond)
+		}
+		if !revision.After(channel.UpdatedAt) {
+			revision = channel.UpdatedAt.Add(time.Microsecond)
+		}
+		tx = tx.Session(&gorm.Session{NowFunc: func() time.Time { return revision }})
 		if reverify {
 			if err := pauseActiveVerificationRunsWithDB(tx, channel.ID, time.Now().UTC()); err != nil {
 				return err
@@ -251,6 +271,9 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 		return tx.Save(group).Error
 	}); err != nil {
 		return nil, err
+	}
+	if reverify {
+		marketplaceVerificationTasks.cancelChannel(channel.ID)
 	}
 	if capabilitiesChanged || !channel.AutoProbeEnabled {
 		marketplaceAutoProbeTasks.cancelChannel(channel.ID)
@@ -272,13 +295,16 @@ func PauseOwnerChannel(ownerUserID int, channelID string, paused bool) error {
 	if err != nil {
 		return err
 	}
+	if channel.Status == marketplacedomain.LifecycleDisabled {
+		return errors.New("渠道已停用，请联系管理员")
+	}
 	status := marketplacedomain.LifecycleActive
 	if paused {
 		status = marketplacedomain.LifecycleSuspended
 	} else if group.VerificationStatus != marketplacedomain.VerificationPassed {
 		return errors.New("检测未通过，不能恢复服务")
 	}
-	return setMarketplaceChannelLifecycle(channel, group, status, paused)
+	return setMarketplaceChannelLifecycle(channel, group, status, paused, true)
 }
 
 func PauseAdminChannel(channelID string, paused bool) error {
@@ -290,11 +316,28 @@ func PauseAdminChannel(channelID string, paused bool) error {
 	if paused {
 		status = marketplacedomain.LifecycleSuspended
 	}
-	return setMarketplaceChannelLifecycle(channel, group, status, paused)
+	return setMarketplaceChannelLifecycle(channel, group, status, paused, false)
 }
 
-func setMarketplaceChannelLifecycle(channel *marketplaceschema.Channel, group *marketplaceschema.Group, status string, paused bool) error {
+func setMarketplaceChannelLifecycle(channel *marketplaceschema.Channel, group *marketplaceschema.Group, status string, paused, ownerAction bool) error {
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var currentChannel marketplaceschema.Channel
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND owner_user_id = ?", channel.ID, channel.OwnerUserID).First(&currentChannel).Error; err != nil {
+			return err
+		}
+		var currentGroup marketplaceschema.Group
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND channel_id = ? AND owner_user_id = ?", group.ID, channel.ID, channel.OwnerUserID).First(&currentGroup).Error; err != nil {
+			return err
+		}
+		if ownerAction {
+			if currentChannel.Status == marketplacedomain.LifecycleDisabled {
+				return errors.New("渠道已停用，请联系管理员")
+			}
+			if !paused && currentGroup.VerificationStatus != marketplacedomain.VerificationPassed {
+				return errors.New("检测未通过，不能恢复服务")
+			}
+		}
+		*channel, *group = currentChannel, currentGroup
 		if err := tx.Model(channel).Update("status", status).Error; err != nil {
 			return err
 		}
@@ -444,7 +487,7 @@ func loadOwnedChannelGroup(ownerUserID int, channelID string) (*marketplaceschem
 		return nil, nil, err
 	}
 	var group marketplaceschema.Group
-	if err := platformdb.DB.Where("channel_id = ?", channel.ID).First(&group).Error; err != nil {
+	if err := platformdb.DB.Where("channel_id = ? AND owner_user_id = ?", channel.ID, ownerUserID).First(&group).Error; err != nil {
 		return nil, nil, err
 	}
 	return &channel, &group, nil

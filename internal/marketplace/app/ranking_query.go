@@ -64,11 +64,7 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 		if !ready {
 			models = decodeModels(channel.DeclaredModels)
 		}
-		matchQuery := query
-		if query.Search != "" && strings.Contains(strings.ToLower(shops[group.OwnerUserID].Name), strings.ToLower(strings.TrimSpace(query.Search))) {
-			matchQuery.Search = ""
-		}
-		if !matchesGroupQuery(group, channel, models, matchQuery) {
+		if !matchesGroupQuery(group, channel, models, query) {
 			continue
 		}
 		snapshot := snapshots[group.ID]

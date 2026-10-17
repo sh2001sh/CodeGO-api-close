@@ -44,6 +44,32 @@ func TestImageProbeUsesGenerationEndpointAndLongTimeout(t *testing.T) {
 	require.Equal(t, marketplaceTextProbeTimeout, marketplaceProbeTimeout("gpt-5.6-sol"))
 }
 
+func TestGeminiNativeImageProbeUsesGenerateContentAndRequiresImageData(t *testing.T) {
+	const model = "gemini-3.1-flash-image-preview"
+	endpoint, payload, err := inferenceProbeRequestWithPrompt("gemini", "https://api.example.com/v1beta", model, "do not forward moderation text", 1024)
+	require.NoError(t, err)
+	require.Equal(t, "https://api.example.com/v1beta/models/"+model+":generateContent", endpoint)
+	require.NotContains(t, endpoint, ":predict")
+	require.Equal(t, []string{"TEXT", "IMAGE"}, payload["generationConfig"].(map[string]any)["responseModalities"])
+	encoded, err := json.Marshal(payload)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "do not forward moderation text")
+	require.False(t, presentationProbeSupportsText(model))
+	require.GreaterOrEqual(t, marketplaceProbeTimeout(model), marketplaceMinimumImageTimeout)
+	endpoint, payload, err = inferenceProbeRequest("openai_compatible", "https://api.example.com/v1", model)
+	require.NoError(t, err)
+	require.Equal(t, "https://api.example.com/v1/chat/completions", endpoint)
+	require.Equal(t, []string{"image", "text"}, payload["modalities"])
+	require.NoError(t, validateMarketplaceProbeResponse("gemini", model, []byte(`{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"aW1hZ2U="}}]}}]}`)))
+	require.NoError(t, validateMarketplaceProbeResponse("gemini", model, []byte(`{"candidates":[{"content":{"parts":[{"inline_data":{"mime_type":"image/png","data":"aW1hZ2U="}}]}}]}`)))
+	for _, body := range []string{`{"candidates":[{"content":{"parts":[{"text":"SAFE"}]}}]}`, `{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"audio/wav","data":"YXVkaW8="}}]}}]}`, `{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":""}}]}}]}`} {
+		require.ErrorContains(t, validateMarketplaceProbeResponse("gemini", model, []byte(body)), "未返回图片")
+	}
+	endpoint, _, err = inferenceProbeRequest("gemini", "https://api.example.com/v1beta", "imagen-3.0-generate")
+	require.NoError(t, err)
+	require.Contains(t, endpoint, ":predict")
+}
+
 func TestProbeResponseRejectsEmbeddedFailureAndMissingImage(t *testing.T) {
 	require.EqualError(
 		t,
@@ -138,6 +164,19 @@ func TestVerifyDeclaredModelsRejectsUnadvertisedModels(t *testing.T) {
 
 func TestSelectProbeModelSkipsSyntheticReviewAlias(t *testing.T) {
 	require.Equal(t, "gpt-5.5", selectProbeModel([]string{"codex-auto-review", "gpt-5.5"}))
+}
+
+func TestGeminiNativeImageDoesNotUseUnrelatedProviderProtocol(t *testing.T) {
+	for _, provider := range []string{"codex", "anthropic"} {
+		_, _, err := inferenceProbeRequest(provider, "https://example.com", "gemini-3.1-flash-image-preview")
+		require.ErrorContains(t, err, "不支持 Gemini 原生生图协议")
+	}
+	for _, model := range []string{"gemini-2.0-flash-preview-image-generation", "gemini-2.0-flash-exp-image-generation"} {
+		endpoint, _, err := inferenceProbeRequest("gemini", "https://example.com", model)
+		require.NoError(t, err)
+		require.Contains(t, endpoint, ":generateContent")
+		require.NotContains(t, endpoint, ":predict")
+	}
 }
 
 func TestProbeDeclaredModelsTestsEveryModel(t *testing.T) {

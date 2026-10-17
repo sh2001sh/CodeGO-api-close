@@ -265,6 +265,16 @@ func allocateSettledFundingFIFOTx(tx *gorm.DB, requestID, accountID string, amou
 	}
 	remaining := amount
 	for remaining > 0 {
+		if tx.Dialector.Name() == "postgres" {
+			used, err := allocateSettledFundingPostgresBatchTx(tx, requestID, accountID, remaining)
+			if err != nil {
+				return err
+			}
+			if used > 0 {
+				remaining -= used
+				continue
+			}
+		}
 		var lot billingschema.FundingLot
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("account_id = ? AND remaining_amount > 0", accountID).
@@ -303,6 +313,50 @@ func allocateSettledFundingFIFOTx(tx *gorm.DB, requestID, accountID string, amou
 		remaining -= used
 	}
 	return nil
+}
+
+// Keep the existing account lock and all per-lot attribution in the caller's
+// transaction. Only a bounded FIFO prefix is locked/materialized in PostgreSQL;
+// no lot rows cross the application/database connection. This avoids three
+// network round trips per micro-lot while preserving exact paid-quota rounding.
+func allocateSettledFundingPostgresBatchTx(tx *gorm.DB, requestID, accountID string, amount int64) (int64, error) {
+	const query = `WITH candidates AS MATERIALIZED (
+		SELECT lot_id, account_id, source, original_amount, paid_quota,
+			remaining_amount, revenue_multiplier, created_at
+		FROM billing.funding_lots
+		WHERE account_id = ? AND remaining_amount > 0
+		ORDER BY created_at ASC, lot_id ASC LIMIT 4096 FOR UPDATE
+	), ranked AS (
+		SELECT *, COALESCE(SUM(remaining_amount::numeric) OVER (
+			ORDER BY created_at ASC, lot_id ASC
+			ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS prior_amount
+		FROM candidates
+	), consumed AS (
+		SELECT *, LEAST(remaining_amount::numeric, ?::numeric - prior_amount)::bigint AS used
+		FROM ranked WHERE prior_amount < ?::numeric
+	), updated AS (
+		UPDATE billing.funding_lots AS lot
+		SET remaining_amount = lot.remaining_amount - consumed.used
+		FROM consumed WHERE lot.lot_id = consumed.lot_id
+		RETURNING consumed.lot_id, consumed.account_id, consumed.source,
+			consumed.original_amount, consumed.paid_quota, consumed.remaining_amount,
+			consumed.revenue_multiplier, consumed.used
+	), inserted AS (
+		INSERT INTO billing.funding_allocations (
+			allocation_id, request_id, lot_id, account_id, source, amount,
+			paid_quota, revenue_multiplier, created_at)
+		SELECT replace(gen_random_uuid()::text, '-', ''), ?, lot_id, account_id,
+			source, used, CASE WHEN paid_quota > 0 AND paid_quota <= original_amount
+				AND remaining_amount <= original_amount
+			THEN (div((original_amount - remaining_amount + used)::numeric * paid_quota, original_amount)
+				- div((original_amount - remaining_amount)::numeric * paid_quota, original_amount))::bigint
+			ELSE 0 END, revenue_multiplier, clock_timestamp()
+		FROM updated RETURNING amount
+	)
+	SELECT COALESCE(SUM(amount), 0)::bigint AS used FROM inserted`
+	var result struct{ Used int64 }
+	err := tx.Raw(query, accountID, amount, amount, requestID).Scan(&result).Error
+	return result.Used, err
 }
 
 func fundingSourceFromReason(reasonCode string) string {

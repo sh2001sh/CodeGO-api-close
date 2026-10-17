@@ -27,6 +27,9 @@ export function WalletPeerTransferPanel(props: {
   maxTransferUSD: number
   minimumUSD: number
   canContinue: boolean
+  disabled?: boolean
+  retrying?: boolean
+  error?: string
   onRecipientIdChange: (value: string) => void
   onLookupRecipient: () => void
   onAmountChange: (value: string) => void
@@ -102,6 +105,7 @@ export function WalletPeerTransferPanel(props: {
             <Input
               id='wallet-transfer-recipient'
               value={props.recipientId}
+              disabled={props.disabled || props.recipientLoading}
               maxLength={6}
               autoComplete='off'
               className='font-mono tracking-widest uppercase'
@@ -117,7 +121,7 @@ export function WalletPeerTransferPanel(props: {
               type='button'
               variant='outline'
               size='icon'
-              disabled={props.recipientLoading}
+              disabled={props.disabled || props.recipientLoading}
               aria-label={t('Find recipient')}
               title={t('Find recipient')}
               onClick={props.onLookupRecipient}
@@ -157,6 +161,7 @@ export function WalletPeerTransferPanel(props: {
               step='0.01'
               inputMode='decimal'
               value={props.amount}
+              disabled={props.disabled}
               className='pr-20 font-mono text-base tabular-nums'
               onChange={(event) => props.onAmountChange(event.target.value)}
             />
@@ -171,6 +176,7 @@ export function WalletPeerTransferPanel(props: {
               type='button'
               variant='ghost'
               size='sm'
+              disabled={props.disabled}
               onClick={() =>
                 props.onAmountChange(props.maxTransferUSD.toFixed(2))
               }
@@ -181,6 +187,11 @@ export function WalletPeerTransferPanel(props: {
         </div>
       </div>
 
+      {props.error ? (
+        <p role='alert' className='text-destructive mt-4 text-sm'>
+          {props.error}
+        </p>
+      ) : null}
       <div className='mt-5 flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between'>
         <Button
           type='button'
@@ -189,7 +200,7 @@ export function WalletPeerTransferPanel(props: {
           onClick={props.onReview}
         >
           <Send className='size-4' />
-          {t('Review transfer')}
+          {props.retrying ? t('Retry') : t('Review transfer')}
         </Button>
       </div>
     </section>

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -105,9 +106,9 @@ func updateWalletTransferPassword(userID int, oldPassword, newPassword string, r
 	return nil
 }
 
-func verifyWalletTransferPassword(userID int, password string) error {
+func verifyWalletTransferPassword(ctx context.Context, userID int, password string) error {
 	var verificationErr error
-	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var security commerceschema.WalletTransferSecurity
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", userID).First(&security).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {

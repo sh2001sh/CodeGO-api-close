@@ -22,6 +22,7 @@ var (
 	ErrWalletTransferPasswordConfirmation = errors.New("两次输入的支付密码不一致")
 	ErrWalletTransferEmailRequired        = errors.New("请先绑定邮箱后再设置支付密码")
 	ErrWalletTransferEmailCodeInvalid     = errors.New("邮箱验证码错误或已过期")
+	ErrWalletTransferUnavailable          = errors.New("转账结果暂未确认，请使用原请求重试")
 )
 
 // WalletTransferSecurity stores the independent payment-password credential.

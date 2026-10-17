@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"math"
 	"math/big"
 	"testing"
@@ -53,7 +54,7 @@ func TestTransferWalletQuotaRejectsRecipientOverflowWithoutWrites(t *testing.T) 
 	require.NoError(t, db.Create(recipient).Error)
 	require.NoError(t, ConfigureWalletTransferPassword(sender.Id, "", "Paypass123"))
 	request := CreateWalletTransferRequest{RecipientExternalId: recipient.ExternalId, AmountQuota: amount, PaymentPassword: "Paypass123", RequestId: "recipient-overflow"}
-	_, err := TransferWalletQuota(sender.Id, request)
+	_, err := TransferWalletQuota(context.Background(), sender.Id, request)
 	require.ErrorIs(t, err, commerceschema.ErrWalletTransferInvalid)
 	var savedSender, savedRecipient identityschema.User
 	require.NoError(t, db.First(&savedSender, sender.Id).Error)
@@ -84,12 +85,12 @@ func TestTransferWalletQuotaLargeFeeAndExactRecipientLimit(t *testing.T) {
 	require.NoError(t, db.Create(recipient).Error)
 	require.NoError(t, ConfigureWalletTransferPassword(sender.Id, "", "Paypass123"))
 	request := CreateWalletTransferRequest{RecipientExternalId: recipient.ExternalId, AmountQuota: amount, PaymentPassword: "Paypass123", RequestId: "exact-recipient-limit"}
-	created, err := TransferWalletQuota(sender.Id, request)
+	created, err := TransferWalletQuota(context.Background(), sender.Id, request)
 	require.NoError(t, err)
 	require.Equal(t, fee.Int64(), created.FeeQuota)
 	require.Equal(t, amount+fee.Int64(), created.TotalDebitQuota)
 	require.Zero(t, created.BalanceAfter)
-	replayed, err := TransferWalletQuota(sender.Id, request)
+	replayed, err := TransferWalletQuota(context.Background(), sender.Id, request)
 	require.NoError(t, err)
 	require.Equal(t, created.Id, replayed.Id)
 	var savedSender, savedRecipient identityschema.User
@@ -129,7 +130,7 @@ func TestTransferWalletQuotaRejectsLifetimeOverflowAndRollsBackSender(t *testing
 	_, err = billingdomain.SettleReservation(billingdomain.SettleReservationParams{ReservationID: reserved.ReservationID, ActualAmount: math.MaxInt64, IdempotencyKey: "life:settle"})
 	require.NoError(t, err)
 	require.NoError(t, db.Model(&recipient).Update("claude_quota", 0).Error)
-	_, err = TransferWalletQuota(sender.Id, CreateWalletTransferRequest{RecipientExternalId: recipient.ExternalId, AmountQuota: minimumWalletTransferQuota(), PaymentPassword: "Paypass123", RequestId: "life:transfer"})
+	_, err = TransferWalletQuota(context.Background(), sender.Id, CreateWalletTransferRequest{RecipientExternalId: recipient.ExternalId, AmountQuota: minimumWalletTransferQuota(), PaymentPassword: "Paypass123", RequestId: "life:transfer"})
 	require.ErrorContains(t, err, "credit exceeds integer limit")
 	var snapshot billingschema.BillingBalanceSnapshot
 	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&snapshot).Error)

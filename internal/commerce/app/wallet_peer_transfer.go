@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/sh2001sh/new-api/constant"
@@ -23,6 +25,7 @@ import (
 const (
 	walletTransferMaxPageSize = 50
 	walletTransferFeeBPS      = int64(100)
+	walletTransferTimeout     = 20 * time.Second
 )
 
 type WalletTransferRecipient struct {
@@ -68,14 +71,22 @@ type WalletTransferOverview struct {
 }
 
 // LookupWalletTransferRecipient resolves only public, masked recipient data.
-func LookupWalletTransferRecipient(senderUserID int, externalID string) (*WalletTransferRecipient, error) {
+func LookupWalletTransferRecipient(ctx context.Context, senderUserID int, externalID string) (*WalletTransferRecipient, error) {
 	externalID = strings.ToUpper(strings.TrimSpace(externalID))
 	if senderUserID <= 0 || len(externalID) != identityschema.ExternalUserIDLength {
 		return nil, commerceschema.ErrWalletTransferRecipientNotFound
 	}
 	var user identityschema.User
-	err := platformdb.DB.Select("id, external_id, display_name, username, status").Where("external_id = ?", externalID).First(&user).Error
-	if err != nil || user.Status != constant.UserStatusEnabled {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	err := platformdb.DB.WithContext(ctx).Select("id, external_id, display_name, username, status").Where("external_id = ?", externalID).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, commerceschema.ErrWalletTransferRecipientNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if user.Status != constant.UserStatusEnabled {
 		return nil, commerceschema.ErrWalletTransferRecipientNotFound
 	}
 	if user.Id == senderUserID {
@@ -111,18 +122,23 @@ func BuildWalletTransferOverview(user *identityschema.User, page, pageSize int) 
 }
 
 // TransferWalletQuota atomically debits the sender and credits the recipient.
-func TransferWalletQuota(senderUserID int, req CreateWalletTransferRequest) (*WalletTransferHistoryItem, error) {
+func TransferWalletQuota(ctx context.Context, senderUserID int, req CreateWalletTransferRequest) (*WalletTransferHistoryItem, error) {
+	ctx, cancel := context.WithTimeout(ctx, walletTransferTimeout)
+	defer cancel()
 	req.RecipientExternalId = strings.ToUpper(strings.TrimSpace(req.RecipientExternalId))
 	req.RequestId = strings.TrimSpace(req.RequestId)
 	if !validWalletTransferRequest(senderUserID, req) {
 		return nil, commerceschema.ErrWalletTransferInvalid
 	}
-	if err := verifyWalletTransferPassword(senderUserID, req.PaymentPassword); err != nil {
-		return nil, err
+	if err := verifyWalletTransferPassword(ctx, senderUserID, req.PaymentPassword); err != nil {
+		if ctx.Err() != nil {
+			err = errors.Join(ctx.Err(), err)
+		}
+		return nil, mapWalletTransferError(err)
 	}
 
 	var transfer commerceschema.WalletTransfer
-	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		recipient, err := loadTransferRecipientTx(tx, req.RecipientExternalId)
 		if err != nil {
 			return err
@@ -145,6 +161,9 @@ func TransferWalletQuota(senderUserID int, req CreateWalletTransferRequest) (*Wa
 		return executeWalletTransferTx(tx, sender, recipient, req, &transfer)
 	})
 	if err != nil {
+		if ctx.Err() != nil {
+			err = errors.Join(ctx.Err(), err)
+		}
 		return nil, mapWalletTransferError(err)
 	}
 	_ = identitystore.InvalidateUserCache(senderUserID)
@@ -198,8 +217,10 @@ func minimumWalletTransferQuota() int64 {
 
 func loadTransferRecipientTx(tx *gorm.DB, externalID string) (*identityschema.User, error) {
 	var user identityschema.User
-	if err := tx.Where("external_id = ? AND status = ?", externalID, constant.UserStatusEnabled).First(&user).Error; err != nil {
+	if err := tx.Where("external_id = ? AND status = ?", externalID, constant.UserStatusEnabled).First(&user).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, commerceschema.ErrWalletTransferRecipientNotFound
+	} else if err != nil {
+		return nil, err
 	}
 	return &user, nil
 }
@@ -207,7 +228,10 @@ func loadTransferRecipientTx(tx *gorm.DB, externalID string) (*identityschema.Us
 func lockTransferUsers(tx *gorm.DB, senderID, recipientID int) (map[int]*identityschema.User, error) {
 	var rows []*identityschema.User
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id IN ?", []int{senderID, recipientID}).Order("id asc").Find(&rows).Error
-	if err != nil || len(rows) != 2 {
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) != 2 {
 		return nil, commerceschema.ErrWalletTransferRecipientNotFound
 	}
 	users := make(map[int]*identityschema.User, len(rows))
@@ -353,5 +377,21 @@ func mapWalletTransferError(err error) error {
 	if errors.Is(err, billingdomain.ErrInsufficientBalance) {
 		return commerceschema.ErrWalletTransferInsufficientBalance
 	}
-	return err
+	for _, rejection := range []error{
+		commerceschema.ErrWalletTransferInvalid,
+		commerceschema.ErrWalletTransferRecipientNotFound,
+		commerceschema.ErrWalletTransferSelf,
+		commerceschema.ErrWalletTransferPasswordNotSet,
+		commerceschema.ErrWalletTransferPasswordIncorrect,
+		commerceschema.ErrWalletTransferPasswordLocked,
+		commerceschema.ErrWalletTransferInsufficientBalance,
+		commerceschema.ErrWalletTransferRewardLocked,
+	} {
+		if errors.Is(err, rejection) {
+			return err
+		}
+	}
+	// A lost connection during commit can leave the outcome unknown. Keep this
+	// distinct from a rejected transfer so clients retry with the same receipt ID.
+	return errors.Join(commerceschema.ErrWalletTransferUnavailable, err)
 }

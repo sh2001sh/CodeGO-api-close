@@ -1,5 +1,7 @@
 {
   "translation": {
+    "Transfer result unknown. Retry this transfer.": "轉賬結果未確認，請重試本筆轉賬。",
+    "Unable to save transfer status. Please reload.": "無法儲存轉賬狀態，請重新載入。",
     "搜索店铺名称或店铺 ID": "搜尋店鋪名稱或店鋪 ID",
     "搜索分组名称、渠道 ID 或模型": "搜尋分組名稱、渠道 ID 或模型",
     "360": "360",

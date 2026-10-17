@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	stdhttp "net/http"
 	"testing"
@@ -13,6 +14,56 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 )
+
+func TestWalletTransferCanceledRequestReturnsUnconfirmed(t *testing.T) {
+	setupCommerceHTTPTestDB(t)
+	ctx, recorder := newCommerceContext(t, stdhttp.MethodPost, "/api/wallet/transfers", map[string]any{
+		"recipient_external_id": "HTP002", "amount_quota": int64(platformruntime.QuotaPerUnit),
+		"payment_password": "Paypass123", "request_id": "canceled-http-transfer",
+	}, 9941)
+	requestContext, cancel := context.WithCancel(ctx.Request.Context())
+	cancel()
+	ctx.Request = ctx.Request.WithContext(requestContext)
+	createWalletTransfer(ctx)
+	if recorder.Code != stdhttp.StatusServiceUnavailable {
+		t.Fatalf("expected temporary unconfirmed response, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["code"] != "TRANSFER_UNCONFIRMED" || payload["success"] != false {
+		t.Fatalf("unexpected response: %#v", payload)
+	}
+	if payload["message"] != "转账结果暂未确认，请使用原请求重试" {
+		t.Fatalf("response exposed an internal database error: %#v", payload)
+	}
+}
+
+func TestWalletRecipientLookupDistinguishesUnavailableFromMissing(t *testing.T) {
+	setupCommerceHTTPTestDB(t)
+	for _, canceled := range []bool{false, true} {
+		ctx, recorder := newCommerceContext(t, stdhttp.MethodGet, "/api/wallet/transfers/recipients/HTP999", nil, 9941)
+		ctx.Params = gin.Params{{Key: "external_id", Value: "HTP999"}}
+		if canceled {
+			requestContext, cancel := context.WithCancel(ctx.Request.Context())
+			cancel()
+			ctx.Request = ctx.Request.WithContext(requestContext)
+		}
+		getWalletTransferRecipient(ctx)
+		var payload map[string]any
+		if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if canceled {
+			if recorder.Code != stdhttp.StatusServiceUnavailable || payload["code"] != "RECIPIENT_LOOKUP_UNAVAILABLE" {
+				t.Fatalf("database failure was mislabeled as a missing recipient: %s", recorder.Body.String())
+			}
+		} else if recorder.Code != stdhttp.StatusOK || payload["message"] != "未找到可接收额度的用户" {
+			t.Fatalf("actual missing recipient must remain a business rejection: %s", recorder.Body.String())
+		}
+	}
+}
 
 func TestWalletTransferHandlersRequireAccountPasswordAndCompleteTransfer(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)

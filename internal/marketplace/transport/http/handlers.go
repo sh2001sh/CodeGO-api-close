@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/csv"
+	"errors"
 	"mime"
 	"net/http"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	"math"
@@ -339,11 +341,15 @@ func BatchWelfare(c *gin.Context) {
 	d := make([]any, 0, len(r.UserIDs))
 	success := 0
 	for _, id := range r.UserIDs {
-		_, e := commerceapp.TransferWalletQuota(c.GetInt("id"), commerceapp.CreateWalletTransferRequest{
+		_, e := commerceapp.TransferWalletQuota(c.Request.Context(), c.GetInt("id"), commerceapp.CreateWalletTransferRequest{
 			RecipientExternalId: id, AmountQuota: r.Amount, PaymentPassword: r.PaymentPassword, RequestId: operationKey(id),
 		})
 		if e != nil {
-			d = append(d, gin.H{"user_id": id, "status": "failed", "error": e.Error()})
+			message := e.Error()
+			if errors.Is(e, commerceschema.ErrWalletTransferUnavailable) {
+				message = commerceschema.ErrWalletTransferUnavailable.Error()
+			}
+			d = append(d, gin.H{"user_id": id, "status": "failed", "error": message})
 		} else {
 			success++
 			d = append(d, gin.H{"user_id": id, "status": "success"})

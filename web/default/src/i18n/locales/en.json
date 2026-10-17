@@ -1,5 +1,7 @@
 {
   "translation": {
+    "Transfer result unknown. Retry this transfer.": "Transfer result unknown. Retry this transfer.",
+    "Unable to save transfer status. Please reload.": "Unable to save transfer status. Please reload.",
     "搜索店铺名称或店铺 ID": "Search shop names or shop IDs",
     "搜索分组名称、渠道 ID 或模型": "Search group names, channel IDs or models",
     "360": "360",

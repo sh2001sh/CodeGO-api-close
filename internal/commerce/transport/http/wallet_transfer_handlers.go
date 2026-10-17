@@ -39,8 +39,12 @@ func getWalletTransferOverview(c *gin.Context) {
 }
 
 func getWalletTransferRecipient(c *gin.Context) {
-	recipient, err := commerceapp.LookupWalletTransferRecipient(c.GetInt("id"), c.Param("external_id"))
+	recipient, err := commerceapp.LookupWalletTransferRecipient(c.Request.Context(), c.GetInt("id"), c.Param("external_id"))
 	if err != nil {
+		if !errors.Is(err, commerceschema.ErrWalletTransferInvalid) && !errors.Is(err, commerceschema.ErrWalletTransferRecipientNotFound) && !errors.Is(err, commerceschema.ErrWalletTransferSelf) {
+			c.JSON(stdhttp.StatusServiceUnavailable, gin.H{"success": false, "message": "收款账户查询暂不可用，请稍后重试", "code": "RECIPIENT_LOOKUP_UNAVAILABLE"})
+			return
+		}
 		httpapi.ApiError(c, err)
 		return
 	}
@@ -127,8 +131,12 @@ func createWalletTransfer(c *gin.Context) {
 		httpapi.ApiError(c, commerceschema.ErrWalletTransferInvalid)
 		return
 	}
-	transfer, err := commerceapp.TransferWalletQuota(c.GetInt("id"), req)
+	transfer, err := commerceapp.TransferWalletQuota(c.Request.Context(), c.GetInt("id"), req)
 	if err != nil {
+		if errors.Is(err, commerceschema.ErrWalletTransferUnavailable) {
+			c.JSON(stdhttp.StatusServiceUnavailable, gin.H{"success": false, "message": commerceschema.ErrWalletTransferUnavailable.Error(), "code": "TRANSFER_UNCONFIRMED"})
+			return
+		}
 		if errors.Is(err, commerceschema.ErrWalletTransferPasswordLocked) {
 			c.JSON(stdhttp.StatusTooManyRequests, gin.H{"success": false, "message": err.Error(), "code": "PAYMENT_PASSWORD_LOCKED"})
 			return

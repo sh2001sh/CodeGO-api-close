@@ -22,6 +22,8 @@ export function WalletTransferConfirmDialog(props: {
   feeLabel: string
   totalDebitLabel: string
   submitting: boolean
+  retrying?: boolean
+  error?: string
   onConfirm: (paymentPassword: string) => Promise<void>
 }) {
   const { t } = useTranslation()
@@ -33,7 +35,12 @@ export function WalletTransferConfirmDialog(props: {
   }, [props.open])
 
   return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+    <Dialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!props.submitting) props.onOpenChange(open)
+      }}
+    >
       <DialogContent className='commerce-dialog max-h-[calc(100dvh-1.5rem)] overflow-y-auto max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
@@ -75,6 +82,7 @@ export function WalletTransferConfirmDialog(props: {
               id='transfer-payment-password'
               type='password'
               value={paymentPassword}
+              disabled={props.submitting}
               autoComplete='off'
               maxLength={64}
               autoFocus
@@ -82,6 +90,12 @@ export function WalletTransferConfirmDialog(props: {
             />
           </div>
         </div>
+
+        {props.error ? (
+          <p role='alert' className='text-destructive text-sm'>
+            {props.error}
+          </p>
+        ) : null}
 
         <DialogFooter>
           <Button
@@ -96,14 +110,18 @@ export function WalletTransferConfirmDialog(props: {
             type='button'
             className='commerce-transfer-submit'
             disabled={props.submitting || !paymentPassword}
-            onClick={() => void props.onConfirm(paymentPassword)}
+            onClick={() => {
+              const password = paymentPassword
+              setPaymentPassword('')
+              void props.onConfirm(password)
+            }}
           >
             {props.submitting ? (
               <Loader2 className='size-4 animate-spin' />
             ) : (
               <Send className='size-4' />
             )}
-            {t('Transfer now')}
+            {props.retrying ? t('Retry') : t('Transfer now')}
           </Button>
         </DialogFooter>
       </DialogContent>

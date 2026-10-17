@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -24,10 +25,10 @@ func TestWalletTransferPasswordHashAndLockout(t *testing.T) {
 	require.True(t, platformsecurity.ValidatePasswordAndHash("Paypass123", security.PasswordHash))
 
 	for attempt := 1; attempt < walletTransferMaxFailedAttempts; attempt++ {
-		require.ErrorIs(t, verifyWalletTransferPassword(user.Id, "wrong-pass"), commerceschema.ErrWalletTransferPasswordIncorrect)
+		require.ErrorIs(t, verifyWalletTransferPassword(context.Background(), user.Id, "wrong-pass"), commerceschema.ErrWalletTransferPasswordIncorrect)
 	}
-	require.ErrorIs(t, verifyWalletTransferPassword(user.Id, "wrong-pass"), commerceschema.ErrWalletTransferPasswordLocked)
-	require.ErrorIs(t, verifyWalletTransferPassword(user.Id, "Paypass123"), commerceschema.ErrWalletTransferPasswordLocked)
+	require.ErrorIs(t, verifyWalletTransferPassword(context.Background(), user.Id, "wrong-pass"), commerceschema.ErrWalletTransferPasswordLocked)
+	require.ErrorIs(t, verifyWalletTransferPassword(context.Background(), user.Id, "Paypass123"), commerceschema.ErrWalletTransferPasswordLocked)
 
 	require.NoError(t, db.First(&security, "user_id = ?", user.Id).Error)
 	require.Greater(t, security.LockedUntil, time.Now().Unix())
@@ -71,7 +72,7 @@ func TestTransferWalletQuotaIsAtomicIdempotentAndPrivate(t *testing.T) {
 		PaymentPassword:     "Paypass123",
 		RequestId:           "wallet-transfer-atomic-idempotent",
 	}
-	created, err := TransferWalletQuota(sender.Id, request)
+	created, err := TransferWalletQuota(context.Background(), sender.Id, request)
 	require.NoError(t, err)
 	require.Equal(t, "outgoing", created.Direction)
 	require.Equal(t, recipient.ExternalId, created.CounterpartyExternalId)
@@ -79,7 +80,7 @@ func TestTransferWalletQuotaIsAtomicIdempotentAndPrivate(t *testing.T) {
 	require.Equal(t, int64(2*unit+2*unit/100), created.TotalDebitQuota)
 	require.NotContains(t, created.CounterpartyDisplayName, "Recipient")
 
-	replayed, err := TransferWalletQuota(sender.Id, request)
+	replayed, err := TransferWalletQuota(context.Background(), sender.Id, request)
 	require.NoError(t, err)
 	require.Equal(t, created.Id, replayed.Id)
 
@@ -110,19 +111,19 @@ func TestTransferWalletQuotaRejectsUnsafeRecipientsAndInsufficientBalance(t *tes
 	require.NoError(t, db.Create(disabled).Error)
 	require.NoError(t, ConfigureWalletTransferPassword(sender.Id, "", "Paypass123"))
 
-	_, err := LookupWalletTransferRecipient(sender.Id, sender.ExternalId)
+	_, err := LookupWalletTransferRecipient(context.Background(), sender.Id, sender.ExternalId)
 	require.ErrorIs(t, err, commerceschema.ErrWalletTransferSelf)
-	_, err = LookupWalletTransferRecipient(sender.Id, disabled.ExternalId)
+	_, err = LookupWalletTransferRecipient(context.Background(), sender.Id, disabled.ExternalId)
 	require.ErrorIs(t, err, commerceschema.ErrWalletTransferRecipientNotFound)
 
-	_, err = TransferWalletQuota(sender.Id, CreateWalletTransferRequest{
+	_, err = TransferWalletQuota(context.Background(), sender.Id, CreateWalletTransferRequest{
 		RecipientExternalId: disabled.ExternalId, AmountQuota: int64(unit),
 		PaymentPassword: "Paypass123", RequestId: "wallet-transfer-disabled",
 	})
 	require.ErrorIs(t, err, commerceschema.ErrWalletTransferRecipientNotFound)
 
 	require.NoError(t, db.Model(&disabled).Update("status", constant.UserStatusEnabled).Error)
-	_, err = TransferWalletQuota(sender.Id, CreateWalletTransferRequest{
+	_, err = TransferWalletQuota(context.Background(), sender.Id, CreateWalletTransferRequest{
 		RecipientExternalId: disabled.ExternalId, AmountQuota: int64(2 * unit),
 		PaymentPassword: "Paypass123", RequestId: "wallet-transfer-insufficient",
 	})

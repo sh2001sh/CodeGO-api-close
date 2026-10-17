@@ -175,7 +175,7 @@ export function WalletPagePanels(props: WalletPagePanelsProps) {
     }
   }
 
-  if (props.loading && props.section !== 'funding') {
+  if (props.loading && props.section === 'billing') {
     return (
       <div className='grid gap-4 lg:grid-cols-2'>
         {Array.from({ length: 4 }).map((_, index) => (

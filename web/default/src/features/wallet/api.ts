@@ -92,7 +92,12 @@ export async function getWalletTransfers(
     p: String(page),
     page_size: String(pageSize),
   })
-  const res = await api.get(`/api/wallet/transfers?${params.toString()}`)
+  const res = await api.get(`/api/wallet/transfers?${params.toString()}`, {
+    timeout: 15_000,
+    disableDuplicate: true,
+    skipErrorHandler: true,
+    skipBusinessError: true,
+  } as Record<string, unknown>)
   return res.data
 }
 
@@ -100,7 +105,12 @@ export async function lookupWalletTransferRecipient(
   externalId: string
 ): Promise<WalletTransferRecipientResponse> {
   const res = await api.get(
-    `/api/wallet/transfers/recipients/${encodeURIComponent(externalId)}`
+    `/api/wallet/transfers/recipients/${encodeURIComponent(externalId)}`,
+    {
+      timeout: 15_000,
+      skipErrorHandler: true,
+      skipBusinessError: true,
+    } as Record<string, unknown>
   )
   return res.data
 }
@@ -122,7 +132,11 @@ export async function sendWalletTransferPasswordEmailCode(): Promise<WalletTrans
 export async function createWalletTransfer(
   request: CreateWalletTransferRequest
 ): Promise<WalletTransferResponse> {
-  const res = await api.post('/api/wallet/transfers', request)
+  const res = await api.post('/api/wallet/transfers', request, {
+    timeout: 30_000,
+    skipErrorHandler: true,
+    skipBusinessError: true,
+  } as Record<string, unknown>)
   return res.data
 }
 

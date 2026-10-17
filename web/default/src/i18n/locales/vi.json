@@ -1,5 +1,7 @@
 {
   "translation": {
+    "Transfer result unknown. Retry this transfer.": "Chưa xác định kết quả chuyển. Hãy thử lại giao dịch này.",
+    "Unable to save transfer status. Please reload.": "Không thể lưu trạng thái chuyển. Vui lòng tải lại.",
     "搜索店铺名称或店铺 ID": "Tìm tên cửa hàng hoặc ID cửa hàng",
     "搜索分组名称、渠道 ID 或模型": "Tìm tên nhóm, ID kênh hoặc mô hình",
     "360": "360",

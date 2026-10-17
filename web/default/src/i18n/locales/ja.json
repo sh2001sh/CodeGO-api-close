@@ -1,5 +1,7 @@
 {
   "translation": {
+    "Transfer result unknown. Retry this transfer.": "送金結果を確認できません。この送金を再試行してください。",
+    "Unable to save transfer status. Please reload.": "送金状態を保存できません。再読み込みしてください。",
     "搜索店铺名称或店铺 ID": "店舗名または店舗 ID を検索",
     "搜索分组名称、渠道 ID 或模型": "グループ名、チャネル ID、モデルを検索",
     "360": "360",

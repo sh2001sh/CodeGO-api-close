@@ -75,6 +75,8 @@ func (f *LedgerRelayFunding) Source() string {
 	return f.source
 }
 
+func (f *LedgerRelayFunding) RequestID() string { return f.requestID }
+
 func (f *LedgerRelayFunding) PreConsume(amount int) error {
 	return f.preConsume(f.reservationContext(), amount)
 }

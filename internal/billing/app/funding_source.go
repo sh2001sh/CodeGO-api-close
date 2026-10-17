@@ -216,6 +216,8 @@ func (s *SubscriptionFunding) Settle(delta int) error {
 
 func (s *SubscriptionFunding) ReservationID() string { return s.reservationID }
 
+func (s *SubscriptionFunding) RequestID() string { return s.requestID }
+
 func (s *SubscriptionFunding) AccountID() string { return s.accountID }
 
 func (s *SubscriptionFunding) SettlementID() string { return s.settlementID }

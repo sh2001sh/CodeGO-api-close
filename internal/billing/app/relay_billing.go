@@ -85,7 +85,7 @@ func SettleRelayBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actu
 		recordSettledUsage(relayInfo, settledQuota)
 		if session, ok := relayInfo.Billing.(*BillingSession); ok {
 			if funding, ok := session.funding.(settlementProjectionFunding); ok {
-				startRequestSettlementProjection(ctx, relayInfo, funding, actualQuota)
+				startRequestSettlementProjection(ctx, relayInfo, funding, settledQuota)
 			}
 		}
 
@@ -166,17 +166,20 @@ func subscriptionSettlementGross(consumerDebit int) int {
 }
 
 type settlementProjectionFunding interface {
+	RequestID() string
 	AccountID() string
 	ReservationID() string
 	SettlementID() string
 }
 
-func startRequestSettlementProjection(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, funding settlementProjectionFunding, actualQuota int) {
+func startRequestSettlementProjection(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, funding settlementProjectionFunding, settledQuota int) {
 	if relayInfo == nil || funding == nil || funding.SettlementID() == "" {
 		return
 	}
 	params := RequestSettlementWorkflowParams{
-		RequestID:       relayInfo.RequestId,
+		// The workflow validates this ID against the native reservation. Credit
+		// packs use a separate funding ID; HTTP correlation stays in the evidence ID.
+		RequestID:       funding.RequestID(),
 		TraceID:         traceIDFromContext(ctx),
 		UserID:          relayInfo.UserId,
 		TokenID:         relayInfo.TokenId,
@@ -185,7 +188,7 @@ func startRequestSettlementProjection(ctx *gin.Context, relayInfo *relaycommon.R
 		SettlementID:    funding.SettlementID(),
 		UsageEvidenceID: relayInfo.RequestId,
 		ReservedAmount:  int64(relayInfo.FinalPreConsumedQuota),
-		ActualAmount:    int64(actualQuota),
+		ActualAmount:    int64(settledQuota),
 	}
 	gopool.Go(func() {
 		if err := StartRequestSettlementWorkflow(context.Background(), params); err != nil {

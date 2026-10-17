@@ -115,7 +115,7 @@ func marketplaceAutoProbeDue(channel marketplaceschema.Channel, now time.Time) b
 }
 
 func marketplaceAutoProbeEligible(channel *marketplaceschema.Channel) bool {
-	return channel != nil && channel.AutoProbeEnabled && marketplacedomain.AcceptsTraffic(channel.Status)
+	return channel != nil && !marketplaceChannelAdminHeld(channel) && channel.AutoProbeEnabled && marketplacedomain.AcceptsTraffic(channel.Status)
 }
 
 func autoProbeJitter(channelID string, intervalMinutes int) time.Duration {

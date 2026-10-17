@@ -89,7 +89,15 @@ func TestGoogleOAuthLoginAndExplicitBinding(t *testing.T) {
 			if !bind && binding.UserId == existing.Id {
 				t.Fatal("email match incorrectly merged accounts")
 			}
+			var unchanged identityschema.User
+			if err := db.First(&unchanged, existing.Id).Error; err != nil || unchanged.Email != existing.Email {
+				t.Fatalf("existing email ownership changed: %v", err)
+			}
 			if !bind {
+				var created identityschema.User
+				if err := db.First(&created, binding.UserId).Error; err != nil || created.Email != "" {
+					t.Fatalf("new OAuth account reused an owned email: %v", err)
+				}
 				if response := decodeAPIResponse(t, callback("google-state")); !response.Success {
 					t.Fatalf("repeat login failed: %#v", response)
 				}

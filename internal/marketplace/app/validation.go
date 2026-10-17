@@ -12,6 +12,8 @@ import (
 
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
+	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
+	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 )
 
 const maxMarketplaceMultiplier = 1_000_000
@@ -99,11 +101,11 @@ func validateAutoProbe(enabled bool, intervalMinutes int, model string, models [
 // ValidateMarketplaceURL rejects non-HTTPS and non-public destinations.
 func ValidateMarketplaceURL(raw string) error {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
+	if err != nil {
 		return errors.New("Base URL 必须是有效的 HTTPS 地址")
 	}
-	if parsed.Port() != "" && parsed.Port() != "443" && parsed.Port() != "8443" {
-		return errors.New("Base URL 仅允许 443 或 8443 端口")
+	if err := platformhttpx.ValidateMarketplaceURLFormat(parsed); err != nil {
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -112,16 +114,11 @@ func ValidateMarketplaceURL(raw string) error {
 		return errors.New("Base URL 域名无法解析")
 	}
 	for _, address := range addresses {
-		if !isPublicIP(address.IP) {
+		if !platformsecurity.IsPublicUpstreamIP(address.IP) {
 			return errors.New("Base URL 不允许指向私网、环回或保留地址")
 		}
 	}
 	return nil
-}
-
-func isPublicIP(ip net.IP) bool {
-	return ip != nil && !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsUnspecified() &&
-		!ip.IsLinkLocalMulticast() && !ip.IsLinkLocalUnicast() && !ip.IsMulticast()
 }
 
 func validateProvider(provider string) error {

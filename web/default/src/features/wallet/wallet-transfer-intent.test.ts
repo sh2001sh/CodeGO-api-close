@@ -1,4 +1,4 @@
-import type { InternalAxiosRequestConfig } from 'axios'
+import { AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
@@ -6,6 +6,8 @@ import { api } from '@/lib/api'
 import { getWalletTransfers } from './api'
 import {
   restoreWalletTransferIntent,
+  readWalletTransferIntent,
+  pollWalletTransferIntent,
   submitWalletTransferIntent,
   type WalletTransferIntent,
 } from './wallet-transfer-intent'
@@ -42,6 +44,10 @@ function completed() {
       request_id: draft.requestId,
       counterparty_external_id: draft.recipient.external_id,
       amount_quota: draft.amountQuota,
+      fee_quota: draft.feeQuota,
+      total_debit_quota: draft.amountQuota + draft.feeQuota,
+      direction: 'outgoing',
+      status: 'completed',
       balance_after: 0,
     },
   }
@@ -111,7 +117,7 @@ test('a lost response survives remount, password rejection and changed draft wit
   }
 })
 
-test('a first definitive rejection releases the draft, while a malformed success preserves it', async () => {
+test('a rejection or malformed success preserves the original intent until a matching receipt', async () => {
   const storage = memoryStorage()
   const previousAdapter = api.defaults.adapter
   try {
@@ -124,7 +130,7 @@ test('a first definitive rejection releases the draft, while a malformed success
       storage
     )
     assert.equal(rejected.status, 'rejected')
-    assert.equal(restoreWalletTransferIntent(1, storage), null)
+    assert.deepEqual(restoreWalletTransferIntent(1, storage), draft)
     api.defaults.adapter = async (config) =>
       response(config, { success: true, data: {} })
     assert.equal(
@@ -132,6 +138,83 @@ test('a first definitive rejection releases the draft, while a malformed success
       'unknown'
     )
     assert.deepEqual(restoreWalletTransferIntent(1, storage), draft)
+  } finally {
+    api.defaults.adapter = previousAdapter
+  }
+})
+
+test('safe server diagnostics survive HTTP errors without releasing the original intent', async () => {
+  const previousAdapter = api.defaults.adapter
+  const storage = memoryStorage()
+  try {
+    for (const failure of [
+      {
+        status: 503,
+        code: 'TRANSFER_UNCONFIRMED',
+        message: 'Retry the original transfer.',
+      },
+      {
+        status: 429,
+        code: 'PAYMENT_PASSWORD_LOCKED',
+        message: 'Payment password temporarily locked.',
+      },
+    ]) {
+      api.defaults.adapter = async (config) => {
+        throw new AxiosError(
+          'Request failed',
+          'ERR_BAD_RESPONSE',
+          config,
+          null,
+          {
+            ...response(config, { success: false, ...failure }),
+            status: failure.status,
+          }
+        )
+      }
+      const result = await submitWalletTransferIntent(
+        1,
+        failure.status === 503
+          ? draft
+          : { ...draft, requestId: 'new-draft-must-not-replace-pending' },
+        'password',
+        storage
+      )
+      assert.equal(result.status, 'unknown')
+      if (result.status === 'unknown') {
+        assert.equal(result.code, failure.code)
+        assert.equal(result.message, failure.message)
+      }
+      assert.equal(
+        restoreWalletTransferIntent(1, storage)?.requestId,
+        draft.requestId
+      )
+    }
+    for (const data of [
+      { success: false, code: 'INTERNAL_ERROR', message: 'private SQL detail' },
+      { success: true, code: 'TRANSFER_UNCONFIRMED', message: 'malformed' },
+    ]) {
+      api.defaults.adapter = async (config) => {
+        throw new AxiosError(
+          'Request failed',
+          'ERR_BAD_RESPONSE',
+          config,
+          null,
+          {
+            ...response(config, data),
+            status: 503,
+          }
+        )
+      }
+      const result = await submitWalletTransferIntent(
+        1,
+        draft,
+        'password',
+        storage
+      )
+      assert.equal(result.status, 'unknown')
+      if (result.status === 'unknown') assert.equal(result.message, undefined)
+      assert.ok(restoreWalletTransferIntent(1, storage))
+    }
   } finally {
     api.defaults.adapter = previousAdapter
   }
@@ -229,3 +312,212 @@ test(
     }
   }
 )
+
+test('202, missing receipts, service errors and mismatched receipts preserve the exact original intent; GET alone completes it', async () => {
+  const storage = memoryStorage()
+  const previousAdapter = api.defaults.adapter
+  const requests: { method?: string; url?: string }[] = []
+  const controller = new AbortController()
+  try {
+    api.defaults.adapter = async (config) => {
+      requests.push(config)
+      return {
+        ...response(config, {
+          success: true,
+          code: 'TRANSFER_PROCESSING',
+          data: { status: 'processing', request_id: draft.requestId },
+        }),
+        status: 202,
+      }
+    }
+    assert.equal(
+      (await submitWalletTransferIntent(1, draft, 'password', storage)).status,
+      'processing'
+    )
+    for (const status of [404, 503]) {
+      api.defaults.adapter = async (config) => {
+        requests.push(config)
+        throw new AxiosError('Unavailable', 'ERR_BAD_RESPONSE', config, null, {
+          ...response(config, {}),
+          status,
+        })
+      }
+      assert.equal(
+        (await readWalletTransferIntent(1, draft, controller.signal, storage))
+          .status,
+        'unknown'
+      )
+      assert.deepEqual(restoreWalletTransferIntent(1, storage), draft)
+    }
+    for (const mismatch of [
+      { request_id: 'other' },
+      { amount_quota: 1 },
+      { fee_quota: 1 },
+      { total_debit_quota: 1 },
+      { counterparty_external_id: 'OTHER1' },
+      { direction: 'incoming' },
+      { status: 'processing' },
+      { balance_after: -1 },
+    ]) {
+      api.defaults.adapter = async (config) => {
+        requests.push(config)
+        return response(config, {
+          ...completed(),
+          data: { ...completed().data, ...mismatch },
+        })
+      }
+      assert.equal(
+        (await readWalletTransferIntent(1, draft, controller.signal, storage))
+          .status,
+        'unknown'
+      )
+      assert.deepEqual(restoreWalletTransferIntent(1, storage), draft)
+    }
+    for (const data of [
+      { success: false, code: 'TRANSFER_UNCONFIRMED' },
+      { success: false, code: 'INTERNAL_ERROR', message: 'private SQL detail' },
+      {
+        success: false,
+        code: 'TRANSFER_REJECTED',
+        data: { request_id: 'other', status: 'rejected' },
+      },
+    ]) {
+      api.defaults.adapter = async (config) => response(config, data)
+      const result = await readWalletTransferIntent(
+        1,
+        draft,
+        controller.signal,
+        storage
+      )
+      assert.equal(result.status, 'unknown')
+      if (result.status === 'unknown') assert.equal(result.message, undefined)
+      assert.deepEqual(restoreWalletTransferIntent(1, storage), draft)
+    }
+    for (const code of ['TRANSFER_REJECTED', 'PAYMENT_PASSWORD_LOCKED']) {
+      api.defaults.adapter = async (config) =>
+        response(config, {
+          success: false,
+          code,
+          message: 'Safe rejection',
+          data: { request_id: draft.requestId, status: 'rejected' },
+        })
+      const result = await readWalletTransferIntent(
+        1,
+        draft,
+        controller.signal,
+        storage
+      )
+      assert.equal(result.status, 'rejected')
+      if (result.status === 'rejected')
+        assert.equal(result.message, 'Safe rejection')
+      assert.deepEqual(restoreWalletTransferIntent(1, storage), draft)
+    }
+    api.defaults.adapter = async (config) => {
+      requests.push(config)
+      assert.equal(config.timeout, 10_000)
+      assert.equal(
+        (config as unknown as Record<string, unknown>).disableDuplicate,
+        true
+      )
+      return response(config, completed())
+    }
+    assert.equal(
+      (await readWalletTransferIntent(1, draft, controller.signal, storage))
+        .status,
+      'completed'
+    )
+    assert.equal(restoreWalletTransferIntent(1, storage), null)
+    assert.equal(
+      requests.filter((request) => request.method === 'post').length,
+      1
+    )
+    assert.ok(
+      requests
+        .slice(1)
+        .every(
+          (request) =>
+            request.method === 'get' &&
+            request.url === `/api/wallet/transfers/requests/${draft.requestId}`
+        )
+    )
+  } finally {
+    api.defaults.adapter = previousAdapter
+  }
+})
+
+test('polling stops after its three minute bound without replaying POST or dropping intent', async () => {
+  const storage = memoryStorage()
+  storage.setItem('wallet-transfer-pending:1', JSON.stringify(draft))
+  const previousAdapter = api.defaults.adapter
+  const originalNow = Date.now
+  let now = originalNow()
+  Date.now = () => now
+  let reads = 0
+  try {
+    api.defaults.adapter = async (config) => {
+      assert.equal(config.method, 'get')
+      reads++
+      now += 180_001
+      return response(config, {
+        success: true,
+        code: 'TRANSFER_UNCONFIRMED',
+        data: { request_id: draft.requestId, status: 'unconfirmed' },
+      })
+    }
+    await pollWalletTransferIntent(
+      1,
+      draft,
+      new AbortController().signal,
+      () => {},
+      storage
+    )
+    assert.equal(reads, 1)
+    assert.deepEqual(restoreWalletTransferIntent(1, storage), draft)
+  } finally {
+    Date.now = originalNow
+    api.defaults.adapter = previousAdapter
+  }
+})
+
+test('aborting a pending poll ignores a delayed completed receipt and preserves a newer intent', async () => {
+  const storage = memoryStorage()
+  storage.setItem('wallet-transfer-pending:1', JSON.stringify(draft))
+  const previousAdapter = api.defaults.adapter
+  const controller = new AbortController()
+  let release!: () => void
+  let started!: () => void
+  const ready = new Promise<void>((resolve) => {
+    started = resolve
+  })
+  const hold = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let callbacks = 0
+  try {
+    api.defaults.adapter = async (config) => {
+      started()
+      await hold
+      return response(config, completed())
+    }
+    const polling = pollWalletTransferIntent(
+      1,
+      draft,
+      controller.signal,
+      () => {
+        callbacks++
+      },
+      storage
+    )
+    await ready
+    controller.abort()
+    const newer = { ...draft, requestId: 'newer-original' }
+    storage.setItem('wallet-transfer-pending:1', JSON.stringify(newer))
+    release()
+    await polling
+    assert.equal(callbacks, 0)
+    assert.deepEqual(restoreWalletTransferIntent(1, storage), newer)
+  } finally {
+    release()
+    api.defaults.adapter = previousAdapter
+  }
+})

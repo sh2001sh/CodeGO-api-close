@@ -17,11 +17,11 @@ func TestImageModelRequiresPerCallMarketplacePrice(t *testing.T) {
 	}, models))
 }
 
-func TestVerifiableMarketplaceModelsSkipsImageModels(t *testing.T) {
-	require.Empty(t, verifiableMarketplaceModels([]string{
+func TestVerifiableMarketplaceModelsIncludesImageModels(t *testing.T) {
+	require.ElementsMatch(t, []string{"gpt-image-2", "grok-imagine-image", "grok-2-image-1212"}, verifiableMarketplaceModels([]string{
 		"gpt-image-2", "grok-imagine-image", "grok-2-image-1212",
 	}))
-	require.Equal(t, []string{"gpt-5.6-sol"}, verifiableMarketplaceModels([]string{
+	require.ElementsMatch(t, []string{"gpt-image-2", "grok-imagine-image-quality", "gpt-5.6-sol"}, verifiableMarketplaceModels([]string{
 		"gpt-image-2", "grok-imagine-image-quality", "gpt-5.6-sol",
 	}))
 }

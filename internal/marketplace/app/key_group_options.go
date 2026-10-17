@@ -65,7 +65,7 @@ func listKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 		multiplier := marketplacedomain.NormalizeMultiplier(group.Multiplier)
 		label := marketplaceDisplayName(publicSourceLabel(channel), multiplier, channel.ID)
 		if price := group.PersonalMultiplier; userID != group.OwnerUserID && price > 0 {
-			multiplier = marketplacedomain.NormalizeMultiplier(price)
+			multiplier = marketplacedomain.NormalizeMultiplier(discountedMarketplaceMultiplier(group.Multiplier, price))
 		}
 		option := KeyGroupOption{
 			Value: "market:" + group.ID, Label: label, Category: "marketplace",

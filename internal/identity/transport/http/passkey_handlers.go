@@ -1,9 +1,9 @@
 package http
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
 	passkeyapp "github.com/sh2001sh/new-api/internal/identity/app/passkey"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"github.com/sh2001sh/new-api/internal/identity/sessionstate"
 	platformstore "github.com/sh2001sh/new-api/internal/platform/store"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
@@ -228,7 +228,7 @@ func AdminResetPasskey(c *gin.Context) {
 		httpapi.ApiErrorMsg(c, identityapp.ErrPasskeyInvalidUserID.Error())
 		return
 	}
-	if err := identityapp.ResetPasskeyBinding(id); err != nil {
+	if err := identityapp.ResetPasskeyBinding(id, identityapp.AdminActionActor{UserID: c.GetInt("id"), Role: c.GetInt("role")}); err != nil {
 		handlePasskeyAppError(c, err)
 		return
 	}

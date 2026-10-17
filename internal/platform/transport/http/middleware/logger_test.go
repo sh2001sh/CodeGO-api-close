@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +12,37 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRequestLoggerOmitsCapabilityQueries(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		path   string
+		status int
+	}{
+		{"/api/desktop/import/config?code=fixture-import-capability", http.StatusOK},
+		{"/api/desktop/import/config/?code=fixture-import-capability", http.StatusTooManyRequests},
+		{"/api/desktop/import/%63onfig?code=fixture-import-capability", http.StatusNotFound},
+		{"/v1/files/file-codego-fixture/delivery?expires=9999999999&signature=fixture-file-capability", http.StatusOK},
+		{"/v1/files/file-codego-fixture/delivery?signature=fixture-file-capability", http.StatusNotFound},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			var output bytes.Buffer
+			router := gin.New()
+			router.Use(gin.LoggerWithConfig(gin.LoggerConfig{Formatter: formatRequestLog, Output: &output}))
+			router.NoRoute(func(c *gin.Context) { c.Status(tc.status) })
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			router.ServeHTTP(recorder, request)
+			require.Equal(t, tc.status, recorder.Code)
+			line := output.String()
+			require.Contains(t, line, request.URL.Path)
+			require.NotContains(t, line, "?")
+			require.NotContains(t, line, "capability")
+		})
+	}
+	line := formatRequestLog(gin.LogFormatterParams{Path: "/api/status?view=public"})
+	require.Contains(t, line, "/api/status?view=public")
+}
 
 func TestRequestLogIncludesCorrelatableTrace(t *testing.T) {
 	trace := "0123456789abcdef0123456789abcdef"

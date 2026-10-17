@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -79,7 +78,7 @@ func TestCodexContradictoryPresentationFieldsRemainPending(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
 	group := seedPublicShopProduct(t, db, "contradictory-fields", 10)
-	ctx, err := preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
+	ctx, err := prepareTrustedPresentationTestProbe(t, &marketplaceschema.Channel{ID: group.ChannelID})
 	require.NoError(t, err)
 	require.NoError(t, validatePresentationProbeResponse(ctx, "codex", "gpt-5", []byte(`{"output":[{"type":"message","content":[{"type":"output_text","text":"AD"}]}],"output_text":"SAFE"}`)))
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
@@ -142,10 +141,10 @@ func TestPresentationInconclusiveVerdictPreservesConnectivityAndErrorDetection(t
 		{`{"choices":[]}`, "缺少有效的模型输出"},
 		{`not json`, "不是有效 JSON"},
 	} {
-		ctx, err := preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
+		ctx, err := prepareTrustedPresentationTestProbe(t, &marketplaceschema.Channel{ID: group.ChannelID})
 		require.NoError(t, err)
 		requests := 0
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { requests++; _, _ = w.Write([]byte(item.body)) }))
+		server := marketplaceTestUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { requests++; _, _ = w.Write([]byte(item.body)) }))
 		_, err = probeMarketplaceInferenceTimedContext(ctx, "openai_compatible", server.URL, "local-test-only", "gpt-5")
 		server.Close()
 		if item.wantError == "" {
@@ -166,7 +165,7 @@ func TestPresentationNewSafeRecoversSemanticFailureButNotNewerADOrRuleFailure(t 
 	group := seedPublicShopProduct(t, db, "semantic-recovery", 10)
 	require.NoError(t, db.Create(&marketplaceschema.Shop{OwnerUserID: 10, Name: "模型店"}).Error)
 	prepare := func() context.Context {
-		ctx, err := preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
+		ctx, err := prepareTrustedPresentationTestProbe(t, &marketplaceschema.Channel{ID: group.ChannelID})
 		require.NoError(t, err)
 		return ctx
 	}
@@ -207,7 +206,7 @@ func TestPresentationEditAndUndoStillInvalidatesOldProbe(t *testing.T) {
 	group := seedPublicShopProduct(t, db, "undo-review", 10)
 	_, err := UpdateOwnerShop(10, ShopProfileRequest{Name: "原店铺"})
 	require.NoError(t, err)
-	ctx, err := preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
+	ctx, err := prepareTrustedPresentationTestProbe(t, &marketplaceschema.Channel{ID: group.ChannelID})
 	require.NoError(t, err)
 	for _, name := range []string{"临时店铺", "原店铺"} {
 		_, err = UpdateOwnerShop(10, ShopProfileRequest{Name: name})
@@ -216,7 +215,7 @@ func TestPresentationEditAndUndoStillInvalidatesOldProbe(t *testing.T) {
 	require.Error(t, validatePresentationProbeResponse(ctx, "openai_compatible", "gpt-5", presentationTextResponse(t, "AD")))
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
 	require.Equal(t, "pending", group.ModerationStatus)
-	ctx, err = preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
+	ctx, err = prepareTrustedPresentationTestProbe(t, &marketplaceschema.Channel{ID: group.ChannelID})
 	require.NoError(t, err)
 	for _, name := range []string{"临时渠道", group.CustomName} {
 		_, err = UpdateOwnerChannel(10, group.ChannelID, UpdateChannelRequest{CustomName: &name})
@@ -233,7 +232,7 @@ func TestShopEditReopensOnlyOwnedGroupReviewAndRejectsStaleProbe(t *testing.T) {
 	group := seedPublicShopProduct(t, db, "shop-recovery", 10)
 	other := seedPublicShopProduct(t, db, "other-owner", 20)
 	require.NoError(t, db.Model(&group).Updates(map[string]any{"moderation_status": "failed", "moderation_reason": presentationSemanticADReason, "lifecycle_status": "suspended"}).Error)
-	ctx, err := preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
+	ctx, err := prepareTrustedPresentationTestProbe(t, &marketplaceschema.Channel{ID: group.ChannelID})
 	require.NoError(t, err)
 	_, err = UpdateOwnerShop(10, ShopProfileRequest{Name: "新模型店", Description: "HTTP streaming 与 AVX512"})
 	require.NoError(t, err)
@@ -246,8 +245,8 @@ func TestShopEditReopensOnlyOwnedGroupReviewAndRejectsStaleProbe(t *testing.T) {
 	require.Equal(t, "pending", group.ModerationStatus)
 	require.Equal(t, "suspended", group.LifecycleStatus)
 	require.NoError(t, db.First(&other, "id = ?", other.ID).Error)
-	require.Empty(t, other.ModerationStatus)
-	newCtx, err := preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
+	require.Equal(t, "passed", other.ModerationStatus)
+	newCtx, err := prepareTrustedPresentationTestProbe(t, &marketplaceschema.Channel{ID: group.ChannelID})
 	require.NoError(t, err)
 	require.NoError(t, validatePresentationProbeResponse(newCtx, "openai_compatible", "gpt-5", presentationTextResponse(t, "SAFE")))
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
@@ -311,7 +310,7 @@ func TestPresentationReviewUsesOneTextModelAndPreservesPausedLifecycle(t *testin
 	for _, paused := range []bool{true, false} {
 		require.ErrorContains(t, PauseOwnerChannel(10, group.ChannelID, paused), "已停用")
 	}
-	require.ErrorContains(t, QueueIncrementalConnectivityTest(group.ChannelID), "已停用")
+
 	// A late successful result cannot undo an administrator disable.
 	late := marketplaceschema.VerificationRun{ID: "late-native", ChannelID: group.ChannelID, Status: "running"}
 	require.NoError(t, db.Create(&late).Error)
@@ -320,8 +319,10 @@ func TestPresentationReviewUsesOneTextModelAndPreservesPausedLifecycle(t *testin
 	require.NoError(t, db.First(&channel, "id = ?", group.ChannelID).Error)
 	require.Equal(t, "disabled", channel.Status)
 	blocked := marketplaceschema.VerificationRun{ID: "blocked-native", ChannelID: group.ChannelID, Status: "queued"}
-	require.ErrorContains(t, prepareConnectivityTest(&blocked, nil), "已停用")
+	require.NoError(t, prepareConnectivityTest(&blocked, nil))
+	require.NoError(t, db.First(&channel, "id = ?", group.ChannelID).Error)
+	require.Equal(t, "disabled", channel.Status, "repair evidence must not release the administrator hold")
 	var count int64
 	require.NoError(t, db.Model(&marketplaceschema.VerificationRun{}).Where("id = ?", blocked.ID).Count(&count).Error)
-	require.Zero(t, count)
+	require.EqualValues(t, 1, count)
 }

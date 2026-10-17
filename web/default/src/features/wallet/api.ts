@@ -130,13 +130,33 @@ export async function sendWalletTransferPasswordEmailCode(): Promise<WalletTrans
 }
 
 export async function createWalletTransfer(
-  request: CreateWalletTransferRequest
+  request: CreateWalletTransferRequest,
+  signal?: AbortSignal
 ): Promise<WalletTransferResponse> {
   const res = await api.post('/api/wallet/transfers', request, {
     timeout: 30_000,
+    signal,
     skipErrorHandler: true,
     skipBusinessError: true,
   } as Record<string, unknown>)
+  return res.data
+}
+
+export async function getWalletTransferReceipt(
+  requestId: string,
+  signal: AbortSignal,
+  timeout = 10_000
+): Promise<WalletTransferResponse> {
+  const res = await api.get(
+    `/api/wallet/transfers/requests/${encodeURIComponent(requestId)}`,
+    {
+      signal,
+      timeout,
+      disableDuplicate: true,
+      skipErrorHandler: true,
+      skipBusinessError: true,
+    } as Record<string, unknown>
+  )
   return res.data
 }
 

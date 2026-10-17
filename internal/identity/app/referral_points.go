@@ -1,26 +1,19 @@
 package app
 
 import (
-	"errors"
 	"fmt"
-	"github.com/sh2001sh/new-api/constant"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
-	blindboxsettings "github.com/sh2001sh/new-api/internal/commerce/blindboxsettings"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
-	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
-	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	"gorm.io/gorm"
 )
-
-const registrationBlindBoxQuantity = 5
 
 func insertUserAndApplyRegistrationRewards(user *identityschema.User, inviterID int) error {
 	if user == nil {
@@ -51,40 +44,9 @@ func finalizeOAuthUserAndApplyRegistrationRewards(user *identityschema.User, inv
 }
 
 func grantRegistrationBlindBoxes(userID int) error {
-	if userID <= 0 {
-		return nil
-	}
-
-	now := platformruntime.GetTimestamp()
-	setting := blindboxsettings.Get()
-	if !setting.RegistrationRewardActive(now) {
-		return nil
-	}
-	tradeNo := fmt.Sprintf("registration-blind-box-%d", userID)
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		var existing commerceschema.BlindBoxOrder
-		err := tx.Where("trade_no = ?", tradeNo).First(&existing).Error
-		if err == nil {
-			return nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		return tx.Create(&commerceschema.BlindBoxOrder{
-			UserId:          userID,
-			Quantity:        registrationBlindBoxQuantity,
-			Money:           0,
-			TradeNo:         tradeNo,
-			PaymentMethod:   "registration_bonus",
-			PaymentProvider: "system",
-			Source:          commerceschema.BlindBoxOrderSourceRegistrationBenefit,
-			BenefitCycle:    fmt.Sprintf("registration:%d", userID),
-			Status:          constant.TopUpStatusSuccess,
-			CreateTime:      now,
-			CompleteTime:    now,
-			ExpiresAt:       now + int64(setting.ExpireDays)*24*60*60,
-		}).Error
-	})
+	// Registration no longer grants monetary lottery inventory. Keep the legacy
+	// entry point inert so older OAuth callers cannot revive the campaign.
+	return nil
 }
 
 func recordRegistrationBonusLog(userID int) {

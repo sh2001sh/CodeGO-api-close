@@ -27,7 +27,7 @@ func TestVerificationUpdatesUseDeclaredGroupColumns(t *testing.T) {
 			require.False(t, db.Migrator().HasColumn(&group, "verification_summary"))
 			wantStatus, wantVerification := marketplacedomain.LifecycleDraft, marketplacedomain.VerificationFailed
 			if imageOnly {
-				require.NoError(t, publishImageOnlyChannel(&channel))
+				require.NoError(t, publishVerifiedConnectivity(&channel))
 				wantStatus, wantVerification = marketplacedomain.LifecycleActive, marketplacedomain.VerificationPassed
 			} else {
 				require.NoError(t, persistUnchangedVerificationFailure(&channel))

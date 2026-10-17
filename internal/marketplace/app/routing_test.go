@@ -153,6 +153,7 @@ func TestOfficialGroupCanBindExistingToken(t *testing.T) {
 
 func openMarketplaceAppTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
+	t.Setenv("PROMPT_AUDIT_MODE", "off")
 	originalDB := platformdb.DB
 	originalSQLite := platformdb.UsingSQLite
 	originalPostgreSQL := platformdb.UsingPostgreSQL
@@ -167,6 +168,6 @@ func openMarketplaceAppTestDB(t *testing.T) *gorm.DB {
 	platformdb.UsingSQLite = true
 	platformdb.UsingPostgreSQL = false
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.UserMultiplier{}))
-	require.NoError(t, db.AutoMigrate(&marketplaceschema.Group{}, &marketplaceschema.Shop{}, &marketplaceschema.ShopRating{}, &marketplaceschema.MarketReport{}))
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.Shop{}, &marketplaceschema.ShopRating{}, &marketplaceschema.MarketReport{}))
 	return db
 }

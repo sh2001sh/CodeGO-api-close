@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Transfer processing...": "转账处理中…",
+    "Checking transfer status...": "正在核对转账…",
+    "Transfer status is unconfirmed.": "转账结果暂未确认。",
+    "Check transfer status": "核对转账",
     "Transfer result unknown. Retry this transfer.": "转账结果未确认，请重试本笔转账。",
     "Unable to save transfer status. Please reload.": "无法保存转账状态，请重新加载。",
     "搜索店铺名称或店铺 ID": "搜索店铺名称或店铺 ID",

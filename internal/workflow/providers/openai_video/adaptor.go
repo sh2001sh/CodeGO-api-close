@@ -47,12 +47,14 @@ type TaskAdaptor struct {
 	ChannelType int
 	apiKey      string
 	baseURL     string
+	marketplace bool
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.ChannelType = info.ChannelType
 	a.baseURL = info.ChannelBaseUrl
 	a.apiKey = info.ApiKey
+	a.marketplace = info.UsesMarketplaceEgress()
 }
 
 func validateRemixRequest(c *gin.Context) *dto.TaskError {
@@ -237,15 +239,14 @@ func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy 
 	uri := relaycommon.JoinBaseURLPath(baseURL, fmt.Sprintf("/v1/videos/%s", taskID))
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
+		if a.marketplace {
+			return nil, fmt.Errorf("invalid marketplace task upstream request")
+		}
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+key)
 
-	client, err := platformhttpx.GetHTTPClientWithProxy(proxy)
-	if err != nil {
-		return nil, fmt.Errorf("new proxy http client failed: %w", err)
-	}
-	return client.Do(req)
+	return taskhttp.DoUpstreamRequest(req, a.marketplace, proxy)
 }
 
 func (a *TaskAdaptor) GetModelList() []string {

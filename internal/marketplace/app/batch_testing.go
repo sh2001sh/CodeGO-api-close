@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -262,34 +261,13 @@ func batchPresentationProbe(channelID, model string) (string, func([]byte) error
 	if err := platformdb.DB.First(&channel, "id = ?", channelID).Error; err != nil {
 		return "", nil, err
 	}
-	ctx, err := preparePresentationProbe(context.Background(), &channel)
+	_, err := preparePresentationProbe(context.Background(), &channel)
 	if err != nil {
 		return "", nil, err
 	}
-	probe, _ := ctx.Value(presentationProbeKey{}).(*presentationProbe)
-	if probe == nil {
-		return "", nil, nil
-	}
-	prompt := probe.Prompt
-	if !presentationProbeSupportsText(model) {
-		prompt = ""
-	}
-	return prompt, func(body []byte) error {
-		// The gateway may normalize Anthropic/Gemini output into OpenAI format.
-		var payload map[string]any
-		if err := json.Unmarshal(body, &payload); err != nil {
-			return err
-		}
-		provider := "openai_compatible"
-		if payload["output"] != nil || payload["output_text"] != nil {
-			provider = "codex"
-		} else if payload["candidates"] != nil {
-			provider = "gemini"
-		} else if payload["content"] != nil {
-			provider = "anthropic"
-		}
-		return validatePresentationProbeResponse(ctx, provider, model, body)
-	}, nil
+	// The batch request goes to the owner's upstream. It cannot approve or
+	// reject public content, even when it returns a valid SAFE/AD string.
+	return "", nil, nil
 }
 
 func getBatchModel(id string) string {

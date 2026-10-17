@@ -72,6 +72,74 @@ func TestSignedFileDeliveryAllowsValidTokenAndRejectsTampering(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, tampered.Code)
 }
 
+func TestSignedFileDeliverySandboxesActiveContentAndPreservesProviderFetches(t *testing.T) {
+	_ = setupFileHandlers(t)
+	router := gin.New()
+	router.GET("/v1/files/:id/delivery", DeliverFile)
+	t.Setenv("FILE_DELIVERY_BASE_URL", "https://api.example.com")
+	t.Setenv("FILE_DELIVERY_SIGNING_SECRET", "delivery-test-secret")
+	for _, tc := range []struct {
+		name, mime, body string
+	}{
+		{"fixture.html", "text/html", "<!doctype html><script>document.title='untrusted'</script>"},
+		{"fixture.svg", "image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg"><script>document.title='untrusted'</script></svg>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			file, err := gatewayFiles.Create(11, tc.name, "user_data", tc.mime, bytes.NewBufferString(tc.body), 4096)
+			require.NoError(t, err)
+			deliveryURL, err := gatewayFiles.BuildSignedDeliveryURL(file.ID, time.Now().UTC())
+			require.NoError(t, err)
+			// Providers fetch without a bearer token and may replay or request ranges.
+			for i := 0; i < 2; i++ {
+				result := httptest.NewRecorder()
+				router.ServeHTTP(result, httptest.NewRequest(http.MethodGet, deliveryURL, nil))
+				require.Equal(t, http.StatusOK, result.Code)
+				require.Equal(t, tc.body, result.Body.String())
+				require.Equal(t, tc.mime, result.Header().Get("Content-Type"))
+				require.Equal(t, "sandbox", result.Header().Get("Content-Security-Policy"))
+				require.Contains(t, result.Header().Get("Content-Disposition"), "inline")
+			}
+			rangeRequest := httptest.NewRequest(http.MethodGet, deliveryURL, nil)
+			rangeRequest.Header.Set("Range", "bytes=0-4")
+			partial := httptest.NewRecorder()
+			router.ServeHTTP(partial, rangeRequest)
+			require.Equal(t, http.StatusPartialContent, partial.Code)
+			require.Equal(t, tc.body[:5], partial.Body.String())
+			require.Equal(t, "sandbox", partial.Header().Get("Content-Security-Policy"))
+		})
+	}
+}
+
+func TestAuthenticatedFileContentSandboxesActiveContent(t *testing.T) {
+	router := setupFileHandlers(t)
+	body := "<!doctype html><script>document.title='untrusted'</script>"
+	file, err := gatewayFiles.Create(11, "fixture.html", "user_data", "text/html", bytes.NewBufferString(body), 4096)
+	require.NoError(t, err)
+	contentURL := "/v1/files/" + file.ID + "/content"
+	result := httptest.NewRecorder()
+	router.ServeHTTP(result, httptest.NewRequest(http.MethodGet, contentURL, nil))
+	require.Equal(t, http.StatusOK, result.Code)
+	require.Equal(t, body, result.Body.String())
+	require.Equal(t, "text/html", result.Header().Get("Content-Type"))
+	require.Equal(t, "sandbox", result.Header().Get("Content-Security-Policy"))
+	require.Equal(t, "nosniff", result.Header().Get("X-Content-Type-Options"))
+
+	request := httptest.NewRequest(http.MethodGet, contentURL, nil)
+	request.Header.Set("Range", "bytes=0-4")
+	partial := httptest.NewRecorder()
+	router.ServeHTTP(partial, request)
+	require.Equal(t, http.StatusPartialContent, partial.Code)
+	require.Equal(t, body[:5], partial.Body.String())
+	require.Equal(t, "sandbox", partial.Header().Get("Content-Security-Policy"))
+
+	other, err := gatewayFiles.Create(12, "other.html", "user_data", "text/html", bytes.NewBufferString(body), 4096)
+	require.NoError(t, err)
+	denied := httptest.NewRecorder()
+	router.ServeHTTP(denied, httptest.NewRequest(http.MethodGet, "/v1/files/"+other.ID+"/content", nil))
+	require.Equal(t, http.StatusNotFound, denied.Code)
+	require.NotContains(t, denied.Body.String(), "<script>")
+}
+
 func TestValidateLocalFileIDsPreservesResponsesRequest(t *testing.T) {
 	_ = setupFileHandlers(t)
 	file, err := gatewayFiles.Create(11, "image.png", "vision", "image/png", bytes.NewReader([]byte("image")), 1024)

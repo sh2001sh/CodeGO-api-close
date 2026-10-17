@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Transfer processing...": "Перевод обрабатывается…",
+    "Checking transfer status...": "Проверка перевода…",
+    "Transfer status is unconfirmed.": "Результат перевода пока не подтверждён.",
+    "Check transfer status": "Проверить перевод",
     "Transfer result unknown. Retry this transfer.": "Результат перевода неизвестен. Повторите этот перевод.",
     "Unable to save transfer status. Please reload.": "Не удалось сохранить статус перевода. Перезагрузите страницу.",
     "搜索店铺名称或店铺 ID": "Поиск по названию или ID магазина",

@@ -15,7 +15,9 @@ import {
 import type { WalletTransferOverview, WalletTransferRecipient } from '../types'
 import {
   restoreWalletTransferIntent,
+  pollWalletTransferIntent,
   submitWalletTransferIntent,
+  type TransferResult,
   type WalletTransferIntent,
 } from '../wallet-transfer-intent'
 import { useWalletTransferPassword } from './use-wallet-transfer-password'
@@ -55,6 +57,12 @@ function WalletPeerTransferForm(
     restored.failed ? t('Unable to save transfer status. Please reload.') : ''
   )
   const submittingRef = useRef(false)
+  const mounted = useRef(true)
+  const submission = useRef<AbortController | null>(null)
+  const activeIntent = useRef(restored.intent)
+  const [polling, setPolling] = useState(Boolean(restored.intent))
+  const [pollAttempt, setPollAttempt] = useState(0)
+  const [receiptStatus, setReceiptStatus] = useState('unconfirmed')
   const overviewRequest = useRef(0)
   const [overview, setOverview] = useState<WalletTransferOverview | null>(null)
   const [loading, setLoading] = useState(true)
@@ -67,7 +75,9 @@ function WalletPeerTransferForm(
   const [amount, setAmount] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [currentTimestamp, setCurrentTimestamp] = useState(0)
+  const [currentTimestamp, setCurrentTimestamp] = useState(() =>
+    Math.floor(Date.now() / 1000)
+  )
 
   const loadOverview = useCallback(async () => {
     const request = ++overviewRequest.current
@@ -75,21 +85,22 @@ function WalletPeerTransferForm(
     setError('')
     try {
       const response = await getWalletTransfers()
-      if (request !== overviewRequest.current) return
+      if (!mounted.current || request !== overviewRequest.current) return
       if (!isApiSuccess(response) || !response.data) {
         throw new Error(response.message || t('Failed to load transfer data.'))
       }
       setOverview(response.data)
       setCurrentTimestamp(Math.floor(Date.now() / 1000))
     } catch (reason) {
-      if (request !== overviewRequest.current) return
+      if (!mounted.current || request !== overviewRequest.current) return
       setError(
         !isAxiosError(reason) && reason instanceof Error
           ? reason.message
           : t('Failed to load transfer data.')
       )
     } finally {
-      if (request === overviewRequest.current) setLoading(false)
+      if (mounted.current && request === overviewRequest.current)
+        setLoading(false)
     }
   }, [t])
 
@@ -102,6 +113,96 @@ function WalletPeerTransferForm(
     void loadOverview()
   }, [loadOverview])
 
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      submission.current?.abort()
+    }
+  }, [])
+
+  const onUserRefresh = props.onUserRefresh
+  const completeTransfer = useCallback(
+    (result: Extract<TransferResult, { status: 'completed' }>) => {
+      activeIntent.current = null
+      setPendingIntent(null)
+      setPolling(false)
+      setTransferError('')
+      setConfirmOpen(false)
+      setRecipient(null)
+      setRecipientId('')
+      setAmount('')
+      toast.success(t('Quota transfer completed.'))
+      setOverview((current) =>
+        current
+          ? { ...current, balance: result.transfer.balance_after }
+          : current
+      )
+      if (result.storageError) {
+        setStorageBlocked(true)
+        setTransferError(t('Unable to save transfer status. Please reload.'))
+      }
+      void loadOverview()
+      void Promise.resolve()
+        .then(() => onUserRefresh?.())
+        .catch(() => {
+          if (mounted.current) setError(t('Refresh failed'))
+        })
+    },
+    [loadOverview, onUserRefresh, t]
+  )
+
+  useEffect(() => {
+    if (!pendingIntent || submitting) return
+    const controller = new AbortController()
+    setPolling(true)
+    void pollWalletTransferIntent(
+      props.userId,
+      pendingIntent,
+      controller.signal,
+      (result) => {
+        if (
+          controller.signal.aborted ||
+          activeIntent.current?.requestId !== pendingIntent.requestId
+        )
+          return
+        if (result.status === 'completed') {
+          completeTransfer(result)
+        } else {
+          setReceiptStatus(result.status)
+          if (result.status === 'rejected')
+            setTransferError(result.message || t('Quota transfer failed.'))
+          else if (result.status === 'unknown' && result.message)
+            setTransferError(result.message)
+        }
+      }
+    ).finally(() => {
+      if (!controller.signal.aborted) {
+        setPolling(false)
+        setReceiptStatus('unconfirmed')
+      }
+    })
+    return () => controller.abort()
+  }, [
+    pendingIntent,
+    submitting,
+    pollAttempt,
+    props.userId,
+    completeTransfer,
+    t,
+  ])
+
+  const lockedUntil = overview?.security.locked_until || 0
+  useEffect(() => {
+    if (lockedUntil <= Math.floor(Date.now() / 1000)) return
+    const timer = window.setInterval(() => {
+      const now = Math.floor(Date.now() / 1000)
+      setCurrentTimestamp(now)
+      if (now >= lockedUntil) window.clearInterval(timer)
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [lockedUntil])
+
   const quotaPerUSD = overview?.quota_per_usd || 500_000
   const amountUSD = Number(amount || 0)
   const amountQuota = Math.round(amountUSD * quotaPerUSD)
@@ -113,7 +214,7 @@ function WalletPeerTransferForm(
     Math.floor(((overview?.balance || 0) * 10_000) / (10_000 + feeBPS)) /
     quotaPerUSD
   const minimumUSD = (overview?.min_quota || quotaPerUSD / 100) / quotaPerUSD
-  const locked = (overview?.security.locked_until || 0) > currentTimestamp
+  const locked = lockedUntil > currentTimestamp
   const amountValid =
     Number.isFinite(amountUSD) &&
     amountUSD >= minimumUSD &&
@@ -123,6 +224,7 @@ function WalletPeerTransferForm(
     Boolean(overview?.security.password_set) &&
     !locked &&
     !submitting &&
+    !polling &&
     !storageBlocked
 
   const reviewQuotaPerUSD = pendingIntent?.quotaPerUSD || quotaPerUSD
@@ -171,83 +273,119 @@ function WalletPeerTransferForm(
       quotaPerUSD,
     }
     submittingRef.current = true
+    const controller = new AbortController()
+    submission.current = controller
+    activeIntent.current = draft
+    setPendingIntent(draft)
     setSubmitting(true)
+    setConfirmOpen(false)
+    setReceiptStatus('processing')
     setTransferError('')
     try {
       const result = await submitWalletTransferIntent(
         props.userId,
         draft,
-        paymentPassword
+        paymentPassword,
+        sessionStorage,
+        controller.signal
       )
+      if (
+        !mounted.current ||
+        controller.signal.aborted ||
+        activeIntent.current?.requestId !== draft.requestId
+      )
+        return
       if (result.status !== 'completed') {
+        activeIntent.current = result.intent
         setPendingIntent(result.intent)
+        setReceiptStatus(result.status)
         if (result.status === 'rejected') {
           setTransferError(result.message || t('Quota transfer failed.'))
-        } else {
-          setTransferError(t('Transfer result unknown. Retry this transfer.'))
+        } else if (result.status === 'unknown') {
+          setTransferError(result.message || '')
         }
         void loadOverview()
         return
       }
-      toast.success(t('Quota transfer completed.'))
-      setPendingIntent(null)
-      setConfirmOpen(false)
-      setRecipient(null)
-      setRecipientId('')
-      setAmount('')
-      setOverview((current) =>
-        current
-          ? { ...current, balance: result.transfer.balance_after }
-          : current
-      )
-      if (result.storageError) {
-        setStorageBlocked(true)
-        setTransferError(t('Unable to save transfer status. Please reload.'))
-      }
-      void loadOverview()
-      void Promise.resolve()
-        .then(() => props.onUserRefresh?.())
-        .catch(() => setError(t('Refresh failed')))
+      completeTransfer(result)
     } catch {
+      if (!mounted.current || controller.signal.aborted) return
       setStorageBlocked(true)
       setTransferError(t('Unable to save transfer status. Please reload.'))
     } finally {
       submittingRef.current = false
-      setSubmitting(false)
+      if (mounted.current) setSubmitting(false)
     }
   }
 
+  let statusLabel = t('Transfer status is unconfirmed.')
+  if (submitting || receiptStatus === 'processing')
+    statusLabel = t('Transfer processing...')
+  else if (polling) statusLabel = t('Checking transfer status...')
+  const pendingStatus = pendingIntent ? (
+    <div
+      role='status'
+      aria-live='polite'
+      className='app-page-shell flex flex-wrap items-center gap-3 p-4 text-sm'
+    >
+      {submitting || polling ? (
+        <Loader2
+          aria-hidden='true'
+          className='text-primary size-4 animate-spin'
+        />
+      ) : null}
+      <span>{statusLabel}</span>
+      <Button
+        type='button'
+        variant='outline'
+        size='sm'
+        disabled={submitting || polling}
+        onClick={() => setPollAttempt((attempt) => attempt + 1)}
+      >
+        <RefreshCw aria-hidden='true' className='size-4' />
+        {t('Check transfer status')}
+      </Button>
+    </div>
+  ) : null
+
   if (loading && !overview) {
     return (
-      <section className='app-page-shell flex min-h-52 items-center justify-center gap-2 p-5'>
-        <Loader2 className='text-primary size-4 animate-spin' />
-        <span className='text-muted-foreground text-sm'>
-          {t('Loading transfer settings...')}
-        </span>
-      </section>
+      <>
+        {pendingStatus}
+        <section className='app-page-shell flex min-h-52 items-center justify-center gap-2 p-5'>
+          <Loader2 className='text-primary size-4 animate-spin' />
+          <span className='text-muted-foreground text-sm'>
+            {t('Loading transfer settings...')}
+          </span>
+        </section>
+      </>
     )
   }
 
   if (!overview) {
     return (
-      <section className='app-page-shell p-5 text-center'>
-        <p className='text-destructive text-sm'>{error}</p>
-        <Button
-          type='button'
-          variant='outline'
-          size='sm'
-          className='mt-3'
-          onClick={() => void loadOverview()}
-        >
-          <RefreshCw className='size-4' />
-          {t('Retry')}
-        </Button>
-      </section>
+      <>
+        {pendingStatus}
+        <section className='app-page-shell p-5 text-center'>
+          <p className='text-destructive text-sm'>{error}</p>
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            className='mt-3'
+            onClick={() => void loadOverview()}
+          >
+            <RefreshCw className='size-4' />
+            {t('Retry')}
+          </Button>
+        </section>
+      </>
     )
   }
 
   return (
     <>
+      {pendingStatus}
       {error ? (
         <div role='alert' className='flex items-center gap-3 text-sm'>
           <p className='text-destructive'>{error}</p>
@@ -276,12 +414,7 @@ function WalletPeerTransferForm(
         }
         disabled={Boolean(pendingIntent) || submitting || storageBlocked}
         retrying={Boolean(pendingIntent)}
-        error={
-          transferError ||
-          (pendingIntent
-            ? t('Transfer result unknown. Retry this transfer.')
-            : '')
-        }
+        error={transferError}
         balanceUSD={balanceUSD}
         maxTransferUSD={maxTransferUSD}
         minimumUSD={minimumUSD}

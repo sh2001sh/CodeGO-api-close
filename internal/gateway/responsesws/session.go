@@ -13,11 +13,14 @@ import (
 
 	"github.com/gorilla/websocket"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
+	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 )
 
 const responsesWebSocketBeta = "responses_websockets=2026-02-06"
 
 var ErrResponseInFlight = errors.New("responses websocket already has an in-flight response")
+
+var marketplaceWebSocketDial = platformhttpx.DialMarketplaceWebSocket
 
 type Session struct {
 	mu              sync.Mutex
@@ -123,6 +126,16 @@ func (s *Session) Close() error {
 }
 
 func (s *Session) Do(ctx context.Context, endpoint string, headers http.Header, requestBody io.Reader) (*http.Response, error) {
+	return s.do(ctx, endpoint, headers, requestBody, false)
+}
+
+// DoMarketplace uses the mandatory checked public destination policy for
+// native Responses connections to untrusted marketplace-owned upstreams.
+func (s *Session) DoMarketplace(ctx context.Context, endpoint string, headers http.Header, requestBody io.Reader) (*http.Response, error) {
+	return s.do(ctx, endpoint, headers, requestBody, true)
+}
+
+func (s *Session) do(ctx context.Context, endpoint string, headers http.Header, requestBody io.Reader, marketplace bool) (*http.Response, error) {
 	payload, err := nativeRequestPayload(requestBody)
 	if err != nil {
 		return nil, err
@@ -141,7 +154,7 @@ func (s *Session) Do(ctx context.Context, endpoint string, headers http.Header, 
 		s.mu.Unlock()
 		return nil, ErrResponseInFlight
 	}
-	conn, err := s.connectionLocked(ctx, endpoint, headers)
+	conn, err := s.connectionLocked(ctx, endpoint, headers, marketplace)
 	if err != nil {
 		if shouldDisableNative(err) {
 			s.nativeDisabled = true
@@ -171,17 +184,36 @@ func (s *Session) Do(ctx context.Context, endpoint string, headers http.Header, 
 	}, nil
 }
 
-func (s *Session) connectionLocked(ctx context.Context, endpoint string, headers http.Header) (*websocket.Conn, error) {
+func (s *Session) connectionLocked(ctx context.Context, endpoint string, headers http.Header, marketplace bool) (*websocket.Conn, error) {
 	if s.conn != nil {
 		return s.conn, nil
 	}
 	wsURL, err := websocketEndpoint(endpoint)
 	if err != nil {
+		if marketplace {
+			return nil, errors.New("invalid marketplace upstream websocket address")
+		}
 		return nil, err
 	}
 	headers = headers.Clone()
+	if headers == nil {
+		headers = make(http.Header)
+	}
 	headers.Set("OpenAI-Beta", responsesWebSocketBeta)
-	conn, response, err := s.dialer.DialContext(ctx, wsURL, headers)
+	var conn *websocket.Conn
+	var response *http.Response
+	if marketplace {
+		conn, response, err = marketplaceWebSocketDial(ctx, wsURL, headers)
+		if err != nil {
+			if ctx.Err() != nil {
+				err = ctx.Err()
+			} else {
+				err = errors.New("marketplace upstream websocket connection failed")
+			}
+		}
+	} else {
+		conn, response, err = s.dialer.DialContext(ctx, wsURL, headers)
+	}
 	status := 0
 	if response != nil {
 		status = response.StatusCode

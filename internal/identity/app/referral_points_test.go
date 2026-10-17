@@ -51,7 +51,7 @@ func setupReferralPointsAppTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestGrantRegistrationBlindBoxesIsIdempotent(t *testing.T) {
+func TestGrantRegistrationBlindBoxesCannotReviveRetiredCampaign(t *testing.T) {
 	db := setupReferralPointsAppTestDB(t)
 	originalSetting := blindboxsettings.Get()
 	t.Cleanup(func() { blindboxsettings.Set(originalSetting) })
@@ -68,12 +68,7 @@ func TestGrantRegistrationBlindBoxesIsIdempotent(t *testing.T) {
 
 	var orders []commerceschema.BlindBoxOrder
 	require.NoError(t, db.Where("user_id = ?", user.Id).Find(&orders).Error)
-	require.Len(t, orders, 1)
-	assert.Equal(t, registrationBlindBoxQuantity, orders[0].Quantity)
-	assert.Equal(t, 0, orders[0].OpenedCount)
-	assert.Equal(t, commerceschema.BlindBoxOrderSourceRegistrationBenefit, orders[0].Source)
-	assert.Equal(t, constant.TopUpStatusSuccess, orders[0].Status)
-	assert.Greater(t, orders[0].ExpiresAt, orders[0].CreateTime)
+	require.Empty(t, orders)
 }
 
 func TestGrantRegistrationBlindBoxesSkipsInactiveCampaign(t *testing.T) {
@@ -103,7 +98,7 @@ func TestRegistrationRewardEndsAtConfiguredTimestamp(t *testing.T) {
 	assert.False(t, setting.RegistrationRewardActive(100))
 }
 
-func TestGrantRegistrationBlindBoxesDoesNotRequireInvitation(t *testing.T) {
+func TestGrantRegistrationBlindBoxesDoesNotGrantWithoutInvitation(t *testing.T) {
 	db := setupReferralPointsAppTestDB(t)
 	originalSetting := blindboxsettings.Get()
 	t.Cleanup(func() { blindboxsettings.Set(originalSetting) })
@@ -119,7 +114,7 @@ func TestGrantRegistrationBlindBoxesDoesNotRequireInvitation(t *testing.T) {
 
 	var count int64
 	require.NoError(t, db.Model(&commerceschema.BlindBoxOrder{}).Where("user_id = ?", user.Id).Count(&count).Error)
-	assert.EqualValues(t, 1, count)
+	assert.Zero(t, count)
 }
 
 func snapshotPaymentSettingForAppTest() func() {

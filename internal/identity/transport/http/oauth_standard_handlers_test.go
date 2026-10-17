@@ -169,7 +169,7 @@ func TestHandleOAuthLogsInNewUser(t *testing.T) {
 	}
 }
 
-func TestHandleLinuxDOOAuthGrantsRegistrationBlindBoxesWithoutInvitation(t *testing.T) {
+func TestHandleLinuxDOOAuthDoesNotGrantRetiredRegistrationBlindBoxes(t *testing.T) {
 	db := setupDesktopHTTPTestDB(t)
 	originalSetting := blindboxsettings.Get()
 	t.Cleanup(func() { blindboxsettings.Set(originalSetting) })
@@ -214,12 +214,12 @@ func TestHandleLinuxDOOAuthGrantsRegistrationBlindBoxesWithoutInvitation(t *test
 	if !response.Success {
 		t.Fatalf("expected oauth login success, got %#v", response)
 	}
-	var order commerceschema.BlindBoxOrder
-	if err := db.Where("user_id = ?", 1).First(&order).Error; err != nil {
-		t.Fatalf("expected registration blind box order: %v", err)
+	var count int64
+	if err := db.Model(&commerceschema.BlindBoxOrder{}).Count(&count).Error; err != nil {
+		t.Fatal(err)
 	}
-	if order.Quantity != 5 || order.OpenedCount != 0 {
-		t.Fatalf("unexpected blind box order: %#v", order)
+	if count != 0 {
+		t.Fatalf("retired registration campaign granted %d orders", count)
 	}
 }
 

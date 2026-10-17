@@ -15,14 +15,13 @@ type EmailBindRequest struct {
 
 // BindEmail verifies the email code and persists the user's bound email address.
 func BindEmail(userID int, email string, code string) error {
+	email = identitystore.NormalizeEmail(email)
+	if err := validateVerificationEmail(email); err != nil {
+		return err
+	}
 	if !VerifyCodeWithKey(email, code, EmailVerificationPurpose) {
 		return ErrVerificationCodeInvalid
 	}
 
-	user, err := identitystore.LoadUserByID(userID, true)
-	if err != nil {
-		return err
-	}
-	user.Email = email
-	return identitystore.UpdateUser(user, false)
+	return identitystore.BindUserEmail(userID, email)
 }

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/samber/hot"
@@ -29,6 +30,7 @@ var marketplaceListCache struct {
 	entries *hot.HotCache[string, *GroupListResult]
 }
 var marketplaceListLoads singleflight.Group
+var marketplacePublicationRevision atomic.Uint64
 
 type marketplaceListSnapshot struct {
 	channels map[string]marketplaceschema.Channel
@@ -60,7 +62,7 @@ type rankingTotals struct {
 
 func ListMarketplaceGroups(query GroupQuery) (*GroupListResult, error) {
 	query = normalizeGroupQuery(query)
-	cacheKey := fmt.Sprintf("%p:%+v", platformdb.DB, query)
+	cacheKey := fmt.Sprintf("%p:%d:%+v", platformdb.DB, marketplacePublicationRevision.Load(), query)
 	marketplaceListCache.Lock()
 	if marketplaceListCache.entries == nil {
 		marketplaceListCache.entries = hot.NewHotCache[string, *GroupListResult](hot.LRU, 64).WithTTL(5 * time.Second).Build()
@@ -365,7 +367,8 @@ func loadPublicGroupRows(query GroupQuery) ([]marketplaceschema.Group, error) {
 
 func publicGroupsQuery(query GroupQuery) *gorm.DB {
 	dbQuery := platformdb.DB.Model(&marketplaceschema.Group{}).Select(marketplaceGroupColumns())
-	dbQuery = dbQuery.Where("(moderation_status IS NULL OR moderation_status <> ?)", "failed")
+	dbQuery = approvedMarketplacePresentationQuery(dbQuery)
+	dbQuery = dbQuery.Where(fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s mc WHERE mc.id = %s.channel_id AND (mc.status = ? OR mc.source_label_status = ?))", marketplaceschema.Channel{}.TableName(), marketplaceschema.Group{}.TableName()), marketplacedomain.LifecycleDisabled, marketplacedomain.SourceLabelRejected)
 	if query.ShopID > 0 {
 		dbQuery = dbQuery.Where("owner_user_id = ?", query.ShopID)
 	}

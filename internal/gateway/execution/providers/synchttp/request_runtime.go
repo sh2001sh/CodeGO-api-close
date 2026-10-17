@@ -31,6 +31,9 @@ type RequestAdaptor interface {
 	SetupRequestHeader(c *gin.Context, req *http.Header, info *relaycommon.RelayInfo) error
 }
 
+var marketplaceHTTPClient = platformhttpx.GetMarketplaceHTTPClientWithResponseHeaderTimeout
+var marketplaceWebSocketDial = platformhttpx.DialMarketplaceWebSocket
+
 func SetupAPIRequestHeader(info *relaycommon.RelayInfo, c *gin.Context, req *http.Header) {
 	if info.RelayMode == gatewaycontract.RelayModeAudioTranscription || info.RelayMode == gatewaycontract.RelayModeAudioTranslation {
 		return
@@ -143,7 +146,9 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 	var err error
 	markResponsesStreamRetrySafeBeforeConnect(c, info)
 	responseHeaderTimeout := responseHeaderTimeoutForRequest(c, info)
-	if info.ChannelSetting.Proxy != "" {
+	if info.UsesMarketplaceEgress() {
+		client = marketplaceHTTPClient(responseHeaderTimeout)
+	} else if info.ChannelSetting.Proxy != "" {
 		client, err = platformhttpx.NewProxyHTTPClientWithResponseHeaderTimeout(info.ChannelSetting.Proxy, responseHeaderTimeout)
 		if err != nil {
 			return nil, fmt.Errorf("new proxy http client failed: %w", err)
@@ -207,6 +212,19 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 		}
 	}
 	if err != nil {
+		if info.UsesMarketplaceEgress() {
+			// net/http errors can contain a URL, DNS response or credentials.
+			// Keep timeout classification while preventing those values from logging.
+			if isUpstreamResponseTimeout(err) {
+				err = context.DeadlineExceeded
+			} else if errors.Is(err, context.Canceled) {
+				err = context.Canceled
+			} else if errors.Is(err, platformhttpx.ErrMarketplaceUpstreamAddress) {
+				err = platformhttpx.ErrMarketplaceUpstreamAddress
+			} else {
+				err = errors.New("marketplace upstream request failed")
+			}
+		}
 		logger.LogError(c, "do request failed: "+err.Error())
 		if isUpstreamResponseTimeout(err) {
 			return nil, types.NewError(
@@ -451,6 +469,19 @@ func DoWSSRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo,
 	}
 	targetHeader.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 
+	if info.UsesMarketplaceEgress() {
+		targetConn, response, err := marketplaceWebSocketDial(requestContext(c), fullRequestURL, targetHeader)
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
+		if err != nil {
+			if requestContext(c).Err() != nil {
+				return nil, requestContext(c).Err()
+			}
+			return nil, errors.New("marketplace upstream websocket connection failed")
+		}
+		return targetConn, nil
+	}
 	targetConn, _, err := websocket.DefaultDialer.DialContext(requestContext(c), fullRequestURL, targetHeader)
 	if err != nil {
 		return nil, fmt.Errorf("dial failed to %s: %w", fullRequestURL, err)

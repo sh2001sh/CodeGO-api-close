@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -17,7 +16,7 @@ import (
 
 func seedPublicShopProduct(t *testing.T, db *gorm.DB, id string, owner int) marketplaceschema.Group {
 	t.Helper()
-	group := marketplaceschema.Group{ID: id, ChannelID: id, OwnerUserID: owner, InternalGroupName: id, PublicSlug: id, CustomName: "推理渠道", Tags: `["编程","低延迟"]`, Visibility: "public", VerificationStatus: "passed", LifecycleStatus: "active", Multiplier: 0.5}
+	group := marketplaceschema.Group{ID: id, ChannelID: id, OwnerUserID: owner, InternalGroupName: id, PublicSlug: id, CustomName: "推理渠道", Tags: `["编程","低延迟"]`, Visibility: "public", VerificationStatus: "passed", LifecycleStatus: "active", Multiplier: 0.5, ModerationStatus: "passed"}
 	require.NoError(t, db.Create(&group).Error)
 	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: id, OwnerUserID: owner, DeclaredModels: `["gpt-5"]`}).Error)
 	return group
@@ -37,6 +36,9 @@ func TestShopListingAggregatesBeyondProductPageAndFilters(t *testing.T) {
 	require.NoError(t, db.Delete(&marketplaceschema.Channel{}, "id = ?", deleted.ChannelID).Error)
 	_, err := UpdateOwnerShop(10, ShopProfileRequest{Name: "晨光模型店", Description: "提供稳定的编程模型"})
 	require.NoError(t, err)
+	// A separate trusted/admin decision is required before edited content is public.
+	require.NoError(t, db.Model(&marketplaceschema.Group{}).Where("owner_user_id = ?", 10).Update("moderation_status", "passed").Error)
+	require.NoError(t, db.Model(&marketplaceschema.Shop{}).Where("owner_user_id = ?", 10).Update("moderation_status", "passed").Error)
 	for _, query := range []GroupQuery{{}, {Search: "晨光"}, {Tag: "编程"}, {Search: "稳定的"}, {Search: "10"}} {
 		shops, err := ListMarketplaceShops(query)
 		require.NoError(t, err)
@@ -151,7 +153,7 @@ func TestPublicTitleAndNoteLengthBoundaries(t *testing.T) {
 	require.Error(t, applyPublicPresentation(&group, &multiline, nil, nil), "titles must remain a single line")
 }
 
-func TestConnectivityRequestAlsoModeratesAndRejectsStaleResults(t *testing.T) {
+func TestChannelConnectivityCannotModerateAndTrustedReviewRejectsStaleResults(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
 	group := seedPublicShopProduct(t, db, "probe-product", 10)
@@ -159,23 +161,24 @@ func TestConnectivityRequestAlsoModeratesAndRejectsStaleResults(t *testing.T) {
 	ctx, err := preparePresentationProbe(context.Background(), channel)
 	require.NoError(t, err)
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := marketplaceTestUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		encoded, err := json.Marshal(body)
 		require.NoError(t, err)
-		require.Contains(t, string(encoded), "推理渠道")
-		require.Contains(t, string(encoded), "不可信")
+		require.NotContains(t, string(encoded), "推理渠道")
+		require.Contains(t, string(encoded), "Reply with OK.")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"SAFE"}}]}`))
 	}))
 	defer server.Close()
 	_, err = probeMarketplaceInferenceTimedContext(ctx, "openai_compatible", server.URL, "test-only", "gpt-5")
 	require.NoError(t, err)
-	require.Equal(t, 1, calls, "moderation must reuse the connectivity inference")
+	require.Equal(t, 1, calls)
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "passed", group.ModerationStatus)
+	require.Equal(t, "pending", group.ModerationStatus, "an owner's SAFE must not approve public content")
+	ctx = context.WithValue(ctx, trustedPresentationProbeKey{}, true)
 	require.Error(t, validatePresentationProbeResponse(ctx, "openai_compatible", "gpt-5", []byte(`{"choices":[{"message":{"content":"AD"}}]}`)))
 	for _, text := range []string{"SAFE", "unknown"} {
 		_ = validatePresentationProbeResponse(ctx, "openai_compatible", "gpt-5", []byte(`{"choices":[{"message":{"content":"`+text+`"}}]}`))
@@ -214,17 +217,16 @@ func TestReportsKeepEvidenceAndAdminRemovesContent(t *testing.T) {
 	require.Error(t, SubmitMarketReport(21, req))
 }
 
-func TestUserConnectivityTestUsesPresentationPrompt(t *testing.T) {
+func TestUserConnectivityTestCannotSupplyPresentationVerdict(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
 	group := seedPublicShopProduct(t, db, "batch-presentation", 10)
 	prompt, validate, err := batchPresentationProbe(group.ChannelID, "gpt-5")
 	require.NoError(t, err)
-	require.Contains(t, prompt, group.CustomName)
-	require.NotNil(t, validate)
-	require.NoError(t, validate([]byte(`{"choices":[{"message":{"content":"SAFE"}}]}`)))
+	require.Empty(t, prompt)
+	require.Nil(t, validate)
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "passed", group.ModerationStatus)
+	require.Equal(t, "pending", group.ModerationStatus)
 	prompt, validate, err = batchPresentationProbe("", "gpt-5")
 	require.NoError(t, err)
 	require.Empty(t, prompt)
@@ -237,7 +239,7 @@ func TestPresentationProbeHandlesNonTextAndShopEdits(t *testing.T) {
 	group := seedPublicShopProduct(t, db, "probe-boundaries", 10)
 	_, err := UpdateOwnerShop(10, ShopProfileRequest{Name: "原店铺"})
 	require.NoError(t, err)
-	ctx, err := preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
+	ctx, err := prepareTrustedPresentationTestProbe(t, &marketplaceschema.Channel{ID: group.ChannelID})
 	require.NoError(t, err)
 	_, err = UpdateOwnerShop(10, ShopProfileRequest{Name: "新店铺"})
 	require.NoError(t, err)
@@ -249,14 +251,14 @@ func TestPresentationProbeHandlesNonTextAndShopEdits(t *testing.T) {
 		prompt, validate, err := batchPresentationProbe(group.ChannelID, model)
 		require.NoError(t, err)
 		require.Empty(t, prompt, model)
-		require.NoError(t, validate([]byte(`{"data":[]}`)), model)
+		require.Nil(t, validate, model)
 	}
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "rule_passed", group.ModerationStatus)
+	require.Equal(t, "pending", group.ModerationStatus)
 	prompt, validate, err := batchPresentationProbe(group.ChannelID, "gpt-5")
 	require.NoError(t, err)
-	require.NotEmpty(t, prompt)
-	require.NoError(t, validate([]byte(`{"choices":[{"message":{"content":"maybe"}}]}`)))
+	require.Empty(t, prompt)
+	require.Nil(t, validate)
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
 	require.Equal(t, "pending", group.ModerationStatus)
 }

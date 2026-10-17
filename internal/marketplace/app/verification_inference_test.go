@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -74,7 +73,7 @@ func TestProbeResponseRejectsEmbeddedFailureAndMissingImage(t *testing.T) {
 	require.EqualError(
 		t,
 		validateMarketplaceProbeResponse("openai_compatible", "gpt-5.6-sol", []byte(`{"success":false,"message":"quota exceeded"}`)),
-		"上游返回失败内容: quota exceeded",
+		"上游返回失败内容",
 	)
 	require.EqualError(
 		t,
@@ -93,7 +92,7 @@ func TestTextProbeRequiresProtocolOutputAndRejectsFailureReply(t *testing.T) {
 	require.EqualError(t, validateMarketplaceProbeResponse(
 		"openai_compatible", "gpt-5.6-sol",
 		[]byte(`{"choices":[{"message":{"content":"请求失败，请稍后重试"}}]}`),
-	), "探针模型返回失败内容: 请求失败，请稍后重试")
+	), "探针模型返回失败内容")
 	require.NoError(t, validateMarketplaceProbeResponse(
 		"openai_compatible", "gpt-5.6-sol",
 		[]byte(`{"choices":[{"message":{"content":"OK"}}]}`),
@@ -109,7 +108,7 @@ func TestTextProbeRequiresProtocolOutputAndRejectsFailureReply(t *testing.T) {
 
 func TestInferenceProbeRetriesTransientHTTPFailure(t *testing.T) {
 	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := marketplaceTestUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests++
 		if requests == 1 {
 			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
@@ -128,7 +127,7 @@ func TestInferenceProbeRetriesTransientHTTPFailure(t *testing.T) {
 
 func TestInferenceProbeDoesNotRetryDeterministicHTTPFailure(t *testing.T) {
 	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := marketplaceTestUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests++
 		http.Error(w, "invalid request", http.StatusBadRequest)
 	}))
@@ -142,7 +141,7 @@ func TestInferenceProbeDoesNotRetryDeterministicHTTPFailure(t *testing.T) {
 }
 
 func TestInferenceProbeRejectsHTTP200ErrorPayload(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := marketplaceTestUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"error":{"message":"model unavailable"}}`))
 	}))
@@ -151,7 +150,7 @@ func TestInferenceProbeRejectsHTTP200ErrorPayload(t *testing.T) {
 	_, err := probeMarketplaceInferenceTimedContext(
 		context.Background(), "openai_compatible", server.URL, "test-key", "gpt-5.6-sol",
 	)
-	require.EqualError(t, err, "上游返回失败内容: model unavailable")
+	require.EqualError(t, err, "上游返回失败内容")
 }
 
 func TestVerifyDeclaredModelsRejectsUnadvertisedModels(t *testing.T) {
@@ -181,7 +180,7 @@ func TestGeminiNativeImageDoesNotUseUnrelatedProviderProtocol(t *testing.T) {
 
 func TestProbeDeclaredModelsTestsEveryModel(t *testing.T) {
 	tested := make([]string, 0, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := marketplaceTestUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
 			Model string `json:"model"`
 		}

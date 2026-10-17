@@ -78,7 +78,13 @@ func AuthenticateUserCredentials(username string, password string) (*identitysch
 	}
 
 	user := &identityschema.User{}
-	err := platformdb.DB.Where("username = ? OR email = ?", username, username).First(user).Error
+	err := platformdb.DB.Where("username = ?", username).First(user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		user, err = UniqueUserByEmail(username)
+		if errors.Is(err, ErrEmailConflict) {
+			return nil, identitydomain.ErrInvalidCredentials
+		}
+	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, identitydomain.ErrInvalidCredentials
@@ -119,6 +125,19 @@ func prepareNewUser(user *identityschema.User, inviterID int) error {
 }
 
 func createPreparedUser(db *gorm.DB, user *identityschema.User) error {
+	user.Email = NormalizeEmail(user.Email)
+	if user.Email != "" {
+		if err := lockEmailOwnership(db, user.Email); err != nil {
+			return err
+		}
+		var count int64
+		if err := db.Unscoped().Model(&identityschema.User{}).Where("LOWER(TRIM(email)) = ?", user.Email).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return ErrEmailConflict
+		}
+	}
 	const maxExternalIDAttempts = 5
 	for attempt := 0; attempt < maxExternalIDAttempts; attempt++ {
 		savePointName := fmt.Sprintf("external_user_id_%d", attempt)

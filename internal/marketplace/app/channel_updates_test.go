@@ -49,7 +49,7 @@ func TestAdminCanUpdateMarketplaceChannelContent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, newSource, updated.SubmittedSourceLabel)
-	require.Equal(t, marketplacedomain.SourceLabelApproved, updated.SourceLabelStatus)
+	require.Equal(t, marketplacedomain.SourceLabelPending, updated.SourceLabelStatus)
 	require.Equal(t, newMultiplier, updated.Multiplier)
 	require.Equal(t, consistency, updated.ModelConsistencyStatus)
 	var savedChannel marketplaceschema.Channel

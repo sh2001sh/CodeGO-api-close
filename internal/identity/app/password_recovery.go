@@ -57,6 +57,7 @@ func DecodePasswordResetRequest(raw []byte) (PasswordResetRequest, error) {
 
 // SendRegistrationVerification sends a registration verification code to an unclaimed email address.
 func SendRegistrationVerification(email string) error {
+	email = identitystore.NormalizeEmail(email)
 	if err := validateVerificationEmail(email); err != nil {
 		return err
 	}
@@ -65,7 +66,9 @@ func SendRegistrationVerification(email string) error {
 	}
 
 	code := GenerateVerificationCode(6)
-	RegisterVerificationCodeWithKey(email, code, EmailVerificationPurpose)
+	if err := RegisterVerificationCodeWithKey(email, code, EmailVerificationPurpose); err != nil {
+		return err
+	}
 	subject := fmt.Sprintf("%s邮箱验证邮件", platformconfig.SystemName)
 	content := renderRegistrationVerificationEmail(platformconfig.SystemName, code, VerificationValidMinutes)
 	return sendEmail(subject, email, content)
@@ -77,12 +80,18 @@ func SendWalletTransferPasswordVerification(userID int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	email := strings.TrimSpace(user.Email)
+	email := identitystore.NormalizeEmail(user.Email)
 	if email == "" {
 		return "", ErrBoundEmailRequired
 	}
 	code := GenerateVerificationCode(6)
-	RegisterVerificationCodeWithKey(email, code, WalletTransferPasswordPurpose)
+	owner, err := identitystore.UniqueUserByEmail(email)
+	if err != nil || owner.Id != userID {
+		return "", ErrBoundEmailRequired
+	}
+	if err := RegisterVerificationCodeWithKey(email, code, WalletTransferPasswordPurpose); err != nil {
+		return "", err
+	}
 	subject := fmt.Sprintf("%s支付密码验证", platformconfig.SystemName)
 	content := renderRegistrationVerificationEmail(platformconfig.SystemName, code, VerificationValidMinutes)
 	if err := sendEmail(subject, email, content); err != nil {
@@ -93,15 +102,21 @@ func SendWalletTransferPasswordVerification(userID int) (string, error) {
 
 // SendPasswordResetEmail sends a password reset email when the address exists.
 func SendPasswordResetEmail(ctx context.Context, email string) error {
+	email = identitystore.NormalizeEmail(email)
 	if err := platformvalidation.Validate.Var(email, "required,email"); err != nil {
 		return ErrInvalidEmailParameter
 	}
-	if !identitystore.IsEmailTaken(email) {
+	if _, err := identitystore.UniqueUserByEmail(email); err != nil {
+		if !errors.Is(err, identitystore.ErrEmailConflict) {
+			return err
+		}
 		return nil
 	}
 
 	code := GenerateVerificationCode(0)
-	RegisterVerificationCodeWithKey(email, code, PasswordResetPurpose)
+	if err := RegisterVerificationCodeWithKey(email, code, PasswordResetPurpose); err != nil {
+		return err
+	}
 	link := fmt.Sprintf("%s/user/reset?%s", strings.TrimRight(platformconfig.ServerAddress, "/"), url.Values{
 		"email": []string{email},
 		"token": []string{code},
@@ -124,7 +139,6 @@ func ResetPassword(req PasswordResetRequest) (string, error) {
 	if err := identitystore.ResetUserPasswordByEmail(req.Email, password); err != nil {
 		return "", err
 	}
-	DeleteVerificationKey(req.Email, PasswordResetPurpose)
 	return password, nil
 }
 

@@ -11,12 +11,15 @@ import (
 	"github.com/sh2001sh/new-api/constant"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
+	platformcache "github.com/sh2001sh/new-api/internal/platform/cache"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"io"
 	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -38,6 +41,10 @@ var (
 )
 
 var weChatHTTPClient = &http.Client{Timeout: 5 * time.Second}
+
+const telegramAuthorizationMaxAge = 5 * time.Minute
+
+var telegramReplays = make(map[string]time.Time)
 
 // SetWeChatHTTPClientForTest overrides the WeChat HTTP client for transport tests.
 func SetWeChatHTTPClientForTest(client *http.Client) {
@@ -213,13 +220,63 @@ func validatedTelegramID(params map[string][]string, token string) (string, erro
 	}
 	ids := params["id"]
 	hashes := params["hash"]
-	if len(ids) == 0 || len(hashes) == 0 {
+	if len(ids) != 1 || len(hashes) != 1 {
+		return "", ErrMessagingOAuthInvalid
+	}
+	for _, values := range params {
+		if len(values) != 1 {
+			return "", ErrMessagingOAuthInvalid
+		}
+	}
+	id, idErr := strconv.ParseInt(ids[0], 10, 64)
+	dates := params["auth_date"]
+	if len(dates) != 1 || idErr != nil || id <= 0 {
+		return "", ErrMessagingOAuthInvalid
+	}
+	authDate, dateErr := strconv.ParseInt(dates[0], 10, 64)
+	now := time.Now()
+	if dateErr != nil || authDate > now.Add(30*time.Second).Unix() || authDate <= now.Add(-telegramAuthorizationMaxAge).Unix() {
 		return "", ErrMessagingOAuthInvalid
 	}
 	if !checkTelegramAuthorization(params, token) {
 		return "", ErrMessagingOAuthInvalid
 	}
+	if !claimTelegramAuthorization(strings.ToLower(hashes[0]), time.Unix(authDate, 0).Add(telegramAuthorizationMaxAge)) {
+		return "", ErrMessagingOAuthInvalid
+	}
 	return ids[0], nil
+}
+
+func claimTelegramAuthorization(hash string, expires time.Time) bool {
+	if !expires.After(time.Now()) {
+		return false
+	}
+	key := "new-api:telegram-replay:v1:" + hash
+	if platformcache.RedisEnabled {
+		if platformcache.RDB == nil {
+			return false
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		claimed, err := platformcache.RDB.SetNX(ctx, key, "1", time.Until(expires)).Result()
+		if err != nil {
+			platformobservability.SysLog("Telegram replay store unavailable")
+		}
+		return err == nil && claimed
+	}
+	verificationMutex.Lock()
+	defer verificationMutex.Unlock()
+	now := time.Now()
+	for value, expiry := range telegramReplays {
+		if !expiry.After(now) {
+			delete(telegramReplays, value)
+		}
+	}
+	if _, used := telegramReplays[key]; used || len(telegramReplays) >= verificationMapMaxSize {
+		return false
+	}
+	telegramReplays[key] = expires
+	return true
 }
 
 func checkTelegramAuthorization(params map[string][]string, token string) bool {
@@ -252,5 +309,6 @@ func checkTelegramAuthorization(params map[string][]string, token string) bool {
 	io.WriteString(sha256Hash, token)
 	hmacHash := hmac.New(sha256.New, sha256Hash.Sum(nil))
 	io.WriteString(hmacHash, joined)
-	return hash == hex.EncodeToString(hmacHash.Sum(nil))
+	provided, err := hex.DecodeString(hash)
+	return err == nil && hmac.Equal(provided, hmacHash.Sum(nil))
 }

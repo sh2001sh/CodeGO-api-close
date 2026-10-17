@@ -203,7 +203,14 @@ export interface CreateWalletTransferRequest {
 export type WalletTransferOverviewResponse = ApiResponse<WalletTransferOverview>
 export type WalletTransferRecipientResponse =
   ApiResponse<WalletTransferRecipient>
-export type WalletTransferResponse = ApiResponse<WalletTransferHistoryItem>
+export interface WalletTransferRequestStatus {
+  request_id: string
+  status: 'processing' | 'unconfirmed' | 'rejected'
+}
+
+export type WalletTransferResponse = ApiResponse<
+  WalletTransferHistoryItem | WalletTransferRequestStatus
+> & { code?: string }
 export type WalletTransferEmailCodeResponse = ApiResponse<{
   email_masked: string
 }>

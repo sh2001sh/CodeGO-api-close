@@ -14,6 +14,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
+	"gorm.io/gorm"
 )
 
 var ErrChannelOutsideBoundRoutePool = errors.New("指定渠道不属于当前 Key 绑定的路由池")
@@ -87,7 +88,7 @@ func ResolveTokenGroupBinding(tokenGroup string, consumerUserID int) (*RoutingBi
 	if err := platformdb.DB.First(&group, "id = ?", groupID).Error; err != nil {
 		return nil, err
 	}
-	if !marketplacedomain.AcceptsTraffic(group.LifecycleStatus) || group.VerificationStatus != marketplacedomain.VerificationPassed {
+	if !marketplacedomain.AcceptsTraffic(group.LifecycleStatus) || group.VerificationStatus != marketplacedomain.VerificationPassed || !marketplacePresentationApproved(&group) {
 		return nil, errors.New("市场分组当前不可用")
 	}
 	if !hasMarketplaceGroupAccessForGroup(&group, consumerUserID) {
@@ -103,15 +104,20 @@ func ResolveTokenGroupBinding(tokenGroup string, consumerUserID int) (*RoutingBi
 		return nil, errors.New("您已被该渠道主拉黑，无法使用此渠道")
 	}
 	var channel marketplaceschema.Channel
-	if err := platformdb.DB.Select("model_prices", "declared_models").First(&channel, "id = ?", group.ChannelID).Error; err != nil {
+	if err := platformdb.DB.Select("status", "source_label_status", "model_prices", "declared_models").First(&channel, "id = ?", group.ChannelID).Error; err != nil {
 		return nil, err
+	}
+	if marketplaceChannelAdminHeld(&channel) {
+		return nil, errors.New("市场渠道已由管理员停用")
 	}
 	// Owner approved bargains and per-user overrides are stored separately
 	// from the public group multiplier. Apply the override at bind time so the
 	// approved rate is used by billing and routing immediately.
 	var userMultiplier marketplaceschema.UserMultiplier
-	if err := platformdb.DB.Where("channel_id = ? AND user_id = ?", group.ChannelID, consumerUserID).First(&userMultiplier).Error; err == nil && userMultiplier.Multiplier > 0 {
-		group.Multiplier = userMultiplier.Multiplier
+	if err := platformdb.DB.Where("channel_id = ? AND user_id = ?", group.ChannelID, consumerUserID).First(&userMultiplier).Error; err == nil {
+		group.Multiplier = discountedMarketplaceMultiplier(group.Multiplier, userMultiplier.Multiplier)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
 	}
 	return &RoutingBinding{
 		GroupID: group.ID, InternalGroup: group.InternalGroupName, OwnerUserID: group.OwnerUserID,

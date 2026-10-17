@@ -53,6 +53,9 @@ func DeliverFile(c *gin.Context) {
 	c.Header("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", maxAge))
 	c.Header("ETag", `"`+file.SHA256+`"`)
 	c.Header("X-Content-Type-Options", "nosniff")
+	// Uploaded HTML/SVG must not execute in the console's origin. Providers can
+	// still fetch the original bytes without browser credentials or redirects.
+	c.Header("Content-Security-Policy", "sandbox")
 	c.Header("Content-Type", file.MimeType)
 	c.Header("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": file.Filename}))
 	http.ServeContent(c.Writer, c.Request, file.Filename, info.ModTime(), content)
@@ -176,6 +179,8 @@ func GetFileContent(c *gin.Context) {
 		return
 	}
 	c.Header("Content-Type", file.MimeType)
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Security-Policy", "sandbox")
 	http.ServeContent(c.Writer, c.Request, file.Filename, info.ModTime(), content)
 }
 

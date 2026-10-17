@@ -23,6 +23,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *gatewayschema.Chann
 
 	httpctx.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
 	httpctx.SetContextKey(c, constant.ContextKeyChannelScope, normalizedChannelScope(channel))
+	httpctx.SetContextKey(c, constant.ContextKeyChannelMarketplaceEgress, channel.RequiresMarketplaceEgress())
 	httpctx.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)
 	httpctx.SetContextKey(c, constant.ContextKeyChannelType, channel.Type)
 	httpctx.SetContextKey(c, constant.ContextKeyChannelCreateTime, channel.CreatedTime)

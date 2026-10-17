@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,7 +34,7 @@ func TestMarketplaceAutoProbeStopsInFlightRequestsWhenDisabled(t *testing.T) {
 			require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))
 			started, stopServer := make(chan struct{}), make(chan struct{})
 			var requests atomic.Int64
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := marketplaceTestUpstream(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				requests.Add(1)
 				if stage == "inference" && r.Method == http.MethodGet {
 					fmt.Fprint(w, `{"data":[{"id":"gpt-5"}]}`)

@@ -11,6 +11,7 @@ import (
 
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	"golang.org/x/text/unicode/norm"
+	"gorm.io/gorm"
 )
 
 var (
@@ -140,6 +141,16 @@ func safePublicText(value string, limit int, name bool) string {
 		return ""
 	}
 	return text
+}
+
+// Old channels without custom public content need no semantic approval. Every
+// custom revision must pass platform-controlled or administrator review.
+func approvedMarketplacePresentationQuery(query *gorm.DB) *gorm.DB {
+	return query.Where("(moderation_status = ? OR (COALESCE(moderation_status, '') = '' AND COALESCE(custom_name, '') = '' AND COALESCE(description, '') = '' AND COALESCE(tags, '') IN ?))", "passed", []string{"", "[]", "null"})
+}
+
+func marketplacePresentationApproved(group *marketplaceschema.Group) bool {
+	return group.ModerationStatus == "passed" || (group.ModerationStatus == "" && group.CustomName == "" && group.Description == "" && len(decodeModels(group.Tags)) == 0)
 }
 
 func hasGroupTag(group marketplaceschema.Group, tag string) bool {

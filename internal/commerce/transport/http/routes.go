@@ -11,6 +11,7 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 	{
 		walletRoute.GET("/unified-credit-migration", getUnifiedCreditMigrationDetail)
 		walletRoute.GET("/transfers", getWalletTransferOverview)
+		walletRoute.GET("/transfers/requests/:request_id", getWalletTransferRequest)
 		walletRoute.GET("/transfers/recipients/:external_id", middleware.CriticalRateLimit(), getWalletTransferRecipient)
 		walletRoute.PUT("/transfers/payment-password", middleware.CriticalRateLimit(), configureWalletTransferPassword)
 		walletRoute.POST("/transfers/payment-password/email-code", middleware.EmailVerificationRateLimit(), sendWalletTransferPasswordEmailCode)

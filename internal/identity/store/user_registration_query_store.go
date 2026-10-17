@@ -15,7 +15,7 @@ func UserExistsOrDeleted(username string, email string) (bool, error) {
 	if email == "" {
 		err = platformdb.DB.Unscoped().First(&user, "username = ?", username).Error
 	} else {
-		err = platformdb.DB.Unscoped().First(&user, "username = ? or email = ?", username, email).Error
+		err = platformdb.DB.Unscoped().First(&user, "username = ? or LOWER(TRIM(email)) = ?", username, NormalizeEmail(email)).Error
 	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

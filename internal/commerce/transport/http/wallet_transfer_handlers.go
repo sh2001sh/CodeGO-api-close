@@ -1,14 +1,18 @@
 package http
 
 import (
+	"context"
 	"errors"
 	stdhttp "net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityapp "github.com/sh2001sh/new-api/internal/identity/app"
+	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
+	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	platformpagination "github.com/sh2001sh/new-api/internal/platform/pagination"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
@@ -71,35 +75,40 @@ func configureWalletTransferPassword(c *gin.Context) {
 		httpapi.ApiError(c, err)
 		return
 	}
-	if !security.PasswordSet && !authorizeFirstWalletTransferPassword(user.Password, req.CurrentPassword) {
-		httpapi.ApiError(c, commerceschema.ErrWalletTransferAccountPassword)
-		return
+	verifyEmail := func() bool {
+		owner, ownerErr := identitystore.UniqueUserByEmail(user.Email)
+		return ownerErr == nil && owner.Id == user.Id && identityapp.VerifyCodeWithKey(user.Email, req.EmailCode, identityapp.WalletTransferPasswordPurpose)
 	}
-	usedEmailCode := false
 	if security.PasswordSet {
 		switch strings.TrimSpace(req.VerificationMethod) {
 		case "payment_password":
 			err = commerceapp.ConfigureWalletTransferPassword(user.Id, req.OldPaymentPassword, req.NewPaymentPassword)
 		case "email":
-			if !identityapp.VerifyCodeWithKey(user.Email, req.EmailCode, identityapp.WalletTransferPasswordPurpose) {
+			if !verifyEmail() {
 				httpapi.ApiError(c, commerceschema.ErrWalletTransferEmailCodeInvalid)
 				return
 			}
-			usedEmailCode = true
 			err = commerceapp.ResetWalletTransferPassword(user.Id, req.NewPaymentPassword)
 		default:
 			httpapi.ApiError(c, commerceschema.ErrWalletTransferInvalid)
 			return
 		}
 	} else {
+		method := strings.TrimSpace(req.VerificationMethod)
+		if method == "email" {
+			if !verifyEmail() {
+				httpapi.ApiError(c, commerceschema.ErrWalletTransferEmailCodeInvalid)
+				return
+			}
+		} else if (method != "" && method != "account_password") || !authorizeFirstWalletTransferPassword(user.Password, req.CurrentPassword) {
+			httpapi.ApiError(c, commerceschema.ErrWalletTransferAccountPassword)
+			return
+		}
 		err = commerceapp.ConfigureWalletTransferPassword(user.Id, "", req.NewPaymentPassword)
 	}
 	if err != nil {
 		httpapi.ApiError(c, err)
 		return
-	}
-	if usedEmailCode {
-		identityapp.DeleteVerificationKey(user.Email, identityapp.WalletTransferPasswordPurpose)
 	}
 	httpapi.ApiSuccess(c, gin.H{"password_set": true})
 }
@@ -131,27 +140,62 @@ func createWalletTransfer(c *gin.Context) {
 		httpapi.ApiError(c, commerceschema.ErrWalletTransferInvalid)
 		return
 	}
-	transfer, err := commerceapp.TransferWalletQuota(c.Request.Context(), c.GetInt("id"), req)
-	if err != nil {
-		if errors.Is(err, commerceschema.ErrWalletTransferUnavailable) {
-			c.JSON(stdhttp.StatusServiceUnavailable, gin.H{"success": false, "message": commerceschema.ErrWalletTransferUnavailable.Error(), "code": "TRANSFER_UNCONFIRMED"})
-			return
-		}
-		if errors.Is(err, commerceschema.ErrWalletTransferPasswordLocked) {
-			c.JSON(stdhttp.StatusTooManyRequests, gin.H{"success": false, "message": err.Error(), "code": "PAYMENT_PASSWORD_LOCKED"})
-			return
-		}
-		httpapi.ApiError(c, err)
+	req.RequestId = strings.TrimSpace(req.RequestId)
+	req.RecipientExternalId = strings.ToUpper(strings.TrimSpace(req.RecipientExternalId))
+	if c.GetInt("id") <= 0 || req.RequestId == "" || len(req.RequestId) > 128 || req.PaymentPassword == "" {
+		httpapi.ApiError(c, commerceschema.ErrWalletTransferInvalid)
 		return
 	}
-	httpapi.ApiSuccess(c, transfer)
+	operation, start := walletTransferRequests.admit(c.GetInt("id"), req)
+	if operation == nil {
+		c.JSON(stdhttp.StatusTooManyRequests, gin.H{"success": false, "code": "TRANSFER_BUSY", "message": "已有转账处理中，请查询原请求"})
+		return
+	}
+	if start {
+		// Admission uses the live request. Detached execution receives only the
+		// validated snapshot, never the request, Gin context or payment password.
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		authorized, err := commerceapp.AuthorizeWalletTransfer(ctx, c.GetInt("id"), req)
+		cancel()
+		req.PaymentPassword = ""
+		if err != nil {
+			walletTransferRequests.finish(operation, nil, err)
+		} else {
+			executor := walletTransferRequests
+			go func() {
+				var transfer *commerceapp.WalletTransferHistoryItem
+				err := commerceschema.ErrWalletTransferUnavailable
+				defer func() {
+					if recover() != nil {
+						platformobservability.SysError("wallet transfer execution panicked; query the original native receipt")
+					}
+					executor.finish(operation, transfer, err)
+				}()
+				ctx, cancel := context.WithTimeout(context.Background(), commerceapp.WalletTransferTimeout)
+				defer cancel()
+				transfer, err = commerceapp.TransferAuthorizedWalletQuota(ctx, authorized)
+			}()
+		}
+	}
+	select {
+	case <-operation.done:
+		writeWalletTransferOutcome(c, operation)
+		return
+	default:
+	}
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case <-operation.done:
+		writeWalletTransferOutcome(c, operation)
+	case <-timer.C:
+		writeWalletTransferPending(c, operation.requestID, true)
+	case <-c.Request.Context().Done():
+		// An admitted operation keeps its independent bounded execution context.
+		writeWalletTransferPending(c, operation.requestID, true)
+	}
 }
 
 func authorizeFirstWalletTransferPassword(accountPasswordHash, currentPassword string) bool {
-	if accountPasswordHash != "" {
-		return platformsecurity.ValidatePasswordAndHash(currentPassword, accountPasswordHash)
-	}
-	// Passwordless/OAuth sessions are already authenticated. The dedicated
-	// payment password is the credential required for subsequent transfers.
-	return true
+	return accountPasswordHash != "" && currentPassword != "" && platformsecurity.ValidatePasswordAndHash(currentPassword, accountPasswordHash)
 }

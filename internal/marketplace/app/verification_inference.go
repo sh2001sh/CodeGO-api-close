@@ -14,6 +14,7 @@ import (
 
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
+	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 )
 
 const (
@@ -38,14 +39,15 @@ func probeMarketplaceInferenceTimedContext(
 ) (int64, error) {
 	prompt := "Reply with OK."
 	maxOutputTokens := marketplaceProbeOutputTokens
-	if probe, ok := parent.Value(presentationProbeKey{}).(*presentationProbe); ok && presentationProbeSupportsText(model) {
+	trusted, _ := parent.Value(trustedPresentationProbeKey{}).(bool)
+	if probe, ok := parent.Value(presentationProbeKey{}).(*presentationProbe); trusted && ok && presentationProbeSupportsText(model) {
 		prompt = probe.Prompt
 		// Reasoning models need room for reasoning before returning AD or SAFE.
 		maxOutputTokens = 1024
 	}
 	endpoint, payload, err := inferenceProbeRequestWithPrompt(provider, baseURL, model, prompt, maxOutputTokens)
 	if err != nil {
-		return 0, err
+		return 0, errors.New("上游推理请求地址或协议无效")
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -75,36 +77,31 @@ func probeMarketplaceInferenceAttempt(
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return 0, false, err
+		return 0, false, errors.New("上游推理请求地址无效")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	setMarketplaceAuthHeaders(req, provider, apiKey)
 	startedAt := time.Now()
-	response, err := (&http.Client{Timeout: timeout}).Do(req)
+	response, err := marketplaceUpstreamHTTPClient.Do(req)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return 0, true, fmt.Errorf("%s探针等待 %s 后超时", marketplaceProbeKind(model), timeout)
 		}
-		return 0, parent.Err() == nil, fmt.Errorf("实际推理请求失败: %w", err)
+		return 0, parent.Err() == nil && !errors.Is(err, platformhttpx.ErrMarketplaceUpstreamAddress), marketplaceUpstreamRequestError(ctx, err)
 	}
 	defer response.Body.Close()
 	latencyMS := time.Since(startedAt).Milliseconds()
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
 		responseBody, readErr := io.ReadAll(io.LimitReader(response.Body, 16<<20))
 		if readErr != nil {
-			return latencyMS, true, fmt.Errorf("读取上游响应失败: %w", readErr)
+			return latencyMS, true, errors.New("读取上游响应失败")
 		}
 		if err := validateMarketplaceProbeResponse(provider, model, responseBody); err != nil {
 			return latencyMS, false, err
 		}
 		return latencyMS, false, validatePresentationProbeResponse(parent, provider, model, responseBody)
 	}
-	detail, _ := io.ReadAll(io.LimitReader(response.Body, 512))
-	message := strings.TrimSpace(string(detail))
-	if message == "" {
-		message = response.Status
-	}
-	probeErr := fmt.Errorf("实际推理检测未通过（HTTP %d）: %s", response.StatusCode, message)
+	probeErr := fmt.Errorf("实际推理检测未通过（HTTP %d）", response.StatusCode)
 	return latencyMS, isTransientMarketplaceProbeStatus(response.StatusCode), probeErr
 }
 

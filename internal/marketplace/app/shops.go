@@ -61,7 +61,7 @@ func loadShopViews(ownerIDs []int, viewerID int) (map[int]ShopView, error) {
 	}
 	for _, profile := range profiles {
 		view := result[profile.OwnerUserID]
-		if profile.ModerationStatus == "failed" {
+		if profile.ModerationStatus != "passed" {
 			continue
 		}
 		if name := safePublicText(profile.Name, 40, true); name != "" {
@@ -260,6 +260,7 @@ func UpdateOwnerShop(ownerID int, req ShopProfileRequest) (*ShopView, error) {
 	}); err != nil {
 		return nil, err
 	}
+	invalidateAdminMarketplaceStatsCache()
 	return GetOwnerShop(ownerID)
 }
 
@@ -319,7 +320,7 @@ func attachShopPresentation(groups []marketplaceschema.Group) (map[int]ShopView,
 	}
 	for _, profile := range profiles {
 		view := views[profile.OwnerUserID]
-		if profile.ModerationStatus == "failed" {
+		if profile.ModerationStatus != "passed" {
 			continue
 		}
 		if name := safePublicText(profile.Name, 40, true); name != "" {

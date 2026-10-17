@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Transfer processing...": "送金処理中…",
+    "Checking transfer status...": "送金状況を確認中…",
+    "Transfer status is unconfirmed.": "送金結果はまだ確認できていません。",
+    "Check transfer status": "送金状況を確認",
     "Transfer result unknown. Retry this transfer.": "送金結果を確認できません。この送金を再試行してください。",
     "Unable to save transfer status. Please reload.": "送金状態を保存できません。再読み込みしてください。",
     "搜索店铺名称或店铺 ID": "店舗名または店舗 ID を検索",

@@ -47,8 +47,8 @@ func TestPauseAdminChannelKeepsEarnings(t *testing.T) {
 	require.Equal(t, "released", released.Status)
 	require.NoError(t, db.First(&channel, "id = ?", channel.ID).Error)
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, marketplacedomain.LifecycleSuspended, channel.Status)
-	require.Equal(t, marketplacedomain.LifecycleSuspended, group.LifecycleStatus)
+	require.Equal(t, marketplacedomain.LifecycleDisabled, channel.Status)
+	require.Equal(t, marketplacedomain.LifecycleDisabled, group.LifecycleStatus)
 	require.NoError(t, db.First(&marketplaceschema.AutoRoutePoolMember{}, "group_id = ?", group.ID).Error)
 	require.NoError(t, db.First(&marketplaceschema.RoutePoolMember{}, "group_id = ?", group.ID).Error)
 }

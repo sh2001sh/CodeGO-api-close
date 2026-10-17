@@ -10,7 +10,6 @@ import (
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
-	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/taskx"
 	taskcommon "github.com/sh2001sh/new-api/internal/workflow/providers/taskcommon"
 	"github.com/sh2001sh/new-api/internal/workflow/providers/taskhttp"
@@ -27,12 +26,14 @@ type TaskAdaptor struct {
 	ChannelType int
 	apiKey      string
 	baseURL     string
+	marketplace bool
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.ChannelType = info.ChannelType
 	a.baseURL = info.ChannelBaseUrl
 	a.apiKey = info.ApiKey
+	a.marketplace = info.UsesMarketplaceEgress()
 }
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
@@ -183,17 +184,16 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
+		if a.marketplace {
+			return nil, fmt.Errorf("invalid marketplace task upstream request")
+		}
 		return nil, err
 	}
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("x-goog-api-key", key)
 
-	client, err := platformhttpx.GetHTTPClientWithProxy(proxy)
-	if err != nil {
-		return nil, fmt.Errorf("new proxy http client failed: %w", err)
-	}
-	return client.Do(req)
+	return taskhttp.DoUpstreamRequest(req, a.marketplace, proxy)
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {

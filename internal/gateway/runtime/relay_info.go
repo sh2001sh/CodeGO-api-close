@@ -67,6 +67,7 @@ type ChannelMeta struct {
 	ChannelType               int
 	ChannelId                 int
 	ChannelScope              string
+	MarketplaceEgress         bool
 	ChannelIsMultiKey         bool
 	ChannelMultiKeyIndex      int
 	ChannelBaseUrl            string
@@ -237,6 +238,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 		ChannelType:               channelType,
 		ChannelId:                 httpctx.GetContextKeyInt(c, constant.ContextKeyChannelId),
 		ChannelScope:              httpctx.GetContextKeyString(c, constant.ContextKeyChannelScope),
+		MarketplaceEgress:         httpctx.GetContextKeyBool(c, constant.ContextKeyChannelMarketplaceEgress),
 		ChannelIsMultiKey:         httpctx.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey),
 		ChannelMultiKeyIndex:      httpctx.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex),
 		ChannelBaseUrl:            httpctx.GetContextKeyString(c, constant.ContextKeyChannelBaseUrl),

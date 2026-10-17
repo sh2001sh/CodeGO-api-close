@@ -20,7 +20,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strconv"
 	"testing"
+	"time"
 )
 
 func TestHandleWeChatOAuthCreatesUserAndSession(t *testing.T) {
@@ -233,7 +235,7 @@ func TestHandleTelegramLoginCreatesSessionForBoundUser(t *testing.T) {
 		Role:        constant.RoleCommonUser,
 		Status:      constant.UserStatusEnabled,
 		Group:       "default",
-		TelegramId:  "tg-user-1",
+		TelegramId:  "990001",
 	}
 	if err := identitystore.CreateUser(user, 0); err != nil {
 		t.Fatalf("failed to seed user: %v", err)
@@ -260,9 +262,9 @@ func TestHandleTelegramLoginCreatesSessionForBoundUser(t *testing.T) {
 	})
 
 	target := "/oauth/telegram/login?" + buildTelegramQuery("telegram-bot-token", map[string]string{
-		"id":         "tg-user-1",
+		"id":         "990001",
 		"first_name": "Telegram",
-		"auth_date":  "1720000000",
+		"auth_date":  strconv.FormatInt(time.Now().Unix(), 10),
 	})
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
@@ -333,9 +335,9 @@ func TestBindTelegramOAuthRedirectsAndPersistsBinding(t *testing.T) {
 	sessionCookie := prepareRecorder.Header().Get("Set-Cookie")
 
 	target := "/oauth/telegram/bind?" + buildTelegramQuery("telegram-bot-token", map[string]string{
-		"id":         "tg-bind-1",
+		"id":         "990002",
 		"first_name": "Telegram",
-		"auth_date":  "1720000000",
+		"auth_date":  strconv.FormatInt(time.Now().Unix(), 10),
 	})
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, target, nil)
@@ -353,7 +355,7 @@ func TestBindTelegramOAuthRedirectsAndPersistsBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to reload telegram bound user: %v", err)
 	}
-	if reloaded.TelegramId != "tg-bind-1" {
+	if reloaded.TelegramId != "990002" {
 		t.Fatalf("expected telegram binding to persist, got %#v", reloaded)
 	}
 }

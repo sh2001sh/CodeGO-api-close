@@ -60,7 +60,7 @@ func validateTextProbePayload(provider string, value any) error {
 			continue
 		}
 		if failure := probeFailureText(output); failure != "" {
-			return fmt.Errorf("探针模型返回失败内容: %s", failure)
+			return errors.New("探针模型返回失败内容")
 		}
 		return nil
 	}
@@ -145,7 +145,7 @@ func detectMarketplaceProbeError(body []byte) error {
 	if json.Unmarshal(body, &payload) != nil {
 		message := strings.ToLower(strings.TrimSpace(string(body)))
 		if message == "failed" || message == "error" || strings.HasPrefix(message, "error:") {
-			return fmt.Errorf("上游返回失败内容: %s", strings.TrimSpace(string(body)))
+			return errors.New("上游返回失败内容")
 		}
 		return nil
 	}
@@ -153,7 +153,7 @@ func detectMarketplaceProbeError(body []byte) error {
 	if message == "" {
 		return nil
 	}
-	return fmt.Errorf("上游返回失败内容: %s", message)
+	return errors.New("上游返回失败内容")
 }
 
 func probePayloadError(value any) string {

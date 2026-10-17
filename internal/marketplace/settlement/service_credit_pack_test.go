@@ -60,6 +60,24 @@ func TestPaidBonusPolicyRejectsOverflowAndUnknownVersions(t *testing.T) {
 	}
 }
 
+func TestPaidBonusPlatformSubsidyCannotBeNegative(t *testing.T) {
+	db := openSettlementTestDB(t)
+	params := RecordParams{
+		RequestID: "bounded-subsidy", GroupID: "group", OwnerUserID: 10, ConsumerUserID: 20,
+		BillingSource: "subscription", ConsumerDebitAmount: 100000, SettlementGrossAmount: 100000,
+		CreditPackGrantedQuota: 110000, CreditPackPaidQuota: 100000, CreditPackChannelShareBPS: 10000,
+		FeePolicyVersion: FeePolicyPaidBonusV2,
+	}
+	require.NoError(t, Record(params))
+	var item marketplaceschema.Settlement
+	require.NoError(t, db.First(&item, "request_id = ?", params.RequestID).Error)
+	require.Greater(t, item.TransactionFee, item.CreditPackDiscountAmount)
+	require.Zero(t, item.CreditPackPlatformSubsidyAmount)
+	require.EqualValues(t, 10000, item.TransactionFee, "historical fee policy stays exact")
+	require.EqualValues(t, 85000, item.OwnerNetAmount)
+	require.Equal(t, params.SettlementGrossAmount, item.OwnerNetAmount+item.PlatformCommission+item.TransactionFee)
+}
+
 func TestRecordCreditPackSharesBonusCostAndKeepsPurchaseSnapshot(t *testing.T) {
 	db := openSettlementTestDB(t)
 	// 100 paid credits buy 110 credits. Of the 10 bonus credits, the

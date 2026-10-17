@@ -7,6 +7,8 @@ import (
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ReconcileMarketplaceChannels upgrades legacy names and publishes verified channels.
@@ -24,71 +26,83 @@ func ReconcileMarketplaceChannels() error {
 	for index := range channels {
 		channel := &channels[index]
 		var group marketplaceschema.Group
-		if err := platformdb.DB.First(&group, "channel_id = ?", channel.ID).Error; err != nil {
-			return err
-		}
-		label := reconciledSourceLabel(channel.ProviderType, channel.SubmittedSourceLabel)
-		channel.SubmittedSourceLabel = label
-		channel.ApprovedSourceLabel = label
-		channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
-		channel.SourceLabelReviewReason = ""
-		normalizeInternalGroupName(&group, channel.ID, label)
-		if err := backfillConnectivityTestStatus(channel); err != nil {
-			return err
-		}
-
-		if group.VerificationStatus == marketplacedomain.VerificationPassed &&
-			group.LifecycleStatus != marketplacedomain.LifecycleSuspended &&
-			group.LifecycleStatus != marketplacedomain.LifecycleDisabled {
-			if channel.InternalChannelID == nil {
-				if err := createInternalChannel(channel, &group); err != nil {
-					return err
-				}
-			} else if err := syncInternalChannel(channel, &group); err != nil {
+		if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(channel, "id = ?", channel.ID).Error; err != nil {
 				return err
 			}
-			now := time.Now().UTC()
-			channel.Status = marketplacedomain.LifecycleActive
-			group.LifecycleStatus = marketplacedomain.LifecycleActive
-			if group.PublishedAt == nil {
-				group.PublishedAt = &now
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&group, "channel_id = ?", channel.ID).Error; err != nil {
+				return err
 			}
-		}
-		if err := platformdb.DB.Save(channel).Error; err != nil {
+			if marketplaceChannelAdminHeld(channel) {
+				channel.Status, group.LifecycleStatus = marketplacedomain.LifecycleDisabled, marketplacedomain.LifecycleDisabled
+				if err := tx.Save(channel).Error; err != nil {
+					return err
+				}
+				if err := tx.Save(&group).Error; err != nil {
+					return err
+				}
+				return syncPausedMarketplaceChannelWithDB(tx, channel, true)
+			}
+			if channel.Status == marketplacedomain.LifecycleSuspended || group.LifecycleStatus == marketplacedomain.LifecycleSuspended {
+				return syncPausedMarketplaceChannelWithDB(tx, channel, true)
+			}
+			label := reconciledSourceLabel(channel.ProviderType, channel.SubmittedSourceLabel)
+			channel.SubmittedSourceLabel = label
+			// Startup reconciliation is not an administrator source review.
+			if channel.SourceLabelStatus == "" {
+				channel.SourceLabelStatus = marketplacedomain.SourceLabelPending
+			}
+			normalizeInternalGroupName(&group, channel.ID, label)
+			if err := backfillConnectivityTestStatus(tx, channel); err != nil {
+				return err
+			}
+			if group.VerificationStatus == marketplacedomain.VerificationPassed {
+				if channel.InternalChannelID == nil {
+					if err := createInternalChannelWithDB(tx, channel, &group); err != nil {
+						return err
+					}
+				} else if err := syncInternalChannelWithDB(tx, channel, &group); err != nil {
+					return err
+				}
+				now := time.Now().UTC()
+				channel.Status, group.LifecycleStatus = marketplacedomain.LifecycleActive, marketplacedomain.LifecycleActive
+				if group.PublishedAt == nil {
+					group.PublishedAt = &now
+				}
+			}
+			if err := tx.Save(channel).Error; err != nil {
+				return err
+			}
+			return tx.Save(&group).Error
+		}); err != nil {
 			return err
 		}
-		if err := platformdb.DB.Save(&group).Error; err != nil {
-			return err
+		if channel.InternalChannelID != nil {
+			refreshInternalChannelRuntime(*channel.InternalChannelID)
+		}
+		if marketplaceChannelAdminHeld(channel) || channel.Status == marketplacedomain.LifecycleSuspended {
+			continue
 		}
 		upgrade, err := needsVerificationUpgrade(channel)
 		if err != nil {
 			return err
 		}
 		if upgrade {
-			channel.Status = marketplacedomain.LifecycleVerifying
-			group.LifecycleStatus = marketplacedomain.LifecycleVerifying
-			group.VerificationStatus = marketplacedomain.VerificationQueued
-			group.VerificationDueAt = nil
-			if err := platformdb.DB.Save(channel).Error; err != nil {
-				return err
-			}
-			if err := platformdb.DB.Save(&group).Error; err != nil {
-				return err
-			}
 			if err := QueueRequiredVerification(channel.ID); err != nil {
 				return err
 			}
 		}
 	}
+
 	return nil
 }
 
-func backfillConnectivityTestStatus(channel *marketplaceschema.Channel) error {
+func backfillConnectivityTestStatus(db *gorm.DB, channel *marketplaceschema.Channel) error {
 	if channel.ConnectivityTestStatus != "" {
 		return nil
 	}
 	var latest marketplaceschema.VerificationRun
-	err := platformdb.DB.Where("channel_id = ?", channel.ID).Order("created_at desc").First(&latest).Error
+	err := db.Where("channel_id = ?", channel.ID).Order("created_at desc").First(&latest).Error
 	if err != nil {
 		if isNotFound(err) {
 			return nil

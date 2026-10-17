@@ -34,6 +34,7 @@ const (
 	/* channel related keys */
 	ContextKeyChannelId                      ContextKey = "channel_id"
 	ContextKeyChannelScope                   ContextKey = "channel_scope"
+	ContextKeyChannelMarketplaceEgress       ContextKey = "channel_marketplace_egress"
 	ContextKeyOfficialChannelOnly            ContextKey = "official_channel_only"
 	ContextKeyOfficialChannelFallback        ContextKey = "official_channel_fallback"
 	ContextKeyChannelName                    ContextKey = "channel_name"

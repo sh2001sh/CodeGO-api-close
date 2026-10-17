@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/sh2001sh/new-api/constant"
 	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
@@ -25,7 +26,8 @@ import (
 const (
 	walletTransferMaxPageSize = 50
 	walletTransferFeeBPS      = int64(100)
-	walletTransferTimeout     = 20 * time.Second
+	WalletTransferTimeout     = 180 * time.Second
+	walletTransferMaxAttempts = 3
 )
 
 type WalletTransferRecipient struct {
@@ -123,8 +125,25 @@ func BuildWalletTransferOverview(user *identityschema.User, page, pageSize int) 
 
 // TransferWalletQuota atomically debits the sender and credits the recipient.
 func TransferWalletQuota(ctx context.Context, senderUserID int, req CreateWalletTransferRequest) (*WalletTransferHistoryItem, error) {
-	ctx, cancel := context.WithTimeout(ctx, walletTransferTimeout)
+	ctx, cancel := context.WithTimeout(ctx, WalletTransferTimeout)
 	defer cancel()
+	authorized, err := AuthorizeWalletTransfer(ctx, senderUserID, req)
+	if err != nil {
+		return nil, err
+	}
+	return TransferAuthorizedWalletQuota(ctx, authorized)
+}
+
+// AuthorizedWalletTransfer contains only the immutable parameters covered by a
+// successful payment-password check. No password survives admission.
+type AuthorizedWalletTransfer struct {
+	senderUserID int
+	request      CreateWalletTransferRequest
+}
+
+// AuthorizeWalletTransfer stays attached to the caller's context. HTTP callers
+// may detach execution only after this check has completed successfully.
+func AuthorizeWalletTransfer(ctx context.Context, senderUserID int, req CreateWalletTransferRequest) (*AuthorizedWalletTransfer, error) {
 	req.RecipientExternalId = strings.ToUpper(strings.TrimSpace(req.RecipientExternalId))
 	req.RequestId = strings.TrimSpace(req.RequestId)
 	if !validWalletTransferRequest(senderUserID, req) {
@@ -136,9 +155,23 @@ func TransferWalletQuota(ctx context.Context, senderUserID int, req CreateWallet
 		}
 		return nil, mapWalletTransferError(err)
 	}
+	req.PaymentPassword = ""
+	return &AuthorizedWalletTransfer{senderUserID: senderUserID, request: req}, nil
+}
+
+// TransferAuthorizedWalletQuota executes the same native transaction and receipt
+// path as TransferWalletQuota. The caller's shorter context always takes priority.
+func TransferAuthorizedWalletQuota(ctx context.Context, authorized *AuthorizedWalletTransfer) (*WalletTransferHistoryItem, error) {
+	if authorized == nil || authorized.senderUserID <= 0 || authorized.request.RequestId == "" {
+		return nil, commerceschema.ErrWalletTransferInvalid
+	}
+	ctx, cancel := context.WithTimeout(ctx, WalletTransferTimeout)
+	defer cancel()
+	senderUserID, req := authorized.senderUserID, authorized.request
 
 	var transfer commerceschema.WalletTransfer
-	err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := runWalletTransferTransaction(ctx, platformdb.DB, func(tx *gorm.DB) error {
+		transfer = commerceschema.WalletTransfer{}
 		recipient, err := loadTransferRecipientTx(tx, req.RecipientExternalId)
 		if err != nil {
 			return err
@@ -158,6 +191,13 @@ func TransferWalletQuota(ctx context.Context, senderUserID int, req CreateWallet
 			transfer = *existing
 			return nil
 		}
+		// Detached HTTP execution can wait after admission. Recheck the locked
+		// live identities before any new funds move; historical receipts stay
+		// immutable and remain readable through the sender-scoped lookup.
+		if sender.Status != constant.UserStatusEnabled || sender.DeletedAt.Valid ||
+			recipient.Status != constant.UserStatusEnabled || recipient.DeletedAt.Valid {
+			return commerceschema.ErrWalletTransferRecipientNotFound
+		}
 		return executeWalletTransferTx(tx, sender, recipient, req, &transfer)
 	})
 	if err != nil {
@@ -170,6 +210,62 @@ func TransferWalletQuota(ctx context.Context, senderUserID int, req CreateWallet
 	_ = identitystore.InvalidateUserCache(transfer.RecipientUserId)
 	item := walletTransferHistoryItem(transfer, senderUserID)
 	return &item, nil
+}
+
+// LookupWalletTransferReceipt returns only the authenticated sender's immutable
+// native receipt. Absence cannot establish a failed or unsubmitted transfer.
+func LookupWalletTransferReceipt(ctx context.Context, senderUserID int, requestID string) (*WalletTransferHistoryItem, error) {
+	requestID = strings.TrimSpace(requestID)
+	if senderUserID <= 0 || requestID == "" || len(requestID) > 128 {
+		return nil, commerceschema.ErrWalletTransferInvalid
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var transfer commerceschema.WalletTransfer
+	err := platformdb.DB.WithContext(ctx).Where("sender_user_id = ? AND request_id = ?", senderUserID, requestID).First(&transfer).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if transfer.Status != commerceschema.WalletTransferStatusCompleted {
+		return nil, nil
+	}
+	item := walletTransferHistoryItem(transfer, senderUserID)
+	return &item, nil
+}
+
+func runWalletTransferTransaction(ctx context.Context, db *gorm.DB, execute func(*gorm.DB) error) error {
+	for attempt := 0; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := db.WithContext(ctx).Transaction(execute)
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return errors.Join(ctx.Err(), err)
+		}
+		if attempt+1 >= walletTransferMaxAttempts || db.Dialector.Name() != "postgres" || !retryableWalletTransferError(err) {
+			return err
+		}
+		// PostgreSQL guarantees these transactions were aborted. The original
+		// context and receipt survive; unknown commit/network errors never retry.
+		timer := time.NewTimer(time.Duration(attempt+1) * 25 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return errors.Join(ctx.Err(), err)
+		case <-timer.C:
+		}
+	}
+}
+
+func retryableWalletTransferError(err error) bool {
+	var pgError *pgconn.PgError
+	return errors.As(err, &pgError) && (pgError.Code == "40P01" || pgError.Code == "40001")
 }
 
 func ListWalletTransfers(userID, page, pageSize int) (*WalletTransferHistoryPage, error) {

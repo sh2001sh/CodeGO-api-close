@@ -77,7 +77,7 @@ func filterAndSortGroups(groups []marketplaceschema.Group, channels map[string]m
 		}
 		if query.ViewerUserID > 0 && query.ViewerUserID != group.OwnerUserID {
 			if override := overrides[channel.ID]; override > 0 {
-				item.Multiplier = marketplacedomain.NormalizeMultiplier(override)
+				item.Multiplier = marketplacedomain.NormalizeMultiplier(discountedMarketplaceMultiplier(group.Multiplier, override))
 				item.SubscriptionMultiplier = marketplacedomain.SubscriptionMultiplier(item.Multiplier)
 			}
 		}

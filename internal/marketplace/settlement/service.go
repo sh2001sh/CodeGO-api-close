@@ -162,7 +162,7 @@ func RecordTx(tx *gorm.DB, params RecordParams) error {
 		Multiplier: params.WalletMultiplier, SubscriptionMultiplier: params.SubscriptionMultiplier,
 		CreditPackGrantedQuota: params.CreditPackGrantedQuota, CreditPackPaidQuota: params.CreditPackPaidQuota,
 		CreditPackChannelShareBPS: params.CreditPackChannelShareBPS,
-		CreditPackDiscountAmount:  discount, CreditPackPlatformSubsidyAmount: discount - fee,
+		CreditPackDiscountAmount:  discount, CreditPackPlatformSubsidyAmount: max(discount-fee, 0),
 		ReferralRebatePending: params.CreditPackGrantedQuota > 0,
 		Status:                statusPending, PendingAccountID: account.AccountID,
 		AvailableAt: time.Now().UTC().Add(24 * time.Hour),

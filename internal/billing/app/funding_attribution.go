@@ -264,14 +264,16 @@ func allocateSettledFundingFIFOTx(tx *gorm.DB, requestID, accountID string, amou
 		return nil
 	}
 	remaining := amount
+	var cursor *fundingFIFOBatch
 	for remaining > 0 {
 		if tx.Dialector.Name() == "postgres" {
-			used, err := allocateSettledFundingPostgresBatchTx(tx, requestID, accountID, remaining)
+			batch, err := allocateSettledFundingPostgresBatchTx(tx, requestID, accountID, remaining, cursor)
 			if err != nil {
 				return err
 			}
-			if used > 0 {
-				remaining -= used
+			if batch.Used > 0 {
+				remaining -= batch.Used
+				cursor = &batch
 				continue
 			}
 		}
@@ -319,12 +321,76 @@ func allocateSettledFundingFIFOTx(tx *gorm.DB, requestID, accountID string, amou
 // transaction. Only a bounded FIFO prefix is locked/materialized in PostgreSQL;
 // no lot rows cross the application/database connection. This avoids three
 // network round trips per micro-lot while preserving exact paid-quota rounding.
-func allocateSettledFundingPostgresBatchTx(tx *gorm.DB, requestID, accountID string, amount int64) (int64, error) {
-	const query = `WITH candidates AS MATERIALIZED (
-		SELECT lot_id, account_id, source, original_amount, paid_quota,
+// The cursor only lives inside this account-locked transaction: exhausted lots
+// remain in the partial index until cleanup, so restarting each batch at its
+// beginning repeatedly visits the transaction's own dead index entries.
+type fundingFIFOBatch struct {
+	Used          int64
+	CreatedAt     time.Time
+	LotID         string
+	ExpectedCount int64
+	ExpectedUsed  int64
+	UpdatedCount  int64
+	UpdatedUsed   int64
+	InsertedCount int64
+}
+
+func (batch fundingFIFOBatch) complete() bool {
+	return batch.ExpectedCount == batch.UpdatedCount && batch.ExpectedCount == batch.InsertedCount &&
+		batch.ExpectedUsed == batch.UpdatedUsed && batch.ExpectedUsed == batch.Used
+}
+
+func allocateSettledFundingPostgresBatchTx(tx *gorm.DB, requestID, accountID string, amount int64, after *fundingFIFOBatch) (fundingFIFOBatch, error) {
+	const savepoint = "funding_fifo_ctid_batch"
+	var empty fundingFIFOBatch
+	if err := tx.SavePoint(savepoint).Error; err != nil {
+		return empty, err
+	}
+	batch, err := allocateSettledFundingPostgresStatementTx(tx, requestID, accountID, amount, after, true)
+	if err != nil {
+		return empty, err
+	}
+	if !batch.complete() {
+		// A row that changed while SELECT waited for FOR UPDATE can retain its
+		// old projected ctid. Discard every write in this batch before retrying
+		// by stable primary key; never advance the cursor from a partial update.
+		if err := tx.RollbackTo(savepoint).Error; err != nil {
+			return empty, err
+		}
+		if err := tx.Exec("RELEASE SAVEPOINT " + savepoint).Error; err != nil {
+			return empty, err
+		}
+		batch, err = allocateSettledFundingPostgresStatementTx(tx, requestID, accountID, amount, after, false)
+		if err != nil {
+			return empty, err
+		}
+		if !batch.complete() {
+			return empty, errors.New("funding FIFO batch attribution is incomplete")
+		}
+		return batch, nil
+	}
+	if err := tx.Exec("RELEASE SAVEPOINT " + savepoint).Error; err != nil {
+		return empty, err
+	}
+	return batch, nil
+}
+
+func allocateSettledFundingPostgresStatementTx(tx *gorm.DB, requestID, accountID string, amount int64, after *fundingFIFOBatch, physical bool) (fundingFIFOBatch, error) {
+	query := `WITH candidates AS MATERIALIZED (
+		SELECT `
+	if physical {
+		query += `ctid AS row_tid, `
+	}
+	query += `lot_id, account_id, source, original_amount, paid_quota,
 			remaining_amount, revenue_multiplier, created_at
 		FROM billing.funding_lots
-		WHERE account_id = ? AND remaining_amount > 0
+		WHERE account_id = ? AND remaining_amount > 0`
+	args := []any{accountID}
+	if after != nil {
+		query += ` AND (created_at, lot_id) > (?, ?)`
+		args = append(args, after.CreatedAt, after.LotID)
+	}
+	query += `
 		ORDER BY created_at ASC, lot_id ASC LIMIT 4096 FOR UPDATE
 	), ranked AS (
 		SELECT *, COALESCE(SUM(remaining_amount::numeric) OVER (
@@ -337,7 +403,11 @@ func allocateSettledFundingPostgresBatchTx(tx *gorm.DB, requestID, accountID str
 	), updated AS (
 		UPDATE billing.funding_lots AS lot
 		SET remaining_amount = lot.remaining_amount - consumed.used
-		FROM consumed WHERE lot.lot_id = consumed.lot_id
+		FROM consumed WHERE `
+	if physical {
+		query += `lot.ctid = consumed.row_tid AND `
+	}
+	query += `lot.lot_id = consumed.lot_id
 		RETURNING consumed.lot_id, consumed.account_id, consumed.source,
 			consumed.original_amount, consumed.paid_quota, consumed.remaining_amount,
 			consumed.revenue_multiplier, consumed.used
@@ -353,10 +423,16 @@ func allocateSettledFundingPostgresBatchTx(tx *gorm.DB, requestID, accountID str
 			ELSE 0 END, revenue_multiplier, clock_timestamp()
 		FROM updated RETURNING amount
 	)
-	SELECT COALESCE(SUM(amount), 0)::bigint AS used FROM inserted`
-	var result struct{ Used int64 }
-	err := tx.Raw(query, accountID, amount, amount, requestID).Scan(&result).Error
-	return result.Used, err
+	SELECT totals.used, totals.inserted_count, last_lot.created_at, last_lot.lot_id,
+		expected.expected_count, expected.expected_used, actual.updated_count, actual.updated_used
+	FROM (SELECT COALESCE(SUM(amount), 0)::bigint AS used, COUNT(*) AS inserted_count FROM inserted) totals
+	CROSS JOIN (SELECT COUNT(*) AS expected_count, COALESCE(SUM(used), 0)::bigint AS expected_used FROM consumed) expected
+	CROSS JOIN (SELECT COUNT(*) AS updated_count, COALESCE(SUM(used), 0)::bigint AS updated_used FROM updated) actual
+	LEFT JOIN (SELECT created_at, lot_id FROM consumed ORDER BY created_at DESC, lot_id DESC LIMIT 1) last_lot ON true`
+	var result fundingFIFOBatch
+	args = append(args, amount, amount, requestID)
+	err := tx.Raw(query, args...).Scan(&result).Error
+	return result, err
 }
 
 func fundingSourceFromReason(reasonCode string) string {

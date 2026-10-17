@@ -30,6 +30,8 @@ var adminMarketplaceStatsCache struct {
 }
 
 func invalidateAdminMarketplaceStatsCache() {
+	// Lifecycle/content writes must revoke discovery results immediately too.
+	marketplacePublicationRevision.Add(1)
 	adminMarketplaceStatsCache.Lock()
 	adminMarketplaceStatsCache.channelEarnings = nil
 	adminMarketplaceStatsCache.adminChannelsAt = time.Time{}

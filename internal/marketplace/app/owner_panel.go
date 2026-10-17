@@ -379,6 +379,11 @@ func resolveBargainRequest(id, action, note string, owner *int) (marketplacesche
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&channel, "id=?", group.ChannelID).Error; err != nil {
 				return err
 			}
+			// The public price may have changed while waiting for the channel
+			// lock; approve against the current price under the same lock.
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&group, "id=? AND channel_id=?", r.GroupID, channel.ID).Error; err != nil {
+				return err
+			}
 			r.Status = "approved"
 			if _, err := setUserMultiplierTx(tx, group, r.UserID, &r.ProposedMultiplier, "bargain"); err != nil {
 				return err

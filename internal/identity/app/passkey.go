@@ -1,14 +1,19 @@
 package app
 
 import (
-	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	"errors"
 	"fmt"
 	webauthn "github.com/go-webauthn/webauthn/webauthn"
 	"github.com/sh2001sh/new-api/constant"
+	auditapp "github.com/sh2001sh/new-api/internal/audit/app"
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	identitydomain "github.com/sh2001sh/new-api/internal/identity/domain"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strconv"
 	"time"
 )
@@ -138,19 +143,37 @@ func DeletePasskeyBinding(userID int) error {
 }
 
 // ResetPasskeyBinding validates the target user and clears their passkey binding.
-func ResetPasskeyBinding(userID int) error {
-	if userID <= 0 {
+func ResetPasskeyBinding(userID int, actor AdminActionActor) error {
+	if userID <= 0 || actor.UserID <= 0 {
 		return ErrPasskeyInvalidUserID
 	}
-	user, err := identitystore.LoadUserByID(userID, true)
-	if err != nil {
-		return err
-	}
-	if _, err := getPasskeyByUserID(user.Id); err != nil {
-		if errors.Is(err, identitydomain.ErrPasskeyNotFound) {
+	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		var users []identityschema.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id IN ?", []int{actor.UserID, userID}).Order("id asc").Find(&users).Error; err != nil {
+			return err
+		}
+		var actorUser, target *identityschema.User
+		for i := range users {
+			if users[i].Id == actor.UserID {
+				actorUser = &users[i]
+			}
+			if users[i].Id == userID {
+				target = &users[i]
+			}
+		}
+		if actorUser == nil || target == nil {
+			return ErrUserNotExists
+		}
+		if actorUser.Status != constant.UserStatusEnabled || actorUser.Role < constant.RoleAdminUser || actorUser.Role <= target.Role {
+			return ErrUserNoPermissionSame
+		}
+		result := tx.Unscoped().Where("user_id = ?", target.Id).Delete(&identitydomain.PasskeyCredential{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
 			return ErrPasskeyNotBound
 		}
-		return err
-	}
-	return deletePasskeyByUserID(user.Id)
+		return auditapp.RecordLogTx(tx, actor.UserID, auditschema.LogTypeSystem, fmt.Sprintf("管理员 %d 重置用户 %d 的 Passkey", actor.UserID, target.Id))
+	})
 }

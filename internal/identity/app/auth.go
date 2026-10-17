@@ -105,7 +105,7 @@ func RegisterPasswordUser(req RegisterRequest) error {
 		Username:         req.Username,
 		Password:         req.Password,
 		DisplayName:      req.DisplayName,
-		Email:            req.Email,
+		Email:            identitystore.NormalizeEmail(req.Email),
 		VerificationCode: req.VerificationCode,
 		AffCode:          req.AffCode,
 	}

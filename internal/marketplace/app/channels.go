@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -81,9 +82,9 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 	}
 	channel := &marketplaceschema.Channel{
 		ID: channelID, OwnerUserID: ownerUserID, ProviderType: req.ProviderType,
-		SubmittedSourceLabel: sourceLabel, ApprovedSourceLabel: sourceLabel,
-		SourceLabelStatus: marketplacedomain.SourceLabelApproved,
-		BaseURLCiphertext: baseURL, CredentialCiphertext: credential,
+		SubmittedSourceLabel: sourceLabel,
+		SourceLabelStatus:    marketplacedomain.SourceLabelPending,
+		BaseURLCiphertext:    baseURL, CredentialCiphertext: credential,
 		CredentialTail: credentialTail(req.APIKey), CredentialVersion: 1,
 		DeclaredModels: string(models),
 		ModelPrices:    modelPrices,
@@ -209,7 +210,7 @@ func UpdateAdminChannel(channelID string, req AdminUpdateChannelRequest) (*Chann
 }
 
 func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest, consistencyStatus *string) (*ChannelView, error) {
-	var reverify, capabilitiesChanged bool
+	var reverify, capabilitiesChanged, presentationChanged bool
 	if err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		// Apply the patch to locked current records. A stale full-row save must
 		// not overwrite a newer review decision, shop edit, or admin pause.
@@ -232,6 +233,7 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 		if err != nil {
 			return err
 		}
+		presentationChanged = currentGroup.CustomName != group.CustomName || currentGroup.Description != group.Description || currentGroup.Tags != group.Tags || currentChannel.MaintenanceWindow != channel.MaintenanceWindow
 		if consistencyStatus != nil {
 			if err := applyModelConsistencyStatus(channel, *consistencyStatus); err != nil {
 				return err
@@ -268,6 +270,11 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 		if err := tx.Save(channel).Error; err != nil {
 			return err
 		}
+		if marketplaceChannelAdminHeld(channel) {
+			if err := syncPausedMarketplaceChannelWithDB(tx, channel, true); err != nil {
+				return err
+			}
+		}
 		return tx.Save(group).Error
 	}); err != nil {
 		return nil, err
@@ -287,6 +294,14 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 	if capabilitiesChanged {
 		queueMarketplaceCapabilityProbe(channel.ID)
 	}
+	if presentationChanged {
+		if _, err := preparePresentationProbe(context.Background(), channel); err != nil {
+			return nil, err
+		}
+		if err := platformdb.DB.First(group, "id = ?", group.ID).Error; err != nil {
+			return nil, err
+		}
+	}
 	return channelView(channel, group), nil
 }
 
@@ -295,7 +310,7 @@ func PauseOwnerChannel(ownerUserID int, channelID string, paused bool) error {
 	if err != nil {
 		return err
 	}
-	if channel.Status == marketplacedomain.LifecycleDisabled {
+	if marketplaceChannelAdminHeld(channel) {
 		return errors.New("渠道已停用，请联系管理员")
 	}
 	status := marketplacedomain.LifecycleActive
@@ -314,7 +329,7 @@ func PauseAdminChannel(channelID string, paused bool) error {
 	}
 	status := marketplacedomain.LifecycleActive
 	if paused {
-		status = marketplacedomain.LifecycleSuspended
+		status = marketplacedomain.LifecycleDisabled
 	}
 	return setMarketplaceChannelLifecycle(channel, group, status, paused, false)
 }
@@ -330,12 +345,15 @@ func setMarketplaceChannelLifecycle(channel *marketplaceschema.Channel, group *m
 			return err
 		}
 		if ownerAction {
-			if currentChannel.Status == marketplacedomain.LifecycleDisabled {
+			if marketplaceChannelAdminHeld(&currentChannel) {
 				return errors.New("渠道已停用，请联系管理员")
 			}
 			if !paused && currentGroup.VerificationStatus != marketplacedomain.VerificationPassed {
 				return errors.New("检测未通过，不能恢复服务")
 			}
+		}
+		if !paused && !ownerAction && (currentGroup.VerificationStatus != marketplacedomain.VerificationPassed || currentChannel.SourceLabelStatus == marketplacedomain.SourceLabelRejected) {
+			return errors.New("渠道需要通过检测及管理员审核后才能恢复")
 		}
 		*channel, *group = currentChannel, currentGroup
 		if err := tx.Model(channel).Update("status", status).Error; err != nil {
@@ -357,6 +375,10 @@ func setMarketplaceChannelLifecycle(channel *marketplaceschema.Channel, group *m
 	gatewaystore.NotifyChannelCacheChanged()
 	invalidateAdminMarketplaceStatsCache()
 	return nil
+}
+
+func marketplaceChannelAdminHeld(channel *marketplaceschema.Channel) bool {
+	return channel != nil && (channel.Status == marketplacedomain.LifecycleDisabled || channel.SourceLabelStatus == marketplacedomain.SourceLabelRejected)
 }
 
 // syncPausedMarketplaceChannel prevents a paused marketplace channel from

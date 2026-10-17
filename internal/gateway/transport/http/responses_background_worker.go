@@ -36,6 +36,8 @@ const (
 	responsesBackgroundHeartbeat    = 10 * time.Second
 )
 
+var marketplaceCancelHTTPClient = platformhttpx.GetMarketplaceHTTPClientWithResponseHeaderTimeout
+
 var (
 	responsesBackgroundWorkerOnce sync.Once
 	responsesBackgroundSlots      = make(chan struct{}, responsesBackgroundWorkerCount)
@@ -241,7 +243,9 @@ func forwardNativeBackgroundCancel(parent context.Context, job *gatewayschema.Re
 	}
 	setting := gatewaydomain.GetSettings(channel)
 	var client *http.Client
-	if setting.Proxy != "" {
+	if channel.RequiresMarketplaceEgress() {
+		client = marketplaceCancelHTTPClient(20 * time.Second)
+	} else if setting.Proxy != "" {
 		client, err = platformhttpx.NewProxyHTTPClientWithResponseHeaderTimeout(setting.Proxy, 20*time.Second)
 	} else {
 		client = platformhttpx.GetHTTPClientWithResponseHeaderTimeout(20 * time.Second)
@@ -251,6 +255,12 @@ func forwardNativeBackgroundCancel(parent context.Context, job *gatewayschema.Re
 	}
 	response, err := client.Do(request)
 	if err != nil {
+		if channel.RequiresMarketplaceEgress() {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("marketplace background cancel request failed")
+		}
 		return err
 	}
 	defer response.Body.Close()

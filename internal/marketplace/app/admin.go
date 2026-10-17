@@ -303,70 +303,55 @@ func ReviewChannel(channelID string, req AdminReviewRequest) (*ChannelView, erro
 	if strings.TrimSpace(req.Reason) == "" {
 		return nil, errors.New("管理员审核必须填写原因")
 	}
-	channel, group, err := loadChannelGroup(channelID)
+	channel, group := &marketplaceschema.Channel{}, &marketplaceschema.Group{}
+	now := time.Now().UTC()
+	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(channel, "id = ?", channelID).Error; err != nil {
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(group, "channel_id = ?", channelID).Error; err != nil {
+			return err
+		}
+		channel.LastReviewReason, channel.SourceLabelReviewReason = req.Reason, req.Reason
+		if req.Approved {
+			if group.VerificationStatus != marketplacedomain.VerificationPassed {
+				return errors.New("渠道检测未通过，不能发布")
+			}
+			channel.Status, group.LifecycleStatus = marketplacedomain.LifecycleActive, marketplacedomain.LifecycleActive
+			channel.ApprovedSourceLabel, channel.SourceLabelStatus = channel.SubmittedSourceLabel, marketplacedomain.SourceLabelApproved
+			group.ModerationStatus, group.ModerationReason, group.ModerationCheckedAt = "passed", req.Reason, &now
+			group.PublishedAt = &now
+			if channel.InternalChannelID == nil {
+				if err := createInternalChannelWithDB(tx, channel, group); err != nil {
+					return err
+				}
+			}
+		} else {
+			channel.Status, group.LifecycleStatus = marketplacedomain.LifecycleDisabled, marketplacedomain.LifecycleDisabled
+			channel.ApprovedSourceLabel, channel.SourceLabelStatus = "", marketplacedomain.SourceLabelRejected
+			if err := pauseActiveVerificationRunsWithDB(tx, channelID, now); err != nil {
+				return err
+			}
+		}
+		if err := tx.Save(channel).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(group).Error; err != nil {
+			return err
+		}
+		return syncPausedMarketplaceChannelWithDB(tx, channel, !req.Approved)
+	})
 	if err != nil {
 		return nil, err
 	}
 	if !req.Approved {
-		return rejectChannel(channel, group, req.Reason)
+		marketplaceVerificationTasks.cancelChannel(channelID)
+		marketplaceAutoProbeTasks.cancelChannel(channelID)
 	}
-	if group.VerificationStatus != marketplacedomain.VerificationPassed {
-		return nil, errors.New("渠道检测未通过，不能发布")
-	}
-	if channel.InternalChannelID == nil {
-		if err := createInternalChannel(channel, group); err != nil {
-			return nil, err
-		}
-	}
-	now := time.Now().UTC()
-	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(channel).Updates(map[string]any{
-			"status": marketplacedomain.LifecycleActive, "last_review_reason": req.Reason,
-			"approved_source_label":      channel.SubmittedSourceLabel,
-			"source_label_status":        marketplacedomain.SourceLabelApproved,
-			"source_label_review_reason": req.Reason,
-		}).Error; err != nil {
-			return err
-		}
-		return tx.Model(group).Updates(map[string]any{"lifecycle_status": marketplacedomain.LifecycleActive, "published_at": now}).Error
-	})
-	if err == nil {
-		channel.Status = marketplacedomain.LifecycleActive
-		channel.LastReviewReason = req.Reason
-		channel.ApprovedSourceLabel = channel.SubmittedSourceLabel
-		channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
-		channel.SourceLabelReviewReason = req.Reason
-		group.LifecycleStatus = marketplacedomain.LifecycleActive
-		group.PublishedAt = &now
-		if err = syncPausedMarketplaceChannel(channel, false); err != nil {
-			return channelView(channel, group), err
-		}
-		invalidateAdminMarketplaceStatsCache()
-	}
-	return channelView(channel, group), err
-}
-
-func rejectChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group, reason string) (*ChannelView, error) {
-	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(channel).Updates(map[string]any{
-			"status": marketplacedomain.LifecycleDraft, "last_review_reason": reason,
-			"approved_source_label": "", "source_label_status": marketplacedomain.SourceLabelRejected,
-			"source_label_review_reason": reason,
-		}).Error; err != nil {
-			return err
-		}
-		return tx.Model(group).Update("lifecycle_status", marketplacedomain.LifecycleDraft).Error
-	})
-	if err == nil {
-		channel.Status = marketplacedomain.LifecycleDraft
-		channel.LastReviewReason = reason
-		channel.ApprovedSourceLabel = ""
-		channel.SourceLabelStatus = marketplacedomain.SourceLabelRejected
-		channel.SourceLabelReviewReason = reason
-		group.LifecycleStatus = marketplacedomain.LifecycleDraft
-		invalidateAdminMarketplaceStatsCache()
-	}
-	return channelView(channel, group), err
+	gatewaystore.InitChannelCache()
+	gatewaystore.NotifyChannelCacheChanged()
+	invalidateAdminMarketplaceStatsCache()
+	return channelView(channel, group), nil
 }
 
 func createInternalChannel(channel *marketplaceschema.Channel, group *marketplaceschema.Group) error {
@@ -375,7 +360,7 @@ func createInternalChannel(channel *marketplaceschema.Channel, group *marketplac
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id = ?", channel.ID).Error; err != nil {
 			return err
 		}
-		if current.Status == marketplacedomain.LifecycleSuspended || current.Status == marketplacedomain.LifecycleDisabled {
+		if current.Status == marketplacedomain.LifecycleSuspended || marketplaceChannelAdminHeld(&current) {
 			return nil
 		}
 		if current.InternalChannelID != nil {

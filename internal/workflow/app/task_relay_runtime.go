@@ -89,6 +89,9 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 		return taskx.TaskErrorWrapperLocal(errors.New("the channel of the origin task is disabled"), "task_channel_disable", http.StatusBadRequest)
 	}
 	info.LockedChannel = ch
+	if info.ChannelMeta == nil {
+		info.InitChannelMeta(c)
+	}
 
 	if originTask.ChannelId != info.ChannelId {
 		key, _, newAPIError := gatewaystore.GetNextEnabledChannelKey(ch)
@@ -105,6 +108,10 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 		info.ChannelType = ch.Type
 		info.ApiKey = key
 	}
+	// Remix uses its persisted origin channel, including on the first attempt
+	// before retry setup. Restore only egress policy, not marketplace billing.
+	httpctx.SetContextKey(c, constant.ContextKeyChannelMarketplaceEgress, ch.RequiresMarketplaceEgress())
+	info.MarketplaceEgress = ch.RequiresMarketplaceEgress()
 
 	if info.Action == constant.TaskActionRemix {
 		if originTask.PrivateData.BillingContext != nil {
@@ -407,6 +414,10 @@ func tryRealtimeFetch(task *workflowschema.Task, isOpenAIVideoAPI bool) []byte {
 		return nil
 	}
 
+	adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+		MarketplaceEgress: channelModel.RequiresMarketplaceEgress(), ChannelType: channelModel.Type,
+		ChannelBaseUrl: baseURL, ApiKey: channelModel.Key,
+	}})
 	resp, err := adaptor.FetchTask(baseURL, channelModel.Key, map[string]any{
 		"task_id": task.GetUpstreamTaskID(),
 		"action":  task.Action,

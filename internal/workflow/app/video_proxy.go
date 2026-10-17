@@ -10,7 +10,9 @@ import (
 	gatewayruntime "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
+	platformconfig "github.com/sh2001sh/new-api/internal/platform/config"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
+	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	platformstore "github.com/sh2001sh/new-api/internal/platform/store"
@@ -23,6 +25,8 @@ import (
 	"strings"
 	"time"
 )
+
+var marketplaceVideoHTTPClient = platformhttpx.GetMarketplaceHTTPClientWithResponseHeaderTimeout
 
 // ProxyVideoContent validates ownership and proxies the completed task's video content.
 func ProxyVideoContent(c *gin.Context) {
@@ -56,7 +60,9 @@ func ProxyVideoContent(c *gin.Context) {
 		return
 	}
 
-	videoURL, request, client, err := buildVideoProxyRequest(c.Request.Context(), channel, task)
+	requestCtx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+	videoURL, request, client, err := buildVideoProxyRequest(requestCtx, channel, task)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to build proxy request for task %s: %s", taskID, err.Error()))
 		writeVideoProxyError(c, http.StatusBadGateway, "server_error", err.Error())
@@ -73,6 +79,10 @@ func ProxyVideoContent(c *gin.Context) {
 
 	fetchSetting := platformstore.GetFetchSetting()
 	if err := platformsecurity.ValidateURLWithFetchSetting(videoURL, fetchSetting.EnableSSRFProtection, fetchSetting.AllowPrivateIp, fetchSetting.DomainFilterMode, fetchSetting.IpFilterMode, fetchSetting.DomainList, fetchSetting.IpList, fetchSetting.AllowedPorts, fetchSetting.ApplyIPFilterForDomain); err != nil {
+		if channel.RequiresMarketplaceEgress() {
+			writeVideoProxyError(c, http.StatusForbidden, "server_error", "video upstream address blocked")
+			return
+		}
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Video URL blocked for task %s: %v", taskID, err))
 		writeVideoProxyError(c, http.StatusForbidden, "server_error", fmt.Sprintf("request blocked: %v", err))
 		return
@@ -80,21 +90,31 @@ func ProxyVideoContent(c *gin.Context) {
 
 	request.URL, err = url.Parse(videoURL)
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to parse URL %s: %s", videoURL, err.Error()))
+		if !channel.RequiresMarketplaceEgress() {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to parse URL %s: %s", videoURL, err.Error()))
+		}
 		writeVideoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy request")
 		return
 	}
 
 	resp, err := client.Do(request)
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to fetch video from %s: %s", videoURL, err.Error()))
+		if channel.RequiresMarketplaceEgress() {
+			logger.LogError(c.Request.Context(), "marketplace video upstream request failed")
+		} else {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to fetch video from %s: %s", videoURL, err.Error()))
+		}
 		writeVideoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Upstream returned status %d for %s", resp.StatusCode, videoURL))
+		if channel.RequiresMarketplaceEgress() {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("marketplace video upstream returned status %d", resp.StatusCode))
+		} else {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("Upstream returned status %d for %s", resp.StatusCode, videoURL))
+		}
 		writeVideoProxyError(c, http.StatusBadGateway, "server_error",
 			fmt.Sprintf("Upstream service returned status %d", resp.StatusCode))
 		return
@@ -128,14 +148,18 @@ func buildVideoProxyRequest(ctx context.Context, channel *gatewayschema.Channel,
 	}
 
 	proxy := gatewaydomain.GetSettings(channel).Proxy
-	client, err := GetHttpClientWithProxy(proxy)
+	var client *http.Client
+	var err error
+	if channel.RequiresMarketplaceEgress() {
+		client = marketplaceVideoHTTPClient(time.Duration(platformconfig.RelayResponseHeaderTimeout) * time.Second)
+	} else {
+		client, err = GetHttpClientWithProxy(proxy)
+	}
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("Failed to create proxy client")
 	}
 
-	requestCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, "", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "", nil)
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("Failed to create proxy request")
 	}
@@ -235,6 +259,10 @@ func getGeminiVideoURL(channel *gatewayschema.Channel, task *workflowschema.Task
 		return "", fmt.Errorf("api key not available for task")
 	}
 
+	adaptor.Init(&gatewayruntime.RelayInfo{ChannelMeta: &gatewayruntime.ChannelMeta{
+		MarketplaceEgress: channel.RequiresMarketplaceEgress(), ChannelType: channel.Type,
+		ChannelBaseUrl: baseURL, ApiKey: apiKey,
+	}})
 	resp, err := adaptor.FetchTask(baseURL, apiKey, map[string]any{
 		"task_id": task.GetUpstreamTaskID(),
 		"action":  task.Action,

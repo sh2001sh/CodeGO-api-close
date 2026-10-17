@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -108,6 +109,14 @@ func BatchSetUserMultipliers(owner int, targets []MultiplierTarget, multiplier *
 }
 
 func setUserMultiplierTx(tx *gorm.DB, group marketplaceschema.Group, userID int, multiplier *float64, source string) (bool, error) {
+	if multiplier != nil {
+		if err := validateMultiplier(*multiplier); err != nil {
+			return false, err
+		}
+		if *multiplier > group.Multiplier {
+			return false, errors.New("专属倍率不能高于公开倍率")
+		}
+	}
 	var current marketplaceschema.UserMultiplier
 	err := tx.Where("channel_id=? AND user_id=?", group.ChannelID, userID).First(&current).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -143,6 +152,15 @@ func setUserMultiplierTx(tx *gorm.DB, group marketplaceschema.Group, userID int,
 		return false, fmt.Errorf("保存倍率通知失败: %w", err)
 	}
 	return true, nil
+}
+
+// Overrides are discounts. Recheck at read time for legacy overrides and when
+// a later public price reduction makes a previously valid discount too high.
+func discountedMarketplaceMultiplier(public, override float64) float64 {
+	if override > 0 && !math.IsNaN(override) && !math.IsInf(override, 0) && override <= public {
+		return override
+	}
+	return public
 }
 
 func ListMultiplierNotices(userID int) ([]marketplaceschema.MultiplierNotice, error) {

@@ -199,7 +199,7 @@ func findOrCreateOAuthUser(provider oauth.Provider, oauthUser *oauth.OAuthUser, 
 	grantBlindBoxes := provider.GetProviderPrefix() == "linuxdo_"
 	if genericProvider, ok := provider.(*oauth.GenericOAuthProvider); ok {
 		err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-			if err := identitystore.CreateUserWithTx(tx, user, inviterID); err != nil {
+			if err := createOAuthUserWithTx(tx, user, inviterID); err != nil {
 				return err
 			}
 			binding := &identitydomain.UserOAuthBinding{
@@ -217,7 +217,7 @@ func findOrCreateOAuthUser(provider oauth.Provider, oauthUser *oauth.OAuthUser, 
 	}
 
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		if err := identitystore.CreateUserWithTx(tx, user, inviterID); err != nil {
+		if err := createOAuthUserWithTx(tx, user, inviterID); err != nil {
 			return err
 		}
 		provider.SetProviderUserID(user, oauthUser.ProviderUserID)
@@ -235,4 +235,15 @@ func findOrCreateOAuthUser(provider oauth.Provider, oauthUser *oauth.OAuthUser, 
 	}
 	finalizeOAuthUserAndApplyRegistrationRewards(user, inviterID, grantBlindBoxes)
 	return user, nil
+}
+
+// Provider identity remains independent of local email ownership. A new OAuth
+// account may sign in without binding an email already owned by another user.
+func createOAuthUserWithTx(tx *gorm.DB, user *identityschema.User, inviterID int) error {
+	err := identitystore.CreateUserWithTx(tx, user, inviterID)
+	if errors.Is(err, identitystore.ErrEmailConflict) {
+		user.Email = ""
+		return identitystore.CreateUserWithTx(tx, user, inviterID)
+	}
+	return err
 }

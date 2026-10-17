@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/sh2001sh/new-api/constant"
 
 	"github.com/gin-gonic/gin"
@@ -39,9 +41,24 @@ func formatRequestLog(param gin.LogFormatterParams) string {
 		param.Latency,
 		param.ClientIP,
 		param.Method,
-		param.Path,
+		requestLogPath(param),
 		logTraceID(traceID),
 	)
+}
+
+func requestLogPath(param gin.LogFormatterParams) string {
+	path, _, _ := strings.Cut(param.Path, "?")
+	requestPath := path
+	if param.Request != nil && param.Request.URL != nil {
+		requestPath = param.Request.URL.Path
+	}
+	requestPath = strings.TrimRight(requestPath, "/")
+	// These queries carry bearer capabilities, including on rejected requests.
+	if requestPath == "/api/desktop/import/config" ||
+		(strings.HasPrefix(requestPath, "/v1/files/") && strings.HasSuffix(requestPath, "/delivery")) {
+		return path
+	}
+	return param.Path
 }
 
 // The trace header may come from a client. Keep it bounded and single-line.

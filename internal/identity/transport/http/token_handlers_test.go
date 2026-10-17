@@ -411,7 +411,7 @@ func TestAddTokenLeavesAccessedTimeUnset(t *testing.T) {
 
 func TestAddTokenSelectsMarketplaceGroupDirectly(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
-	if err := db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}); err != nil {
+	if err := db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}, &marketplaceschema.UserMultiplier{}, &marketplaceschema.ChannelUserBlock{}, &marketplaceschema.GroupAccess{}, &marketplaceschema.AutoRoutePoolMember{}, &marketplaceschema.AutoRoutePoolConfig{}, &marketplaceschema.RoutePool{}, &marketplaceschema.RoutePoolMember{}); err != nil {
 		t.Fatalf("failed to migrate marketplace channel and group: %v", err)
 	}
 	group := marketplaceschema.Group{

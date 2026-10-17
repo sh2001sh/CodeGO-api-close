@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Transfer processing...": "Đang xử lý chuyển tiền…",
+    "Checking transfer status...": "Đang kiểm tra giao dịch…",
+    "Transfer status is unconfirmed.": "Chưa xác nhận kết quả giao dịch.",
+    "Check transfer status": "Kiểm tra giao dịch",
     "Transfer result unknown. Retry this transfer.": "Chưa xác định kết quả chuyển. Hãy thử lại giao dịch này.",
     "Unable to save transfer status. Please reload.": "Không thể lưu trạng thái chuyển. Vui lòng tải lại.",
     "搜索店铺名称或店铺 ID": "Tìm tên cửa hàng hoặc ID cửa hàng",

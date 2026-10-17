@@ -35,7 +35,7 @@ func TestWalletTransferCanceledRequestReturnsUnconfirmed(t *testing.T) {
 	if payload["code"] != "TRANSFER_UNCONFIRMED" || payload["success"] != false {
 		t.Fatalf("unexpected response: %#v", payload)
 	}
-	if payload["message"] != "转账结果暂未确认，请使用原请求重试" {
+	if payload["message"] != "转账结果暂未确认，请查询原请求" {
 		t.Fatalf("response exposed an internal database error: %#v", payload)
 	}
 }
@@ -194,7 +194,7 @@ func TestWalletTransferPasswordSetupDoesNotRequireBoundEmail(t *testing.T) {
 	}
 }
 
-func TestWalletTransferPasswordlessSetupDoesNotRequireTwoFAOrEmail(t *testing.T) {
+func TestWalletTransferPasswordlessSetupRejectsMissingProof(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)
 	user := &identityschema.User{
 		Id: 9944, ExternalId: "HTP004", Username: "transfer-passwordless", AffCode: "HTP004", Status: constant.UserStatusEnabled,
@@ -206,7 +206,58 @@ func TestWalletTransferPasswordlessSetupDoesNotRequireTwoFAOrEmail(t *testing.T)
 		"new_payment_password": "Paypass123", "confirm_password": "Paypass123",
 	}, user.Id)
 	configureWalletTransferPassword(ctx)
-	if response := decodeCommerceResponse(t, recorder); !response.Success {
-		t.Fatalf("expected passwordless setup without 2FA or email to succeed, got %#v", response)
+	if response := decodeCommerceResponse(t, recorder); response.Success {
+		t.Fatal("passwordless setup accepted missing identity proof")
+	}
+}
+
+func TestWalletTransferPasswordlessSetupRequiresSingleUseBoundEmailProof(t *testing.T) {
+	db := setupCommerceHTTPTestDB(t)
+	user := identityschema.User{Id: 9945, ExternalId: "HTP005", Username: "oauth-email-proof", Email: "oauth@example.com", AffCode: "HTP005", Status: constant.UserStatusEnabled}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	request := func(method, code string, want bool) {
+		ctx, recorder := newCommerceContext(t, stdhttp.MethodPut, "/api/wallet/transfers/payment-password", map[string]any{
+			"verification_method": method, "email_code": code, "new_payment_password": "Paypass123", "confirm_password": "Paypass123",
+		}, user.Id)
+		configureWalletTransferPassword(ctx)
+		if response := decodeCommerceResponse(t, recorder); response.Success != want {
+			t.Fatalf("method=%s expected success %v, got %#v", method, want, response)
+		}
+	}
+	request("account_password", "", false)
+	request("email", "", false)
+	request("email", "bad", false)
+	if err := identityapp.RegisterVerificationCodeWithKey(user.Email, "123456", identityapp.EmailVerificationPurpose); err != nil {
+		t.Fatal(err)
+	}
+	request("email", "123456", false)
+	if err := identityapp.RegisterVerificationCodeWithKey(user.Email, "654321", identityapp.WalletTransferPasswordPurpose); err != nil {
+		t.Fatal(err)
+	}
+	request("email", "654321", true)
+	request("email", "654321", false)
+}
+
+func TestWalletTransferPasswordlessSetupRejectsAmbiguousBoundEmail(t *testing.T) {
+	db := setupCommerceHTTPTestDB(t)
+	for _, user := range []identityschema.User{
+		{Id: 9946, ExternalId: "HTP006", Username: "oauth-duplicate-one", Email: "shared@example.com", AffCode: "HTP006", Status: constant.UserStatusEnabled},
+		{Id: 9947, ExternalId: "HTP007", Username: "oauth-duplicate-two", Email: "SHARED@example.com", AffCode: "HTP007", Status: constant.UserStatusEnabled},
+	} {
+		if err := db.Create(&user).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := identityapp.RegisterVerificationCodeWithKey("shared@example.com", "123456", identityapp.WalletTransferPasswordPurpose); err != nil {
+		t.Fatal(err)
+	}
+	ctx, recorder := newCommerceContext(t, stdhttp.MethodPut, "/api/wallet/transfers/payment-password", map[string]any{
+		"verification_method": "email", "email_code": "123456", "new_payment_password": "Paypass123", "confirm_password": "Paypass123",
+	}, 9946)
+	configureWalletTransferPassword(ctx)
+	if response := decodeCommerceResponse(t, recorder); response.Success {
+		t.Fatal("ambiguous bound email authorized password setup")
 	}
 }

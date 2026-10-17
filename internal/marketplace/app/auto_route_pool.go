@@ -355,7 +355,7 @@ func resolveRoutePoolBindings(ownerUserID int, selected map[string]int, config A
 		}
 		effectiveMultiplier := group.Multiplier
 		if override, ok := overrides[channel.ID]; ok {
-			effectiveMultiplier = override
+			effectiveMultiplier = discountedMarketplaceMultiplier(group.Multiplier, override)
 		}
 		if !MultiplierWithinLimit(effectiveMultiplier, multiplierLimit) {
 			overLimitCount++
@@ -507,6 +507,7 @@ func loadAutoRouteGroupsForIDs(ownerUserID int, groupIDs []string) ([]marketplac
 	}
 	var groups []marketplaceschema.Group
 	query := platformdb.DB.Where("source_type = ? AND verification_status = ? AND lifecycle_status IN ?", marketplacedomain.SourceTypeMarketplaceUser, marketplacedomain.VerificationPassed, []string{marketplacedomain.LifecycleActive, marketplacedomain.LifecycleDegraded})
+	query = approvedMarketplacePresentationQuery(query)
 	if groupIDs != nil {
 		query = query.Where("id IN ?", groupIDs)
 	}
@@ -539,7 +540,7 @@ func loadAutoRouteGroupsForIDs(ownerUserID int, groupIDs []string) ([]marketplac
 	filtered := groups[:0]
 	for _, group := range groups {
 		channel, ok := channels[group.ChannelID]
-		if !ok || channel.InternalChannelID == nil || len(decodeModels(channel.DeclaredModels)) == 0 {
+		if !ok || marketplaceChannelAdminHeld(&channel) || channel.InternalChannelID == nil || len(decodeModels(channel.DeclaredModels)) == 0 {
 			continue
 		}
 		filtered = append(filtered, group)

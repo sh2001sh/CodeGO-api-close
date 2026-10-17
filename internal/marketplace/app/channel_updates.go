@@ -11,17 +11,25 @@ import (
 )
 
 func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest) (bool, error) {
+	// Preserve legacy administrator rejections before an owner edits the source
+	// label. Editing remains available, while only an admin can release the hold.
+	if marketplaceChannelAdminHeld(channel) {
+		channel.Status, group.LifecycleStatus = marketplacedomain.LifecycleDisabled, marketplacedomain.LifecycleDisabled
+	}
 	reverify, err := applyChannelModelUpdate(channel, req)
 	if err != nil {
 		return false, err
 	}
-	presentationChanged, err := applyChannelPresentationUpdate(channel, group, req)
+	_, err = applyChannelPresentationUpdate(channel, group, req)
 	if err != nil {
 		return false, err
 	}
-	reverify = reverify || presentationChanged
+	previousMaintenance := channel.MaintenanceWindow
 	if err := applyCapacityUpdate(channel, req); err != nil {
 		return false, err
+	}
+	if previousMaintenance != channel.MaintenanceWindow {
+		group.ModerationStatus, group.ModerationReason, group.ModerationCheckedAt = "pending", "", nil
 	}
 	if err := applyAutoProbeUpdate(channel, req); err != nil {
 		return false, err
@@ -108,6 +116,7 @@ func applyChannelModelUpdate(channel *marketplaceschema.Channel, req UpdateChann
 }
 
 func applyChannelPresentationUpdate(channel *marketplaceschema.Channel, group *marketplaceschema.Group, req UpdateChannelRequest) (bool, error) {
+	oldName, oldDescription, oldTags := group.CustomName, group.Description, group.Tags
 	if err := applyPublicPresentation(group, req.CustomName, req.Description, req.Tags); err != nil {
 		return false, err
 	}
@@ -129,13 +138,12 @@ func applyChannelPresentationUpdate(channel *marketplaceschema.Channel, group *m
 		label, _ := canonicalSourceLabel(*req.SourceLabel)
 		if label != channel.SubmittedSourceLabel {
 			channel.SubmittedSourceLabel = label
-			channel.ApprovedSourceLabel = label
-			channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
+			channel.SourceLabelStatus = marketplacedomain.SourceLabelPending
 			channel.SourceLabelReviewReason = ""
 			refreshInternalGroupName(group, channel.ID, label)
 		}
 	}
-	return false, nil
+	return oldName != group.CustomName || oldDescription != group.Description || oldTags != group.Tags, nil
 }
 
 func applyAutoProbeUpdate(channel *marketplaceschema.Channel, req UpdateChannelRequest) error {
@@ -224,7 +232,11 @@ func applyCapacityUpdate(channel *marketplaceschema.Channel, req UpdateChannelRe
 		channel.QPS = *req.QPS
 	}
 	if req.MaintenanceWindow != nil {
-		channel.MaintenanceWindow = strings.TrimSpace(*req.MaintenanceWindow)
+		note, err := normalizePublicText(*req.MaintenanceWindow, 255, false)
+		if err != nil {
+			return err
+		}
+		channel.MaintenanceWindow = note
 	}
 	return nil
 }

@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Transfer processing...": "Transfert en cours…",
+    "Checking transfer status...": "Vérification du transfert…",
+    "Transfer status is unconfirmed.": "Le résultat du transfert reste à confirmer.",
+    "Check transfer status": "Vérifier le transfert",
     "Transfer result unknown. Retry this transfer.": "Résultat du transfert inconnu. Réessayez ce transfert.",
     "Unable to save transfer status. Please reload.": "Impossible d’enregistrer l’état du transfert. Rechargez la page.",
     "搜索店铺名称或店铺 ID": "Rechercher un nom ou un ID de boutique",

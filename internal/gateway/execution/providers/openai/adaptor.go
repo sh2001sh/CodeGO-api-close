@@ -635,7 +635,11 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 					return nil, err
 				}
 			}
-			response, nativeErr := session.Do(c.Request.Context(), requestURL, headers, bytes.NewReader(rawBody))
+			do := session.Do
+			if info.UsesMarketplaceEgress() {
+				do = session.DoMarketplace
+			}
+			response, nativeErr := do(c.Request.Context(), requestURL, headers, bytes.NewReader(rawBody))
 			if nativeErr == nil {
 				return response, nil
 			}

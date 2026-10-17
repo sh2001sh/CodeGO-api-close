@@ -104,27 +104,22 @@ func fetchUpstreamModelsContext(
 ) ([]string, error) {
 	endpoint, err := modelsEndpoint(provider, baseURL)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("上游模型列表请求地址无效")
 	}
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("上游模型列表请求地址无效")
 	}
 	setMarketplaceAuthHeaders(httpReq, provider, apiKey)
-	response, err := (&http.Client{Timeout: 15 * time.Second}).Do(httpReq)
+	response, err := marketplaceUpstreamHTTPClient.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, marketplaceUpstreamRequestError(ctx, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		detail, _ := io.ReadAll(io.LimitReader(response.Body, 512))
-		message := strings.TrimSpace(string(detail))
-		if message == "" {
-			message = response.Status
-		}
-		return nil, fmt.Errorf("获取模型列表失败（HTTP %d）: %s", response.StatusCode, message)
+		return nil, fmt.Errorf("获取模型列表失败（HTTP %d）", response.StatusCode)
 	}
 	var payload struct {
 		Data []struct {
@@ -238,7 +233,10 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 			return err
 		}
 		*channel, *group = currentChannel, currentGroup
-		if probeErr == nil && channel.Status != marketplacedomain.LifecycleSuspended && channel.Status != marketplacedomain.LifecycleDisabled {
+		if marketplaceChannelAdminHeld(channel) {
+			channel.Status, group.LifecycleStatus = marketplacedomain.LifecycleDisabled, marketplacedomain.LifecycleDisabled
+		}
+		if probeErr == nil && channel.Status != marketplacedomain.LifecycleSuspended && !marketplaceChannelAdminHeld(channel) {
 			var syncErr error
 			if channel.InternalChannelID == nil {
 				syncErr = createInternalChannelWithDB(tx, channel, group)
@@ -261,6 +259,15 @@ func completeVerification(run *marketplaceschema.VerificationRun, channel *marke
 			"status":                       gorm.Expr("CASE WHEN status IN ? THEN status ELSE ? END", []string{marketplacedomain.LifecycleSuspended, marketplacedomain.LifecycleDisabled}, lifecycle),
 			"connectivity_test_status":     connectivityStatus,
 			"connectivity_test_checked_at": now,
+		}
+		if marketplaceChannelAdminHeld(channel) {
+			channelUpdates["status"] = marketplacedomain.LifecycleDisabled
+			if err := tx.Model(group).Update("lifecycle_status", marketplacedomain.LifecycleDisabled).Error; err != nil {
+				return err
+			}
+			if err := syncPausedMarketplaceChannelWithDB(tx, channel, true); err != nil {
+				return err
+			}
 		}
 		return tx.Model(channel).Updates(channelUpdates).Error
 	})

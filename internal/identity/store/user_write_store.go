@@ -28,7 +28,9 @@ func UpdateUser(user *identityschema.User, updatePassword bool) error {
 		return err
 	}
 	newUser.ExternalId = storedUser.ExternalId
-	if err := platformdb.DB.Model(&storedUser).Updates(newUser).Error; err != nil {
+	// Email ownership changes use BindUserEmail; unrelated updates must never
+	// restore a stale binding from a previously loaded user snapshot.
+	if err := platformdb.DB.Model(&storedUser).Omit("email").Updates(newUser).Error; err != nil {
 		return err
 	}
 

@@ -4,6 +4,7 @@ import { ArrowUpRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { normalizeSystemName } from '@/lib/branding'
 import { COMMUNITY_LINKS, COMPANY } from '@/lib/company'
+import { DEFAULT_LOGO } from '@/lib/constants'
 import './site-footer.css'
 
 export function SiteFooter() {
@@ -14,7 +15,7 @@ export function SiteFooter() {
       <div className='site-footer-inner'>
         <div className='site-footer-directory'>
           <Link className='site-footer-brand' to='/'>
-            <img src='/codego-mark.svg' width='36' height='36' alt='' />
+            <img src={DEFAULT_LOGO} width='36' height='36' alt='' />
             <span>{normalizeSystemName()}</span>
           </Link>
 

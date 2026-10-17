@@ -21,6 +21,7 @@ import i18n from '@/i18n/config'
 import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { normalizeSystemName } from '@/lib/branding'
+import { DEFAULT_LOGO } from '@/lib/constants'
 import { useStatus } from '@/hooks/use-status'
 import { SiteSeo } from '@/components/seo'
 import { AuthLayout } from '../auth-layout'
@@ -48,7 +49,7 @@ export function SignIn() {
         <div className='market-auth-header'>
           <div className='market-auth-brand-emblem' aria-hidden='true'>
             <img
-              src='/codego-mark.svg'
+              src={DEFAULT_LOGO}
               alt=''
               width='32'
               height='32'

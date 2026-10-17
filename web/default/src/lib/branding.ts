@@ -28,6 +28,10 @@ const LEGACY_LOGO_VALUES = new Set([
   'favicon.ico',
   '/code-go-logo.svg',
   'code-go-logo.svg',
+  '/codego-mark.svg',
+  'codego-mark.svg',
+  '/logo.svg',
+  'logo.svg',
 ])
 const LEGACY_SYSTEM_NAMES = new Set(['codexforall', 'new api', 'newapi'])
 
@@ -47,13 +51,16 @@ export function normalizeLogoUrl(value?: unknown): string {
   const trimmed = value.trim()
   if (!trimmed) return DEFAULT_LOGO
   if (INVALID_LOGO_VALUES.has(trimmed.toLowerCase())) return DEFAULT_LOGO
-  if (LEGACY_LOGO_VALUES.has(trimmed)) return DEFAULT_LOGO
-
-  // Older status/local-storage values include favicon query versions.
-  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
-    const path = trimmed.split(/[?#]/, 1)[0]
-    if (LEGACY_LOGO_VALUES.has(path)) return DEFAULT_LOGO
-  }
+  // Migrate only our bundled defaults, including cached query versions.
+  // Matching filenames on another host remain explicit custom logos.
+  const path = trimmed
+    .replace(
+      /^(?:https?:)?\/\/(?:www\.)?(?:codegoai\.com|shu26\.cfd)(?=\/)/i,
+      ''
+    )
+    .replace(/^\.\//, '/')
+    .split(/[?#]/, 1)[0]
+  if (LEGACY_LOGO_VALUES.has(path)) return DEFAULT_LOGO
 
   return trimmed
 }

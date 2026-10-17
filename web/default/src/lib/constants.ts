@@ -22,7 +22,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 // System Configuration Defaults
 export const DEFAULT_SYSTEM_NAME = 'Code Go'
-export const DEFAULT_LOGO = '/codego-mark.svg'
+export const DEFAULT_LOGO = '/logo.svg?v=20261017-canonical'
 export const DEFAULT_FAVICON = DEFAULT_LOGO
 
 // LocalStorage Keys

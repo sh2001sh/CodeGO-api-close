@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router'
 import '@/styles/market-home.css'
 import { ArrowDown, ArrowRight, ArrowUpRight, Search, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_LOGO } from '@/lib/constants'
 import { SiteFooter } from '@/components/site-footer'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 import { DawnNav } from '../components/dawn-nav'
@@ -47,12 +48,12 @@ function getModelMeta(id: string, vendor?: string) {
   if (lower.includes('gemini') || lower.includes('google')) {
     return {
       provider: 'Google',
-      logo: '/codego-mark.svg',
+      logo: DEFAULT_LOGO,
     }
   }
   return {
     provider: vendor || 'AI Model',
-    logo: '/codego-mark.svg',
+    logo: DEFAULT_LOGO,
   }
 }
 

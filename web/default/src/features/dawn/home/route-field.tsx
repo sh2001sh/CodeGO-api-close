@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_LOGO } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { createRouteScene } from './lib/route-renderer'
@@ -21,7 +22,7 @@ function getModelIcon(id: string): string {
     lower.includes('anthropic')
   )
     return '/claude.svg'
-  return '/logo.svg'
+  return DEFAULT_LOGO
 }
 
 type RouteFieldProps = {
@@ -275,7 +276,7 @@ export function RouteField(props: RouteFieldProps) {
             <i />
           </div>
           <div className='mh-path-node mh-path-core'>
-            <img src='/codego-mark.svg' width='16' height='16' alt='' />
+            <img src={DEFAULT_LOGO} width='16' height='16' alt='' />
             <span>CodeGo</span>
           </div>
           <div className='mh-fiber mh-fiber-lag' aria-hidden='true'>

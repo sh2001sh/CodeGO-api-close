@@ -20,6 +20,7 @@ import { Link } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
 import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_LOGO } from '@/lib/constants'
 import { SiteSeo } from '@/components/seo'
 import { AuthLayout } from '../auth-layout'
 import { ForgotPasswordForm } from './components/forgot-password-form'
@@ -42,7 +43,7 @@ export function ForgotPassword() {
         <div className='market-auth-header'>
           <div className='market-auth-brand-emblem' aria-hidden='true'>
             <img
-              src='/codego-mark.svg'
+              src={DEFAULT_LOGO}
               alt=''
               width='32'
               height='32'

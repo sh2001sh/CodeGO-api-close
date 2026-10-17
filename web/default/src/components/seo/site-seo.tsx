@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_LOGO } from '@/lib/constants'
 
 type SiteSeoProps = {
   title: string
@@ -14,7 +15,7 @@ type SiteSeoProps = {
 const SITE_NAME = 'CodeGo'
 const SITE_ALTERNATE_NAME = 'Code Go'
 const SITE_ORIGIN = 'https://codegoai.com'
-const DEFAULT_OG_IMAGE = `${SITE_ORIGIN}/codego-mark.svg`
+const DEFAULT_OG_IMAGE = `${SITE_ORIGIN}${DEFAULT_LOGO}`
 
 function ensureMeta(
   selector: string,

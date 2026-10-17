@@ -148,7 +148,7 @@ func TestMarketplaceReconciliationUsesCurrentTransactionForBackfill(t *testing.T
 	require.Equal(t, "draft", channel.Status)
 }
 
-func TestMarketplaceContentEditRevokesCachedDiscoveryImmediately(t *testing.T) {
+func TestMarketplaceSafeContentEditRefreshesCachedDiscoveryImmediately(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
@@ -168,8 +168,16 @@ func TestMarketplaceContentEditRevokesCachedDiscoveryImmediately(t *testing.T) {
 	require.NoError(t, err)
 	after, err := ListMarketplaceGroups(query)
 	require.NoError(t, err)
-	require.Zero(t, after.Total)
-	require.Empty(t, after.Items)
+	require.Equal(t, 1, after.Total)
+	require.Len(t, after.Items, 1)
+	for _, search := range []string{name, group.ChannelID} {
+		result, err := ListMarketplaceGroups(GroupQuery{Search: search})
+		require.NoError(t, err)
+		require.Equal(t, 1, result.Total, search)
+	}
+	oldName, err := ListMarketplaceGroups(GroupQuery{Search: group.CustomName})
+	require.NoError(t, err)
+	require.Zero(t, oldName.Total)
 }
 
 func TestMarketplaceImageOnlyChannelRequiresRealImageResponse(t *testing.T) {
@@ -253,7 +261,7 @@ func TestMarketplacePendingContentHiddenFromDiscoveryAndBinding(t *testing.T) {
 	require.NotEqual(t, "待审名称", views[10].Name)
 }
 
-func TestMarketplaceReviewUsesOnlyPlatformEndpointAndUnknownStaysPending(t *testing.T) {
+func TestMarketplaceReviewUsesOnlyPlatformEndpointAndUnknownPreservesRuleApproval(t *testing.T) {
 	for _, verdict := range []string{"SAFE", "AD", "SAFE because no ads", "请求失败"} {
 		t.Run(verdict, func(t *testing.T) {
 			db := openMarketplaceAppTestDB(t)
@@ -282,7 +290,7 @@ func TestMarketplaceReviewUsesOnlyPlatformEndpointAndUnknownStaysPending(t *test
 			require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
 			want := map[string]string{"SAFE": "passed", "AD": "failed"}[verdict]
 			if want == "" {
-				want = "pending"
+				want = "passed"
 			}
 			require.Equal(t, want, group.ModerationStatus)
 			for _, upstreamVerdict := range []string{"SAFE", "AD"} {

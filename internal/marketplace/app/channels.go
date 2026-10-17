@@ -234,6 +234,13 @@ func updateMarketplaceChannel(channel *marketplaceschema.Channel, group *marketp
 			return err
 		}
 		presentationChanged = currentGroup.CustomName != group.CustomName || currentGroup.Description != group.Description || currentGroup.Tags != group.Tags || currentChannel.MaintenanceWindow != channel.MaintenanceWindow
+		if presentationChanged {
+			var shop marketplaceschema.Shop
+			if err := tx.Where("owner_user_id = ?", channel.OwnerUserID).First(&shop).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			applyMarketplacePresentationRules(group, &shop, channel.MaintenanceWindow)
+		}
 		if consistencyStatus != nil {
 			if err := applyModelConsistencyStatus(channel, *consistencyStatus); err != nil {
 				return err

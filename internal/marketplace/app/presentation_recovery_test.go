@@ -12,9 +12,87 @@ import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func TestSafePresentationEditsRemainSearchableWithoutModelReview(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Settlement{}, &marketplaceschema.VerificationRun{}, &marketplaceschema.RankingSnapshot{}, &marketplaceschema.ChannelFeedback{}, &marketplaceschema.GroupAccess{}, &gatewayschema.Ability{}, &gatewayschema.Channel{}))
+	oldLogDB := platformdb.LogDB
+	platformdb.LogDB = nil
+	t.Cleanup(func() { platformdb.LogDB = oldLogDB })
+	group := seedPublicShopProduct(t, db, "1088", 10)
+	other := seedPublicShopProduct(t, db, "1089", 20)
+	assertVisible := func(name string) {
+		t.Helper()
+		for _, search := range []string{"1088", name} {
+			result, err := ListMarketplaceGroups(GroupQuery{ShopID: 10, Search: search})
+			require.NoError(t, err)
+			require.Equal(t, 1, result.Total, search)
+			require.Equal(t, group.ID, result.Items[0].ID)
+		}
+	}
+	for _, name := range []string{"高速推理", "长文本编程", "高速推理"} {
+		view, err := UpdateOwnerChannel(10, group.ChannelID, UpdateChannelRequest{CustomName: &name})
+		require.NoError(t, err)
+		require.Equal(t, "passed", view.ModerationStatus)
+		assertVisible(name)
+	}
+	note := "价格 0.5x，缓存 99.9%，站内联系"
+	_, err := UpdateOwnerChannel(10, group.ChannelID, UpdateChannelRequest{MaintenanceWindow: &note})
+	require.NoError(t, err)
+	assertVisible("高速推理")
+	for _, name := range []string{"晨光模型店", "新模型店"} {
+		_, err = UpdateOwnerShop(10, ShopProfileRequest{Name: name, Description: "HTTP streaming 与 AVX512"})
+		require.NoError(t, err)
+		assertVisible("高速推理")
+		shops, err := ListMarketplaceShops(GroupQuery{Search: name})
+		require.NoError(t, err)
+		require.Equal(t, 1, shops.Total)
+	}
+	_, err = UpdateOwnerShop(10, ShopProfileRequest{Name: "非法店铺", Description: "访问 https://example.com"})
+	require.Error(t, err)
+	bad := "加微信联系"
+	_, err = UpdateOwnerChannel(10, group.ChannelID, UpdateChannelRequest{CustomName: &bad})
+	require.Error(t, err)
+	assertVisible("高速推理")
+	shop, err := GetOwnerShop(10)
+	require.NoError(t, err)
+	require.Equal(t, "新模型店", shop.CustomName)
+	require.NoError(t, db.First(&other, "id = ?", other.ID).Error)
+	require.Equal(t, "推理渠道", other.CustomName)
+	require.Equal(t, "passed", other.ModerationStatus)
+}
+
+func TestSafeRenameCannotApproveOtherUnsafePublicFields(t *testing.T) {
+	for _, field := range []string{"description", "tags", "maintenance", "shop"} {
+		t.Run(field, func(t *testing.T) {
+			db := openMarketplaceAppTestDB(t)
+			require.NoError(t, db.AutoMigrate(&marketplaceschema.VerificationRun{}))
+			group := seedPublicShopProduct(t, db, "unsafe-other-field", 10)
+			switch field {
+			case "description":
+				require.NoError(t, db.Model(&group).Update("description", "https://example.com").Error)
+			case "tags":
+				require.NoError(t, db.Model(&group).Update("tags", `["加微信"]`).Error)
+			case "maintenance":
+				require.NoError(t, db.Model(&marketplaceschema.Channel{}).Where("id = ?", group.ChannelID).Update("maintenance_window", "https://example.com").Error)
+			case "shop":
+				require.NoError(t, db.Create(&marketplaceschema.Shop{OwnerUserID: 10, Name: "加微信"}).Error)
+			}
+			name := "安全的新名称"
+			_, err := UpdateOwnerChannel(10, group.ChannelID, UpdateChannelRequest{CustomName: &name})
+			require.ErrorContains(t, err, "公开内容规则检查未通过")
+			require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
+			require.Equal(t, "failed", group.ModerationStatus)
+			var count int64
+			require.NoError(t, publicGroupsQuery(GroupQuery{Search: group.ChannelID}).Count(&count).Error)
+			require.Zero(t, count)
+		})
+	}
+}
 
 func TestStaleChannelPatchKeepsNewReviewAndLifecycle(t *testing.T) {
 	for _, review := range []string{"failed", "pending"} {
@@ -74,7 +152,7 @@ func TestLateVerificationAndSyncCannotPublishPausedInternalChannel(t *testing.T)
 	}
 }
 
-func TestCodexContradictoryPresentationFieldsRemainPending(t *testing.T) {
+func TestCodexContradictoryPresentationFieldsPreserveRuleApproval(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}))
 	group := seedPublicShopProduct(t, db, "contradictory-fields", 10)
@@ -83,7 +161,8 @@ func TestCodexContradictoryPresentationFieldsRemainPending(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, validatePresentationProbeResponse(ctx, "codex", "gpt-5", []byte(`{"output":[{"type":"message","content":[{"type":"output_text","text":"AD"}]}],"output_text":"SAFE"}`)))
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "pending", group.ModerationStatus)
+	require.Equal(t, "passed", group.ModerationStatus)
+	require.Equal(t, presentationRuleSafeReason, group.ModerationReason)
 }
 
 func TestStaleOwnerLifecycleActionCannotUndoAdministratorDisable(t *testing.T) {
@@ -152,8 +231,8 @@ func TestPresentationInconclusiveVerdictPreservesConnectivityAndErrorDetection(t
 		if item.wantError == "" {
 			require.NoError(t, err)
 			require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-			require.Equal(t, "pending", group.ModerationStatus)
-			require.Contains(t, group.ModerationReason, "未返回有效")
+			require.Equal(t, "passed", group.ModerationStatus)
+			require.Equal(t, presentationRuleSafeReason, group.ModerationReason)
 		} else {
 			require.ErrorContains(t, err, item.wantError)
 		}
@@ -204,15 +283,16 @@ func TestPresentationRecheckCannotRevokeUnchangedApprovalOnUnavailableOrInconclu
 			}
 			require.Equal(t, "passed", group.ModerationStatus)
 			require.Equal(t, "人工复核通过", group.ModerationReason)
-			// Editing invalidates approval; an unavailable review cannot publish
-			// the changed revision using the old decision.
+			// An edited revision gets its own full server rule decision even when
+			// optional semantic review is unavailable.
 			name := "修订名称"
 			_, err = UpdateOwnerChannel(10, group.ChannelID, UpdateChannelRequest{CustomName: &name})
 			require.NoError(t, err)
 			_, err = preparePresentationProbe(context.Background(), &marketplaceschema.Channel{ID: group.ChannelID})
 			require.NoError(t, err)
 			require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-			require.Equal(t, "pending", group.ModerationStatus)
+			require.Equal(t, "passed", group.ModerationStatus)
+			require.Equal(t, presentationRuleSafeReason, group.ModerationReason)
 		})
 	}
 }
@@ -272,7 +352,8 @@ func TestPresentationEditAndUndoStillInvalidatesOldProbe(t *testing.T) {
 	}
 	require.Error(t, validatePresentationProbeResponse(ctx, "openai_compatible", "gpt-5", presentationTextResponse(t, "AD")))
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "pending", group.ModerationStatus)
+	require.Equal(t, "passed", group.ModerationStatus)
+	require.Equal(t, presentationRuleSafeReason, group.ModerationReason)
 	ctx, err = prepareTrustedPresentationTestProbe(t, &marketplaceschema.Channel{ID: group.ChannelID})
 	require.NoError(t, err)
 	for _, name := range []string{"临时渠道", group.CustomName} {
@@ -281,7 +362,8 @@ func TestPresentationEditAndUndoStillInvalidatesOldProbe(t *testing.T) {
 	}
 	require.Error(t, validatePresentationProbeResponse(ctx, "openai_compatible", "gpt-5", presentationTextResponse(t, "AD")))
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "pending", group.ModerationStatus)
+	require.Equal(t, "passed", group.ModerationStatus)
+	require.Equal(t, presentationRuleSafeReason, group.ModerationReason)
 }
 
 func TestShopEditReopensOnlyOwnedGroupReviewAndRejectsStaleProbe(t *testing.T) {
@@ -300,7 +382,8 @@ func TestShopEditReopensOnlyOwnedGroupReviewAndRejectsStaleProbe(t *testing.T) {
 		require.NoError(t, probe.record(context.Background(), map[string]string{"SAFE": "passed", "AD": "failed"}[verdict], verdict))
 	}
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "pending", group.ModerationStatus)
+	require.Equal(t, "passed", group.ModerationStatus)
+	require.Equal(t, presentationRuleSafeReason, group.ModerationReason)
 	require.Equal(t, "suspended", group.LifecycleStatus)
 	require.NoError(t, db.First(&other, "id = ?", other.ID).Error)
 	require.Equal(t, "passed", other.ModerationStatus)
@@ -326,7 +409,8 @@ func TestOwnerCanEditPresentationAcrossFailedAndRestrictedStatesWithoutOtherVali
 			_, err = UpdateOwnerChannel(10, group.ChannelID, req)
 			require.NoError(t, err)
 			require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-			require.Equal(t, "pending", group.ModerationStatus)
+			require.Equal(t, "passed", group.ModerationStatus)
+			require.Equal(t, presentationRuleSafeReason, group.ModerationReason)
 			require.Equal(t, name, group.CustomName)
 			require.Equal(t, note, group.Description)
 			require.Equal(t, state, group.LifecycleStatus)

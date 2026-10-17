@@ -243,7 +243,7 @@ func UpdateOwnerShop(ownerID int, req ShopProfileRequest) (*ShopView, error) {
 		if existing.OwnerUserID > 0 && existing.Name == name && existing.Description == description {
 			return nil
 		}
-		profile := marketplaceschema.Shop{OwnerUserID: ownerID, Name: name, Description: description, ModerationStatus: "pending"}
+		profile := marketplaceschema.Shop{OwnerUserID: ownerID, Name: name, Description: description, ModerationStatus: "passed"}
 		profile.UpdatedAt = time.Now().UTC().Truncate(time.Microsecond)
 		if !profile.UpdatedAt.After(existing.UpdatedAt) {
 			profile.UpdatedAt = existing.UpdatedAt.Add(time.Microsecond)
@@ -251,12 +251,34 @@ func UpdateOwnerShop(ownerID int, req ShopProfileRequest) (*ShopView, error) {
 		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "owner_user_id"}}, DoUpdates: clause.AssignmentColumns([]string{"name", "description", "moderation_status", "updated_at"})}).Create(&profile).Error; err != nil {
 			return err
 		}
-		// Shared public content changed. Reopen review for this owner's groups
-		// without changing their service lifecycle, prices or connectivity data.
-		// Advancing the revision also prevents an old probe from writing back.
-		return tx.Model(&marketplaceschema.Group{}).Where("owner_user_id = ?", ownerID).Updates(map[string]any{
-			"moderation_status": "pending", "moderation_reason": "", "moderation_checked_at": nil, "updated_at": profile.UpdatedAt,
-		}).Error
+		// Review every complete owned revision in this transaction. A safe shop
+		// rename must not hide all products while an optional model is offline.
+		var groups []marketplaceschema.Group
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("owner_user_id = ?", ownerID).Order("id").Find(&groups).Error; err != nil {
+			return err
+		}
+		var channels []marketplaceschema.Channel
+		if err := tx.Select("id", "maintenance_window").Where("owner_user_id = ?", ownerID).Find(&channels).Error; err != nil {
+			return err
+		}
+		maintenance := make(map[string]string, len(channels))
+		for _, channel := range channels {
+			maintenance[channel.ID] = channel.MaintenanceWindow
+		}
+		for _, group := range groups {
+			applyMarketplacePresentationRules(&group, &profile, maintenance[group.ChannelID])
+			revision := profile.UpdatedAt
+			if !revision.After(group.UpdatedAt) {
+				revision = group.UpdatedAt.Add(time.Microsecond)
+			}
+			if err := tx.Model(&group).UpdateColumns(map[string]any{
+				"moderation_status": group.ModerationStatus, "moderation_reason": group.ModerationReason,
+				"moderation_checked_at": group.ModerationCheckedAt, "updated_at": revision,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
 	}); err != nil {
 		return nil, err
 	}

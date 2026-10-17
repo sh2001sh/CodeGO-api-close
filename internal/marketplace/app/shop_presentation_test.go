@@ -36,9 +36,6 @@ func TestShopListingAggregatesBeyondProductPageAndFilters(t *testing.T) {
 	require.NoError(t, db.Delete(&marketplaceschema.Channel{}, "id = ?", deleted.ChannelID).Error)
 	_, err := UpdateOwnerShop(10, ShopProfileRequest{Name: "晨光模型店", Description: "提供稳定的编程模型"})
 	require.NoError(t, err)
-	// A separate trusted/admin decision is required before edited content is public.
-	require.NoError(t, db.Model(&marketplaceschema.Group{}).Where("owner_user_id = ?", 10).Update("moderation_status", "passed").Error)
-	require.NoError(t, db.Model(&marketplaceschema.Shop{}).Where("owner_user_id = ?", 10).Update("moderation_status", "passed").Error)
 	for _, query := range []GroupQuery{{}, {Search: "晨光"}, {Tag: "编程"}, {Search: "稳定的"}, {Search: "10"}} {
 		shops, err := ListMarketplaceShops(query)
 		require.NoError(t, err)
@@ -97,11 +94,11 @@ func TestShopRatingRequiresUsageAndReplacesVote(t *testing.T) {
 }
 
 func TestPublicPresentationRejectsAdsAndKeepsFailedVerdict(t *testing.T) {
-	for _, text := range []string{"https://example.com", "ｗｗｗ．ｅｘａｍｐｌｅ．ｃｏｍ", "微 信 abc", "微\n信 abc", "加-群", "VX123456", "123 456 789", "测试\u200b名称", "访问 example . com", "私信我购买"} {
+	for _, text := range []string{"https://example.com", "ｗｗｗ．ｅｘａｍｐｌｅ．ｃｏｍ", "微 信 abc", "微\n信 abc", "加-群", "VX123456", "123 456 789", "测试\u200b名称", "访问 example . com", "站外私信购买"} {
 		_, err := normalizePublicText(text, 300, false)
 		require.Error(t, err, text)
 	}
-	for _, text := range []string{"GPT-5 编程", "GPT-5.6 编程", "Claude 3.7", "C++", "低延迟", "提供推理与代码能力", "模型 128K 上下文"} {
+	for _, text := range []string{"GPT-5 编程", "GPT-5.6 编程", "Claude 3.7", "C++", "低延迟", "提供推理与代码能力", "模型 128K 上下文", "站内私信联系", "私信我购买", "联系站内客服"} {
 		_, err := normalizePublicText(text, 300, false)
 		require.NoError(t, err, text)
 	}
@@ -178,7 +175,8 @@ func TestChannelConnectivityCannotModerateAndTrustedReviewRejectsStaleResults(t 
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "pending", group.ModerationStatus, "an owner's SAFE must not approve public content")
+	require.Equal(t, "passed", group.ModerationStatus)
+	require.Equal(t, presentationRuleSafeReason, group.ModerationReason, "an owner response must not replace the server rule decision")
 	ctx = context.WithValue(ctx, trustedPresentationProbeKey{}, true)
 	require.Error(t, validatePresentationProbeResponse(ctx, "openai_compatible", "gpt-5", []byte(`{"choices":[{"message":{"content":"AD"}}]}`)))
 	for _, text := range []string{"SAFE", "unknown"} {
@@ -228,7 +226,8 @@ func TestUserConnectivityTestCannotSupplyPresentationVerdict(t *testing.T) {
 	require.Empty(t, prompt)
 	require.Nil(t, validate)
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "pending", group.ModerationStatus)
+	require.Equal(t, "passed", group.ModerationStatus)
+	require.Equal(t, presentationRuleSafeReason, group.ModerationReason)
 	prompt, validate, err = batchPresentationProbe("", "gpt-5")
 	require.NoError(t, err)
 	require.Empty(t, prompt)
@@ -248,7 +247,7 @@ func TestPresentationProbeHandlesNonTextAndShopEdits(t *testing.T) {
 	require.Error(t, validatePresentationProbeResponse(ctx, "codex", "gpt-5", []byte(`{"output_text":"AD"}`)))
 	shop, err := GetOwnerShop(10)
 	require.NoError(t, err)
-	require.Equal(t, "pending", shop.ModerationStatus, "an old probe must not moderate edited shop content")
+	require.Equal(t, "passed", shop.ModerationStatus, "an old probe must not moderate edited shop content")
 	for _, model := range []string{"text-embedding-3-small", "bge-m3", "gpt-image-1", "gpt-5-openai-compact"} {
 		prompt, validate, err := batchPresentationProbe(group.ChannelID, model)
 		require.NoError(t, err)
@@ -256,13 +255,15 @@ func TestPresentationProbeHandlesNonTextAndShopEdits(t *testing.T) {
 		require.Nil(t, validate, model)
 	}
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "pending", group.ModerationStatus)
+	require.Equal(t, "passed", group.ModerationStatus)
+	require.Equal(t, presentationRuleSafeReason, group.ModerationReason)
 	prompt, validate, err := batchPresentationProbe(group.ChannelID, "gpt-5")
 	require.NoError(t, err)
 	require.Empty(t, prompt)
 	require.Nil(t, validate)
 	require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
-	require.Equal(t, "pending", group.ModerationStatus)
+	require.Equal(t, "passed", group.ModerationStatus)
+	require.Equal(t, presentationRuleSafeReason, group.ModerationReason)
 }
 
 func TestChannelRenamePreservesOriginalNumericID(t *testing.T) {

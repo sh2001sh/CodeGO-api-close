@@ -15,10 +15,13 @@ import (
 )
 
 var (
-	publicContactPattern = regexp.MustCompile(`(?i)(h(?:tt|xx)ps?://|www\.|[a-z0-9][a-z0-9-]*\.(com|cn|net|org|io|me|top|xyz|shop|cfd|cc|vip|app|dev|ai|link|site|online|store)(?:$|[^a-z0-9-])|t\.me(?:$|[^a-z0-9-])|[a-z0-9._+%-]+@[a-z0-9.-]+\.[a-z]{2,})`)
-	publicMobilePattern  = regexp.MustCompile(`(?:^|[^0-9])(?:86)?1[3-9][0-9]{9}(?:$|[^0-9])`)
-	publicVXPattern      = regexp.MustCompile(`(?:^|[^a-z0-9])vx`)
+	publicContactPattern      = regexp.MustCompile(`(?i)(h(?:tt|xx)ps?://|www\.|[a-z0-9][a-z0-9-]*\.(com|cn|net|org|io|me|top|xyz|shop|cfd|cc|vip|app|dev|ai|link|site|online|store)(?:$|[^a-z0-9-])|t\.me(?:$|[^a-z0-9-])|[a-z0-9._+%-]+@[a-z0-9.-]+\.[a-z]{2,})`)
+	publicMobilePattern       = regexp.MustCompile(`(?:^|[^0-9])(?:86)?1[3-9][0-9]{9}(?:$|[^0-9])`)
+	publicVXPattern           = regexp.MustCompile(`(?:^|[^a-z0-9])vx`)
+	publicOffsiteTradePattern = regexp.MustCompile(`(?:站外|私下).{0,8}(?:交易|购买|充值|付款|支付|联系)`)
 )
+
+const presentationRuleSafeReason = "公开内容通过网址、联系方式及站外引流规则检查"
 
 func normalizePublicText(value string, limit int, name bool) (string, error) {
 	value = strings.TrimSpace(norm.NFKC.String(value))
@@ -50,12 +53,44 @@ func normalizePublicText(value string, limit int, name bool) (string, error) {
 	if publicVXPattern.MatchString(text) {
 		return "", errors.New("名称、备注和标签不能包含联系方式或站外引流广告")
 	}
-	for _, keyword := range []string{"微信", "微 信", "薇信", "威信", "加v", "加微", "加群", "加我", "私聊", "私信", "联系", "扣扣", "企鹅群", "qq群", "qq号", "wechat", "telegram", "whatsapp", "discord", "引流", "站外", "扫码", "二维码", "访问网站", "点击链接"} {
+	if publicOffsiteTradePattern.MatchString(text) {
+		return "", errors.New("名称、备注和标签不能包含站外交易引导")
+	}
+	for _, keyword := range []string{"微信", "微 信", "薇信", "威信", "加v", "加微", "加群", "扣扣", "企鹅群", "qq群", "qq号", "wechat", "telegram", "whatsapp", "discord", "引流", "扫码", "二维码", "访问网站", "点击链接"} {
 		if strings.Contains(text, strings.ReplaceAll(keyword, " ", "")) {
 			return "", errors.New("名称、备注和标签不能包含联系方式或站外引流广告")
 		}
 	}
 	return value, nil
+}
+
+func validateMarketplacePresentation(group *marketplaceschema.Group, shop *marketplaceschema.Shop, maintenance string) error {
+	for _, field := range []struct {
+		text  string
+		limit int
+		name  bool
+	}{
+		{group.CustomName, 40, true}, {group.Description, 300, false},
+		{shop.Name, 40, true}, {shop.Description, 300, false},
+		{maintenance, 255, false},
+	} {
+		if _, err := normalizePublicText(field.text, field.limit, field.name); err != nil {
+			return err
+		}
+	}
+	_, err := normalizeGroupTags(decodeModels(group.Tags))
+	return err
+}
+
+// A server-side rule decision applies to the complete edited revision. Channel
+// lifecycle and administrator holds are separate and must stay unchanged.
+func applyMarketplacePresentationRules(group *marketplaceschema.Group, shop *marketplaceschema.Shop, maintenance string) {
+	group.ModerationStatus, group.ModerationReason = "passed", presentationRuleSafeReason
+	if err := validateMarketplacePresentation(group, shop, maintenance); err != nil {
+		group.ModerationStatus, group.ModerationReason = "failed", err.Error()
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	group.ModerationCheckedAt = &now
 }
 
 // Dates and model version suffixes are technical metadata, not phone numbers.
@@ -143,8 +178,8 @@ func safePublicText(value string, limit int, name bool) string {
 	return text
 }
 
-// Old channels without custom public content need no semantic approval. Every
-// custom revision must pass platform-controlled or administrator review.
+// Only server-reviewed revisions are discoverable; an owner's model response
+// never supplies a review decision. Content-free legacy rows stay compatible.
 func approvedMarketplacePresentationQuery(query *gorm.DB) *gorm.DB {
 	return query.Where("(moderation_status = ? OR (COALESCE(moderation_status, '') = '' AND COALESCE(custom_name, '') = '' AND COALESCE(description, '') = '' AND COALESCE(tags, '') IN ?))", "passed", []string{"", "[]", "null"})
 }

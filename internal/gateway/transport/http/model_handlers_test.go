@@ -358,6 +358,52 @@ func TestListModelsKeepsMarketplaceGroupWithoutResolvedContext(t *testing.T) {
 	require.Contains(t, ids, "zz-market-direct-model")
 }
 
+func TestMarketplaceModelListUsesChannelPricingAndEnabledTokenModels(t *testing.T) {
+	withSelfUseModeDisabled(t)
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&identityschema.User{Id: 1020, Username: "market-custom-pricing", Group: "default", Status: constant.UserStatusEnabled}).Error)
+	for _, item := range []struct {
+		model, group string
+		enabled      bool
+	}{
+		{"zz-channel-priced-image-4k", "market_custom", true},
+		{"zz-channel-priced-text", "market_custom", true},
+		{"zz-channel-priced-disabled", "market_custom", false},
+		{"zz-other-private-model", "other_private", true},
+	} {
+		require.NoError(t, db.Create(&gatewayschema.Ability{Group: item.group, Model: item.model, ChannelId: 1, Enabled: item.enabled}).Error)
+	}
+	for _, limited := range []bool{false, true} {
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		ctx.Set("id", 1020)
+		httpctx.SetContextKey(ctx, constant.ContextKeyTokenGroup, "market:custom")
+		httpctx.SetContextKey(ctx, constant.ContextKeyUsingGroup, "market_custom")
+		httpctx.SetContextKey(ctx, constant.ContextKeyTokenModelLimitEnabled, limited)
+		httpctx.SetContextKey(ctx, constant.ContextKeyTokenModelLimit, map[string]bool{"zz-channel-priced-image-4k": true, "zz-channel-priced-disabled": true, "zz-other-private-model": true})
+		ListModels(ctx, constant.ChannelTypeOpenAI)
+		ids := decodeListModelsResponse(t, recorder)
+		require.Contains(t, ids, "zz-channel-priced-image-4k")
+		require.NotContains(t, ids, "zz-channel-priced-disabled")
+		require.NotContains(t, ids, "zz-other-private-model")
+		if limited {
+			require.Len(t, ids, 1)
+		} else {
+			require.Len(t, ids, 2)
+			require.Contains(t, ids, "zz-channel-priced-text")
+		}
+	}
+	// Official groups still require their global billing configuration.
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	ctx.Set("id", 1020)
+	httpctx.SetContextKey(ctx, constant.ContextKeyTokenGroup, "market_custom")
+	ListModels(ctx, constant.ChannelTypeOpenAI)
+	require.Empty(t, decodeListModelsResponse(t, recorder))
+}
+
 func TestListModelsUsesNamedRoutePoolInsteadOfGlobalAutoPool(t *testing.T) {
 	withSelfUseModeDisabled(t)
 	db := setupModelListControllerTestDB(t)

@@ -24,9 +24,10 @@ func ListModels(c *gin.Context, modelType int) {
 		}
 	}
 	tokenGroup := httpctx.GetContextKeyString(c, constant.ContextKeyTokenGroup)
-	if marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) &&
+	marketplaceGroupToken := marketplaceapp.IsMarketplaceTokenGroup(tokenGroup) &&
 		!marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup) &&
-		!marketplaceapp.IsMarketplaceRoutePoolTokenGroup(tokenGroup) {
+		!marketplaceapp.IsMarketplaceRoutePoolTokenGroup(tokenGroup)
+	if marketplaceGroupToken {
 		// TokenAuth resolves market:<id> to the actual internal routing group.
 		// Model-list routes do not run the distributor that normally performs
 		// this replacement for relay requests.
@@ -40,7 +41,21 @@ func ListModels(c *gin.Context, modelType int) {
 	normalizedTokenGroup := gatewayroutingapp.NormalizeTokenGroup(tokenGroup)
 	marketplaceAutoToken := marketplaceapp.IsMarketplaceAutoTokenGroup(tokenGroup)
 	marketplaceRoutePool := marketplaceapp.IsMarketplaceRoutePoolTokenGroup(tokenGroup)
-	if !tokenModelLimitEnabled && marketplaceRoutePool {
+	if marketplaceGroupToken {
+		// Marketplace prices belong to the selected channel. A missing global
+		// official price must not hide a verified model, including image models.
+		models := gatewayroutingapp.EnabledModelsForGroup(normalizedTokenGroup)
+		if tokenModelLimitEnabled {
+			allowed := make([]string, 0, len(models))
+			for _, model := range models {
+				if tokenModelLimit[model] {
+					allowed = append(allowed, model)
+				}
+			}
+			models = allowed
+		}
+		userOpenAIModels = gatewayroutingapp.CollectMarketplaceModelsForNames(userID, models)
+	} else if !tokenModelLimitEnabled && marketplaceRoutePool {
 		poolModels, poolErr := marketplaceapp.ListRoutePoolModels(userID, marketplaceapp.RoutePoolIDFromTokenGroup(tokenGroup))
 		if poolErr != nil {
 			err = poolErr

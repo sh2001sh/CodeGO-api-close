@@ -94,6 +94,6 @@ func cloneAdminOwnerIncomeResult(source *AdminOwnerIncomeResult) *AdminOwnerInco
 		return nil
 	}
 	result := *source
-	result.Items = append([]AdminOwnerIncomeItem(nil), source.Items...)
+	result.Items = append([]AdminOwnerIncomeItem{}, source.Items...)
 	return &result
 }

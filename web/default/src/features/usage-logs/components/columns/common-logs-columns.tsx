@@ -52,7 +52,6 @@ import {
 } from '../../lib/format'
 import {
   getEffectiveTokenThroughput,
-  getStreamTokenThroughput,
   getFirstOutputTiming,
 } from '../../lib/throughput'
 import {
@@ -676,23 +675,11 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             ? other.total_duration_ms / 1000
             : log.use_time
         const firstOutput = log.is_stream ? getFirstOutputTiming(other) : null
-        const streamTokensPerSecond = getStreamTokenThroughput({
-          isStream: log.is_stream,
-          timingVersion: other?.timing_version,
-          completionTokens: log.completion_tokens,
-          generationTimeMs: other?.generation_time_ms,
-        })
-        const effectiveTokensPerSecond = getEffectiveTokenThroughput({
+        const tokensPerSecond = getEffectiveTokenThroughput({
           completionTokens: log.completion_tokens,
           totalDurationMs: other?.total_duration_ms,
           useTimeSeconds: useTime,
         })
-        const tokensPerSecond =
-          streamTokensPerSecond ?? effectiveTokensPerSecond
-        const throughputLabel =
-          streamTokensPerSecond != null
-            ? t('Output token rate')
-            : t('Effective throughput')
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
         const streamStartVariant = firstOutput
           ? getFirstResponseTimeColor(firstOutput.milliseconds / 1000)
@@ -772,20 +759,16 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     <Tooltip>
                       <TooltipTrigger render={<span className='cursor-help' />}>
                         {' · '}
-                        {throughputLabel}{' '}
+                        {t('Effective throughput')}{' '}
                         <span className='font-mono tabular-nums'>
                           {tokensPerSecond.toFixed(1)}
                         </span>
                         {' t/s'}
                       </TooltipTrigger>
                       <TooltipContent>
-                        {streamTokensPerSecond != null
-                          ? t(
-                              'Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.'
-                            )
-                          : t(
-                              'Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed.'
-                            )}
+                        {t(
+                          'Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed.'
+                        )}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

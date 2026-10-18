@@ -20,7 +20,6 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import {
   getEffectiveTokenThroughput,
-  getStreamTokenThroughput,
   getFirstOutputTiming,
 } from './throughput.ts'
 
@@ -51,6 +50,17 @@ describe('usage log effective token throughput', () => {
         (bufferedStream.streamOutputTimeMs / 1000),
       1_500
     )
+  })
+
+  test('does not divide hidden reasoning tokens by a buffered output tail', () => {
+    const log = {
+      completionTokens: 1_220,
+      totalDurationMs: 10_000,
+      useTimeSeconds: 10,
+      generationTimeMs: 140,
+    }
+    assert.equal(getEffectiveTokenThroughput(log), 122)
+    assert.ok(log.completionTokens / (log.generationTimeMs / 1000) > 8_700)
   })
 
   test('falls back to historical whole-second duration', () => {
@@ -84,49 +94,6 @@ describe('usage log effective token throughput', () => {
 })
 
 describe('measured output timing', () => {
-  test('keeps stream rate separate from effective request throughput', () => {
-    assert.equal(
-      getStreamTokenThroughput({
-        isStream: true,
-        timingVersion: 2,
-        completionTokens: 600,
-        generationTimeMs: 6_000,
-      }),
-      100
-    )
-    assert.equal(
-      getEffectiveTokenThroughput({
-        completionTokens: 600,
-        totalDurationMs: 20_000,
-        useTimeSeconds: 20,
-      }),
-      30
-    )
-  })
-
-  test('does not manufacture stream speed for historical or non-streaming logs', () => {
-    const input = {
-      isStream: true,
-      completionTokens: 600,
-      generationTimeMs: 6_000,
-    }
-    assert.equal(getStreamTokenThroughput(input), null)
-    assert.equal(
-      getStreamTokenThroughput({ ...input, timingVersion: 2, isStream: false }),
-      null
-    )
-    for (const generationTimeMs of [0, -1, NaN, Infinity]) {
-      assert.equal(
-        getStreamTokenThroughput({
-          ...input,
-          timingVersion: 2,
-          generationTimeMs,
-        }),
-        null
-      )
-    }
-  })
-
   test('prefers visible text over an early lifecycle or reasoning event', () => {
     assert.deepEqual(
       getFirstOutputTiming({

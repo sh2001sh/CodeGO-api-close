@@ -193,6 +193,13 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			sawCompactionOutput.Store(true)
 		}
 		textOutput := hasResponsesVisibleText(streamResponse)
+		// Keep the output observed from the provider before downstream writes.
+		// A split delta may be partly sent before a client disconnects; recording
+		// it only after the complete write loses that output from settlement.
+		switch streamResponse.Type {
+		case "response.output_text.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta", "response.refusal.delta", "response.function_call_arguments.delta":
+			responseTextBuilder.WriteString(streamResponse.Delta)
+		}
 		// Capture provider usage before writing anything downstream. A client
 		// disconnect while flushing the final event must not discard exact usage.
 		if streamResponse.Response != nil && streamResponse.Response.Usage != nil {
@@ -341,9 +348,6 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 					c.Set("image_generation_call_size", streamResponse.Response.GetSize())
 				}
 			}
-		case "response.output_text.delta":
-			// 处理输出文本
-			responseTextBuilder.WriteString(streamResponse.Delta)
 		case dto.ResponsesOutputTypeItemDone:
 			// 函数调用处理
 			if streamResponse.Item != nil {
@@ -404,9 +408,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if c.GetBool(string(constant.ContextKeyClientGone)) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
 		if usage.PromptTokens == 0 {
 			usage.PromptTokens = info.GetEstimatePromptTokens()
+			usage.UsageSource = "fallback_prompt_tokens"
 		}
 		if usage.CompletionTokens == 0 && responseTextBuilder.Len() > 0 {
 			usage.CompletionTokens = tokenx.CountTextToken(responseTextBuilder.String(), info.UpstreamModelName)
+			usage.UsageSource = "local_completion_fallback"
 		}
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 		info.ConversationResponseText = responseTextBuilder.String()
@@ -465,6 +471,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			// 非正常结束，使用输出文本的 token 数量
 			completionTokens := tokenx.CountTextToken(tempStr, info.UpstreamModelName)
 			usage.CompletionTokens = completionTokens
+			usage.UsageSource = "local_completion_fallback"
 		}
 	}
 

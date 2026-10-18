@@ -62,7 +62,6 @@ import {
 } from '../../lib/format'
 import {
   getEffectiveTokenThroughput,
-  getStreamTokenThroughput,
   getFirstOutputTiming,
 } from '../../lib/throughput'
 import {
@@ -472,12 +471,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
     other.total_duration_ms >= 0
       ? other.total_duration_ms / 1000
       : props.log.use_time
-  const streamThroughput = getStreamTokenThroughput({
-    isStream: props.log.is_stream,
-    completionTokens: props.log.completion_tokens,
-    timingVersion: other?.timing_version,
-    generationTimeMs: other?.generation_time_ms,
-  })
   const effectiveThroughput = getEffectiveTokenThroughput({
     completionTokens: props.log.completion_tokens,
     totalDurationMs: other?.total_duration_ms,
@@ -694,13 +687,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   mono
                 />
               )}
-              {showTiming && streamThroughput != null && (
-                <DetailRow
-                  label={t('Output token rate')}
-                  value={streamThroughput.toFixed(1) + ' t/s'}
-                  mono
-                />
-              )}
               {showTiming && effectiveThroughput != null && (
                 <DetailRow
                   label={t('Effective throughput')}
@@ -714,7 +700,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     'First output may include reasoning or tool calls. First text excludes lifecycle events and reasoning.'
                   )}{' '}
                   {t(
-                    'Output tokens per second from first model output to response completion. Usage may include reasoning tokens; this is not the upstream inference speed.'
+                    'Output tokens divided by the complete request duration. Historical and non-streaming logs cannot measure stream speed.'
                   )}
                 </p>
               )}

@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { getIntlLocale } from '@/i18n/format'
 import { Download, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -8,9 +9,14 @@ import {
   parseQuotaFromDollars,
   quotaUnitsToDollars,
 } from '@/lib/format'
+import { useDebounce } from '@/hooks/use-debounce'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useAdminOwnerIncome, useAdminOwnerIncomeRelease } from '../hooks'
+import {
+  useAdminOwnerIncome,
+  useAdminOwnerIncomeRelease,
+  useAdminOwnerIncomeReclaim,
+} from '../hooks'
 import type {
   AdminOwnerIncomeItem,
   AdminOwnerIncomeReleaseResult,
@@ -24,24 +30,57 @@ export function AdminOwnerIncomePanel(props: {
   onRangeChange: (range: AdminIncomeRange) => void
 }) {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const [selectedOwners, setSelectedOwners] = useState<AdminOwnerIncomeItem[]>(
     []
   )
   const [amount, setAmount] = useState('')
   const [lastResult, setLastResult] =
     useState<AdminOwnerIncomeReleaseResult | null>(null)
+  const [operationId, setOperationId] = useState<string>()
   const pendingOperation = useRef<{ signature: string; id: string } | null>(
     null
   )
+  const ownerSearch = useDebounce(props.ownerSearch.trim(), 350)
   const filters = {
-    ownerSearch: props.ownerSearch.trim(),
+    ownerSearch,
     startTimestamp:
       props.range.start && Math.floor(props.range.start.getTime() / 1000),
     endTimestamp:
       props.range.end && Math.floor(props.range.end.getTime() / 1000),
   }
   const query = useAdminOwnerIncome(filters)
+  const isFiltering =
+    query.isFetching || ownerSearch !== props.ownerSearch.trim()
   const reclaim = useAdminOwnerIncomeRelease()
+  const progress = useAdminOwnerIncomeReclaim(operationId)
+  const isReclaiming = reclaim.isPending || Boolean(operationId)
+
+  useEffect(() => {
+    const result = progress.data
+    if (!operationId || !result) return
+    if (result.status === 'failed') {
+      toast.error(result.error_message || t('额度回收失败'))
+      setOperationId(undefined)
+      return
+    }
+    if (result.status !== 'completed') return
+    pendingOperation.current = null
+    setOperationId(undefined)
+    setLastResult(result)
+    setSelectedOwners([])
+    setAmount('')
+    toast.success(
+      t('实际回收 {{count}} 条收益，共 {{amount}}', {
+        count: result.reclaimed_count,
+        amount: formatQuota(result.reclaimed_amount),
+      })
+    )
+    void queryClient.invalidateQueries({
+      queryKey: ['marketplace-owner-income'],
+    })
+    void queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] })
+  }, [operationId, progress.data, queryClient, t])
   const available = selectedOwners.reduce(
     (sum, owner) => sum + owner.reclaimable_quota,
     0
@@ -76,9 +115,9 @@ export function AdminOwnerIncomePanel(props: {
 
   const submit = () => {
     if (
-      query.isFetching ||
+      isFiltering ||
       query.isError ||
-      reclaim.isPending ||
+      isReclaiming ||
       selectedOwners.length === 0 ||
       available <= 0
     )
@@ -138,16 +177,13 @@ export function AdminOwnerIncomePanel(props: {
       },
       {
         onSuccess: (result) => {
-          pendingOperation.current = null
-          setLastResult(result)
-          toast.success(
-            t('实际回收 {{count}} 条收益，共 {{amount}}', {
-              count: result.reclaimed_count,
-              amount: formatQuota(result.reclaimed_amount),
-            })
+          // A successful POST only enqueues work. Read the same operation ID
+          // until its financial transaction has actually committed.
+          queryClient.setQueryData(
+            ['marketplace-owner-income-reclaim', result.operation_id],
+            result
           )
-          setSelectedOwners([])
-          setAmount('')
+          setOperationId(result.operation_id)
         },
         onError: (error) =>
           toast.error(
@@ -200,7 +236,7 @@ export function AdminOwnerIncomePanel(props: {
         range={props.range}
         onRangeChange={changeRange}
         onRefresh={() => void query.refetch()}
-        isFetching={query.isFetching}
+        isFetching={isFiltering}
         isError={query.isError}
         selectedOwners={selectedOwners}
         onToggleOwner={toggleOwner}
@@ -234,19 +270,26 @@ export function AdminOwnerIncomePanel(props: {
           <Button
             onClick={submit}
             disabled={
-              reclaim.isPending ||
+              isReclaiming ||
               query.isError ||
-              query.isFetching ||
+              isFiltering ||
               selectedOwners.length === 0 ||
               available <= 0
             }
             className='lg:min-w-40'
           >
-            <WalletCards className={reclaim.isPending ? 'animate-pulse' : ''} />
-            {reclaim.isPending ? t('回收中') : t('确认批量回收')}
+            <WalletCards className={isReclaiming ? 'animate-pulse' : ''} />
+            {isReclaiming ? t('回收中') : t('确认批量回收')}
           </Button>
         </div>
       </section>
+
+      {operationId && (
+        <p role='status' className='text-muted-foreground text-sm'>
+          {t('回收中')}
+          {progress.isError && ` · ${t('加载失败')}`}
+        </p>
+      )}
 
       {lastResult && (
         <section className='border-border overflow-hidden rounded-md border'>

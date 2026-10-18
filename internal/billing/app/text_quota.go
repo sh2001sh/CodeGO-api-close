@@ -392,7 +392,7 @@ func appendTextBillingClassification(other map[string]interface{}, relayInfo *re
 
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) {
 	originUsage := usage
-	usedFallbackUsage := false
+	usedFallbackUsage := usage != nil && usage.UsageSource == "fallback_prompt_tokens"
 	if fallback, ok := fallbackPromptOnlyUsage(relayInfo, usage); ok {
 		usage = fallback
 		usedFallbackUsage = true
@@ -524,6 +524,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	}
 	if tieredBillingApplied {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
+	}
+	if usage != nil && usage.UsageSource != "" {
+		other["usage_source"] = usage.UsageSource
 	}
 	appendTextBillingClassification(other, relayInfo, summary, usedFallbackUsage)
 	appendUsageConsumptionDiscountInfo(other, discountDetail)

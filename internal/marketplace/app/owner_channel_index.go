@@ -70,16 +70,17 @@ func loadOwnerChannelIndex(db *gorm.DB, ownerUserID int) ([]OwnerChannelIndexIte
 	}
 	channels := marketplaceschema.Channel{}.TableName()
 	groups := marketplaceschema.Group{}.TableName()
-	settlements := marketplaceschema.Settlement{}.TableName()
-	// Aggregate each owned group through its compact covering index, including
-	// deleted inventory, rather than scanning all owner settlements before joining.
+	facts, err := incomeFacts(db, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+	earnings := facts.Select("SUM(total_income)").Where("group_id = g.id AND owner_user_id = c.owner_user_id")
 	rows, err := db.Table(channels+" AS c").
 		Select(`c.id, COALESCE(c.submitted_source_label, ''), COALESCE(c.source_label_status, ''),
 			COALESCE(c.declared_models, ''), COALESCE(c.model_verification_results, ''), COALESCE(c.connectivity_test_status, ''),
 			COALESCE(g.custom_name, ''), COALESCE(g.description, ''), COALESCE(g.tags, ''), g.lifecycle_status, g.verification_status,
 			g.multiplier, c.deleted_at,
-			COALESCE((SELECT SUM(s.owner_net_amount) FROM `+settlements+` AS s
-				WHERE s.group_id = g.id AND s.owner_user_id = c.owner_user_id), 0) AS total_income`).
+			COALESCE((?), 0) AS total_income`, earnings).
 		Joins("JOIN "+groups+" AS g ON g.channel_id = c.id AND g.owner_user_id = c.owner_user_id").
 		Where("c.owner_user_id = ?", ownerUserID).
 		Order("c.deleted_at asc, c.created_at desc, c.id asc").Rows()

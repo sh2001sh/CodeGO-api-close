@@ -175,6 +175,7 @@ func TestOaiResponsesStreamHandlerSettlesAcceptedRequestAfterClientDisconnect(t 
 	require.NotNil(t, usage)
 	require.Equal(t, 123, usage.PromptTokens)
 	require.Equal(t, 123, usage.TotalTokens)
+	require.Equal(t, "fallback_prompt_tokens", usage.UsageSource)
 	require.True(t, c.GetBool(string(constant.ContextKeyClientGone)))
 }
 

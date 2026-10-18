@@ -1,6 +1,9 @@
 package app
 
 import (
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +16,69 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func TestAdminOwnerIncomeCoalescesColdReadsAndReturnsIndependentResults(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1) // The SQLite :memory: fixture belongs to one connection.
+	invalidateAdminMarketplaceStatsCache()
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Settlement{}))
+	require.NoError(t, db.Create(&identityschema.User{Id: 42, ExternalId: "BENCH42", Username: "income-owner", ClaudeQuota: 100}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Settlement{ID: "coalesced", RequestID: "coalesced", OwnerUserID: 42, OwnerNetAmount: 100, Status: "released"}).Error)
+	var aggregates atomic.Int64
+	require.NoError(t, db.Callback().Row().After("gorm:row").Register("count_income_aggregates", func(tx *gorm.DB) {
+		if strings.Contains(tx.Statement.SQL.String(), "AS total_income") {
+			aggregates.Add(1)
+			// Keep the cold database read in flight while callers arrive.
+			time.Sleep(100 * time.Millisecond)
+		}
+	}))
+	t.Cleanup(func() { db.Callback().Row().Remove("count_income_aggregates") })
+	const clients = 8
+	results := make([]*AdminOwnerIncomeResult, clients)
+	errs := make([]error, clients)
+	var ready, done sync.WaitGroup
+	ready.Add(clients)
+	done.Add(clients)
+	start := make(chan struct{})
+	for i := range clients {
+		go func() {
+			defer done.Done()
+			ready.Done()
+			<-start
+			results[i], errs[i] = ListAdminOwnerIncome(AdminOwnerIncomeQuery{})
+		}()
+	}
+	ready.Wait()
+	close(start)
+	done.Wait()
+	for i := range clients {
+		require.NoError(t, errs[i])
+		require.EqualValues(t, 100, results[i].Items[0].ReclaimableQuota)
+	}
+	require.EqualValues(t, 1, aggregates.Load())
+	results[0].Items[0].ReleasedIncome = 0
+	require.EqualValues(t, 100, results[1].Items[0].ReleasedIncome)
+	// Only the historical aggregates are cached; wallet balances stay fresh.
+	require.NoError(t, db.Model(&identityschema.User{}).Where("id = ?", 42).Update("claude_quota", 25).Error)
+	fresh, err := ListAdminOwnerIncome(AdminOwnerIncomeQuery{})
+	require.NoError(t, err)
+	require.EqualValues(t, 25, fresh.Items[0].ReclaimableQuota)
+	require.EqualValues(t, 1, aggregates.Load())
+}
+
+func TestAdminOwnerIncomeEmptyCacheKeepsArray(t *testing.T) {
+	db := openMarketplaceAppTestDB(t)
+	invalidateAdminMarketplaceStatsCache()
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.Settlement{}))
+	for range 2 {
+		result, err := ListAdminOwnerIncome(AdminOwnerIncomeQuery{})
+		require.NoError(t, err)
+		require.NotNil(t, result.Items)
+		require.Empty(t, result.Items)
+	}
+}
 
 func TestReviewChannelReenablesPreviouslyPausedInternalChannel(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)

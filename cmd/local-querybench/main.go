@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -42,8 +43,9 @@ func main() {
 	n := flag.Int("n", 100000, "settlement rows")
 	tag := flag.String("tag", "before", "unique run name")
 	viewers := flag.Int("viewers", 500, "distinct users in the 500-client page-query burst")
+	database := flag.String("database", "codego_query_test", "loopback fixture database for measure, stress, reclaim or validate")
 	flag.Parse()
-	if err := run(*mode, *n, *tag, *viewers); err != nil {
+	if err := run(*mode, *n, *tag, *viewers, *database); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -51,7 +53,13 @@ func main() {
 func open(name string, log logger.Interface) (*gorm.DB, error) {
 	return gorm.Open(postgres.Open("postgres://loadtest@127.0.0.1:55437/"+name+"?sslmode=disable"), &gorm.Config{Logger: log})
 }
-func run(mode string, n int, tag string, viewers int) error {
+func run(mode string, n int, tag string, viewers int, database string) error {
+	if !regexp.MustCompile(`^codego_query_[a-z0-9_]+$`).MatchString(database) {
+		return fmt.Errorf("only codego_query_* loopback fixtures are allowed")
+	}
+	if database != "codego_query_test" && mode != "measure" && mode != "stress" && mode != "reclaim" && mode != "validate" {
+		return fmt.Errorf("custom fixture database is unsupported for mode %s", mode)
+	}
 	c := &counter{Interface: logger.Default.LogMode(logger.Silent)}
 	if mode == "new-baseline-fixture" || mode == "new-final-fixture" {
 		admin, err := open("postgres", c)
@@ -97,7 +105,7 @@ func run(mode string, n int, tag string, viewers int) error {
 			return err
 		}
 	}
-	db, err := open("codego_query_test", c)
+	db, err := open(database, c)
 	if err != nil {
 		return err
 	}

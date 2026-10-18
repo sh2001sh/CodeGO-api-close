@@ -57,7 +57,7 @@ export function AdminGovernance() {
   const page = position.filterKey === filterKey ? position.page : 1
   const query = useAdminMarketplaceChannels(
     { ...filters, page, pageSize: 50 },
-    true
+    section === 'channels'
   )
   const failedModelRemoval = useMarketplaceFailedModelRemoval(true)
   const [editing, setEditing] = useState<MarketplaceChannel | null>(null)

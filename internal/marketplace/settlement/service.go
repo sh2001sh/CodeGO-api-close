@@ -226,12 +226,16 @@ func StartReleaseWorker(ctx context.Context) {
 				if err != nil {
 					platformobservability.SysError("release marketplace settlement: " + err.Error())
 				}
+				compacted, compactErr := CompactIncomeProjection(ctx)
+				if compactErr != nil {
+					platformobservability.SysError("compact marketplace income projection: " + compactErr.Error())
+				}
 
 				delay := time.Duration(0)
 				switch {
-				case err != nil:
+				case err != nil || compactErr != nil:
 					delay = releaseErrorDelay
-				case selected < releaseBatchSize:
+				case selected < releaseBatchSize && compacted < 10000:
 					delay = releaseIdleDelay
 				}
 				if delay == 0 {

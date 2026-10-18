@@ -538,8 +538,9 @@ export function useAdminOwnerIncomeReclaim(operationId?: string) {
     queryFn: () => getAdminOwnerIncomeReclaim(operationId!),
     enabled: Boolean(operationId),
     refetchInterval: (query) =>
-      query.state.data?.status === 'pending' ||
-      query.state.data?.status === 'running'
+      !query.state.data ||
+      query.state.data.status === 'pending' ||
+      query.state.data.status === 'running'
         ? 2_000
         : false,
     refetchOnWindowFocus: false,

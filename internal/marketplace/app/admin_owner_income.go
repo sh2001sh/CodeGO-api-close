@@ -18,24 +18,32 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 		input.StartTimestamp, input.EndTimestamp = input.EndTimestamp, input.StartTimestamp
 	}
 	normalizedSearch := normalizeExternalIDSearch(input.OwnerSearch)
-	cacheKey := fmt.Sprintf("%p:%s:%d:%d", platformdb.DB, normalizedSearch, input.StartTimestamp, input.EndTimestamp)
+	cacheKey := fmt.Sprintf("%p:%d:%s:%d:%d", platformdb.DB, marketplacePublicationRevision.Load(), normalizedSearch, input.StartTimestamp, input.EndTimestamp)
+	value, err, _ := adminOwnerIncomeLoads.Do(cacheKey, func() (any, error) {
+		return loadAdminOwnerIncome(input, normalizedSearch, cacheKey)
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Each caller gets an independent result and fresh spendable wallet balances.
+	return populateAdminOwnerBalances(cloneAdminOwnerIncomeResult(value.(*AdminOwnerIncomeResult)))
+}
+
+func loadAdminOwnerIncome(input AdminOwnerIncomeQuery, normalizedSearch, cacheKey string) (*AdminOwnerIncomeResult, error) {
 	adminMarketplaceStatsCache.Lock()
 	if adminMarketplaceStatsCache.ownerIncomeResult != nil &&
 		adminMarketplaceStatsCache.ownerIncomeKey == cacheKey &&
 		time.Since(adminMarketplaceStatsCache.ownerIncomeAt) < adminMarketplaceStatsCacheTTL {
 		result := cloneAdminOwnerIncomeResult(adminMarketplaceStatsCache.ownerIncomeResult)
 		adminMarketplaceStatsCache.Unlock()
-		return populateAdminOwnerBalances(result)
+		return result, nil
 	}
 	adminMarketplaceStatsCache.Unlock()
-	query := platformdb.DB.Model(&marketplaceschema.Settlement{}).
-		Select(`owner_user_id,
-			COUNT(*) AS request_count,
-			COALESCE(SUM(owner_net_amount), 0) AS total_income,
-			COALESCE(SUM(CASE WHEN status = 'pending' THEN owner_net_amount ELSE 0 END), 0) AS pending_income,
-			COALESCE(SUM(CASE WHEN status = 'released' THEN owner_net_amount - reclaimed_amount ELSE 0 END), 0) AS released_income,
-			COALESCE(SUM(CASE WHEN status = 'reclaimed' THEN owner_net_amount ELSE reclaimed_amount END), 0) AS reclaimed_income,
-			COALESCE(SUM(CASE WHEN status = 'forfeited' THEN owner_net_amount ELSE 0 END), 0) AS forfeited_income`)
+	query, err := incomeFacts(platformdb.DB, input.StartTimestamp, input.EndTimestamp)
+	if err != nil {
+		return nil, err
+	}
+	query = query.Select("owner_user_id, " + incomeSums)
 	if normalizedSearch != "" {
 		ownerUserIDs, err := ownerUserIDsByExternalID(normalizedSearch)
 		if err != nil {
@@ -48,15 +56,9 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 		}
 		query = query.Where("owner_user_id IN ?", ownerUserIDs)
 	}
-	if input.StartTimestamp > 0 {
-		query = query.Where("created_at >= ?", time.Unix(input.StartTimestamp, 0))
-	}
-	if input.EndTimestamp > 0 {
-		query = query.Where("created_at < ?", time.Unix(input.EndTimestamp+1, 0))
-	}
 
 	result := &AdminOwnerIncomeResult{Items: []AdminOwnerIncomeItem{}}
-	if err := query.Group("owner_user_id").Order("total_income DESC, owner_user_id ASC").Scan(&result.Items).Error; err != nil {
+	if err := query.Group("owner_user_id").Having("SUM(request_count) > 0").Order("total_income DESC, owner_user_id ASC").Scan(&result.Items).Error; err != nil {
 		return nil, err
 	}
 	ownerUserIDs := make([]int, 0, len(result.Items))
@@ -78,7 +80,7 @@ func ListAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeResult,
 		result.ForfeitedIncome += item.ForfeitedIncome
 	}
 	cacheAdminOwnerIncomeResult(cacheKey, result)
-	return populateAdminOwnerBalances(result)
+	return result, nil
 }
 
 func populateAdminOwnerBalances(result *AdminOwnerIncomeResult) (*AdminOwnerIncomeResult, error) {

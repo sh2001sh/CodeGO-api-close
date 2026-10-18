@@ -22,30 +22,6 @@ export interface UsageLogThroughputInput {
   useTimeSeconds: number
 }
 
-export interface StreamThroughputInput {
-  isStream: boolean
-  completionTokens: number
-  generationTimeMs?: number | null
-  timingVersion?: number | null
-}
-
-/** Output-token throughput, measured before billing and background work. */
-export function getStreamTokenThroughput(
-  input: StreamThroughputInput
-): number | null {
-  if (
-    !input.isStream ||
-    input.timingVersion !== 2 ||
-    !Number.isFinite(input.completionTokens) ||
-    input.completionTokens <= 0 ||
-    input.generationTimeMs == null ||
-    !Number.isFinite(input.generationTimeMs) ||
-    input.generationTimeMs <= 0
-  )
-    return null
-  return (input.completionTokens * 1000) / input.generationTimeMs
-}
-
 export interface FirstOutputTimingInput {
   frt?: number
   e2e_ttft_ms?: number
@@ -83,6 +59,8 @@ export function getFirstOutputTiming(input: FirstOutputTimingInput | null): {
 
 /**
  * Calculates effective output throughput over the complete request lifetime.
+ * Provider usage can include hidden reasoning and buffered output, so dividing
+ * it by the interval after the first visible output invents a generation rate.
  * The second-resolution use time keeps historical logs compatible.
  */
 export function getEffectiveTokenThroughput({

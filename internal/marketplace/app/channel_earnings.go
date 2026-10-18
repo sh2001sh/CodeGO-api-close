@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -25,19 +26,36 @@ func earningsByGroupIDs(ids []string) (map[string]ownerChannelEarnings, error) {
 }
 
 func earningsByGroupIDsInRange(ids []string, startTimestamp, endTimestamp int64) (map[string]ownerChannelEarnings, error) {
+	return loadChannelEarnings(0, ids, startTimestamp, endTimestamp)
+}
+
+func earningsByOwnerGroupIDs(ownerUserID int, ids []string) (map[string]ownerChannelEarnings, error) {
+	if ownerUserID <= 0 {
+		return nil, errors.New("用户未登录")
+	}
+	return loadChannelEarnings(ownerUserID, ids, 0, 0)
+}
+
+func loadChannelEarnings(ownerUserID int, ids []string, startTimestamp, endTimestamp int64) (map[string]ownerChannelEarnings, error) {
 	result := make(map[string]ownerChannelEarnings, len(ids))
 	if len(ids) == 0 {
 		return result, nil
 	}
 	cacheIDs := slices.Clone(ids)
 	slices.Sort(cacheIDs)
-	cacheKey := fmt.Sprintf("%p:%d:%d:%s", platformdb.DB, startTimestamp, endTimestamp, strings.Join(cacheIDs, ","))
-	if cached, ok := cachedChannelEarnings(cacheKey); ok {
-		return cached, nil
-	}
-	value, err, _ := channelEarningsLoads.Do(cacheKey, func() (any, error) {
+	cacheKey := fmt.Sprintf("%p:%d:%d:%d:%s", platformdb.DB, ownerUserID, startTimestamp, endTimestamp, strings.Join(cacheIDs, ","))
+	// Owner reads share only overlapping work. Settlements and reclaim updates
+	// must be visible on the next request, independently of the admin cache.
+	if ownerUserID == 0 {
 		if cached, ok := cachedChannelEarnings(cacheKey); ok {
 			return cached, nil
+		}
+	}
+	value, err, _ := channelEarningsLoads.Do(cacheKey, func() (any, error) {
+		if ownerUserID == 0 {
+			if cached, ok := cachedChannelEarnings(cacheKey); ok {
+				return cached, nil
+			}
 		}
 		loaded := make(map[string]ownerChannelEarnings, len(ids))
 		var rows []ownerChannelEarnings
@@ -50,6 +68,9 @@ func earningsByGroupIDsInRange(ids []string, startTimestamp, endTimestamp int64)
 			COALESCE(SUM(CASE WHEN status = 'reclaimed' THEN owner_net_amount ELSE reclaimed_amount END), 0) AS reclaimed_income,
 			COALESCE(SUM(CASE WHEN status = 'forfeited' THEN owner_net_amount ELSE 0 END), 0) AS forfeited_income`).
 			Where("group_id IN ?", ids)
+		if ownerUserID > 0 {
+			query = query.Where("owner_user_id = ?", ownerUserID)
+		}
 		if startTimestamp > 0 {
 			query = query.Where("created_at >= ?", time.Unix(startTimestamp, 0))
 		}
@@ -62,7 +83,9 @@ func earningsByGroupIDsInRange(ids []string, startTimestamp, endTimestamp int64)
 		for _, row := range rows {
 			loaded[row.GroupID] = row
 		}
-		cacheChannelEarnings(cacheKey, loaded)
+		if ownerUserID == 0 {
+			cacheChannelEarnings(cacheKey, loaded)
+		}
 		return loaded, nil
 	})
 	if err != nil {

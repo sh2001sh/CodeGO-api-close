@@ -156,6 +156,9 @@ func ListOwnerChannelsByIDs(ownerUserID int, ids []string) ([]ChannelView, error
 }
 
 func listOwnerChannelViews(ownerUserID int, ids []string) ([]ChannelView, error) {
+	if ownerUserID <= 0 {
+		return nil, errors.New("用户未登录")
+	}
 	var channels []marketplaceschema.Channel
 	query := platformdb.DB.Unscoped().Omit("base_url_ciphertext", "credential_ciphertext", "transport_capabilities", "gpt56_mapping_results").Where("owner_user_id = ?", ownerUserID)
 	if ids != nil {
@@ -168,7 +171,7 @@ func listOwnerChannelViews(ownerUserID int, ids []string) ([]ChannelView, error)
 	if err != nil {
 		return nil, err
 	}
-	earnings, err := earningsByGroupIDs(groupIDs(groups))
+	earnings, err := earningsByOwnerGroupIDs(ownerUserID, groupIDs(groups))
 	if err != nil {
 		return nil, err
 	}

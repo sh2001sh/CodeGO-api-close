@@ -71,14 +71,16 @@ func loadOwnerChannelIndex(db *gorm.DB, ownerUserID int) ([]OwnerChannelIndexIte
 	channels := marketplaceschema.Channel{}.TableName()
 	groups := marketplaceschema.Group{}.TableName()
 	settlements := marketplaceschema.Settlement{}.TableName()
+	// Aggregate each owned group through its compact covering index, including
+	// deleted inventory, rather than scanning all owner settlements before joining.
 	rows, err := db.Table(channels+" AS c").
 		Select(`c.id, COALESCE(c.submitted_source_label, ''), COALESCE(c.source_label_status, ''),
 			COALESCE(c.declared_models, ''), COALESCE(c.model_verification_results, ''), COALESCE(c.connectivity_test_status, ''),
 			COALESCE(g.custom_name, ''), COALESCE(g.description, ''), COALESCE(g.tags, ''), g.lifecycle_status, g.verification_status,
-			g.multiplier, c.deleted_at, COALESCE(earnings.total_income, 0) AS total_income`).
+			g.multiplier, c.deleted_at,
+			COALESCE((SELECT SUM(s.owner_net_amount) FROM `+settlements+` AS s
+				WHERE s.group_id = g.id AND s.owner_user_id = c.owner_user_id), 0) AS total_income`).
 		Joins("JOIN "+groups+" AS g ON g.channel_id = c.id AND g.owner_user_id = c.owner_user_id").
-		Joins("LEFT JOIN (SELECT group_id, SUM(owner_net_amount) AS total_income FROM "+settlements+
-			" WHERE owner_user_id = ? GROUP BY group_id) earnings ON earnings.group_id = g.id", ownerUserID).
 		Where("c.owner_user_id = ?", ownerUserID).
 		Order("c.deleted_at asc, c.created_at desc, c.id asc").Rows()
 	if err != nil {

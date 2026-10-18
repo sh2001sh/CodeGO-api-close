@@ -140,7 +140,8 @@ func TestMarketplaceUpstreamBlocksUnsafeTargetsBeforeDial(t *testing.T) {
 	)
 	defer client.CloseIdleConnections()
 	for _, address := range []string{
-		"http://8.8.8.8", "https://user:password@8.8.8.8", "https://8.8.8.8:22", "https://8.8.8.8:80",
+		"http://8.8.8.8", "https://user:password@8.8.8.8", "https://8.8.8.8:0", "https://8.8.8.8:65536",
+		"https://127.0.0.1:8080", "https://10.0.0.1:65535",
 		"https://127.0.0.1", "https://10.0.0.1", "https://172.16.1.2", "https://192.168.1.2", "https://100.64.0.1",
 		"https://169.254.169.254", "https://0.0.0.0", "https://192.0.2.1", "https://198.18.0.1", "https://224.0.0.1",
 		"https://[::1]", "https://[::]", "https://[fc00::1]", "https://[fe80::1]", "https://[ff02::1]",
@@ -261,8 +262,8 @@ func TestMarketplaceUpstreamNeverReturnsUntrustedBodyInErrors(t *testing.T) {
 	require.NotContains(t, err.Error(), "CANARY")
 }
 
-func TestMarketplaceUpstreamDialsPublicIPv6And8443Literally(t *testing.T) {
-	for _, address := range []string{"8.8.8.8:8443", "[2001:4860:4860::8888]:443"} {
+func TestMarketplaceUpstreamDialsPublicCustomPortsLiterally(t *testing.T) {
+	for _, address := range []string{"8.8.8.8:8443", "178.83.203.233:8080", "8.8.8.8:65535", "[2001:4860:4860::8888]:8080"} {
 		dials := 0
 		client := platformhttpx.NewMarketplaceHTTPClient(
 			func(context.Context, string) ([]net.IPAddr, error) {

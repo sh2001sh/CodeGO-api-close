@@ -15,11 +15,17 @@ func TestValidateMarketplaceURLRejectsPrivateDestinations(t *testing.T) {
 		"https://10.0.0.1",
 		"https://169.254.169.254/latest/meta-data",
 		"https://[::1]",
+		"https://127.0.0.1:8080",
+		"https://10.0.0.1:65535",
 	} {
 		t.Run(target, func(t *testing.T) {
 			require.Error(t, ValidateMarketplaceURL(target))
 		})
 	}
+}
+
+func TestValidateMarketplaceURLAllowsPublicCustomPort(t *testing.T) {
+	require.NoError(t, ValidateMarketplaceURL("https://178.83.203.233:8080/v1"))
 }
 
 func TestValidateMultiplierAllowsPositiveValuesWithinTechnicalLimit(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -57,8 +58,11 @@ func ValidateMarketplaceURLFormat(parsed *url.URL) error {
 	if parsed == nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Opaque != "" || parsed.Fragment != "" {
 		return errors.New("Base URL 必须是有效的 HTTPS 地址")
 	}
-	if parsed.Port() != "" && parsed.Port() != "443" && parsed.Port() != "8443" {
-		return errors.New("Base URL 仅允许 443 或 8443 端口")
+	if port := parsed.Port(); port != "" {
+		number, err := strconv.Atoi(port)
+		if err != nil || number < 1 || number > 65535 {
+			return errors.New("Base URL 端口必须在 1 到 65535 之间")
+		}
 	}
 	return nil
 }
@@ -84,7 +88,11 @@ func NewMarketplaceHTTPClient(
 	}
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)
-		if err != nil || (port != "443" && port != "8443") {
+		if err != nil {
+			return nil, ErrMarketplaceUpstreamAddress
+		}
+		portNumber, err := strconv.Atoi(port)
+		if err != nil || portNumber < 1 || portNumber > 65535 {
 			return nil, ErrMarketplaceUpstreamAddress
 		}
 		var addresses []net.IPAddr

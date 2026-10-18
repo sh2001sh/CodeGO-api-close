@@ -5774,6 +5774,7 @@
     "Current payment password": "Текущий платежный пароль",
     "Used quota": "Использованная квота",
     "GPT plan quota": "Квота плана GPT",
+    "Permanent plan quota": "Квота бессрочного тарифа",
     "Ultra": "Ультра",
     "Usage based": "На основе использования",
     "All {{count}} groups": "Все группы {{count}}",

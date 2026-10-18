@@ -6018,6 +6018,7 @@
     "按余额倍率扣费，可用于官方分组和获准的第三方渠道": "Charged at the balance multiplier for official groups and approved third-party channels",
     "余额 {{wallet}} · 套餐 {{subscription}}": "Balance {{wallet}} · Plan {{subscription}}",
     "GPT plan quota": "GPT plan quota",
+    "Permanent plan quota": "Permanent plan quota",
     "处理中": "Processing",
     "Refund unused quota": "Refund unused quota",
     "Official GPT quota": "Official GPT quota",

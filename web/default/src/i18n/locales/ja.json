@@ -5774,6 +5774,7 @@
     "Current payment password": "現在の支払いパスワード",
     "Used quota": "使用済みクォータ",
     "GPT plan quota": "GPT プラン クォータ",
+    "Permanent plan quota": "無期限プランのクォータ",
     "Ultra": "ウルトラ",
     "Usage based": "使用量ベース",
     "All {{count}} groups": "すべての {{count}} グループ",

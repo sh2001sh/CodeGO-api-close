@@ -1,15 +1,35 @@
-import { CreditCard, Layers3, WalletCards } from 'lucide-react'
+import {
+  CircleHelp,
+  CreditCard,
+  Layers3,
+  Package,
+  WalletCards,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { LogOtherData } from '../types'
 
-type BillingQuotaCategory = 'universal' | 'gpt' | 'subscription'
+type BillingQuotaCategory =
+  | 'universal'
+  | 'gpt'
+  | 'subscription'
+  | 'credit_pack'
+  | 'unknown'
 
 function resolveBillingQuotaCategory(
   other: LogOtherData | null | undefined
 ): BillingQuotaCategory | null {
   if (!other) return null
-  if (other.billing_quota_category) return other.billing_quota_category
+  // Audit metadata is persisted JSON: runtime values can outlive this UI's types.
+  switch (other.billing_quota_category) {
+    case 'universal':
+    case 'gpt':
+    case 'subscription':
+    case 'credit_pack':
+      return other.billing_quota_category
+    default:
+      if (other.billing_quota_category) return 'unknown'
+  }
 
   switch (other.billing_source) {
     case 'claude_wallet':
@@ -17,6 +37,8 @@ function resolveBillingQuotaCategory(
     case 'wallet':
       return 'gpt'
     case 'subscription':
+      if (other.subscription_billing_version === 'credit_pack')
+        return 'credit_pack'
       return 'subscription'
     default:
       return null
@@ -48,6 +70,16 @@ export function BillingQuotaSourceBadge(props: {
       label: t('GPT plan quota'),
       icon: Layers3,
       className: 'border-success/30 bg-success/10 text-success',
+    },
+    credit_pack: {
+      label: t('Permanent plan quota'),
+      icon: Package,
+      className: 'border-success/30 bg-success/10 text-success',
+    },
+    unknown: {
+      label: t('Unknown'),
+      icon: CircleHelp,
+      className: 'border-border bg-muted text-muted-foreground',
     },
   }[category]
   const Icon = config.icon

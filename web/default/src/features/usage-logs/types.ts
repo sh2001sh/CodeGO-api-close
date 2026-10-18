@@ -223,8 +223,9 @@ export interface LogOtherData {
   is_system_prompt_overwritten?: boolean
   po?: string[]
   billing_source?: string
-  billing_quota_category?: 'universal' | 'gpt' | 'subscription'
+  billing_quota_category?: 'universal' | 'gpt' | 'subscription' | 'credit_pack'
   billing_quota_label?: string
+  subscription_billing_version?: string
   marketplace_group_id?: string
   marketplace_group_display_name?: string
   marketplace_channel_id?: string

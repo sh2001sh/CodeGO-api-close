@@ -5774,6 +5774,7 @@
     "Current payment password": "Mot de passe de paiement actuel",
     "Used quota": "Quota utilisé",
     "GPT plan quota": "Quota du plan GPT",
+    "Permanent plan quota": "Quota du forfait permanent",
     "Ultra": "Ultra",
     "Usage based": "Basé sur l'utilisation",
     "All {{count}} groups": "Tous les {{count}} groupes",

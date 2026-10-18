@@ -306,9 +306,9 @@ type Settlement struct {
 
 func (Settlement) TableName() string { return tableName("settlements") }
 
-// IncomeReclaim records a reclaim task and its committed progress. PostgreSQL
-// commits all settlement changes and per-owner totals atomically; legacy stores
-// may have committed batches that a resumed worker must preserve.
+// IncomeReclaim records committed recovery progress. Direct tasks commit native
+// wallet transfers and owner totals first, then materialize history using the
+// persisted per-owner remainder. Legacy tasks retain their atomic audit flow.
 type IncomeReclaim struct {
 	ID           string    `gorm:"primaryKey;size:64"`
 	Fingerprint  string    `gorm:"size:64;not null"`

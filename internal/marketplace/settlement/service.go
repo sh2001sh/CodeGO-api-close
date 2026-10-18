@@ -78,6 +78,8 @@ type ReleaseFilter struct {
 	Limit          int
 	MaxAmount      int64 // Exact amount to reclaim; 0 means all matching released earnings.
 	OperationID    string
+	Direct         bool          `json:",omitempty"`
+	AuditRemaining map[int]int64 `json:",omitempty"`
 }
 
 type ReleaseResult struct {
@@ -100,11 +102,12 @@ type reclaimBatchOwnerAmount struct {
 }
 
 var (
-	releaseHook       ReleaseHook
-	reclaimHook       ReclaimHook
-	forfeitHook       ForfeitHook
-	workerOnce        sync.Once
-	reclaimWorkerOnce sync.Once
+	releaseHook         ReleaseHook
+	reclaimHook         ReclaimHook
+	reclaimBalancesHook func(*gorm.DB, []int) (map[int]int64, error)
+	forfeitHook         ForfeitHook
+	workerOnce          sync.Once
+	reclaimWorkerOnce   sync.Once
 )
 
 const (
@@ -118,6 +121,9 @@ const (
 
 func RegisterReleaseHook(hook ReleaseHook) { releaseHook = hook }
 func RegisterReclaimHook(hook ReclaimHook) { reclaimHook = hook }
+func RegisterReclaimBalancesHook(hook func(*gorm.DB, []int) (map[int]int64, error)) {
+	reclaimBalancesHook = hook
+}
 func RegisterForfeitHook(hook ForfeitHook) { forfeitHook = hook }
 
 func Record(params RecordParams) error {
@@ -405,6 +411,7 @@ func CreateIncomeReclaimTask(filter ReleaseFilter) (marketplaceschema.IncomeRecl
 	filter.OwnerUserIDs = slices.Compact(filter.OwnerUserIDs)
 	filter.OperationID = ""
 	filter.Limit = 0
+	filter.AuditRemaining = nil
 	payload, err := json.Marshal(filter)
 	if err != nil {
 		return marketplaceschema.IncomeReclaim{}, err
@@ -413,7 +420,18 @@ func CreateIncomeReclaimTask(filter ReleaseFilter) (marketplaceschema.IncomeRecl
 		ID: operationID, Fingerprint: fmt.Sprintf("%x", sha256.Sum256(payload)),
 		Filter: string(payload), Status: reclaimTaskPending,
 	}
+	if filter.Direct {
+		operation.Status = reclaimTaskDebitPending
+	}
 	err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
+		if filter.Direct {
+			if len(filter.OwnerUserIDs) == 0 || filter.OwnerUserIDs[0] <= 0 || reclaimBalancesHook == nil {
+				return errors.New("直扣需要明确的渠道主及原生钱包余额读取")
+			}
+			if err := lockReclaimOwnersTx(tx, filter.OwnerUserIDs); err != nil {
+				return err
+			}
+		}
 		inserted := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&operation)
 		if inserted.Error != nil {
 			return inserted.Error
@@ -427,14 +445,26 @@ func CreateIncomeReclaimTask(filter ReleaseFilter) (marketplaceschema.IncomeRecl
 				return errors.New("回收操作标识已用于其他筛选条件或金额")
 			}
 			if existing.Status == reclaimTaskFailed {
-				if err := tx.Model(&existing).Updates(map[string]any{"status": reclaimTaskPending, "error_message": ""}).Error; err != nil {
+				if filter.Direct {
+					if err := checkOutstandingDirectReclaimsTx(tx, operationID, filter.OwnerUserIDs); err != nil {
+						return err
+					}
+				}
+				nextStatus := reclaimTaskPending
+				if filter.Direct {
+					nextStatus = reclaimTaskDebitPending
+				}
+				if err := tx.Model(&existing).Updates(map[string]any{"status": nextStatus, "error_message": ""}).Error; err != nil {
 					return err
 				}
-				existing.Status = reclaimTaskPending
+				existing.Status = nextStatus
 				existing.ErrorMessage = ""
 			}
 			operation = existing
 			return nil
+		}
+		if filter.Direct {
+			return checkOutstandingDirectReclaimsTx(tx, operationID, filter.OwnerUserIDs)
 		}
 		return nil
 	})

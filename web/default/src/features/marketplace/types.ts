@@ -318,6 +318,8 @@ export interface AdminOwnerIncomeReleaseItem {
 }
 
 export interface AdminOwnerIncomeReleaseResult {
+  direct?: boolean
+  audit_pending?: boolean
   operation_id: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   reclaimed_count: number

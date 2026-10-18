@@ -13,6 +13,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strings"
 )
 
@@ -293,6 +294,28 @@ func ReclaimMarketplaceOwnerEarningsTx(tx *gorm.DB, ownerUserID, adminUserID int
 		return err
 	}
 	return CreditMarketplaceOwnerEarningsTx(tx, adminUserID, amount, operationID+":credit", "marketplace_owner_reclaim")
+}
+
+// LockMarketplaceReclaimBalancesTx reads native spendable balances. Reservations,
+// including administrative income freezes, are never spendable for this action.
+func LockMarketplaceReclaimBalancesTx(tx *gorm.DB, ownerIDs []int) (map[int]int64, error) {
+	balances := make(map[int]int64, len(ownerIDs))
+	for _, owner := range ownerIDs {
+		legacy, err := getUserClaudeWalletQuotaTx(tx, owner)
+		if err != nil {
+			return nil, err
+		}
+		account, err := ensureMirroredUserAccountTx(tx, owner, billingAccountTypeClaudeWallet, legacy)
+		if err != nil {
+			return nil, err
+		}
+		var balance billingschema.BillingBalanceSnapshot
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&balance, "account_id = ?", account.AccountID).Error; err != nil {
+			return nil, err
+		}
+		balances[owner] = balance.AvailableBalance
+	}
+	return balances, nil
 }
 
 // ForfeitMarketplacePendingEarningsTx removes frozen funds from the pending

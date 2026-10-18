@@ -539,6 +539,7 @@ export function useAdminOwnerIncomeReclaim(operationId?: string) {
     enabled: Boolean(operationId),
     refetchInterval: (query) =>
       !query.state.data ||
+      query.state.data.audit_pending ||
       query.state.data.status === 'pending' ||
       query.state.data.status === 'running'
         ? 2_000

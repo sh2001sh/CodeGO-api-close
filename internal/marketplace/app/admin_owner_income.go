@@ -138,6 +138,7 @@ func ReleaseAdminOwnerIncome(input AdminOwnerIncomeQuery) (*AdminOwnerIncomeRele
 		EndTimestamp: input.EndTimestamp,
 		MaxAmount:    input.MaxAmount,
 		OperationID:  input.OperationID,
+		Direct:       true,
 	})
 	if err != nil {
 		return nil, err
@@ -161,6 +162,13 @@ func adminOwnerIncomeReclaimResult(task marketplaceschema.IncomeReclaim) (*Admin
 	if err := json.Unmarshal([]byte(task.Filter), &filter); err != nil {
 		return nil, fmt.Errorf("decode income reclaim task filter: %w", err)
 	}
+	status := task.Status
+	if status == "debit_pending" {
+		status = "pending"
+	}
+	if status == "charged" {
+		status = "completed"
+	}
 	amounts := map[int]int64{}
 	if task.OwnerAmounts != "" {
 		if err := json.Unmarshal([]byte(task.OwnerAmounts), &amounts); err != nil {
@@ -181,7 +189,8 @@ func adminOwnerIncomeReclaimResult(task marketplaceschema.IncomeReclaim) (*Admin
 	}
 	slices.SortFunc(items, func(a, b AdminOwnerIncomeReleaseItem) int { return a.OwnerUserID - b.OwnerUserID })
 	return &AdminOwnerIncomeReleaseResult{
-		OperationID: task.ID, Status: task.Status, ReclaimedCount: task.Count,
+		OperationID: task.ID, Status: status, ReclaimedCount: task.Count,
+		Direct: filter.Direct, AuditPending: task.Status == "charged",
 		ReclaimedAmount: task.Amount, TargetAmount: filter.MaxAmount, Items: items,
 		BatchNumber: task.BatchNumber, ErrorMessage: task.ErrorMessage,
 		CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,

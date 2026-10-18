@@ -181,6 +181,8 @@ type AdminOwnerIncomeQuery struct {
 }
 
 type AdminOwnerIncomeReleaseResult struct {
+	Direct          bool                          `json:"direct"`
+	AuditPending    bool                          `json:"audit_pending"`
 	OperationID     string                        `json:"operation_id"`
 	Status          string                        `json:"status"`
 	ReclaimedCount  int                           `json:"reclaimed_count"`

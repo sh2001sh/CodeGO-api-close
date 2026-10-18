@@ -53,12 +53,27 @@ export function AdminOwnerIncomePanel(props: {
   const isFiltering =
     query.isFetching || ownerSearch !== props.ownerSearch.trim()
   const reclaim = useAdminOwnerIncomeRelease()
-  const progress = useAdminOwnerIncomeReclaim(operationId)
+  const progress = useAdminOwnerIncomeReclaim(
+    operationId ??
+      (lastResult?.audit_pending ? lastResult.operation_id : undefined)
+  )
   const isReclaiming = reclaim.isPending || Boolean(operationId)
 
   useEffect(() => {
     const result = progress.data
-    if (!operationId || !result) return
+    if (!result) return
+    if (!operationId) {
+      if (
+        lastResult?.audit_pending &&
+        result.operation_id === lastResult.operation_id &&
+        !result.audit_pending
+      ) {
+        void queryClient.invalidateQueries({
+          queryKey: ['marketplace-owner-income'],
+        })
+      }
+      return
+    }
     if (result.status === 'failed') {
       toast.error(result.error_message || t('额度回收失败'))
       setOperationId(undefined)
@@ -71,16 +86,26 @@ export function AdminOwnerIncomePanel(props: {
     setSelectedOwners([])
     setAmount('')
     toast.success(
-      t('实际回收 {{count}} 条收益，共 {{amount}}', {
-        count: result.reclaimed_count,
-        amount: formatQuota(result.reclaimed_amount),
-      })
+      t(
+        result.direct
+          ? '{{count}} 位渠道主，共回收 {{amount}}'
+          : '实际回收 {{count}} 条收益，共 {{amount}}',
+        {
+          count: result.direct ? result.items.length : result.reclaimed_count,
+          amount: formatQuota(result.reclaimed_amount),
+        }
+      )
     )
     void queryClient.invalidateQueries({
       queryKey: ['marketplace-owner-income'],
     })
     void queryClient.invalidateQueries({ queryKey: ['marketplace-channels'] })
-  }, [operationId, progress.data, queryClient, t])
+  }, [operationId, progress.data, queryClient, t, lastResult])
+  const latestResult =
+    progress.data?.operation_id === lastResult?.operation_id &&
+    progress.data?.status === 'completed'
+      ? progress.data
+      : lastResult
   const available = selectedOwners.reduce(
     (sum, owner) => sum + owner.reclaimable_quota,
     0
@@ -194,8 +219,8 @@ export function AdminOwnerIncomePanel(props: {
   }
 
   const exportResult = () => {
-    if (!lastResult?.items.length) return
-    const rows = lastResult.items.map((item) => [
+    if (!latestResult?.items.length) return
+    const rows = latestResult.items.map((item) => [
       item.owner_external_id || String(item.owner_user_id),
       String(quotaUnitsToDollars(item.amount)),
     ])
@@ -254,6 +279,9 @@ export function AdminOwnerIncomePanel(props: {
                 amount: formatQuota(available),
               })}
             </p>
+            <p className='text-muted-foreground mt-1 text-sm'>
+              {t('按渠道主 ID 顺序直扣，单人不超过当前可回收额度。')}
+            </p>
           </div>
           <label className='space-y-1.5'>
             <span className='text-sm font-medium'>{t('本次回收总额')}</span>
@@ -291,22 +319,27 @@ export function AdminOwnerIncomePanel(props: {
         </p>
       )}
 
-      {lastResult && (
+      {latestResult && (
         <section className='border-border overflow-hidden rounded-md border'>
           <div className='bg-muted/15 border-border flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between'>
             <div>
               <h3 className='font-semibold'>{t('最近一次回收结果')}</h3>
               <p className='text-muted-foreground text-sm'>
                 {t('{{count}} 位渠道主，共回收 {{amount}}', {
-                  count: lastResult.items.length,
-                  amount: formatQuota(lastResult.reclaimed_amount),
+                  count: latestResult.items.length,
+                  amount: formatQuota(latestResult.reclaimed_amount),
                 })}
               </p>
+              {latestResult.audit_pending && (
+                <p role='status' className='text-muted-foreground text-sm'>
+                  {t('扣款已完成，历史收益明细正在补齐，请勿重复回收。')}
+                </p>
+              )}
             </div>
             <Button
               variant='outline'
               onClick={exportResult}
-              disabled={lastResult.items.length === 0}
+              disabled={latestResult.items.length === 0}
             >
               <Download />
               {t('导出 CSV')}
@@ -325,7 +358,7 @@ export function AdminOwnerIncomePanel(props: {
                 </tr>
               </thead>
               <tbody className='divide-border divide-y'>
-                {lastResult.items.map((item) => (
+                {latestResult.items.map((item) => (
                   <tr key={item.owner_user_id}>
                     <td className='px-4 py-3 font-mono font-medium'>
                       {item.owner_external_id || item.owner_user_id}

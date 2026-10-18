@@ -253,18 +253,24 @@ func TestIncomeReclaimResultListsAmountByExternalOwnerID(t *testing.T) {
 		RequestID: "export-detail", GroupID: "g", OwnerUserID: 42, OwnerNetAmount: 95, Status: "released",
 	}).Error)
 	marketplacesettlement.RegisterReclaimHook(func(_ *gorm.DB, _, _ int, _ int64, _ string) error { return nil })
-	t.Cleanup(func() { marketplacesettlement.RegisterReclaimHook(nil) })
+	marketplacesettlement.RegisterReclaimBalancesHook(func(_ *gorm.DB, _ []int) (map[int]int64, error) { return map[int]int64{42: 95}, nil })
+	t.Cleanup(func() {
+		marketplacesettlement.RegisterReclaimHook(nil)
+		marketplacesettlement.RegisterReclaimBalancesHook(nil)
+	})
 
 	result, err := ReleaseAdminOwnerIncome(AdminOwnerIncomeQuery{
 		OwnerUserIDs: []int{42}, MaxAmount: 40, OperationID: "export-detail",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "pending", result.Status)
-	_, err = marketplacesettlement.ProcessIncomeReclaimTask(result.OperationID)
+	_, err = marketplacesettlement.ProcessDirectIncomeReclaimTask(result.OperationID)
 	require.NoError(t, err)
 	result, err = GetAdminOwnerIncomeReclaim(result.OperationID)
 	require.NoError(t, err)
 	require.EqualValues(t, 40, result.ReclaimedAmount)
+	require.Equal(t, "completed", result.Status)
+	require.True(t, result.AuditPending)
 	require.Equal(t, []AdminOwnerIncomeReleaseItem{{
 		OwnerUserID: 42, OwnerExternalID: "ABC123", Amount: 40,
 	}}, result.Items)

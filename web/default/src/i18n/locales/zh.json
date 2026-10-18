@@ -10404,5 +10404,8 @@
   },
   "Unable to load collective plans.": "无法加载集享计划。",
   "Unable to load participation records.": "无法加载参与记录。",
-  "No collective plans match your selection.": "暂无符合筛选条件的集享计划。"
+  "No collective plans match your selection.": "暂无符合筛选条件的集享计划。",
+  "已冻结": "已冻结",
+  "冻结状态加载失败，请刷新重试。": "冻结状态加载失败，请刷新重试。",
+  "该金额已从钱包可用余额中冻结，等待人工结算，不受下方统计范围影响。": "该金额已从钱包可用余额中冻结，等待人工结算，不受下方统计范围影响。"
 }

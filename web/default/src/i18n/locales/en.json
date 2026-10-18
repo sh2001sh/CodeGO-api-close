@@ -10404,5 +10404,8 @@
   },
   "Unable to load collective plans.": "Unable to load collective plans.",
   "Unable to load participation records.": "Unable to load participation records.",
-  "No collective plans match your selection.": "No collective plans match your selection."
+  "No collective plans match your selection.": "No collective plans match your selection.",
+  "已冻结": "Frozen",
+  "冻结状态加载失败，请刷新重试。": "Unable to load freeze status. Refresh to retry.",
+  "该金额已从钱包可用余额中冻结，等待人工结算，不受下方统计范围影响。": "This amount is held from your available wallet balance pending manual settlement, regardless of the filters below."
 }

@@ -41,6 +41,14 @@ interface ApiResponse<T = unknown> {
   data?: T
 }
 
+export async function getMyMarketplaceIncomeFreeze(signal?: AbortSignal) {
+  const response = await api.get<ApiResponse<{ frozen_amount: number }>>(
+    '/api/marketplace/channels/mine/income-freeze',
+    { signal }
+  )
+  return requireData(response.data)
+}
+
 export async function createMarketplaceBargainRequest(input: {
   groupId: string
   proposedMultiplier: number

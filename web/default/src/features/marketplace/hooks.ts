@@ -29,6 +29,7 @@ import {
   getMyMarketplaceChannelIndex,
   getMyMarketplaceChannelPage,
   getMyMarketplaceUsageLogs,
+  getMyMarketplaceIncomeFreeze,
   getTokenOptions,
   pauseMarketplaceVerification,
   queueMarketplaceConnectivityTest,
@@ -370,6 +371,17 @@ export function useMarketplaceChannelUserBlocks(
     enabled: enabled && Boolean(channelId),
     staleTime: 15_000,
     refetchOnWindowFocus: false,
+  })
+}
+
+export function useMyMarketplaceIncomeFreeze() {
+  const userId = useAuthStore((state) => state.auth.user?.id ?? 0)
+  return useQuery({
+    queryKey: ['marketplace-income-freeze', userId],
+    queryFn: ({ signal }) => getMyMarketplaceIncomeFreeze(signal),
+    enabled: Boolean(userId),
+    staleTime: 0,
+    refetchInterval: 30_000,
   })
 }
 

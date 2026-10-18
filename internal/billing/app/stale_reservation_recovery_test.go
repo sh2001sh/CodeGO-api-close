@@ -34,6 +34,19 @@ func TestRecoverStaleRelayReservationsReleasesRequestWithoutUsage(t *testing.T) 
 	require.Equal(t, 1_000, user.ClaudeQuota)
 }
 
+func TestAdministrativeWalletFreezeSurvivesStaleRecovery(t *testing.T) {
+	db := setupStaleRecoveryTestDB(t)
+	now := time.Now().UTC()
+	account := seedStaleRecoveryReservation(t, db, 5099, "admin-hold", 300, now.Add(-72*time.Hour))
+	require.NoError(t, db.Model(&billingschema.BillingReservation{}).
+		Where("account_id = ?", account.AccountID).
+		Updates(map[string]interface{}{"request_id": "", "workflow_id": "marketplace_owner_income_freeze", "expires_at": nil, "created_at": now.Add(-72 * time.Hour)}).Error)
+	result, err := RecoverStaleRelayReservations(context.Background(), now.Add(30*24*time.Hour), 10)
+	require.NoError(t, err)
+	require.Zero(t, result.Requests)
+	assertRecoveredBalance(t, db, account.AccountID, 700, 300, 0)
+}
+
 func TestRecoverStaleRelayReservationsSettlesFromUsageLog(t *testing.T) {
 	db := setupStaleRecoveryTestDB(t)
 	now := time.Now().UTC()

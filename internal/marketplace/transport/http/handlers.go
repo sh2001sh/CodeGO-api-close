@@ -20,6 +20,12 @@ import (
 	"math"
 )
 
+func GetMyIncomeFreeze(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	result, err := marketplaceapp.GetOwnerIncomeFreeze(c.GetInt("id"))
+	respond(c, result, err)
+}
+
 func ListGroups(c *gin.Context) {
 	query := marketplaceapp.GroupQuery{
 		ShopID: queryInt(c, "shop_id", 0), Tag: c.Query("tag"),

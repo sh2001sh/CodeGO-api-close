@@ -47,6 +47,7 @@ func TestMarketplaceRoutesRequireAuthentication(t *testing.T) {
 		"/api/marketplace/channels/mine?view=index",
 		"/api/marketplace/channels/mine?ids=some-channel",
 		"/api/marketplace/channels/mine/logs",
+		"/api/marketplace/channels/mine/income-freeze",
 		"/api/marketplace/channels/mine/logs/export",
 		"/api/marketplace/security-audit/events/export",
 		"/api/marketplace/admin/channels",

@@ -49,6 +49,7 @@ func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
 		marketplaceRoute.POST("/channels", middleware.CriticalRateLimit(), CreateChannel)
 		marketplaceRoute.POST("/channels/fetch-models", middleware.CriticalRateLimit(), FetchModels)
 		marketplaceRoute.GET("/channels/mine", ListMyChannels)
+		marketplaceRoute.GET("/channels/mine/income-freeze", GetMyIncomeFreeze)
 		marketplaceRoute.GET("/channels/mine/logs", ListMyUsageLogs)
 		marketplaceRoute.GET("/channels/mine/logs/export", middleware.DownloadRateLimit(), ExportMyUsageLogs)
 		marketplaceRoute.GET("/channels/mine/observability", ListMyObservability)

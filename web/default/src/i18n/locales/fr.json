@@ -10404,5 +10404,8 @@
   },
   "Unable to load collective plans.": "Unable to load collective plans.",
   "Unable to load participation records.": "Unable to load participation records.",
-  "No collective plans match your selection.": "No collective plans match your selection."
+  "No collective plans match your selection.": "No collective plans match your selection.",
+  "已冻结": "Gelé",
+  "冻结状态加载失败，请刷新重试。": "Impossible de charger le statut du gel. Actualisez pour réessayer.",
+  "该金额已从钱包可用余额中冻结，等待人工结算，不受下方统计范围影响。": "Ce montant est gelé sur le solde disponible du portefeuille en attente de règlement manuel, indépendamment des filtres ci-dessous."
 }

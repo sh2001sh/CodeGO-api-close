@@ -2,12 +2,16 @@ import { useMemo, useState } from 'react'
 import { getIntlLocale } from '@/i18n/format'
 import { RefreshCcw, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { formatQuotaWithCurrency } from '@/lib/currency'
 import dayjs from '@/lib/dayjs'
 import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { BoundedSelect } from '@/components/bounded-select'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
-import { useMyMarketplaceUsageLogs } from '../hooks'
+import {
+  useMyMarketplaceIncomeFreeze,
+  useMyMarketplaceUsageLogs,
+} from '../hooks'
 import type { OwnerChannelOption } from '../types'
 
 interface DateRange {
@@ -17,6 +21,7 @@ interface DateRange {
 
 export function OwnerIncomeOverview(props: { channels: OwnerChannelOption[] }) {
   const { t } = useTranslation()
+  const freeze = useMyMarketplaceIncomeFreeze()
   const [channelId, setChannelId] = useState('all')
   const channelOptions = useMemo(
     () => [
@@ -63,6 +68,36 @@ export function OwnerIncomeOverview(props: { channels: OwnerChannelOption[] }) {
 
   return (
     <div>
+      {freeze.isError && (
+        <div
+          role='alert'
+          className='text-destructive px-4 py-3 text-sm sm:px-5'
+        >
+          {t('冻结状态加载失败，请刷新重试。')}
+        </div>
+      )}
+      {!freeze.isError && (
+        <div
+          role='status'
+          className='border-border bg-muted/50 border-b px-4 py-3 text-sm sm:px-5'
+        >
+          <div className='font-medium'>
+            {t('已冻结')} ·{' '}
+            {freeze.isPending
+              ? t('加载中…')
+              : formatQuotaWithCurrency(freeze.data?.frozen_amount ?? 0, {
+                  digitsLarge: 6,
+                  digitsSmall: 6,
+                  abbreviate: false,
+                })}
+          </div>
+          <p className='text-muted-foreground mt-1 text-xs'>
+            {t(
+              '该金额已从钱包可用余额中冻结，等待人工结算，不受下方统计范围影响。'
+            )}
+          </p>
+        </div>
+      )}
       <div className='owner-income-filter'>
         <div className='min-w-0'>
           <div className='text-sm font-medium'>{t('收入统计范围')}</div>
@@ -96,8 +131,11 @@ export function OwnerIncomeOverview(props: { channels: OwnerChannelOption[] }) {
           <Button
             variant='outline'
             size='icon'
-            onClick={() => void query.refetch()}
-            disabled={query.isFetching}
+            onClick={() => {
+              void query.refetch()
+              void freeze.refetch()
+            }}
+            disabled={query.isFetching || freeze.isFetching}
             title={t('刷新收入')}
             aria-label={t('刷新收入')}
           >

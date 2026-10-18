@@ -7557,7 +7557,7 @@
     "{{count}} 个模型使用站点价格": "{{count}} model usage site price",
     "模型能力": "Model capabilities",
     "从上游同步，或补充需要发布的模型。": "Sync from upstream, or supplement models that need to be published.",
-    "编辑已有渠道时，API 地址留空会保留原地址；同步模型时仍需填写有效的 HTTPS 地址": "When editing an existing channel, leaving the API address blank will retain the original address; you still need to fill in a valid HTTPS address when synchronizing the model",
+    "编辑已有渠道时，API 地址留空会保留原地址；同步模型时仍需填写有效的 HTTP 或 HTTPS 地址": "When editing an existing channel, leave the API address blank to keep it unchanged. To sync models, enter a valid HTTP or HTTPS address.",
     "同步上游模型": "Synchronize upstream models",
     "输入模型名称，例如 gpt-4.1": "Enter a model name, for example gpt-4.1",
     "添加模型": "Add model",

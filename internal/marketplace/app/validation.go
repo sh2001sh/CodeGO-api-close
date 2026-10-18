@@ -98,11 +98,11 @@ func validateAutoProbe(enabled bool, intervalMinutes int, model string, models [
 	return nil
 }
 
-// ValidateMarketplaceURL rejects non-HTTPS and non-public destinations.
+// ValidateMarketplaceURL accepts HTTP(S) and rejects non-public destinations.
 func ValidateMarketplaceURL(raw string) error {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return errors.New("Base URL 必须是有效的 HTTPS 地址")
+		return errors.New("Base URL 必须是有效的 HTTP 或 HTTPS 地址")
 	}
 	if err := platformhttpx.ValidateMarketplaceURLFormat(parsed); err != nil {
 		return err

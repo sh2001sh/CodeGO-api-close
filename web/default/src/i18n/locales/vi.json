@@ -7557,7 +7557,7 @@
     "{{count}} 个模型使用站点价格": "Giá trang web sử dụng mô hình {{count}}",
     "模型能力": "Khả năng của mô hình",
     "从上游同步，或补充需要发布的模型。": "Đồng bộ hóa từ thượng nguồn hoặc bổ sung các mô hình cần xuất bản.",
-    "编辑已有渠道时，API 地址留空会保留原地址；同步模型时仍需填写有效的 HTTPS 地址": "Khi chỉnh sửa kênh hiện có, để trống địa chỉ API sẽ giữ lại địa chỉ ban đầu; bạn vẫn cần điền địa chỉ HTTPS hợp lệ khi đồng bộ hóa mô hình",
+    "编辑已有渠道时，API 地址留空会保留原地址；同步模型时仍需填写有效的 HTTP 或 HTTPS 地址": "Khi chỉnh sửa kênh, để trống địa chỉ API để giữ nguyên địa chỉ hiện tại. Để đồng bộ mô hình, hãy nhập địa chỉ HTTP hoặc HTTPS hợp lệ.",
     "同步上游模型": "Đồng bộ hóa các mô hình thượng nguồn",
     "输入模型名称，例如 gpt-4.1": "Nhập tên model, ví dụ gpt-4.1",
     "添加模型": "Thêm mô hình",

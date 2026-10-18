@@ -10,7 +10,7 @@ func TestValidateMarketplaceURLRejectsPrivateDestinations(t *testing.T) {
 	t.Parallel()
 
 	for _, target := range []string{
-		"http://api.example.com",
+		"ftp://8.8.8.8", "http://127.0.0.1:8080", "http://10.0.0.1:65535",
 		"https://127.0.0.1",
 		"https://10.0.0.1",
 		"https://169.254.169.254/latest/meta-data",
@@ -26,6 +26,7 @@ func TestValidateMarketplaceURLRejectsPrivateDestinations(t *testing.T) {
 
 func TestValidateMarketplaceURLAllowsPublicCustomPort(t *testing.T) {
 	require.NoError(t, ValidateMarketplaceURL("https://178.83.203.233:8080/v1"))
+	require.NoError(t, ValidateMarketplaceURL("http://178.83.203.233:8080/v1"))
 }
 
 func TestValidateMultiplierAllowsPositiveValuesWithinTechnicalLimit(t *testing.T) {

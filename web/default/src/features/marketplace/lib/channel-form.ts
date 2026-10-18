@@ -70,7 +70,7 @@ export const channelFormSchema = z.object({
     'gemini',
   ]),
   source_label: z.enum(MARKETPLACE_SOURCE_OPTIONS),
-  base_url: z.string().url().startsWith('https://'),
+  base_url: z.url({ protocol: /^https?$/ }),
   api_key: z.string().min(1),
   declared_models: z.array(z.string()).min(1),
   model_prices: z.record(z.string(), channelModelPriceSchema),
@@ -110,7 +110,7 @@ export const channelPresentationSchema = channelFormSchema.pick({
 export type ChannelPresentationInput = z.infer<typeof channelPresentationSchema>
 
 export const channelEditFormSchema = channelFormSchema.extend({
-  base_url: z.union([z.literal(''), z.string().url().startsWith('https://')]),
+  base_url: z.union([z.literal(''), channelFormSchema.shape.base_url]),
   api_key: z.string(),
 })
 

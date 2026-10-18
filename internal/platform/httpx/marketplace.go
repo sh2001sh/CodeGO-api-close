@@ -53,10 +53,10 @@ func (t *MarketplaceTransport) RoundTrip(req *http.Request) (*http.Response, err
 	return t.Transport.RoundTrip(req)
 }
 
-// ValidateMarketplaceURLFormat limits owner endpoints to credential-free HTTPS.
+// ValidateMarketplaceURLFormat limits owner endpoints to credential-free HTTP(S).
 func ValidateMarketplaceURLFormat(parsed *url.URL) error {
-	if parsed == nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Opaque != "" || parsed.Fragment != "" {
-		return errors.New("Base URL 必须是有效的 HTTPS 地址")
+	if parsed == nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || parsed.Opaque != "" || parsed.Fragment != "" {
+		return errors.New("Base URL 必须是有效的 HTTP 或 HTTPS 地址")
 	}
 	if port := parsed.Port(); port != "" {
 		number, err := strconv.Atoi(port)
@@ -133,14 +133,18 @@ func NewMarketplaceHTTPClient(
 	}
 }
 
-// DialWebSocket applies the same checked-IP dialer and TLS verification to wss.
+// DialWebSocket applies the checked-IP dialer to ws and TLS verification to wss.
 // Gorilla does not follow redirects; the caller must not retry a Location.
 func (t *MarketplaceTransport) DialWebSocket(ctx context.Context, endpoint string, headers http.Header) (*websocket.Conn, *http.Response, error) {
 	parsed, err := url.Parse(endpoint)
-	if err != nil || parsed.Scheme != "wss" {
+	if err != nil || (parsed.Scheme != "ws" && parsed.Scheme != "wss") {
 		return nil, nil, ErrMarketplaceUpstreamAddress
 	}
-	parsed.Scheme = "https"
+	if parsed.Scheme == "wss" {
+		parsed.Scheme = "https"
+	} else {
+		parsed.Scheme = "http"
+	}
 	if ValidateMarketplaceURLFormat(parsed) != nil || (headers.Get("Host") != "" && headers.Get("Host") != parsed.Host) {
 		return nil, nil, ErrMarketplaceUpstreamAddress
 	}

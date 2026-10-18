@@ -7557,7 +7557,7 @@
     "{{count}} 个模型使用站点价格": "Prix ​​du site d'utilisation du modèle {{count}}",
     "模型能力": "Capacités du modèle",
     "从上游同步，或补充需要发布的模型。": "Synchronisez depuis l'amont ou complétez les modèles qui doivent être publiés.",
-    "编辑已有渠道时，API 地址留空会保留原地址；同步模型时仍需填写有效的 HTTPS 地址": "Lors de la modification d'un canal existant, laisser l'adresse API vide conservera l'adresse d'origine ; vous devez toujours renseigner une adresse HTTPS valide lors de la synchronisation du modèle",
+    "编辑已有渠道时，API 地址留空会保留原地址；同步模型时仍需填写有效的 HTTP 或 HTTPS 地址": "Lors de la modification d’un canal, laissez l’adresse API vide pour conserver l’adresse actuelle. Pour synchroniser les modèles, saisissez une adresse HTTP ou HTTPS valide.",
     "同步上游模型": "Synchroniser les modèles en amont",
     "输入模型名称，例如 gpt-4.1": "Saisissez un nom de modèle, par exemple gpt-4.1",
     "添加模型": "Ajouter un modèle",

@@ -140,7 +140,9 @@ func TestMarketplaceUpstreamBlocksUnsafeTargetsBeforeDial(t *testing.T) {
 	)
 	defer client.CloseIdleConnections()
 	for _, address := range []string{
-		"http://8.8.8.8", "https://user:password@8.8.8.8", "https://8.8.8.8:0", "https://8.8.8.8:65536",
+		"ftp://8.8.8.8", "http://user:password@8.8.8.8", "http://8.8.8.8:0", "http://8.8.8.8:65536",
+		"http://127.0.0.1:8080", "http://10.0.0.1:65535", "http://private.example",
+		"https://user:password@8.8.8.8", "https://8.8.8.8:0", "https://8.8.8.8:65536",
 		"https://127.0.0.1:8080", "https://10.0.0.1:65535",
 		"https://127.0.0.1", "https://10.0.0.1", "https://172.16.1.2", "https://192.168.1.2", "https://100.64.0.1",
 		"https://169.254.169.254", "https://0.0.0.0", "https://192.0.2.1", "https://198.18.0.1", "https://224.0.0.1",
@@ -296,6 +298,44 @@ func TestMarketplaceUpstreamIgnoresProxyEnvironment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"isolated-model"}, models)
 	require.Zero(t, proxyCalls.Load())
+}
+
+func TestMarketplaceHTTPModelDiscoveryAndInference(t *testing.T) {
+	var served atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		served.Add(1)
+		require.Equal(t, "example.com:8080", r.Host)
+		require.Equal(t, "Bearer isolated-test-key", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/models":
+			require.Equal(t, http.MethodGet, r.Method)
+			_, _ = io.WriteString(w, `{"data":[{"id":"gpt-5"}]}`)
+		case "/v1/chat/completions":
+			require.Equal(t, http.MethodPost, r.Method)
+			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"OK"}}]}`)
+		default:
+			t.Errorf("unexpected upstream path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	client := platformhttpx.NewMarketplaceHTTPClient(func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}, func(ctx context.Context, network, address string) (net.Conn, error) {
+		require.Equal(t, "93.184.216.34:8080", address)
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	})
+	defer client.CloseIdleConnections()
+	previous := marketplaceUpstreamHTTPClient
+	marketplaceUpstreamHTTPClient = client
+	t.Cleanup(func() { marketplaceUpstreamHTTPClient = previous })
+	models, err := fetchUpstreamModelsContext(context.Background(), "openai_compatible", "http://example.com:8080/v1", "isolated-test-key")
+	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-5"}, models)
+	_, err = probeMarketplaceInferenceTimedContext(context.Background(), "openai_compatible", "http://example.com:8080/v1", "isolated-test-key", "gpt-5")
+	require.NoError(t, err)
+	require.EqualValues(t, 2, served.Load())
 }
 
 func TestMarketplaceUpstreamRequestErrorsDoNotExposeDNSOrURLSecrets(t *testing.T) {

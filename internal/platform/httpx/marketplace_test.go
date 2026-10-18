@@ -57,7 +57,8 @@ func TestMarketplaceWebSocketPinsDNSAndBlocksRebinding(t *testing.T) {
 
 func TestMarketplaceWebSocketRejectsUnsafeAddressesBeforeDial(t *testing.T) {
 	for _, target := range []string{
-		"ws://example.com/v1/realtime", "wss://user:pass@example.com/v1/realtime",
+		"ftp://example.com/v1/realtime", "ws://user:pass@example.com/v1/realtime", "ws://127.0.0.1:8080/v1/realtime",
+		"ws://[::1]/v1/realtime", "ws://example.com:0/v1/realtime", "ws://example.com:65536/v1/realtime", "wss://user:pass@example.com/v1/realtime",
 		"wss://example.com:0/v1/realtime", "wss://example.com:65536/v1/realtime", "wss://127.0.0.1:8080/v1/realtime",
 		"wss://[::1]/v1/realtime", "wss://example.com/v1/realtime#fragment",
 	} {
@@ -82,6 +83,7 @@ func TestMarketplaceURLAcceptsValidCustomPorts(t *testing.T) {
 		"https://178.83.203.233:8080/v1", "https://example.com:1/v1",
 		"https://example.com:80/v1", "https://example.com:3000/v1",
 		"https://example.com:65535/v1", "https://[2001:4860:4860::8888]:8080/v1",
+		"http://178.83.203.233:8080/v1", "http://example.com", "https://example.com",
 	} {
 		parsed, err := url.Parse(endpoint)
 		require.NoError(t, err)
@@ -131,6 +133,80 @@ func TestMarketplaceCustomPortHTTPSAndWebSocket(t *testing.T) {
 			require.NoError(t, err)
 			_ = conn.Close()
 			require.Equal(t, 2, dials)
+		})
+	}
+}
+
+func TestMarketplaceHTTPAndWebSocketPublicPorts(t *testing.T) {
+	for _, port := range []string{"80", "1", "8080", "65535"} {
+		t.Run(port, func(t *testing.T) {
+			upgrader := websocket.Upgrader{}
+			var served atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				served.Add(1)
+				require.Equal(t, "example.com:"+port, r.Host)
+				require.Equal(t, "Bearer isolated-test-key", r.Header.Get("Authorization"))
+				switch r.URL.Path {
+				case "/socket":
+					conn, err := upgrader.Upgrade(w, r, nil)
+					if err == nil {
+						_ = conn.WriteMessage(websocket.TextMessage, []byte("http-port-ok"))
+						_ = conn.Close()
+					}
+				case "/redirect":
+					w.Header().Set("Location", "http://127.0.0.1/private")
+					w.WriteHeader(http.StatusTemporaryRedirect)
+				default:
+					_, _ = io.WriteString(w, "http-port-ok")
+				}
+			}))
+			defer server.Close()
+			var mixed bool
+			var dials atomic.Int32
+			client := NewMarketplaceHTTPClient(func(context.Context, string) ([]net.IPAddr, error) {
+				addresses := []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}
+				if mixed {
+					addresses = append(addresses, net.IPAddr{IP: net.ParseIP("127.0.0.1")})
+				}
+				return addresses, nil
+			}, func(ctx context.Context, network, target string) (net.Conn, error) {
+				dials.Add(1)
+				require.Equal(t, "93.184.216.34:"+port, target)
+				return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+			})
+			defer client.CloseIdleConnections()
+			headers := http.Header{"Authorization": {"Bearer isolated-test-key"}}
+			for _, path := range []string{"/models", "/redirect"} {
+				req, err := http.NewRequest(http.MethodGet, "http://example.com:"+port+path, nil)
+				require.NoError(t, err)
+				req.Header = headers
+				response, err := client.Do(req)
+				require.NoError(t, err)
+				body, err := io.ReadAll(response.Body)
+				require.NoError(t, err)
+				_ = response.Body.Close()
+				if path == "/models" {
+					require.Equal(t, "http-port-ok", string(body))
+				} else {
+					require.Equal(t, http.StatusTemporaryRedirect, response.StatusCode)
+				}
+			}
+			transport := client.Transport.(*MarketplaceTransport)
+			conn, _, err := transport.DialWebSocket(context.Background(), "ws://example.com:"+port+"/socket", headers)
+			require.NoError(t, err)
+			_, payload, err := conn.ReadMessage()
+			require.NoError(t, err)
+			require.Equal(t, "http-port-ok", string(payload))
+			_ = conn.Close()
+			require.EqualValues(t, 3, served.Load())
+			client.CloseIdleConnections()
+			mixed = true
+			before := dials.Load()
+			_, err = client.Get("http://example.com:" + port)
+			require.ErrorIs(t, err, ErrMarketplaceUpstreamAddress)
+			_, _, err = transport.DialWebSocket(context.Background(), "ws://example.com:"+port+"/socket", headers)
+			require.ErrorIs(t, err, ErrMarketplaceUpstreamAddress)
+			require.Equal(t, before, dials.Load())
 		})
 	}
 }

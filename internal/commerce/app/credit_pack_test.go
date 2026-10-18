@@ -15,7 +15,6 @@ import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystore "github.com/sh2001sh/new-api/internal/gateway/store"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
-	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -393,9 +392,6 @@ func TestCreditPackBillingSelectsPackBeforeLegacyTenfoldExceedsKeyBalance(t *tes
 	db := setupRedemptionTestDB(t)
 	// The onefold pack takes priority over legacy subscription pricing, even
 	// when the API key cannot cover the legacy tenfold reservation.
-	wasSQLite := platformdb.UsingSQLite
-	platformdb.UsingSQLite = false
-	t.Cleanup(func() { platformdb.UsingSQLite = wasSQLite })
 	ensureSubscriptionPreConsumeRecordSchema(t)
 	require.NoError(t, db.AutoMigrate(&identityschema.Token{}))
 	insertSubscriptionResetAppTestUser(t, 72161, 0)

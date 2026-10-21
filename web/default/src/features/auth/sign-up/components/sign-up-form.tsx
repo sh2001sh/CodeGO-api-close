@@ -309,7 +309,12 @@ export function SignUpForm({
                 </label>
                 <Input
                   id='registration-verification-code'
+                  type='text'
+                  inputMode='text'
                   autoComplete='one-time-code'
+                  autoCapitalize='none'
+                  autoCorrect='off'
+                  spellCheck={false}
                   placeholder={t('Verification code')}
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value)}

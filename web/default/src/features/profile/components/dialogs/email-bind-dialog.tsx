@@ -160,6 +160,12 @@ export function EmailBindDialog({
             <div className='flex gap-2'>
               <Input
                 id='code'
+                type='text'
+                inputMode='text'
+                autoComplete='one-time-code'
+                autoCapitalize='none'
+                autoCorrect='off'
+                spellCheck={false}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder={t('Enter code')}

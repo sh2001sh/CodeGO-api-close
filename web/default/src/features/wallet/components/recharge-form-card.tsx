@@ -268,11 +268,7 @@ export function RechargeFormCard(props: RechargeFormCardProps) {
                       const button = (
                         <Button
                           key={method.type}
-                          variant={
-                            props.selectedPaymentMethod?.type === method.type
-                              ? 'default'
-                              : 'outline'
-                          }
+                          variant='outline'
                           onClick={() => props.onPaymentMethodSelect(method)}
                           disabled={disabled || !!props.paymentLoading}
                           className='commerce-payment-method'

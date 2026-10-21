@@ -167,6 +167,8 @@ func applyOptionValue(key string, value string) (err error) {
 		commercestore.StripeCNYUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "StripeHKDUnitPrice":
 		commercestore.StripeHKDUnitPrice, _ = strconv.ParseFloat(value, 64)
+	case "StripeUSDUnitPrice":
+		commercestore.StripeUSDUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "StripeUnitPrice":
 		commercestore.StripeUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "StripeMinTopUp":

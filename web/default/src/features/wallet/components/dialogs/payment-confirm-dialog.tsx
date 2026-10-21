@@ -24,7 +24,6 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -32,13 +31,19 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { DEFAULT_DISCOUNT_RATE } from '../../constants'
 import { formatPaymentAmount, getPaymentIcon } from '../../lib'
+import { isStripePayment } from '../../lib/payment'
+import type { StripeCurrency } from '../../lib/stripe'
 import type { PaymentMethod } from '../../types'
+import { StripeCurrencySelect } from '../stripe-currency-select'
 
 interface PaymentConfirmDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
   topupAmount: number
+  currency: string
+  stripeCurrency: StripeCurrency
+  onStripeCurrencyChange: (currency: StripeCurrency) => void
   paymentAmount: number
   paymentMethod: PaymentMethod | undefined
   calculating: boolean
@@ -52,6 +57,9 @@ export function PaymentConfirmDialog({
   onConfirm,
   topupAmount,
   paymentAmount,
+  currency,
+  stripeCurrency,
+  onStripeCurrencyChange,
   paymentMethod,
   calculating,
   processing,
@@ -69,12 +77,21 @@ export function PaymentConfirmDialog({
           <AlertDialogTitle className='text-xl font-semibold'>
             {t('Confirm Payment')}
           </AlertDialogTitle>
-          <AlertDialogDescription>
-            {t('Review your payment details')}
-          </AlertDialogDescription>
         </AlertDialogHeader>
 
         <div className='space-y-3 py-3 sm:space-y-4 sm:py-4'>
+          {isStripePayment(paymentMethod?.type || '') && (
+            <div className='flex items-center justify-between gap-4'>
+              <span className='text-muted-foreground text-sm'>
+                {t('Payment currency')}
+              </span>
+              <StripeCurrencySelect
+                value={stripeCurrency}
+                onChange={onStripeCurrencyChange}
+                disabled={processing}
+              />
+            </div>
+          )}
           <div className='flex items-center justify-between'>
             <span className='text-muted-foreground text-sm'>
               {t('Recharge quota (USD)')}
@@ -87,7 +104,7 @@ export function PaymentConfirmDialog({
           <div className='flex items-center justify-between'>
             <span className='text-muted-foreground text-sm'>
               {t('Payment amount ({{currency}})', {
-                currency: paymentMethod?.currency || 'CNY',
+                currency: currency,
               })}
             </span>
             {calculating ? (
@@ -95,11 +112,11 @@ export function PaymentConfirmDialog({
             ) : (
               <div className='flex items-baseline gap-2'>
                 <span className='font-mono text-2xl font-semibold tabular-nums'>
-                  {formatPaymentAmount(paymentAmount)}
+                  {formatPaymentAmount(paymentAmount, currency)}
                 </span>
                 {hasDiscount && (
                   <span className='text-muted-foreground text-sm line-through'>
-                    {formatPaymentAmount(originalAmount)}
+                    {formatPaymentAmount(originalAmount, currency)}
                   </span>
                 )}
               </div>
@@ -111,7 +128,7 @@ export function PaymentConfirmDialog({
               <div className='flex items-center justify-between text-sm'>
                 <span className='text-muted-foreground'>{t('You save')}</span>
                 <span className='text-success font-semibold'>
-                  {formatPaymentAmount(discountAmount)}
+                  {formatPaymentAmount(discountAmount, currency)}
                 </span>
               </div>
             </div>
@@ -139,7 +156,10 @@ export function PaymentConfirmDialog({
           <AlertDialogCancel disabled={processing}>
             {t('Cancel')}
           </AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm} disabled={processing}>
+          <AlertDialogAction
+            onClick={onConfirm}
+            disabled={processing || calculating || paymentAmount <= 0}
+          >
             {processing && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
             {t('Confirm Payment')}
           </AlertDialogAction>

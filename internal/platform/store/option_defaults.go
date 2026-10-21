@@ -75,6 +75,7 @@ func buildDefaultOptionMap() map[string]string {
 		"StripePriceId":                        commercestore.StripePriceId,
 		"StripeCNYUnitPrice":                   strconv.FormatFloat(commercestore.StripeCNYUnitPrice, 'f', -1, 64),
 		"StripeHKDUnitPrice":                   strconv.FormatFloat(commercestore.StripeHKDUnitPrice, 'f', -1, 64),
+		"StripeUSDUnitPrice":                   strconv.FormatFloat(commercestore.StripeUSDUnitPrice, 'f', -1, 64),
 		"StripeUnitPrice":                      strconv.FormatFloat(commercestore.StripeUnitPrice, 'f', -1, 64),
 		"StripePromotionCodesEnabled":          strconv.FormatBool(commercestore.StripePromotionCodesEnabled),
 		"CreemApiKey":                          commercestore.CreemApiKey,

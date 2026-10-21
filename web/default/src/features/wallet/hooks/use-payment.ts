@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import {
@@ -35,6 +35,7 @@ import {
   isWaffoPancakePayment,
   submitPaymentForm,
 } from '../lib'
+import type { StripeCurrency } from '../lib/stripe'
 import type { NowPaymentsPaymentResponse } from '../types'
 
 // ============================================================================
@@ -42,6 +43,7 @@ import type { NowPaymentsPaymentResponse } from '../types'
 // ============================================================================
 
 export function usePayment() {
+  const quoteSequence = useRef(0)
   const [amount, setAmount] = useState<number>(0)
   const [calculating, setCalculating] = useState(false)
   const [processing, setProcessing] = useState(false)
@@ -50,7 +52,12 @@ export function usePayment() {
 
   // Calculate payment amount
   const calculatePaymentAmount = useCallback(
-    async (topupAmount: number, paymentType: string) => {
+    async (
+      topupAmount: number,
+      paymentType: string,
+      currency: StripeCurrency = 'HKD'
+    ) => {
+      const sequence = ++quoteSequence.current
       try {
         setCalculating(true)
 
@@ -60,7 +67,7 @@ export function usePayment() {
         const response = isStripe
           ? await calculateStripeAmount({
               amount: topupAmount,
-              currency: paymentType === 'stripe_cny' ? 'CNY' : 'HKD',
+              currency,
             })
           : isNowPayments
             ? await calculateNowPaymentsAmount({ amount: topupAmount })
@@ -72,6 +79,7 @@ export function usePayment() {
                   amount: topupAmount,
                 })
 
+        if (sequence !== quoteSequence.current) return 0
         if (isApiSuccess(response) && response.data) {
           const calculatedAmount = parseFloat(response.data)
           setAmount(calculatedAmount)
@@ -82,10 +90,10 @@ export function usePayment() {
         setAmount(0)
         return 0
       } catch (_error) {
-        setAmount(0)
+        if (sequence === quoteSequence.current) setAmount(0)
         return 0
       } finally {
-        setCalculating(false)
+        if (sequence === quoteSequence.current) setCalculating(false)
       }
     },
     []
@@ -93,7 +101,11 @@ export function usePayment() {
 
   // Process payment
   const processPayment = useCallback(
-    async (topupAmount: number, paymentType: string) => {
+    async (
+      topupAmount: number,
+      paymentType: string,
+      currency: StripeCurrency = 'HKD'
+    ) => {
       try {
         setProcessing(true)
 
@@ -105,7 +117,7 @@ export function usePayment() {
           ? await requestStripePayment({
               amount,
               payment_method: 'stripe',
-              currency: paymentType === 'stripe_cny' ? 'CNY' : 'HKD',
+              currency,
             })
           : isNowPayments
             ? await requestNowPaymentsPayment({ amount })

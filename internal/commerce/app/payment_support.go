@@ -303,7 +303,7 @@ func UnlockOrder(tradeNo string) {
 
 func BuildStripePayMethod() map[string]string {
 	return map[string]string{
-		"name":      "Stripe (HKD)",
+		"name":      "Stripe",
 		"type":      commerceschema.PaymentMethodStripe,
 		"currency":  "HKD",
 		"color":     "rgba(var(--semi-purple-5), 1)",

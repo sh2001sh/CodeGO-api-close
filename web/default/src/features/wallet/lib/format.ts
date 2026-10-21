@@ -77,7 +77,14 @@ export function formatPaymentAmount(
     typeof amount === 'number' ? amount : Number.parseFloat(String(amount))
   if (!Number.isFinite(numeric)) return '-'
 
-  if (currency === 'USD') return `${numeric.toFixed(2)} credits`
+  currency = currency.toUpperCase()
+  const prefixes: Record<string, string> = { HKD: 'HK$', CNY: '¥', USD: 'US$' }
+  if (prefixes[currency]) {
+    return `${prefixes[currency]}${new Intl.NumberFormat(getIntlLocale(), {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(numeric)}`
+  }
   return new Intl.NumberFormat(getIntlLocale(), {
     style: 'currency',
     currency,

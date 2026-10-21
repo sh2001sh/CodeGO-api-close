@@ -45,6 +45,7 @@ var StripePriceId = ""
 var StripeUnitPrice = 8.0 // Legacy display setting; new checkouts use explicit currency prices.
 var StripeCNYUnitPrice = 1.4
 var StripeHKDUnitPrice = 1.5
+var StripeUSDUnitPrice = 0.2
 var StripeMinTopUp = 5
 var StripePromotionCodesEnabled = false
 

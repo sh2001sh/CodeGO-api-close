@@ -37,6 +37,8 @@ import {
   calculatePresetPricing,
   getMinTopupAmount,
 } from '../lib'
+import { isStripePayment } from '../lib/payment'
+import { type StripeCurrency } from '../lib/stripe'
 import type {
   PaymentMethod,
   PresetAmount,
@@ -46,6 +48,7 @@ import type {
 } from '../types'
 import { CreemProductsSection } from './creem-products-section'
 import { RedemptionCodePanel } from './redemption-code-panel'
+import { StripeCurrencySelect } from './stripe-currency-select'
 
 interface RechargeFormCardProps {
   topupInfo: TopupInfo | null
@@ -54,6 +57,11 @@ interface RechargeFormCardProps {
   onSelectPreset: (preset: PresetAmount) => void
   topupAmount: number
   onTopupAmountChange: (amount: number) => void
+  paymentCurrency: string
+  stripeCurrency: StripeCurrency
+  onStripeCurrencyChange: (currency: StripeCurrency) => void
+  stripeUnitPrice: number
+  discountRate: number
   paymentAmount: number
   calculating: boolean
   onPaymentMethodSelect: (method: PaymentMethod) => void
@@ -79,6 +87,9 @@ interface RechargeFormCardProps {
 export function RechargeFormCard(props: RechargeFormCardProps) {
   const { t } = useTranslation()
   const [localAmount, setLocalAmount] = useState(props.topupAmount.toString())
+  const stripeSelected = isStripePayment(
+    props.selectedPaymentMethod?.type || ''
+  )
   const effectiveMinTopup = getMinTopupAmount(props.topupInfo)
   useEffect(() => {
     setLocalAmount(props.topupAmount.toString())
@@ -133,6 +144,13 @@ export function RechargeFormCard(props: RechargeFormCardProps) {
         {hasAnyTopup || !redemptionEnabled ? (
           <header className='commerce-recharge-heading'>
             <h2>{t('Balance top-up')}</h2>
+            {props.topupInfo?.enable_stripe_topup && (
+              <StripeCurrencySelect
+                value={stripeSelected ? props.stripeCurrency : 'CNY'}
+                onChange={props.onStripeCurrencyChange}
+                disabled={!!props.paymentLoading}
+              />
+            )}
           </header>
         ) : null}
         {hasConfigurableTopup ? (
@@ -148,7 +166,7 @@ export function RechargeFormCard(props: RechargeFormCardProps) {
                   aria-label={t('Recharge quota (USD)')}
                 >
                   {props.presetAmounts.map((preset, index) => {
-                    const discount = 1.0
+                    const discount = props.discountRate
                     const {
                       displayValue,
                       actualPrice,
@@ -156,7 +174,7 @@ export function RechargeFormCard(props: RechargeFormCardProps) {
                       hasDiscount,
                     } = calculatePresetPricing(
                       preset.value,
-                      1,
+                      stripeSelected ? props.stripeUnitPrice : 1,
                       discount,
                       props.usdExchangeRate ?? 1
                     )
@@ -178,13 +196,19 @@ export function RechargeFormCard(props: RechargeFormCardProps) {
                         ) : null}
                         <span className='commerce-preset-payment'>
                           {t('Pay {{amount}}', {
-                            amount: formatPaymentAmount(actualPrice),
+                            amount: formatPaymentAmount(
+                              actualPrice,
+                              props.paymentCurrency
+                            ),
                           })}
                           {hasDiscount && savedAmount > 0 ? (
                             <span className='text-success'>
                               {' '}
                               {t('Save {{amount}}', {
-                                amount: formatPaymentAmount(savedAmount),
+                                amount: formatPaymentAmount(
+                                  savedAmount,
+                                  props.paymentCurrency
+                                ),
                               })}
                             </span>
                           ) : null}
@@ -213,14 +237,17 @@ export function RechargeFormCard(props: RechargeFormCardProps) {
                 <dl className='commerce-recharge-total'>
                   <dt>
                     {t('Payment amount ({{currency}})', {
-                      currency: props.selectedPaymentMethod?.currency || 'CNY',
+                      currency: props.paymentCurrency,
                     })}
                   </dt>
                   <dd>
                     {props.calculating ? (
                       <Skeleton className='h-5 w-16' />
                     ) : (
-                      formatPaymentAmount(props.paymentAmount)
+                      formatPaymentAmount(
+                        props.paymentAmount,
+                        props.paymentCurrency
+                      )
                     )}
                   </dd>
                 </dl>
@@ -241,7 +268,11 @@ export function RechargeFormCard(props: RechargeFormCardProps) {
                       const button = (
                         <Button
                           key={method.type}
-                          variant='outline'
+                          variant={
+                            props.selectedPaymentMethod?.type === method.type
+                              ? 'default'
+                              : 'outline'
+                          }
                           onClick={() => props.onPaymentMethodSelect(method)}
                           disabled={disabled || !!props.paymentLoading}
                           className='commerce-payment-method'

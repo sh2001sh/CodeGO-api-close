@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,61 +127,71 @@ func TestStripeStoredEvidenceSurvivesMutableSettings(t *testing.T) {
 	t.Log(fmt.Sprintf("immutable CNY snapshot rejects changed payable price"))
 }
 
-func TestStripeHKDWalletAndPackKeepApprovedCredits(t *testing.T) {
-	db := setupRedemptionTestDB(t)
-	require.NoError(t, db.AutoMigrate(&commerceschema.InvoiceRequest{}, &commerceschema.InvoiceRequestItem{}))
-	confirmPaymentComplianceForTest(t)
-	forms, _ := stubSubscriptionStripe(t, http.StatusOK)
-	insertSubscriptionResetAppTestUser(t, 876301, 0)
-	checkout, err := CreateStripeTopUp(context.Background(), 876301, StripePayRequest{Currency: "HKD", Amount: 10, PaymentMethod: "stripe"})
-	require.NoError(t, err)
-	require.Equal(t, "1500", (<-forms).Get("line_items[0][price_data][unit_amount]"))
-	paid := stripePaidFixture(checkout.OrderID, 1500)
-	paid["currency"] = "hkd"
-	require.NoError(t, HandleStripeWebhookFulfillment(context.Background(), checkout.OrderID, "", paid, "127.0.0.1"))
-	var user identityschema.User
-	require.NoError(t, db.First(&user, 876301).Error)
-	require.EqualValues(t, quotaUnitsFromUSD(10), user.ClaudeQuota)
-	invoice, err := loadInvoiceEligibleOrderTx(db, user.Id, "topup", checkout.OrderID)
-	require.NoError(t, err)
-	require.Equal(t, "HKD", invoice.Currency)
-	require.Equal(t, 15.0, invoice.OrderAmount)
-	page, err := ListInvoiceEligibleOrdersPage(user.Id, "hkd", &platformpagination.PageInfo{Page: 1, PageSize: 10})
-	require.NoError(t, err)
-	require.Equal(t, 1, page.Total)
-	plan := defaultSubscriptionPlans()[0]
-	require.NoError(t, db.Create(&plan).Error)
-	InvalidateSubscriptionPlanCache(plan.Id)
-	t.Cleanup(func() { InvalidateSubscriptionPlanCache(plan.Id) })
-	pack, err := CreateSubscriptionStripePayment(user.Id, SubscriptionStripePayRequest{PlanID: plan.Id, Currency: "HKD"})
-	require.NoError(t, err)
-	require.Equal(t, "HKD", pack.Currency)
-	require.Equal(t, 96.0, pack.AmountDue)
-	require.Equal(t, "9600", (<-forms).Get("line_items[0][price_data][unit_amount]"))
-	paid = stripePaidFixture(pack.OrderID, 9600)
-	paid["currency"] = "hkd"
-	encoded, err := json.Marshal(paid)
-	require.NoError(t, err)
-	for i := 0; i < 2; i++ {
-		require.NoError(t, CompleteSubscriptionOrder(pack.OrderID, string(encoded), "stripe", ""))
-		require.NoError(t, FulfillPaidSubscriptionOrder(pack.OrderID))
+func TestStripeCurrenciesWalletAndPackKeepApprovedCredits(t *testing.T) {
+	for _, tc := range []struct {
+		currency               string
+		walletMoney, packMoney float64
+		walletMinor, packMinor string
+	}{
+		{"HKD", 15, 96, "1500", "9600"}, {"CNY", 14, 89.6, "1400", "8960"}, {"USD", 2, 12.8, "200", "1280"},
+	} {
+		t.Run(tc.currency, func(t *testing.T) {
+			db := setupRedemptionTestDB(t)
+			require.NoError(t, db.AutoMigrate(&commerceschema.InvoiceRequest{}, &commerceschema.InvoiceRequestItem{}))
+			confirmPaymentComplianceForTest(t)
+			forms, _ := stubSubscriptionStripe(t, http.StatusOK)
+			insertSubscriptionResetAppTestUser(t, 876301, 0)
+			checkout, err := CreateStripeTopUp(context.Background(), 876301, StripePayRequest{Currency: tc.currency, Amount: 10, PaymentMethod: "stripe"})
+			require.NoError(t, err)
+			require.Equal(t, tc.walletMinor, (<-forms).Get("line_items[0][price_data][unit_amount]"))
+			paid := stripePaidFixture(checkout.OrderID, StripeMoneyToMinorUnits(tc.walletMoney))
+			paid["currency"] = strings.ToLower(tc.currency)
+			require.NoError(t, HandleStripeWebhookFulfillment(context.Background(), checkout.OrderID, "", paid, "127.0.0.1"))
+			var user identityschema.User
+			require.NoError(t, db.First(&user, 876301).Error)
+			require.EqualValues(t, quotaUnitsFromUSD(10), user.ClaudeQuota)
+			invoice, err := loadInvoiceEligibleOrderTx(db, user.Id, "topup", checkout.OrderID)
+			require.NoError(t, err)
+			require.Equal(t, tc.currency, invoice.Currency)
+			require.Equal(t, tc.walletMoney, invoice.OrderAmount)
+			page, err := ListInvoiceEligibleOrdersPage(user.Id, strings.ToLower(tc.currency), &platformpagination.PageInfo{Page: 1, PageSize: 10})
+			require.NoError(t, err)
+			require.Equal(t, 1, page.Total)
+			plan := defaultSubscriptionPlans()[0]
+			require.NoError(t, db.Create(&plan).Error)
+			InvalidateSubscriptionPlanCache(plan.Id)
+			t.Cleanup(func() { InvalidateSubscriptionPlanCache(plan.Id) })
+			pack, err := CreateSubscriptionStripePayment(user.Id, SubscriptionStripePayRequest{PlanID: plan.Id, Currency: tc.currency})
+			require.NoError(t, err)
+			require.Equal(t, tc.currency, pack.Currency)
+			require.Equal(t, tc.packMoney, pack.AmountDue)
+			require.Equal(t, tc.packMinor, (<-forms).Get("line_items[0][price_data][unit_amount]"))
+			paid = stripePaidFixture(pack.OrderID, StripeMoneyToMinorUnits(tc.packMoney))
+			paid["currency"] = strings.ToLower(tc.currency)
+			encoded, err := json.Marshal(paid)
+			require.NoError(t, err)
+			for i := 0; i < 2; i++ {
+				require.NoError(t, CompleteSubscriptionOrder(pack.OrderID, string(encoded), "stripe", ""))
+				require.NoError(t, FulfillPaidSubscriptionOrder(pack.OrderID))
+			}
+			var sub commerceschema.UserSubscription
+			require.NoError(t, db.Where("user_id = ?", user.Id).First(&sub).Error)
+			require.Equal(t, quotaUnitsFromUSD(67.2), sub.AmountTotal)
+			require.Equal(t, quotaUnitsFromUSD(64), sub.CreditPackPaidQuota)
+			require.Zero(t, sub.EndTime)
+			t.Logf("%s %.2f => 10 wallet credits; %s %.2f => one permanent 67.2-credit pack with unchanged 64-credit paid basis", tc.currency, tc.walletMoney, tc.currency, tc.packMoney)
+		})
 	}
-	var sub commerceschema.UserSubscription
-	require.NoError(t, db.Where("user_id = ?", user.Id).First(&sub).Error)
-	require.Equal(t, quotaUnitsFromUSD(67.2), sub.AmountTotal)
-	require.Equal(t, quotaUnitsFromUSD(64), sub.CreditPackPaidQuota)
-	require.Zero(t, sub.EndTime)
-	t.Log("HKD 15 => 10 wallet credits; HKD 96 => one permanent 67.2-credit pack with unchanged 64-credit paid basis")
 }
 
 func TestStripePricingAndOrderBounds(t *testing.T) {
-	for _, currency := range []string{"hkd", "cny"} {
+	for _, currency := range []string{"hkd", "cny", "usd"} {
 		for _, amount := range []float64{0, -1, math.NaN(), math.Inf(1), math.MaxFloat64} {
 			_, err := stripePriceFromCNY(amount, currency)
 			require.Error(t, err)
 		}
 	}
-	_, err := stripePresentmentCurrency("USD")
+	_, err := stripePresentmentCurrency("EUR")
 	require.Error(t, err)
 	old := commercestore.StripeMinTopUp
 	t.Cleanup(func() { commercestore.StripeMinTopUp = old })
@@ -189,6 +200,25 @@ func TestStripePricingAndOrderBounds(t *testing.T) {
 		_, err := QuoteStripeTopUpAmount(1, StripePayRequest{Amount: amount, Currency: "HKD"})
 		require.Error(t, err)
 	}
+}
+
+func TestStripeTopUpInfoHasOneUnlabelledPaymentEntry(t *testing.T) {
+	setupRedemptionTestDB(t)
+	confirmPaymentComplianceForTest(t)
+	stubSubscriptionStripe(t, http.StatusOK)
+	oldMethods := commercestore.PayMethods
+	t.Cleanup(func() { commercestore.PayMethods = oldMethods })
+	commercestore.PayMethods = []map[string]string{{"name": "Stripe (CNY)", "type": "stripe_cny"}, {"name": "Stripe (HKD)", "type": "stripe"}}
+	methods := BuildTopUpInfo(0)["pay_methods"].([]map[string]string)
+	count := 0
+	for _, method := range methods {
+		require.NotEqual(t, "stripe_cny", method["type"])
+		if method["type"] == "stripe" {
+			count++
+			require.Equal(t, "Stripe", method["name"])
+		}
+	}
+	require.Equal(t, 1, count)
 }
 
 func TestStripeUnrelatedExpiryDoesNotCancelOrder(t *testing.T) {

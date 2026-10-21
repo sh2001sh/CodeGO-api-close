@@ -82,6 +82,7 @@ func GetPublicStatus() map[string]any {
 		"price":                         commercestore.Price,
 		"stripe_cny_unit_price":         commercestore.StripeCNYUnitPrice,
 		"stripe_hkd_unit_price":         commercestore.StripeHKDUnitPrice,
+		"stripe_usd_unit_price":         commercestore.StripeUSDUnitPrice,
 		"stripe_unit_price":             commercestore.StripeUnitPrice,
 		"api_info_enabled":              cs.ApiInfoEnabled,
 		"uptime_kuma_enabled":           cs.UptimeKumaEnabled,

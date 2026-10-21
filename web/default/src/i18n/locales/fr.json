@@ -10411,5 +10411,6 @@
   "扣款已完成，历史收益明细正在补齐，请勿重复回收。": "Les fonds ont été récupérés. Les revenus historiques sont en cours de mise à jour. Ne renvoyez pas cette demande.",
   "按渠道主 ID 顺序直扣，单人不超过当前可回收额度。": "Prélèvement direct par ordre d’identifiant, dans la limite du montant récupérable de chaque propriétaire.",
   "HKD / credit": "HKD / credit",
+  "USD / credit": "USD / credit",
   "CNY / credit": "CNY / credit"
 }

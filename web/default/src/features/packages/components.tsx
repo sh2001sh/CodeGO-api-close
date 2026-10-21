@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { ReactNode } from 'react'
 import { Crown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Progress } from '@/components/ui/progress'
@@ -49,6 +50,8 @@ import { PackagePlanCard } from './package-plan-card'
 
 export function PlanZone(props: {
   title: string
+  controls?: ReactNode
+  formatPrice?: (amount: number, currency: string) => string
   plans: PlanRecord[]
   loading: boolean
   collectiveRooms?: GroupBuyItem[]
@@ -64,8 +67,9 @@ export function PlanZone(props: {
 
   return (
     <section className='commerce-package-zone'>
-      <div>
+      <div className='flex flex-wrap items-center justify-between gap-3'>
         <h3 className='text-foreground'>{props.title}</h3>
+        {props.controls}
       </div>
       {props.loading ? (
         <div className='grid gap-4 sm:grid-cols-2 2xl:grid-cols-3'>
@@ -79,6 +83,7 @@ export function PlanZone(props: {
             <StaggerItem key={record.plan.id}>
               <PackagePlanCard
                 record={record}
+                formatPrice={props.formatPrice}
                 collectiveRoom={props.collectiveRooms?.find(
                   (room) => room.plan_id === record.plan.id
                 )}

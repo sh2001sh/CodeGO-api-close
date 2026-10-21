@@ -14,6 +14,7 @@ import {
 import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useStatus } from '@/hooks/use-status'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,18 +24,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   translatePlanAction,
   translatePlanSubtitle,
   translatePlanTitle,
 } from '@/features/packages/lib/display'
+import { CheckoutMethodSelect } from '@/features/wallet/components/checkout-method-select'
+import { StripeCurrencySelect } from '@/features/wallet/components/stripe-currency-select'
+import { formatPaymentAmount } from '@/features/wallet/lib/format'
+import {
+  getStripePlanAmount,
+  type StripeCurrency,
+} from '@/features/wallet/lib/stripe'
 import {
   getSubscriptionOrderStatus,
   cancelSubscriptionOrder,
@@ -69,6 +69,8 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   plan: PlanRecord | null
+  preferredPaymentMethod?: string
+  stripeCurrency?: StripeCurrency
   enableStripe?: boolean
   enableCreem?: boolean
   enableOnlineTopUp?: boolean
@@ -181,6 +183,10 @@ function StatusItem(props: { label: string; value: ReactNode }) {
 
 export function SubscriptionPurchaseDialog(props: Props) {
   const { t } = useTranslation()
+  const { status } = useStatus()
+  const [stripeCurrency, setStripeCurrency] = useState<StripeCurrency>(
+    props.stripeCurrency || 'HKD'
+  )
   const [paying, setPaying] = useState(false)
   const [selectedEpayMethod, setSelectedEpayMethod] = useState('')
   const [paymentTracker, setPaymentTracker] = useState<PaymentTracker>(
@@ -201,16 +207,26 @@ export function SubscriptionPurchaseDialog(props: Props) {
   useEffect(() => {
     if (!props.open) {
       setSelectedEpayMethod('')
+      setStripeCurrency(props.stripeCurrency || 'HKD')
       setPaymentTracker(EMPTY_PAYMENT_TRACKER)
       hasTriggeredSuccessRef.current = false
       return
     }
-    if (paymentMethods.length > 0) {
-      setSelectedEpayMethod(
-        (current) => current || paymentMethods[0]?.type || ''
-      )
-    }
-  }, [paymentMethods, props.open])
+    setStripeCurrency(props.stripeCurrency || 'HKD')
+    setSelectedEpayMethod(
+      (current) =>
+        current ||
+        props.preferredPaymentMethod ||
+        paymentMethods[0]?.type ||
+        (props.enableStripe ? 'stripe' : 'creem')
+    )
+  }, [
+    paymentMethods,
+    props.open,
+    props.preferredPaymentMethod,
+    props.stripeCurrency,
+    props.enableStripe,
+  ])
 
   useEffect(() => {
     if (
@@ -291,9 +307,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
     }
   }, [paymentTracker.orderId, paymentTracker.stage, props.open])
 
-  const selectedEpayMethodLabel = useMemo(
-    () => getMethodLabel(selectedEpayMethod, paymentMethods, t),
-    [paymentMethods, selectedEpayMethod, t]
+  const selectedEpayMethodLabel = getMethodLabel(
+    selectedEpayMethod,
+    paymentMethods,
+    t
   )
 
   const handleOpenChange = (open: boolean) => {
@@ -335,10 +352,20 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const firstPurchaseDiscount = Number(
     (planRecord.first_purchase_discount_multiplier || 0) * 10
   )
-  const displayPrice = formatSubscriptionPlanPrice(
-    effectiveAmount,
-    plan.currency
-  )
+  const stripeSelected = selectedEpayMethod === 'stripe' && hasStripe
+  const formatSelectedPrice = (amount: number) =>
+    stripeSelected
+      ? formatPaymentAmount(
+          getStripePlanAmount(
+            amount,
+            plan.currency || 'USD',
+            stripeCurrency,
+            status
+          ),
+          stripeCurrency
+        )
+      : formatSubscriptionPlanPrice(amount, plan.currency)
+  const displayPrice = formatSelectedPrice(effectiveAmount)
   const actionLabel = translatePlanAction(planRecord.action, t)
   const purchaseType = props.purchaseType || 'normal'
   const groupBuyId = props.groupBuyId || 0
@@ -410,7 +437,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
       : []),
     {
       label: i18n.t('支付价格'),
-      value: formatSubscriptionPlanPrice(effectiveAmount, plan.currency),
+      value: displayPrice,
     },
   ]
 
@@ -467,7 +494,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
     }
   }
 
-  const handlePayStripe = async (currency: 'HKD' | 'CNY') => {
+  const handlePayStripe = async (currency: StripeCurrency) => {
     setPaying(true)
     try {
       const response = await paySubscriptionStripe({
@@ -644,7 +671,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
           />
           <StatusItem
             label={i18n.t('应付金额')}
-            value={formatSubscriptionPlanPrice(
+            value={formatPaymentAmount(
               paymentTracker.amountDue,
               paymentTracker.currency
             )}
@@ -740,7 +767,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     {firstPurchaseDiscountApplied &&
                     baseAmount > effectiveAmount ? (
                       <div className='text-muted-foreground text-sm line-through'>
-                        {formatSubscriptionPlanPrice(baseAmount, plan.currency)}
+                        {formatSelectedPrice(baseAmount)}
                       </div>
                     ) : null}
                     <div className='commerce-purchase-price'>
@@ -836,73 +863,37 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     <Trans i18nKey={'选择支付方式'} />
                   </div>
 
-                  <div className='space-y-3'>
-                    {hasStripe || hasCreem ? (
-                      <div className='grid grid-cols-2 gap-2'>
-                        {hasStripe ? (
-                          <Button
-                            variant='outline'
-                            className='w-full'
-                            onClick={() => void handlePayStripe('HKD')}
-                            disabled={disablePurchase}
-                          >
-                            Stripe · HKD
-                          </Button>
-                        ) : null}
-                        {hasStripe ? (
-                          <Button
-                            variant='outline'
-                            className='w-full'
-                            onClick={() => void handlePayStripe('CNY')}
-                            disabled={disablePurchase}
-                          >
-                            Stripe · CNY
-                          </Button>
-                        ) : null}
-                        {hasCreem ? (
-                          <Button
-                            variant='outline'
-                            className='w-full'
-                            onClick={() => void handlePayCreem()}
-                            disabled={disablePurchase}
-                          >
-                            Creem
-                          </Button>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {hasEpay ? (
-                      <div className='grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]'>
-                        <Select
-                          value={selectedEpayMethod}
-                          onValueChange={(value) =>
-                            value !== null && setSelectedEpayMethod(value)
-                          }
-                          disabled={disablePurchase}
-                        >
-                          <SelectTrigger className='w-full'>
-                            <SelectValue>{selectedEpayMethodLabel}</SelectValue>
-                          </SelectTrigger>
-                          <SelectContent alignItemWithTrigger={false}>
-                            <SelectGroup>
-                              {paymentMethods.map((item) => (
-                                <SelectItem key={item.type} value={item.type}>
-                                  {getMethodLabel(item.type, paymentMethods, t)}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          className='w-full sm:w-auto'
-                          onClick={() => void handlePayEpay()}
-                          disabled={disablePurchase || !selectedEpayMethod}
-                        >
-                          {purchaseModeLabel}
-                        </Button>
-                      </div>
-                    ) : null}
+                  <div className='flex flex-wrap items-center gap-3'>
+                    <CheckoutMethodSelect
+                      value={selectedEpayMethod}
+                      onChange={setSelectedEpayMethod}
+                      methods={hasEpay ? paymentMethods : []}
+                      enableStripe={hasStripe}
+                      enableCreem={hasCreem}
+                      disabled={disablePurchase}
+                    />
+                    {stripeSelected && (
+                      <StripeCurrencySelect
+                        value={stripeCurrency}
+                        onChange={setStripeCurrency}
+                        disabled={disablePurchase}
+                      />
+                    )}
+                    <Button
+                      className='w-full sm:ml-auto sm:w-auto'
+                      disabled={disablePurchase || !selectedEpayMethod}
+                      onClick={() => {
+                        if (stripeSelected) void handlePayStripe(stripeCurrency)
+                        else if (selectedEpayMethod === 'creem')
+                          void handlePayCreem()
+                        else void handlePayEpay()
+                      }}
+                    >
+                      {paying && (
+                        <Loader2 className='mr-2 size-4 animate-spin' />
+                      )}
+                      {purchaseModeLabel}
+                    </Button>
                   </div>
                 </div>
               ) : (

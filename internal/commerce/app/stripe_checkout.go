@@ -89,7 +89,7 @@ func stripePresentmentCurrency(currency string) (string, error) {
 	if currency == "" {
 		currency = "hkd"
 	}
-	if currency != "hkd" && currency != "cny" {
+	if currency != "hkd" && currency != "cny" && currency != "usd" {
 		return "", errors.New("unsupported Stripe payment currency")
 	}
 	return currency, nil
@@ -112,6 +112,8 @@ func stripePriceFromCNY(base float64, currency string) (float64, error) {
 		price = commercestore.StripeHKDUnitPrice
 	case "cny":
 		price = commercestore.StripeCNYUnitPrice
+	case "usd":
+		price = commercestore.StripeUSDUnitPrice
 	default:
 		return 0, errors.New("unsupported Stripe payment currency")
 	}

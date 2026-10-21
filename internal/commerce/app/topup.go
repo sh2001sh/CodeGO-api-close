@@ -50,7 +50,7 @@ func BuildTopUpInfo(userID int) map[string]any {
 
 	payMethods = CloneDisplayedPayMethods(CloneDisplayedPayMethods(payMethods, commerceschema.PaymentMethodStripe), "stripe_cny")
 	if IsStripeTopUpEnabled() {
-		payMethods = append(payMethods, BuildStripePayMethod(), map[string]string{"name": "Stripe (CNY)", "type": "stripe_cny", "currency": "CNY", "min_topup": strconv.FormatInt(GetStripeMinTopup(), 10)})
+		payMethods = append(payMethods, BuildStripePayMethod())
 	}
 	enableWaffo := IsWaffoTopUpEnabled()
 	if enableWaffo && !containsPayMethod(payMethods, commerceschema.PaymentMethodWaffo) {

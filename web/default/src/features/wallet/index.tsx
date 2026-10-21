@@ -20,6 +20,7 @@ import { WalletResetOpportunityPanel } from './components/wallet-reset-opportuni
 import { WalletTransferHistorySheet } from './components/wallet-transfer-history-sheet'
 import { WalletWorkspaceShell } from './components/wallet-workspace-shell'
 import { useWalletWorkspace } from './hooks/use-wallet-workspace'
+import { getStripeUnitPrice } from './lib/stripe'
 
 interface WalletProps {
   initialShowHistory?: boolean
@@ -156,6 +157,13 @@ export function Wallet(props: WalletProps) {
               <TabsContent value='funding'>
                 <div className='commerce-wallet-funding'>
                   <CreditPackPlans
+                    paymentMethod={workspace.selectedPaymentMethod?.type}
+                    onPaymentMethodChange={workspace.handlePricingMethodChange}
+                    stripeCurrency={workspace.stripeCurrency}
+                    onStripeCurrencyChange={
+                      workspace.handleStripeCurrencyChange
+                    }
+                    status={workspace.status}
                     plans={
                       workspace.publicPlansError ? [] : workspace.publicPlans
                     }
@@ -175,6 +183,16 @@ export function Wallet(props: WalletProps) {
                     onSelectPreset={workspace.handleSelectPreset}
                     topupAmount={workspace.topupAmount}
                     onTopupAmountChange={workspace.handleTopupAmountChange}
+                    paymentCurrency={workspace.paymentCurrency}
+                    stripeCurrency={workspace.stripeCurrency}
+                    onStripeCurrencyChange={
+                      workspace.handleStripeCurrencyChange
+                    }
+                    stripeUnitPrice={getStripeUnitPrice(
+                      workspace.stripeCurrency,
+                      workspace.status
+                    )}
+                    discountRate={workspace.getDiscountRate()}
                     paymentAmount={workspace.paymentAmount}
                     calculating={workspace.calculating}
                     onPaymentMethodSelect={workspace.handlePaymentMethodSelect}
@@ -274,6 +292,9 @@ export function Wallet(props: WalletProps) {
         onOpenChange={workspace.setConfirmDialogOpen}
         onConfirm={workspace.handlePaymentConfirm}
         topupAmount={workspace.topupAmount}
+        currency={workspace.paymentCurrency}
+        stripeCurrency={workspace.stripeCurrency}
+        onStripeCurrencyChange={workspace.handleStripeCurrencyChange}
         paymentAmount={workspace.paymentAmount}
         paymentMethod={workspace.selectedPaymentMethod}
         calculating={workspace.calculating}

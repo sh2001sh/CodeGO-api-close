@@ -9,7 +9,11 @@ import {
   formatSubscriptionQuotaAmount,
 } from '@/features/subscriptions/lib'
 import type { PlanRecord } from '@/features/subscriptions/types'
+import { formatPaymentAmount } from '../lib/format'
+import { getStripePlanAmount, type StripeCurrency } from '../lib/stripe'
 import type { TopupInfo } from '../types'
+import { CheckoutMethodSelect } from './checkout-method-select'
+import { StripeCurrencySelect } from './stripe-currency-select'
 import { getEpayMethods } from './subscription-plans-card'
 
 export function CreditPackPlans(props: {
@@ -17,6 +21,11 @@ export function CreditPackPlans(props: {
   loading?: boolean
   topupInfo: TopupInfo | null
   onRefresh: () => Promise<void>
+  paymentMethod?: string
+  onPaymentMethodChange: (value: string) => void
+  stripeCurrency: StripeCurrency
+  onStripeCurrencyChange: (value: StripeCurrency) => void
+  status?: Record<string, unknown> | null
 }) {
   const { t } = useTranslation()
   const [selected, setSelected] = useState<PlanRecord | null>(null)
@@ -38,6 +47,20 @@ export function CreditPackPlans(props: {
         <h2 id='credit-pack-title' className='text-lg font-semibold'>
           {t('永久额度包')}
         </h2>
+        <div className='flex flex-wrap items-center gap-2'>
+          <CheckoutMethodSelect
+            value={props.paymentMethod || ''}
+            onChange={props.onPaymentMethodChange}
+            methods={getEpayMethods(props.topupInfo?.pay_methods)}
+            enableStripe={props.topupInfo?.enable_stripe_topup}
+          />
+          {props.paymentMethod === 'stripe' && (
+            <StripeCurrencySelect
+              value={props.stripeCurrency}
+              onChange={props.onStripeCurrencyChange}
+            />
+          )}
+        </div>
       </header>
       <div className='commerce-credit-list'>
         {plans.map((record) => {
@@ -53,10 +76,20 @@ export function CreditPackPlans(props: {
                   <h3>{plan.title}</h3>
                 </div>
                 <span className='commerce-credit-price'>
-                  {formatSubscriptionPlanPrice(
-                    plan.price_amount,
-                    plan.currency
-                  )}
+                  {props.paymentMethod === 'stripe'
+                    ? formatPaymentAmount(
+                        getStripePlanAmount(
+                          record.amount_due ?? plan.price_amount,
+                          plan.currency,
+                          props.stripeCurrency,
+                          props.status
+                        ),
+                        props.stripeCurrency
+                      )
+                    : formatSubscriptionPlanPrice(
+                        record.amount_due ?? plan.price_amount,
+                        plan.currency
+                      )}
                 </span>
               </div>
               <dl className='commerce-credit-quota'>
@@ -92,6 +125,8 @@ export function CreditPackPlans(props: {
           }
         }}
         plan={selected}
+        preferredPaymentMethod={props.paymentMethod}
+        stripeCurrency={props.stripeCurrency}
         enableStripe={!!props.topupInfo?.enable_stripe_topup}
         enableCreem={!!props.topupInfo?.enable_creem_topup}
         enableOnlineTopUp={!!props.topupInfo?.enable_online_topup}

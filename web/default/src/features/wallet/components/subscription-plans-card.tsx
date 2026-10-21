@@ -48,7 +48,9 @@ export function getEpayMethods(
   return payMethods
     .filter(
       (method) =>
-        method?.type && method.type !== 'stripe' && method.type !== 'creem'
+        method?.type &&
+        !method.type.startsWith('stripe') &&
+        method.type !== 'creem'
     )
     .map((method) => {
       if (method.type === 'xunhu') {

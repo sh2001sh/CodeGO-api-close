@@ -34,11 +34,16 @@ import {
   CardStaggerItem,
 } from '@/components/page-transition'
 import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
+import { formatSubscriptionPlanPrice } from '@/features/subscriptions/lib'
 import type { PlanRecord } from '@/features/subscriptions/types'
+import { CheckoutMethodSelect } from '@/features/wallet/components/checkout-method-select'
 import { ResetOpportunityEntryCard } from '@/features/wallet/components/reset-opportunity-entry-card'
+import { StripeCurrencySelect } from '@/features/wallet/components/stripe-currency-select'
 import { getEpayMethods } from '@/features/wallet/components/subscription-plans-card'
 import { WalletWorkspaceShell } from '@/features/wallet/components/wallet-workspace-shell'
 import { useWalletWorkspace } from '@/features/wallet/hooks/use-wallet-workspace'
+import { formatPaymentAmount } from '@/features/wallet/lib/format'
+import { getStripePlanAmount } from '@/features/wallet/lib/stripe'
 import { CurrentPackagePanel, PlanZone, PackageHistory } from './components'
 import { CreditPackRules } from './credit-pack-rules'
 import './packages.css'
@@ -54,6 +59,7 @@ export function PackagesPage() {
   const workspace = useWalletWorkspace()
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
   const [purchaseOpen, setPurchaseOpen] = useState(false)
+  const [planPaymentMethod, setPlanPaymentMethod] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const creditPackPlans = useMemo(
     () =>
@@ -77,6 +83,25 @@ export function PackagesPage() {
     () => getEpayMethods(topupInfo?.pay_methods),
     [topupInfo?.pay_methods]
   )
+
+  const selectedPlanPaymentMethod =
+    planPaymentMethod ||
+    epayMethods[0]?.type ||
+    (topupInfo?.enable_stripe_topup ? 'stripe' : '')
+  const formatPlanPrice = (amount: number, currency: string) => {
+    if (selectedPlanPaymentMethod === 'stripe') {
+      return formatPaymentAmount(
+        getStripePlanAmount(
+          amount,
+          currency,
+          workspace.stripeCurrency,
+          workspace.status
+        ),
+        workspace.stripeCurrency
+      )
+    }
+    return formatSubscriptionPlanPrice(amount, currency)
+  }
 
   const purchaseCountMap = useMemo(() => {
     const map = new Map<number, number>()
@@ -231,6 +256,23 @@ export function PackagesPage() {
                 {!workspace.publicPlansError && (
                   <PlanZone
                     title={t('永久额度包')}
+                    controls={
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <CheckoutMethodSelect
+                          value={selectedPlanPaymentMethod}
+                          onChange={setPlanPaymentMethod}
+                          methods={epayMethods}
+                          enableStripe={topupInfo?.enable_stripe_topup}
+                        />
+                        {selectedPlanPaymentMethod === 'stripe' && (
+                          <StripeCurrencySelect
+                            value={workspace.stripeCurrency}
+                            onChange={workspace.handleStripeCurrencyChange}
+                          />
+                        )}
+                      </div>
+                    }
+                    formatPrice={formatPlanPrice}
                     plans={creditPackPlans}
                     loading={workspace.publicPlansLoading}
                     onPurchase={openPurchase}
@@ -300,6 +342,8 @@ export function PackagesPage() {
           }
         }}
         plan={selectedPlan}
+        preferredPaymentMethod={selectedPlanPaymentMethod}
+        stripeCurrency={workspace.stripeCurrency}
         enableStripe={!!topupInfo?.enable_stripe_topup}
         enableCreem={!!topupInfo?.enable_creem_topup}
         enableOnlineTopUp={!!topupInfo?.enable_online_topup}

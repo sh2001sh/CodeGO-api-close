@@ -10411,5 +10411,6 @@
   "扣款已完成，历史收益明细正在补齐，请勿重复回收。": "Đã thu hồi tiền. Lịch sử thu nhập đang được cập nhật. Không gửi lại yêu cầu này.",
   "按渠道主 ID 顺序直扣，单人不超过当前可回收额度。": "Trừ trực tiếp theo thứ tự ID chủ kênh, không vượt quá số tiền hiện có thể thu hồi của từng người.",
   "HKD / credit": "HKD / credit",
+  "USD / credit": "USD / credit",
   "CNY / credit": "CNY / credit"
 }

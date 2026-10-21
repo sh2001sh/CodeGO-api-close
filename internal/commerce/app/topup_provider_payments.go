@@ -280,7 +280,7 @@ func HandleStripeWebhookFulfillment(ctx context.Context, referenceID string, cus
 		return err
 	}
 	if credited > 0 {
-		auditapp.RecordTopupLog(topUp.UserId, fmt.Sprintf("Stripe topup success, quota: %v, paid: %.2f CNY", logger.FormatQuota(credited), topUp.Money), clientIP, topUp.PaymentMethod, commerceschema.PaymentMethodStripe)
+		auditapp.RecordTopupLog(topUp.UserId, fmt.Sprintf("Stripe topup success, quota: %v, paid: %.2f %s", logger.FormatQuota(credited), topUp.Money, strings.ToUpper(stripeOrderCurrency(topUp.ProviderPayload))), clientIP, topUp.PaymentMethod, commerceschema.PaymentMethodStripe)
 	}
 	return nil
 }

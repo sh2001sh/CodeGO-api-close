@@ -317,7 +317,7 @@ export interface RedemptionRequest {
  * Payment request parameters
  */
 export interface PaymentRequest {
-  currency?: 'HKD' | 'CNY'
+  currency?: 'HKD' | 'CNY' | 'USD'
   /** Topup amount */
   amount: number
   /** Payment method identifier */
@@ -346,7 +346,7 @@ export interface WaffoPancakePaymentRequest {
  * Amount calculation request
  */
 export interface AmountRequest {
-  currency?: 'HKD' | 'CNY'
+  currency?: 'HKD' | 'CNY' | 'USD'
   /** Topup amount to calculate */
   amount: number
 }

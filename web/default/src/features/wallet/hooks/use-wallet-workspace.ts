@@ -15,8 +15,10 @@ import { DEFAULT_DISCOUNT_RATE } from '../constants'
 import {
   getDefaultPaymentType,
   getMinTopupAmount,
+  isStripePayment,
   isWaffoPancakePayment,
 } from '../lib'
+import { type StripeCurrency } from '../lib/stripe'
 import type {
   CreemProduct,
   PaymentMethod,
@@ -51,6 +53,7 @@ export function useWalletWorkspace() {
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null)
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<PaymentMethod>()
+  const [stripeCurrency, setStripeCurrency] = useState<StripeCurrency>('HKD')
   const [paymentLoading, setPaymentLoading] = useState<string | null>(null)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [billingDialogOpen, setBillingDialogOpen] = useState(false)
@@ -186,6 +189,11 @@ export function useWalletWorkspace() {
       setTopupAmount(minTopup)
 
       const defaultPaymentType = getDefaultPaymentType(topupInfo)
+      setSelectedPaymentMethod(
+        topupInfo.pay_methods.find(
+          (method) => method.type === defaultPaymentType
+        )
+      )
       calculatePaymentAmount(minTopup, defaultPaymentType)
     }
   }, [topupInfo, topupAmount, calculatePaymentAmount])
@@ -198,18 +206,22 @@ export function useWalletWorkspace() {
     (preset: PresetAmount) => {
       setTopupAmount(preset.value)
       setSelectedPreset(preset.value)
-      calculatePaymentAmount(preset.value, getCurrentPaymentType())
+      calculatePaymentAmount(
+        preset.value,
+        getCurrentPaymentType(),
+        stripeCurrency
+      )
     },
-    [calculatePaymentAmount, getCurrentPaymentType]
+    [calculatePaymentAmount, getCurrentPaymentType, stripeCurrency]
   )
 
   const handleTopupAmountChange = useCallback(
     (amount: number) => {
       setTopupAmount(amount)
       setSelectedPreset(null)
-      calculatePaymentAmount(amount, getCurrentPaymentType())
+      calculatePaymentAmount(amount, getCurrentPaymentType(), stripeCurrency)
     },
-    [calculatePaymentAmount, getCurrentPaymentType]
+    [calculatePaymentAmount, getCurrentPaymentType, stripeCurrency]
   )
 
   const handlePaymentMethodSelect = useCallback(
@@ -223,14 +235,45 @@ export function useWalletWorkspace() {
           return
         }
 
-        await calculatePaymentAmount(topupAmount, method.type)
-        setConfirmDialogOpen(true)
+        const quoted = await calculatePaymentAmount(
+          topupAmount,
+          method.type,
+          stripeCurrency
+        )
+        if (quoted > 0) setConfirmDialogOpen(true)
       } finally {
         setPaymentLoading(null)
       }
     },
+    [calculatePaymentAmount, topupAmount, topupInfo, stripeCurrency]
+  )
+
+  const handlePricingMethodChange = useCallback(
+    (type: string) => {
+      const method = topupInfo?.pay_methods.find((item) => item.type === type)
+      if (!method) return
+      setSelectedPaymentMethod(method)
+      void calculatePaymentAmount(topupAmount, method.type, stripeCurrency)
+    },
+    [calculatePaymentAmount, topupAmount, topupInfo, stripeCurrency]
+  )
+
+  const handleStripeCurrencyChange = useCallback(
+    (value: StripeCurrency) => {
+      setStripeCurrency(value)
+      const method = topupInfo?.pay_methods.find(
+        (item) => item.type === 'stripe'
+      )
+      if (!method) return
+      setSelectedPaymentMethod({ ...method, currency: value })
+      void calculatePaymentAmount(topupAmount, method.type, value)
+    },
     [calculatePaymentAmount, topupAmount, topupInfo]
   )
+
+  const paymentCurrency = isStripePayment(selectedPaymentMethod?.type || '')
+    ? stripeCurrency
+    : selectedPaymentMethod?.currency || 'CNY'
 
   const handlePaymentConfirm = useCallback(async () => {
     if (!selectedPaymentMethod) return
@@ -238,7 +281,11 @@ export function useWalletWorkspace() {
     const isPancake = isWaffoPancakePayment(selectedPaymentMethod.type)
     const success = isPancake
       ? await processWaffoPancakePayment(topupAmount)
-      : await processPayment(topupAmount, selectedPaymentMethod.type)
+      : await processPayment(
+          topupAmount,
+          selectedPaymentMethod.type,
+          stripeCurrency
+        )
 
     if (success) {
       setConfirmDialogOpen(false)
@@ -249,6 +296,7 @@ export function useWalletWorkspace() {
     processPayment,
     processWaffoPancakePayment,
     selectedPaymentMethod,
+    stripeCurrency,
     topupAmount,
   ])
 
@@ -315,6 +363,10 @@ export function useWalletWorkspace() {
     selectedPreset,
     selectedPaymentMethod,
     paymentAmount,
+    paymentCurrency,
+    stripeCurrency,
+    handleStripeCurrencyChange,
+    handlePricingMethodChange,
     calculating,
     paymentLoading,
     redemptionCode,

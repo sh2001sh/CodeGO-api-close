@@ -82,6 +82,7 @@ const defaultBillingSettings: BillingSettings = {
   StripePriceId: '',
   StripeCNYUnitPrice: 1.4,
   StripeHKDUnitPrice: 1.5,
+  StripeUSDUnitPrice: 0.2,
   StripeUnitPrice: 8.0,
   StripeMinTopUp: 5,
   StripePromotionCodesEnabled: false,

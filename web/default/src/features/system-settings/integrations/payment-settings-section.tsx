@@ -121,6 +121,7 @@ const paymentSchema = z.object({
   StripePriceId: z.string(),
   StripeCNYUnitPrice: z.coerce.number().positive().finite(),
   StripeHKDUnitPrice: z.coerce.number().positive().finite(),
+  StripeUSDUnitPrice: z.coerce.number().positive().finite(),
   StripeUnitPrice: z.coerce.number().min(0),
   StripeMinTopUp: z.coerce.number().int().min(5),
   StripePromotionCodesEnabled: z.boolean(),
@@ -435,6 +436,7 @@ export function PaymentSettingsSection({
       StripePriceId: values.StripePriceId.trim(),
       StripeCNYUnitPrice: values.StripeCNYUnitPrice as number,
       StripeHKDUnitPrice: values.StripeHKDUnitPrice as number,
+      StripeUSDUnitPrice: values.StripeUSDUnitPrice as number,
       StripeUnitPrice: values.StripeUnitPrice as number,
       StripeMinTopUp: values.StripeMinTopUp as number,
       StripePromotionCodesEnabled:
@@ -447,6 +449,7 @@ export function PaymentSettingsSection({
       StripePriceId: initialRef.current.StripePriceId.trim(),
       StripeCNYUnitPrice: initialRef.current.StripeCNYUnitPrice,
       StripeHKDUnitPrice: initialRef.current.StripeHKDUnitPrice,
+      StripeUSDUnitPrice: initialRef.current.StripeUSDUnitPrice,
       StripeUnitPrice: initialRef.current.StripeUnitPrice,
       StripeMinTopUp: initialRef.current.StripeMinTopUp,
       StripePromotionCodesEnabled:
@@ -486,6 +489,12 @@ export function PaymentSettingsSection({
       updates.push({
         key: 'StripeHKDUnitPrice',
         value: sanitized.StripeHKDUnitPrice,
+      })
+    }
+    if (sanitized.StripeUSDUnitPrice !== initial.StripeUSDUnitPrice) {
+      updates.push({
+        key: 'StripeUSDUnitPrice',
+        value: sanitized.StripeUSDUnitPrice,
       })
     }
     if (sanitized.StripeUnitPrice !== initial.StripeUnitPrice) {
@@ -727,6 +736,7 @@ export function PaymentSettingsSection({
       StripePriceId: values.StripePriceId.trim(),
       StripeCNYUnitPrice: values.StripeCNYUnitPrice,
       StripeHKDUnitPrice: values.StripeHKDUnitPrice,
+      StripeUSDUnitPrice: values.StripeUSDUnitPrice,
       StripeUnitPrice: values.StripeUnitPrice,
       StripeMinTopUp: values.StripeMinTopUp,
       StripePromotionCodesEnabled: values.StripePromotionCodesEnabled,
@@ -763,6 +773,7 @@ export function PaymentSettingsSection({
       StripePriceId: initialRef.current.StripePriceId.trim(),
       StripeCNYUnitPrice: initialRef.current.StripeCNYUnitPrice,
       StripeHKDUnitPrice: initialRef.current.StripeHKDUnitPrice,
+      StripeUSDUnitPrice: initialRef.current.StripeUSDUnitPrice,
       StripeUnitPrice: initialRef.current.StripeUnitPrice,
       StripeMinTopUp: initialRef.current.StripeMinTopUp,
       StripePromotionCodesEnabled:
@@ -922,6 +933,12 @@ export function PaymentSettingsSection({
       updates.push({
         key: 'StripeHKDUnitPrice',
         value: sanitized.StripeHKDUnitPrice,
+      })
+    }
+    if (sanitized.StripeUSDUnitPrice !== initial.StripeUSDUnitPrice) {
+      updates.push({
+        key: 'StripeUSDUnitPrice',
+        value: sanitized.StripeUSDUnitPrice,
       })
     }
     if (sanitized.StripeUnitPrice !== initial.StripeUnitPrice) {
@@ -1488,6 +1505,27 @@ export function PaymentSettingsSection({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t('HKD / credit')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={0.01}
+                        step='0.01'
+                        value={field.value as number}
+                        onChange={(event) =>
+                          field.onChange(event.target.valueAsNumber)
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='StripeUSDUnitPrice'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('USD / credit')}</FormLabel>
                     <FormControl>
                       <Input
                         type='number'

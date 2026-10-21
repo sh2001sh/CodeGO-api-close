@@ -35,6 +35,7 @@ const monthlyPassBenefitKey = {
 } as const
 
 export function PackagePlanCard(props: {
+  formatPrice?: (amount: number, currency: string) => string
   collectiveRoom?: GroupBuyItem
   record: PlanRecord
   purchaseCount: number
@@ -53,6 +54,7 @@ export function PackagePlanCard(props: {
   const [showDetails, setShowDetails] = useState(false)
   const plan = props.record.plan
   const title = translatePlanTitle(plan.title, t)
+  const formatPrice = props.formatPrice || formatSubscriptionPlanPrice
   const isCreditPack = plan.plan_type === 'credit_pack'
   const groupBuyEnabled =
     plan.group_buy_enabled === true &&
@@ -169,11 +171,11 @@ export function PackagePlanCard(props: {
             {t('Payment price')}
           </div>
           <div className='text-foreground text-3xl tabular-nums'>
-            {formatSubscriptionPlanPrice(effectiveAmount, plan.currency)}
+            {formatPrice(effectiveAmount, plan.currency)}
           </div>
           {effectiveAmount !== plan.price_amount && (
             <div className='text-muted-foreground mt-1 text-xs line-through'>
-              {formatSubscriptionPlanPrice(plan.price_amount, plan.currency)}
+              {formatPrice(plan.price_amount, plan.currency)}
             </div>
           )}
         </div>

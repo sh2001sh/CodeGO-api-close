@@ -241,7 +241,7 @@ export interface PlanPayload {
 }
 
 export interface SubscriptionPayRequest {
-  currency?: 'HKD' | 'CNY'
+  currency?: 'HKD' | 'CNY' | 'USD'
   plan_id: number
   payment_method?: string
   purchase_type?: SubscriptionPurchaseType

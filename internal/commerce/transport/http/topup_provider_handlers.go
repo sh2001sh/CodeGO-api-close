@@ -1,17 +1,20 @@
 package http
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	commercestore "github.com/sh2001sh/new-api/internal/commerce/paymentsettings"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
 	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	"github.com/sh2001sh/new-api/internal/platform/logger"
-	"github.com/stripe/stripe-go/v81"
-	"github.com/stripe/stripe-go/v81/webhook"
+	"github.com/stripe/stripe-go/v87"
+	"github.com/stripe/stripe-go/v87/webhook"
 	waffocore "github.com/waffo-com/waffo-go/core"
 	"io"
 	stdhttp "net/http"
+	"strings"
 )
 
 func RequestStripeAmount(c *gin.Context) {
@@ -44,7 +47,7 @@ func RequestStripePay(c *gin.Context) {
 
 func StripeWebhook(c *gin.Context) {
 	ctx := c.Request.Context()
-	if !commerceapp.IsStripeTopUpEnabled() {
+	if strings.TrimSpace(commercestore.StripeWebhookSecret) == "" {
 		logger.LogWarn(ctx, "Stripe webhook 琚嫆缁?reason=webhook_disabled")
 		c.AbortWithStatus(stdhttp.StatusForbidden)
 		return
@@ -69,33 +72,53 @@ func StripeWebhook(c *gin.Context) {
 		return
 	}
 
-	referenceID := event.GetObjectValue("client_reference_id")
-	customerID := event.GetObjectValue("customer")
-	clientIP := c.ClientIP()
+	var checkout stripe.CheckoutSession
 	switch event.Type {
-	case stripe.EventTypeCheckoutSessionCompleted:
-		if event.GetObjectValue("status") == "complete" && event.GetObjectValue("payment_status") == "paid" {
-			_ = commerceapp.HandleStripeWebhookFulfillment(ctx, referenceID, customerID, map[string]any{
-				"customer":     customerID,
-				"amount_total": event.GetObjectValue("amount_total"),
-				"currency":     event.GetObjectValue("currency"),
-				"event_type":   string(event.Type),
-			}, clientIP)
+	case stripe.EventTypeCheckoutSessionCompleted, stripe.EventTypeCheckoutSessionAsyncPaymentSucceeded, stripe.EventTypeCheckoutSessionAsyncPaymentFailed, stripe.EventTypeCheckoutSessionExpired:
+		if json.Unmarshal(event.Data.Raw, &checkout) != nil {
+			c.AbortWithStatus(stdhttp.StatusBadRequest)
+			return
 		}
-	case stripe.EventTypeCheckoutSessionAsyncPaymentSucceeded:
-		_ = commerceapp.HandleStripeWebhookFulfillment(ctx, referenceID, customerID, map[string]any{
-			"customer":     customerID,
-			"amount_total": event.GetObjectValue("amount_total"),
-			"currency":     event.GetObjectValue("currency"),
-			"event_type":   string(event.Type),
-		}, clientIP)
+	default:
+		c.Status(stdhttp.StatusOK)
+		return
+	}
+	referenceID := checkout.ClientReferenceID
+	if referenceID == "" {
+		c.Status(stdhttp.StatusOK)
+		return
+	}
+	customerID, intentID := "", ""
+	if checkout.Customer != nil {
+		customerID = checkout.Customer.ID
+	}
+	if checkout.PaymentIntent != nil {
+		intentID = checkout.PaymentIntent.ID
+	}
+	evidence := map[string]any{
+		"id": checkout.ID, "client_reference_id": referenceID, "mode": string(checkout.Mode),
+		"status": string(checkout.Status), "payment_status": string(checkout.PaymentStatus),
+		"payment_intent": intentID, "livemode": checkout.Livemode, "customer": customerID,
+		"amount_total": checkout.AmountTotal, "currency": string(checkout.Currency), "event_type": string(event.Type),
+	}
+	switch event.Type {
+	case stripe.EventTypeCheckoutSessionCompleted, stripe.EventTypeCheckoutSessionAsyncPaymentSucceeded:
+		if checkout.Status == "complete" && checkout.PaymentStatus == "paid" {
+			err = commerceapp.HandleStripeWebhookFulfillment(ctx, referenceID, customerID, evidence, c.ClientIP())
+		}
 	case stripe.EventTypeCheckoutSessionAsyncPaymentFailed:
-		_ = commerceapp.MarkStripeTopUpFailed(ctx, referenceID, clientIP)
+		err = commerceapp.ExpireStripeOrder(ctx, referenceID, evidence)
 	case stripe.EventTypeCheckoutSessionExpired:
-		if event.GetObjectValue("status") == "expired" {
-			_ = commerceapp.ExpireStripeOrder(ctx, referenceID)
+		if checkout.Status == "expired" {
+			err = commerceapp.ExpireStripeOrder(ctx, referenceID, evidence)
 		}
 	}
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("Stripe webhook fulfillment failed event_id=%s trade_no=%s error=%q", event.ID, referenceID, err.Error()))
+		c.AbortWithStatus(stdhttp.StatusServiceUnavailable)
+		return
+	}
+
 	c.Status(stdhttp.StatusOK)
 }
 

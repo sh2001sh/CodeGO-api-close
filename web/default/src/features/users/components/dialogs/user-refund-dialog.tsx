@@ -134,10 +134,10 @@ export function UserRefundDialog(props: Props) {
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   )
-  const money = (amount: number) =>
+  const money = (amount: number, currency = 'CNY') =>
     new Intl.NumberFormat(getIntlLocale(), {
       style: 'currency',
-      currency: 'CNY',
+      currency,
     }).format(amount)
   const statusLabel = (order: RefundableOrder) => {
     if (order.refund_status === 'processing') return t('Refund is processing')
@@ -217,13 +217,13 @@ export function UserRefundDialog(props: Props) {
                         {order.trade_no}
                       </TableCell>
                       <TableCell className='text-right tabular-nums'>
-                        {money(order.paid_amount)}
+                        {money(order.paid_amount, order.currency)}
                       </TableCell>
                       <TableCell className='text-right tabular-nums'>
                         {formatQuota(order.used_quota)}
                       </TableCell>
                       <TableCell className='text-right tabular-nums'>
-                        {money(order.refund_amount)}
+                        {money(order.refund_amount, order.currency)}
                       </TableCell>
                       <TableCell className='max-w-48 whitespace-normal'>
                         <div>{statusLabel(order)}</div>
@@ -299,7 +299,10 @@ export function UserRefundDialog(props: Props) {
           !refund.isPending && !open && setConfirmOrder(null)
         }
         title={t('Confirm refund of {{amount}}?', {
-          amount: money(confirmOrder?.refund_amount || 0),
+          amount: money(
+            confirmOrder?.refund_amount || 0,
+            confirmOrder?.currency
+          ),
         })}
         desc={confirmOrder?.trade_no || ''}
         confirmText={t('Refund')}

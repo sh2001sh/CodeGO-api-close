@@ -82,6 +82,14 @@ func commercialPaymentCurrency(provider, method, payload string, amount float64)
 	}
 	switch provider {
 	case commerceschema.PaymentProviderStripe:
+		var paid stripePaymentEvidence
+		if json.Unmarshal([]byte(payload), &paid) == nil && paid.Checkout != nil {
+			if _, _, err := validateStripePayment(payload, payload, paid.Reference, amount); err != nil {
+				return ""
+			}
+			return strings.ToUpper(paid.Currency)
+		}
+		// Historical Stripe payments predate per-order currency snapshots.
 		return "USD"
 	case PaymentProviderNowPayments:
 		return "USDT"

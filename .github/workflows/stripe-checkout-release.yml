@@ -1,0 +1,103 @@
+name: Stripe Checkout release (amd64)
+
+on:
+  push:
+    branches: [fix/stripe-checkout-20261021]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stripe-checkout-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check production base and version
+        id: version
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git fetch origin baaa7f90307e5266afd535e15753fc30fc995336
+          git merge-base --is-ancestor baaa7f90307e5266afd535e15753fc30fc995336 HEAD
+          printf 'tag=sha-%s\n' "${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.1"
+      - name: Verify payment, refund and ledger boundaries
+        run: go test -count=1 -timeout=7m ./internal/commerce/... ./internal/billing/app ./internal/platform/store
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - name: Verify frontend
+        working-directory: web/default
+        env:
+          DISABLE_ESLINT_PLUGIN: "true"
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun run lint
+          VITE_REACT_APP_VERSION="sha-${GITHUB_SHA:0:7}" bun run build
+          test -s dist/index.html
+
+  images:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [control-api, ledger-worker]
+    steps:
+      - uses: actions/checkout@v4
+      - run: printf '%s\n' '${{ needs.verify.outputs.tag }}' > VERSION
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          build-args: |
+            APP_PATH=./cmd/${{ matrix.service }}
+            FRONTEND_REVISION=${{ github.sha }}
+            BUN_IMAGE=mirror.gcr.io/oven/bun:1@sha256:0733e50325078969732ebe3b15ce4c4be5082f18c4ac1a0f0ca4839c2e4e42a7
+            GO_IMAGE=mirror.gcr.io/library/golang:1.26.1-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039
+            RUNTIME_IMAGE=mirror.gcr.io/library/debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
+          cache-from: type=gha,scope=v2-${{ matrix.service }}-amd64
+          cache-to: type=gha,mode=max,scope=stripe-${{ matrix.service }}-amd64
+          tags: ghcr.io/sh2001sh/codego-api:${{ needs.verify.outputs.tag }}-${{ matrix.service }}-amd64
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+      - name: Record immutable image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          printf '%s %s %s\n' '${{ matrix.service }}' "$GITHUB_SHA" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"

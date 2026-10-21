@@ -21,6 +21,7 @@ import (
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
+	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
 	"gorm.io/gorm/clause"
 )
 
@@ -33,6 +34,7 @@ type SubscriptionFuelQuoteRequest struct {
 
 type SubscriptionFuelPurchaseRequest struct {
 	SubscriptionFuelQuoteRequest
+	Currency      string `json:"currency,omitempty"`
 	PaymentMethod string `json:"payment_method"`
 }
 
@@ -87,7 +89,7 @@ func QuoteSubscriptionFuel(userID int, req SubscriptionFuelQuoteRequest) (*Subsc
 	}, nil
 }
 
-func createPendingSubscriptionFuelOrder(userID int, quote *SubscriptionFuelQuote, method, provider, tradeNo string) (*commerceschema.SubscriptionOrder, error) {
+func createPendingSubscriptionFuelOrder(userID int, quote *SubscriptionFuelQuote, method, provider, tradeNo, currency string) (*commerceschema.SubscriptionOrder, error) {
 	if quote == nil {
 		return nil, ErrSubscriptionFuelUnavailable
 	}
@@ -106,6 +108,16 @@ func createPendingSubscriptionFuelOrder(userID int, quote *SubscriptionFuelQuote
 		Status:               constant.TopUpStatusPending,
 		FulfillmentStatus:    commerceschema.SubscriptionOrderFulfillmentPending,
 		CreateTime:           time.Now().Unix(),
+	}
+	if provider == commerceschema.PaymentProviderStripe {
+		plan, err := GetSubscriptionPlanByID(quote.PlanID)
+		if err != nil {
+			return nil, err
+		}
+		order.ProviderPayload = platformtext.GetJsonString(map[string]string{"stripe_currency": currency})
+		if err := snapshotStripeSubscriptionCheckout(order, plan.Currency, 0); err != nil {
+			return nil, err
+		}
 	}
 	if err := platformdb.DB.Create(order).Error; err != nil {
 		return nil, err
@@ -131,7 +143,7 @@ func CreateSubscriptionFuelEpayPayment(userID int, req SubscriptionFuelPurchaseR
 		return nil, errors.New("payment callback address is invalid")
 	}
 	tradeNo := fmt.Sprintf("SUBFUEL%dNO%s%d", userID, platformruntime.GetRandomString(6), time.Now().Unix())
-	order, err := createPendingSubscriptionFuelOrder(userID, quote, req.PaymentMethod, commerceschema.PaymentProviderEpay, tradeNo)
+	order, err := createPendingSubscriptionFuelOrder(userID, quote, req.PaymentMethod, commerceschema.PaymentProviderEpay, tradeNo, "")
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +168,7 @@ func CreateSubscriptionFuelXunhuPayment(userID int, req SubscriptionFuelPurchase
 		return nil, fmt.Errorf("minimum XunhuPay payment is %d CNY", commercestore.XunhuMinTopUp)
 	}
 	tradeNo := fmt.Sprintf("SUBFUEL%dNO%s%d", userID, platformruntime.GetRandomString(6), time.Now().Unix())
-	order, err := createPendingSubscriptionFuelOrder(userID, quote, commerceschema.PaymentMethodXunhu, commerceschema.PaymentProviderXunhu, tradeNo)
+	order, err := createPendingSubscriptionFuelOrder(userID, quote, commerceschema.PaymentMethodXunhu, commerceschema.PaymentProviderXunhu, tradeNo, "")
 	if err != nil {
 		return nil, err
 	}
@@ -170,11 +182,14 @@ func CreateSubscriptionFuelXunhuPayment(userID int, req SubscriptionFuelPurchase
 }
 
 func CreateSubscriptionFuelStripePayment(userID int, req SubscriptionFuelPurchaseRequest) (*SubscriptionStripeCheckoutPayload, error) {
-	quote, err := QuoteSubscriptionFuel(userID, req.SubscriptionFuelQuoteRequest)
+	if !IsStripeTopUpEnabled() {
+		return nil, errors.New("Stripe is not configured")
+	}
+	currency, err := stripePresentmentCurrency(req.Currency)
 	if err != nil {
 		return nil, err
 	}
-	plan, err := GetSubscriptionPlanByID(quote.PlanID)
+	quote, err := QuoteSubscriptionFuel(userID, req.SubscriptionFuelQuoteRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -186,16 +201,18 @@ func CreateSubscriptionFuelStripePayment(userID int, req SubscriptionFuelPurchas
 		return nil, errors.New("user not found")
 	}
 	referenceID := "sub_fuel_ref_" + platformsecurity.Sha1([]byte(fmt.Sprintf("%d-%d-%s", userID, time.Now().UnixMilli(), randstr.String(4))))
-	order, err := createPendingSubscriptionFuelOrder(userID, quote, commerceschema.PaymentMethodStripe, commerceschema.PaymentProviderStripe, referenceID)
+	order, err := createPendingSubscriptionFuelOrder(userID, quote, commerceschema.PaymentMethodStripe, commerceschema.PaymentProviderStripe, referenceID, currency)
 	if err != nil {
 		return nil, err
 	}
-	link, err := genStripeSubscriptionLink(referenceID, user.StripeCustomer, user.Email, "FUEL:"+quote.PlanTitle, plan.Currency, order.Money)
+	link, err := genStripeSubscriptionLink(referenceID, user.StripeCustomer, user.Email, "FUEL:"+quote.PlanTitle, currency, order.Money)
 	if err != nil {
-		_ = ExpireSubscriptionOrder(referenceID, commerceschema.PaymentProviderStripe)
+		if stripeCheckoutRejected(err) {
+			_ = ExpireSubscriptionOrder(referenceID, commerceschema.PaymentProviderStripe)
+		}
 		return nil, errors.New("failed to create payment")
 	}
-	return &SubscriptionStripeCheckoutPayload{SubscriptionCheckoutPayload: SubscriptionCheckoutPayload{OrderID: referenceID, AmountDue: order.Money, Action: "fuel"}, PayLink: link}, nil
+	return &SubscriptionStripeCheckoutPayload{SubscriptionCheckoutPayload: SubscriptionCheckoutPayload{OrderID: referenceID, AmountDue: order.Money, Currency: strings.ToUpper(currency), Action: "fuel"}, PayLink: link}, nil
 }
 
 func fulfillSubscriptionFuelTx(tx *gorm.DB, order *commerceschema.SubscriptionOrder) error {

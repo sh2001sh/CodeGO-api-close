@@ -103,6 +103,9 @@ func attachCreditPackTopupQuota(topups []*commerceschema.TopUp) error {
 	}
 	for _, topup := range topups {
 		topup.CreditedQuota = quotas[topup.TradeNo]
+		if topup.PaymentProvider == commerceschema.PaymentProviderStripe {
+			topup.Currency = refundPaymentCurrency(topup.PaymentProvider, topup.ProviderPayload)
+		}
 	}
 	return nil
 }

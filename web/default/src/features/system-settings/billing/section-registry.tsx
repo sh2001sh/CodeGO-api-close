@@ -173,6 +173,8 @@ const BILLING_SECTIONS = [
           StripeApiSecret: settings.StripeApiSecret,
           StripeWebhookSecret: settings.StripeWebhookSecret,
           StripePriceId: settings.StripePriceId,
+          StripeCNYUnitPrice: settings.StripeCNYUnitPrice,
+          StripeHKDUnitPrice: settings.StripeHKDUnitPrice,
           StripeUnitPrice: settings.StripeUnitPrice,
           StripeMinTopUp: settings.StripeMinTopUp,
           StripePromotionCodesEnabled: settings.StripePromotionCodesEnabled,

@@ -87,6 +87,7 @@ interface PaymentTracker {
   externalUrl: string
   qrCodeUrl: string
   amountDue: number
+  currency: string
   methodLabel: string
   actionLabel: string
   message: string
@@ -99,6 +100,7 @@ const EMPTY_PAYMENT_TRACKER: PaymentTracker = {
   externalUrl: '',
   qrCodeUrl: '',
   amountDue: 0,
+  currency: '',
   methodLabel: '',
   actionLabel: '',
   message: '',
@@ -315,7 +317,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
 
   if (!plan || !planRecord) return null
 
-  const hasStripe = props.enableStripe && !!plan.stripe_price_id
+  const hasStripe =
+    props.enableStripe &&
+    ['CNY', 'USD'].includes((plan.currency || 'USD').trim().toUpperCase())
   const hasCreem = props.enableCreem && !!plan.creem_product_id
   const hasEpay = props.enableOnlineTopUp && paymentMethods.length > 0
   const totalAmount = Number(plan.total_amount || 0)
@@ -423,6 +427,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
       externalUrl,
       qrCodeUrl,
       amountDue,
+      currency: response.data?.currency || plan.currency,
       methodLabel,
       actionLabel: purchaseModeLabel,
       message: qrCodeUrl
@@ -462,10 +467,11 @@ export function SubscriptionPurchaseDialog(props: Props) {
     }
   }
 
-  const handlePayStripe = async () => {
+  const handlePayStripe = async (currency: 'HKD' | 'CNY') => {
     setPaying(true)
     try {
       const response = await paySubscriptionStripe({
+        currency,
         plan_id: plan.id,
         purchase_type: purchaseType,
         group_buy_id: groupBuyId,
@@ -640,7 +646,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
             label={i18n.t('应付金额')}
             value={formatSubscriptionPlanPrice(
               paymentTracker.amountDue,
-              plan.currency
+              paymentTracker.currency
             )}
           />
           <StatusItem
@@ -837,10 +843,20 @@ export function SubscriptionPurchaseDialog(props: Props) {
                           <Button
                             variant='outline'
                             className='w-full'
-                            onClick={() => void handlePayStripe()}
+                            onClick={() => void handlePayStripe('HKD')}
                             disabled={disablePurchase}
                           >
-                            Stripe
+                            Stripe · HKD
+                          </Button>
+                        ) : null}
+                        {hasStripe ? (
+                          <Button
+                            variant='outline'
+                            className='w-full'
+                            onClick={() => void handlePayStripe('CNY')}
+                            disabled={disablePurchase}
+                          >
+                            Stripe · CNY
                           </Button>
                         ) : null}
                         {hasCreem ? (

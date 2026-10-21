@@ -78,6 +78,15 @@ func CreatePendingTopUpOrderWithBlindBoxDiscount(topUp *commerceschema.TopUp) (f
 				return err
 			}
 		}
+		if topUp.PaymentProvider == commerceschema.PaymentProviderStripe {
+			propID := 0
+			if prop != nil {
+				propID = prop.Id
+			}
+			if err := snapshotStripeCheckout(&topUp.ProviderPayload, stripeOrderCurrency(topUp.ProviderPayload), topUp.Money, propID); err != nil {
+				return err
+			}
+		}
 		return tx.Create(topUp).Error
 	})
 	return appliedRate, err
@@ -105,7 +114,10 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &commerceschema.TopUp{}
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(topUpTradeNoColumn()+" = ?", tradeNo).First(topUp).Error; err != nil {
-			return commerceschema.ErrTopUpNotFound
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return commerceschema.ErrTopUpNotFound
+			}
+			return err
 		}
 		if expectedPaymentProvider != "" && topUp.PaymentProvider != expectedPaymentProvider {
 			return commerceschema.ErrPaymentMethodMismatch
@@ -145,6 +157,7 @@ func ExpireDueTopUps(limit int) (int, error) {
 	var ids []int
 	if err := platformdb.DB.Model(&commerceschema.TopUp{}).
 		Where("status = ? AND create_time > 0 AND create_time <= ?", constant.TopUpStatusPending, cutoff).
+		Where("payment_provider <> ?", commerceschema.PaymentProviderStripe).
 		Order("create_time asc, id asc").
 		Limit(limit).
 		Pluck("id", &ids).Error; err != nil {

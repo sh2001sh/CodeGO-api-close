@@ -35,8 +35,7 @@ func IsStripeTopUpEnabled() bool {
 		return false
 	}
 	return strings.TrimSpace(commercestore.StripeApiSecret) != "" &&
-		strings.TrimSpace(commercestore.StripeWebhookSecret) != "" &&
-		strings.TrimSpace(commercestore.StripePriceId) != ""
+		strings.TrimSpace(commercestore.StripeWebhookSecret) != ""
 }
 
 func IsCreemTopUpEnabled() bool {
@@ -304,10 +303,11 @@ func UnlockOrder(tradeNo string) {
 
 func BuildStripePayMethod() map[string]string {
 	return map[string]string{
-		"name":      "Stripe",
+		"name":      "Stripe (HKD)",
 		"type":      commerceschema.PaymentMethodStripe,
+		"currency":  "HKD",
 		"color":     "rgba(var(--semi-purple-5), 1)",
-		"min_topup": strconv.Itoa(commercestore.StripeMinTopUp),
+		"min_topup": strconv.FormatInt(GetStripeMinTopup(), 10),
 	}
 }
 
@@ -470,6 +470,9 @@ func CreateXunhuOrder(tradeNo string, title string, totalFee float64, notifyURL 
 
 func GetStripeMinTopup() int64 {
 	minTopup := commercestore.StripeMinTopUp
+	if minTopup < 5 {
+		minTopup = 5
+	}
 	if platformgeneral.GetQuotaDisplayType() == platformgeneral.QuotaDisplayTypeTokens {
 		minTopup = minTopup * int(platformruntime.QuotaPerUnit)
 	}

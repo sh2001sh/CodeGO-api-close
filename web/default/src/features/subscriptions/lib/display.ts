@@ -95,6 +95,8 @@ export function getSubscriptionDisabledReasonText(
 ): string {
   const normalized = normalizeSubscriptionText(value)
   switch (normalized) {
+    case 'HKD':
+      return 'HK$'
     case 'cannot subscribe to a lower-tier plan while your current package is active':
     case 'cannot subscribe to a lower-tier plan while your current package still has remaining quota':
       return interfaceI18n.t(

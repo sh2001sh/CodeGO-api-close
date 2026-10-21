@@ -30,11 +30,11 @@ func listRefundableOrders(userID int) ([]commerceschema.RefundableOrder, error) 
 		return nil, errors.New("invalid user")
 	}
 	var topups []commerceschema.TopUp
-	if err := platformdb.DB.Where("user_id = ? AND status = ? AND payment_provider = ?", userID, constant.TopUpStatusSuccess, commerceschema.PaymentProviderEpay).Order("id desc").Limit(100).Find(&topups).Error; err != nil {
+	if err := platformdb.DB.Where("user_id = ? AND status = ? AND payment_provider IN ?", userID, constant.TopUpStatusSuccess, []string{commerceschema.PaymentProviderEpay, commerceschema.PaymentProviderStripe}).Order("id desc").Limit(100).Find(&topups).Error; err != nil {
 		return nil, err
 	}
 	var orders []commerceschema.SubscriptionOrder
-	if err := platformdb.DB.Where("user_id = ? AND status = ? AND payment_provider = ? AND purchase_type <> ?", userID, constant.TopUpStatusSuccess, commerceschema.PaymentProviderEpay, commerceschema.SubscriptionPurchaseTypeFuel).Order("id desc").Limit(100).Find(&orders).Error; err != nil {
+	if err := platformdb.DB.Where("user_id = ? AND status = ? AND payment_provider IN ? AND purchase_type <> ?", userID, constant.TopUpStatusSuccess, []string{commerceschema.PaymentProviderEpay, commerceschema.PaymentProviderStripe}, commerceschema.SubscriptionPurchaseTypeFuel).Order("id desc").Limit(100).Find(&orders).Error; err != nil {
 		return nil, err
 	}
 	result := make([]commerceschema.RefundableOrder, 0, len(topups)+len(orders))
@@ -59,6 +59,7 @@ func refundableSubscription(userID int, order *commerceschema.SubscriptionOrder)
 
 func refundableSubscriptionWithDB(tx *gorm.DB, userID int, order *commerceschema.SubscriptionOrder) commerceschema.RefundableOrder {
 	item := commerceschema.RefundableOrder{OrderType: commerceschema.RefundOrderTypeSubscription, TradeNo: order.TradeNo, PaymentMethod: order.PaymentMethod, CreatedAt: order.CreateTime, PaidAmount: order.Money, RefundStatus: order.RefundStatus, RefundNo: order.RefundNo, RefundAmount: order.RefundAmount}
+	item.Currency = refundPaymentCurrency(order.PaymentProvider, order.ProviderPayload)
 	if order.RefundStatus == commerceschema.RefundStatusFailed || order.RefundStatus == commerceschema.RefundStatusProcessing {
 		holdStatus := billingschema.BillingReservationStatusReleased
 		if order.RefundStatus == commerceschema.RefundStatusProcessing {
@@ -302,6 +303,14 @@ func loadRefundOrderTx(tx *gorm.DB, userID int, orderType, tradeNo string) (*ref
 }
 
 func validateRefundPayment(status, provider, method, payload, tradeNo string, paid float64) error {
+	if provider == commerceschema.PaymentProviderStripe {
+		if status != constant.TopUpStatusSuccess || method != commerceschema.PaymentMethodStripe {
+			return errors.New("Stripe payment is not refundable")
+		}
+		_, _, err := validateStripePayment(payload, payload, tradeNo, paid)
+		return err
+	}
+
 	if status != constant.TopUpStatusSuccess || provider != commerceschema.PaymentProviderEpay || (method != "alipay" && method != "wxpay") || paid <= 0 || math.IsNaN(paid) || math.IsInf(paid, 0) || paid*100 > float64(math.MaxInt64) {
 		return errors.New("仅支持已支付成功的现金支付订单退款")
 	}
@@ -334,7 +343,7 @@ func createRefund(userID int, req commerceschema.RefundRequest) (*commerceschema
 		return nil, errors.New("退款订单参数无效")
 	}
 	refundNo := fmt.Sprintf("RFUSR%d%s%d", userID, platformruntime.GetRandomString(8), time.Now().Unix())
-	var providerOrderID string
+	var providerOrderID, paymentProvider, paymentPayload string
 	var refundAmount float64
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		state, err := loadRefundOrderTx(tx, userID, req.OrderType, req.TradeNo)
@@ -385,6 +394,7 @@ func createRefund(userID int, req commerceschema.RefundRequest) (*commerceschema
 		}
 		refundAmount = item.RefundAmount
 		providerOrderID = extractProviderOrderID(state.payload)
+		paymentProvider, paymentPayload = state.provider, state.payload
 		return tx.Model(state.record).Updates(map[string]any{"refund_status": commerceschema.RefundStatusProcessing, "refund_no": refundNo, "refund_amount": refundAmount, "refund_quota": item.RemainingQuota, "refund_provider_id": "", "refund_updated_at": platformruntime.GetTimestamp()}).Error
 	})
 	if err != nil {
@@ -393,7 +403,12 @@ func createRefund(userID int, req commerceschema.RefundRequest) (*commerceschema
 	if err := invalidateRefundUserCache(userID); err != nil {
 		return nil, fmt.Errorf("退款已冻结，缓存刷新失败: %w", err)
 	}
-	response, err := JianPayRefundCreate(providerOrderID, refundNo, int64(math.Round(refundAmount*100)), "管理员审核未使用额度退款（扣除2%手续费）")
+	var response *JianPayRefundResult
+	if paymentProvider == commerceschema.PaymentProviderStripe {
+		response, err = createStripeRefund(paymentPayload, refundNo, int64(math.Round(refundAmount*100)))
+	} else {
+		response, err = JianPayRefundCreate(providerOrderID, refundNo, int64(math.Round(refundAmount*100)), "管理员审核未使用额度退款（扣除2%手续费）")
+	}
 	if err != nil {
 		// The provider may have received the request. Keep this exact attempt and
 		// hold until an administrator queries refundNo; never automatically retry.
@@ -470,12 +485,13 @@ func syncRefund(userID int, refundNo string) (*commerceschema.RefundResult, erro
 }
 
 func syncRefundOrder(userID int, orderType, tradeNo, refundNo, providerID string, amount float64) (*commerceschema.RefundResult, error) {
-	var terminal string
+	var terminal, paymentProvider, paymentPayload string
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
 		state, err := loadRefundOrderTx(tx, userID, orderType, tradeNo)
 		if err != nil {
 			return err
 		}
+		paymentProvider, paymentPayload = state.provider, state.payload
 		if state.refundNo != refundNo || state.amount != amount {
 			return errors.New("退款尝试已变更")
 		}
@@ -499,7 +515,12 @@ func syncRefundOrder(userID int, orderType, tradeNo, refundNo, providerID string
 	if terminal != "" {
 		return &commerceschema.RefundResult{OrderType: orderType, TradeNo: tradeNo, RefundNo: refundNo, RefundID: providerID, RefundAmount: amount, Status: terminal}, nil
 	}
-	response, err := JianPayRefundQuery(providerID, refundNo)
+	var response *JianPayRefundResult
+	if paymentProvider == commerceschema.PaymentProviderStripe {
+		response, err = queryStripeRefund(paymentPayload, providerID, refundNo, int64(math.Round(amount*100)))
+	} else {
+		response, err = JianPayRefundQuery(providerID, refundNo)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -567,6 +588,7 @@ func minInt64(left, right int64) int64 {
 
 func refundableTopupTx(tx *gorm.DB, userID int, order *commerceschema.TopUp) commerceschema.RefundableOrder {
 	item := commerceschema.RefundableOrder{OrderType: commerceschema.RefundOrderTypeBalance, TradeNo: order.TradeNo, PaymentMethod: order.PaymentMethod, CreatedAt: order.CreateTime, PaidAmount: order.Money, RefundStatus: order.RefundStatus, RefundNo: order.RefundNo, RefundAmount: order.RefundAmount}
+	item.Currency = refundPaymentCurrency(order.PaymentProvider, order.ProviderPayload)
 	if order.RefundStatus == commerceschema.RefundStatusFailed || order.RefundStatus == commerceschema.RefundStatusProcessing {
 		holdStatus := billingschema.BillingReservationStatusReleased
 		if order.RefundStatus == commerceschema.RefundStatusProcessing {
@@ -692,7 +714,7 @@ func extractProviderOrderID(payload string) string {
 	if json.Unmarshal([]byte(payload), &data) != nil {
 		return ""
 	}
-	for _, key := range []string{"trade_no", "TradeNo", "orderId", "order_id"} {
+	for _, key := range []string{"trade_no", "TradeNo", "orderId", "order_id", "payment_intent"} {
 		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
 			return strings.TrimSpace(value)
 		}

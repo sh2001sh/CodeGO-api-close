@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/shopspring/decimal"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -18,7 +20,7 @@ import (
 	platformgeneral "github.com/sh2001sh/new-api/internal/platform/general"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stripe/stripe-go/v81"
+	"github.com/stripe/stripe-go/v87"
 )
 
 // Exercise the SDK's HTTP encoding without any requests to Stripe.
@@ -28,6 +30,7 @@ func stubSubscriptionStripe(t *testing.T, status int) (<-chan url.Values, *atomi
 	calls := &atomic.Int32{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
+		assert.True(t, strings.HasPrefix(r.Header.Get("Idempotency-Key"), "codego-checkout:"))
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/v1/checkout/sessions", r.URL.Path)
 		assert.Equal(t, "Bearer sk_test_subscription_currency_fixture", r.Header.Get("Authorization"))
@@ -97,13 +100,18 @@ func TestSubscriptionStripeCheckoutUsesPlanCurrency(t *testing.T) {
 				platformgeneral.GetSetting().QuotaDisplayType = platformgeneral.QuotaDisplayTypeCNY
 				require.NoError(t, db.Model(&identityschema.User{}).Where("id = ?", userID).Update("stripe_customer", "cus_fixture").Error)
 			}
-			payload, err := CreateSubscriptionStripePayment(userID, SubscriptionStripePayRequest{PlanID: plan.Id})
+			payload, err := CreateSubscriptionStripePayment(userID, SubscriptionStripePayRequest{PlanID: plan.Id, Currency: "CNY"})
 			require.NoError(t, err)
 			require.Equal(t, "https://checkout.example.test/session", payload.PayLink)
-			require.Equal(t, tc.price, payload.AmountDue)
+			base := tc.price
+			if tc.wantCurrency == "usd" {
+				base *= commercestore.USDExchangeRate
+			}
+			charged := decimal.NewFromFloat(base).Mul(decimal.NewFromFloat(commercestore.StripeCNYUnitPrice)).Round(2).InexactFloat64()
+			require.Equal(t, charged, payload.AmountDue)
 			form := <-forms
-			require.Equal(t, tc.wantCurrency, form.Get("line_items[0][price_data][currency]"))
-			require.Equal(t, strconv.FormatInt(int64(math.Round(tc.price*100)), 10), form.Get("line_items[0][price_data][unit_amount]"))
+			require.Equal(t, "cny", form.Get("line_items[0][price_data][currency]"))
+			require.Equal(t, strconv.FormatInt(int64(math.Round(charged*100)), 10), form.Get("line_items[0][price_data][unit_amount]"))
 			require.Equal(t, payload.OrderID, form.Get("client_reference_id"))
 			require.Equal(t, "1", form.Get("line_items[0][quantity]"))
 			require.Equal(t, "payment", form.Get("mode"))
@@ -112,7 +120,7 @@ func TestSubscriptionStripeCheckoutUsesPlanCurrency(t *testing.T) {
 			require.EqualValues(t, 1, calls.Load())
 			var order commerceschema.SubscriptionOrder
 			require.NoError(t, db.Where("trade_no = ?", payload.OrderID).First(&order).Error)
-			require.Equal(t, tc.price, order.Money)
+			require.Equal(t, charged, order.Money)
 			require.Equal(t, constant.TopUpStatusPending, order.Status)
 			if tc.pack {
 				require.Equal(t, plan.TotalAmount, order.CreditPackQuota)
@@ -144,7 +152,7 @@ func TestSubscriptionStripeCheckoutProviderFailureExpiresOrder(t *testing.T) {
 	require.NoError(t, db.Create(&plan).Error)
 	InvalidateSubscriptionPlanCache(plan.Id)
 	t.Cleanup(func() { InvalidateSubscriptionPlanCache(plan.Id) })
-	_, err := CreateSubscriptionStripePayment(874001, SubscriptionStripePayRequest{PlanID: plan.Id})
+	_, err := CreateSubscriptionStripePayment(874001, SubscriptionStripePayRequest{PlanID: plan.Id, Currency: "CNY"})
 	require.Error(t, err)
 	require.EqualValues(t, 1, calls.Load())
 	var order commerceschema.SubscriptionOrder
@@ -165,7 +173,7 @@ func TestSubscriptionStripeCheckoutUnsupportedCurrencyCreatesNoOrder(t *testing.
 	require.NoError(t, db.Create(&plan).Error)
 	InvalidateSubscriptionPlanCache(plan.Id)
 	t.Cleanup(func() { InvalidateSubscriptionPlanCache(plan.Id) })
-	_, err := CreateSubscriptionStripePayment(874101, SubscriptionStripePayRequest{PlanID: plan.Id})
+	_, err := CreateSubscriptionStripePayment(874101, SubscriptionStripePayRequest{PlanID: plan.Id, Currency: "CNY"})
 	require.ErrorContains(t, err, "unsupported")
 	require.Zero(t, calls.Load())
 	var count int64
@@ -183,10 +191,10 @@ func TestSubscriptionStripeCreditPackCallbackRemainsIdempotent(t *testing.T) {
 	require.NoError(t, db.Create(&plan).Error)
 	InvalidateSubscriptionPlanCache(plan.Id)
 	t.Cleanup(func() { InvalidateSubscriptionPlanCache(plan.Id) })
-	payload, err := CreateSubscriptionStripePayment(875001, SubscriptionStripePayRequest{PlanID: plan.Id})
+	payload, err := CreateSubscriptionStripePayment(875001, SubscriptionStripePayRequest{PlanID: plan.Id, Currency: "CNY"})
 	require.NoError(t, err)
 	for i := 0; i < 2; i++ {
-		require.NoError(t, HandleStripeWebhookFulfillment(context.Background(), payload.OrderID, "cus_fixture", map[string]any{"id": "cs_test_currency", "currency": "cny", "amount_total": 6400}, "127.0.0.1"))
+		require.NoError(t, HandleStripeWebhookFulfillment(context.Background(), payload.OrderID, "cus_fixture", map[string]any{"id": "cs_test_currency", "currency": "cny", "amount_total": 8960, "client_reference_id": payload.OrderID, "mode": "payment", "status": "complete", "payment_status": "paid", "payment_intent": "pi_test_currency", "livemode": false}, "127.0.0.1"))
 		require.NoError(t, FulfillPaidSubscriptionOrder(payload.OrderID))
 	}
 	var count int64
@@ -200,5 +208,5 @@ func TestSubscriptionStripeCreditPackCallbackRemainsIdempotent(t *testing.T) {
 	require.NoError(t, db.First(&sub, order.TargetSubscriptionId).Error)
 	require.Equal(t, quotaUnitsFromUSD(67.2), sub.CreditPackGrantedQuota)
 	require.Zero(t, sub.EndTime)
-	t.Log(fmt.Sprintf("CNY 64 -> 6400 minor units; duplicate callbacks and fulfillment retained one permanent balance of %d quota", sub.CreditPackGrantedQuota))
+	t.Log(fmt.Sprintf("CNY 89.60 -> 8960 minor units; duplicate callbacks and fulfillment retained one permanent balance of %d quota", sub.CreditPackGrantedQuota))
 }

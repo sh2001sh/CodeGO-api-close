@@ -76,6 +76,9 @@ func CreatePendingSubscriptionOrderWithDiscounts(order *commerceschema.Subscript
 				return errors.New("credit pack bonus must be between 5% and 10%")
 			}
 			order.OriginalMoney = plan.PriceAmount
+			if err := snapshotStripeSubscriptionCheckout(order, plan.Currency, 0); err != nil {
+				return err
+			}
 			if err := snapshotSubscriptionEpayCheckout(order, 0); err != nil {
 				return err
 			}
@@ -86,6 +89,9 @@ func CreatePendingSubscriptionOrderWithDiscounts(order *commerceschema.Subscript
 			return err
 		}
 		if order.FirstPurchaseDiscountApplied {
+			if err := snapshotStripeSubscriptionCheckout(order, plan.Currency, 0); err != nil {
+				return err
+			}
 			if err := snapshotSubscriptionEpayCheckout(order, 0); err != nil {
 				return err
 			}
@@ -102,6 +108,9 @@ func CreatePendingSubscriptionOrderWithDiscounts(order *commerceschema.Subscript
 		propID := 0
 		if prop != nil {
 			propID = prop.Id
+		}
+		if err := snapshotStripeSubscriptionCheckout(order, plan.Currency, propID); err != nil {
+			return err
 		}
 		if err := snapshotSubscriptionEpayCheckout(order, propID); err != nil {
 			return err
@@ -128,6 +137,25 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 		}
 		if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
 			return commerceschema.ErrPaymentMethodMismatch
+		}
+		if order.PaymentProvider == commerceschema.PaymentProviderStripe {
+			paid, verifiedPayload, err := validateStripePayment(order.ProviderPayload, providerPayload, order.TradeNo, order.Money)
+			if err != nil {
+				return err
+			}
+			if order.Status != constant.TopUpStatusSuccess {
+				if order.RefundStatus != "" || order.RefundNo != "" || order.RefundProviderID != "" || order.RefundQuota != 0 || order.RefundAmount != 0 {
+					return commerceschema.ErrSubscriptionOrderStatusInvalid
+				}
+				var user identityschema.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id = ?", order.UserId).First(&user).Error; err != nil {
+					return err
+				}
+				if err := consumeStripeOriginalPropTx(tx, order.UserId, order.TradeNo, commerceschema.BlindBoxPropOrderTypeSubscription, paid.Checkout); err != nil {
+					return err
+				}
+			}
+			providerPayload = verifiedPayload
 		}
 		if order.PaymentProvider == commerceschema.PaymentProviderEpay {
 			if actualPaymentMethod != "" && actualPaymentMethod != order.PaymentMethod {
@@ -344,6 +372,11 @@ func CancelPendingSubscriptionOrder(userID int, tradeNo string) error {
 		if order.Status != constant.TopUpStatusPending {
 			return nil
 		}
+		if order.PaymentProvider == commerceschema.PaymentProviderStripe {
+			if err := expireStripeCheckout(order.ProviderPayload); err != nil {
+				return err
+			}
+		}
 		order.Status = constant.TopUpStatusExpired
 		order.CompleteTime = platformruntime.GetTimestamp()
 		if err := tx.Save(order).Error; err != nil {
@@ -365,6 +398,7 @@ func ExpireDueSubscriptionOrders(limit int) (int, error) {
 	var ids []int
 	if err := platformdb.DB.Model(&commerceschema.SubscriptionOrder{}).
 		Where("status = ? AND create_time > 0 AND create_time <= ?", constant.TopUpStatusPending, cutoff).
+		Where("payment_provider <> ?", commerceschema.PaymentProviderStripe).
 		Order("create_time asc, id asc").Limit(limit).Pluck("id", &ids).Error; err != nil {
 		return 0, err
 	}

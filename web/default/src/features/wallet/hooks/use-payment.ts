@@ -60,6 +60,7 @@ export function usePayment() {
         const response = isStripe
           ? await calculateStripeAmount({
               amount: topupAmount,
+              currency: paymentType === 'stripe_cny' ? 'CNY' : 'HKD',
             })
           : isNowPayments
             ? await calculateNowPaymentsAmount({ amount: topupAmount })
@@ -104,6 +105,7 @@ export function usePayment() {
           ? await requestStripePayment({
               amount,
               payment_method: 'stripe',
+              currency: paymentType === 'stripe_cny' ? 'CNY' : 'HKD',
             })
           : isNowPayments
             ? await requestNowPaymentsPayment({ amount })

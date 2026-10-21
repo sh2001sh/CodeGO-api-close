@@ -10409,5 +10409,7 @@
   "冻结状态加载失败，请刷新重试。": "Không thể tải trạng thái đóng băng. Vui lòng làm mới để thử lại.",
   "该金额已从钱包可用余额中冻结，等待人工结算，不受下方统计范围影响。": "Số tiền này đã được đóng băng khỏi số dư ví khả dụng để chờ quyết toán thủ công, không phụ thuộc vào bộ lọc bên dưới.",
   "扣款已完成，历史收益明细正在补齐，请勿重复回收。": "Đã thu hồi tiền. Lịch sử thu nhập đang được cập nhật. Không gửi lại yêu cầu này.",
-  "按渠道主 ID 顺序直扣，单人不超过当前可回收额度。": "Trừ trực tiếp theo thứ tự ID chủ kênh, không vượt quá số tiền hiện có thể thu hồi của từng người."
+  "按渠道主 ID 顺序直扣，单人不超过当前可回收额度。": "Trừ trực tiếp theo thứ tự ID chủ kênh, không vượt quá số tiền hiện có thể thu hồi của từng người.",
+  "HKD / credit": "HKD / credit",
+  "CNY / credit": "CNY / credit"
 }

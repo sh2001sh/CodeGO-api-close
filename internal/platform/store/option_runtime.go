@@ -163,6 +163,10 @@ func applyOptionValue(key string, value string) (err error) {
 		commercestore.StripeWebhookSecret = value
 	case "StripePriceId":
 		commercestore.StripePriceId = value
+	case "StripeCNYUnitPrice":
+		commercestore.StripeCNYUnitPrice, _ = strconv.ParseFloat(value, 64)
+	case "StripeHKDUnitPrice":
+		commercestore.StripeHKDUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "StripeUnitPrice":
 		commercestore.StripeUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "StripeMinTopUp":

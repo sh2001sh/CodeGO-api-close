@@ -135,6 +135,7 @@ export interface ManageUserQuotaPayload {
 export type UsersDialogType = 'create' | 'update' | 'delete'
 
 export interface RefundableOrder {
+  currency?: string
   order_type: 'balance' | 'subscription' | string
   trade_no: string
   payment_method: string

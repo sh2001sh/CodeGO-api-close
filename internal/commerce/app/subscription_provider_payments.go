@@ -13,10 +13,7 @@ import (
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
-	"github.com/stripe/stripe-go/v81"
-	"github.com/stripe/stripe-go/v81/checkout/session"
 	"github.com/thanhpk/randstr"
-	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -50,6 +47,7 @@ type SubscriptionXunhuPayRequest struct {
 }
 
 type SubscriptionStripePayRequest struct {
+	Currency       string `json:"currency,omitempty"`
 	PlanID         int    `json:"plan_id"`
 	PurchaseType   string `json:"purchase_type"`
 	GroupBuyID     int64  `json:"group_buy_id"`
@@ -66,6 +64,7 @@ type SubscriptionCreemPayRequest struct {
 }
 
 type SubscriptionCheckoutPayload struct {
+	Currency  string  `json:"currency,omitempty"`
 	OrderID   string  `json:"order_id"`
 	AmountDue float64 `json:"amount_due"`
 	Action    string  `json:"action"`
@@ -343,7 +342,10 @@ func CreateSubscriptionStripePayment(userID int, req SubscriptionStripePayReques
 	if preview.Action == commerceschema.SubscriptionPurchaseActionUpgrade && preview.AmountDue != plan.PriceAmount {
 		return nil, errors.New("subscription upgrades are currently supported via WeChat Pay only")
 	}
-	currency, err := subscriptionStripeCurrency(plan.Currency)
+	if normalizeSubscriptionCurrency(plan.Currency) != "CNY" && normalizeSubscriptionCurrency(plan.Currency) != "USD" {
+		return nil, errors.New("unsupported Stripe subscription base currency")
+	}
+	currency, err := stripePresentmentCurrency(req.Currency)
 	if err != nil {
 		return nil, err
 	}
@@ -373,6 +375,7 @@ func CreateSubscriptionStripePayment(userID int, req SubscriptionStripePayReques
 		PaymentProvider: commerceschema.PaymentProviderStripe,
 		CreateTime:      time.Now().Unix(),
 		Status:          constant.TopUpStatusPending,
+		ProviderPayload: platformtext.GetJsonString(map[string]string{"stripe_currency": currency}),
 	}
 	ApplySubscriptionPurchaseFields(order, purchaseType, groupBuyID)
 	if _, err := CreatePendingSubscriptionOrderWithDiscounts(order, preview.BaseAmountDue); err != nil {
@@ -380,11 +383,14 @@ func CreateSubscriptionStripePayment(userID int, req SubscriptionStripePayReques
 	}
 	payLink, err := genStripeSubscriptionLink(referenceID, user.StripeCustomer, user.Email, plan.Title, currency, order.Money)
 	if err != nil {
-		_ = ExpireSubscriptionOrder(referenceID, commerceschema.PaymentProviderStripe)
+		if stripeCheckoutRejected(err) {
+			_ = ExpireSubscriptionOrder(referenceID, commerceschema.PaymentProviderStripe)
+		}
 		return nil, errors.New("failed to create payment")
 	}
 	return &SubscriptionStripeCheckoutPayload{
 		SubscriptionCheckoutPayload: SubscriptionCheckoutPayload{
+			Currency:  strings.ToUpper(currency),
 			OrderID:   referenceID,
 			AmountDue: order.Money,
 			Action:    preview.Action,
@@ -482,6 +488,8 @@ func subscriptionStripeCurrency(currency string) (string, error) {
 		return "cny", nil
 	case "USD":
 		return "usd", nil
+	case "HKD":
+		return "hkd", nil
 	default:
 		return "", errors.New("unsupported Stripe subscription currency")
 	}
@@ -492,43 +500,5 @@ func genStripeSubscriptionLink(referenceID string, customerID string, email stri
 	if err != nil {
 		return "", err
 	}
-	if math.IsNaN(amountDue) || math.IsInf(amountDue, 0) || amountDue <= 0 || amountDue >= float64(math.MaxInt64)/100 {
-		return "", errors.New("invalid stripe amount")
-	}
-	unitAmount := StripeMoneyToMinorUnits(amountDue)
-	if unitAmount < 1 {
-		return "", fmt.Errorf("invalid stripe amount")
-	}
-	params := &stripe.CheckoutSessionParams{
-		ClientReferenceID: stripe.String(referenceID),
-		SuccessURL:        stripe.String(BuildPaymentReturnPath("/packages")),
-		CancelURL:         stripe.String(BuildPaymentReturnPath("/packages")),
-		LineItems: []*stripe.CheckoutSessionLineItemParams{
-			{
-				Quantity: stripe.Int64(1),
-				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
-					Currency:   stripe.String(currency),
-					UnitAmount: stripe.Int64(unitAmount),
-					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: stripe.String(productName),
-					},
-				},
-			},
-		},
-		Mode: stripe.String(string(stripe.CheckoutSessionModePayment)),
-	}
-	if customerID == "" {
-		if email != "" {
-			params.CustomerEmail = stripe.String(email)
-		}
-		params.CustomerCreation = stripe.String(string(stripe.CheckoutSessionCustomerCreationAlways))
-	} else {
-		params.Customer = stripe.String(customerID)
-	}
-	client := session.Client{B: stripe.GetBackend(stripe.APIBackend), Key: commercestore.StripeApiSecret}
-	result, err := client.New(params)
-	if err != nil {
-		return "", err
-	}
-	return result.URL, nil
+	return createStripeCheckout(context.Background(), referenceID, customerID, email, productName, currency, amountDue, BuildPaymentReturnPath("/wallet?pay=success"), BuildPaymentReturnPath("/wallet?pay=cancel"), true)
 }

@@ -72,7 +72,7 @@ export function submitPaymentForm(
  * Check if payment method is Stripe
  */
 export function isStripePayment(paymentType: string): boolean {
-  return paymentType === PAYMENT_TYPES.STRIPE
+  return paymentType === PAYMENT_TYPES.STRIPE || paymentType === 'stripe_cny'
 }
 
 /**

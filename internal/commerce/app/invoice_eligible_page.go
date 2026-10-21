@@ -59,13 +59,13 @@ func ListInvoiceEligibleOrdersPageWithContext(ctx context.Context, userID int, k
 			amountText = "CASE WHEN order_amount = CAST(order_amount AS SIGNED) THEN CAST(CAST(order_amount AS SIGNED) AS CHAR) ELSE CAST(order_amount AS CHAR) END"
 		}
 		currency := `CASE COALESCE(NULLIF(payment_provider, ''), payment_method, '')
-			WHEN 'stripe' THEN 'usd' WHEN 'nowpayments' THEN 'usdt'
+			WHEN 'nowpayments' THEN 'usdt'
 			WHEN 'epay' THEN 'cny' WHEN 'xunhu' THEN 'cny' WHEN 'wxpay' THEN 'cny' WHEN 'alipay' THEN 'cny' ELSE '' END`
 		condition := "LOWER(trade_no) LIKE ? ESCAPE '!' OR LOWER(order_title) LIKE ? ESCAPE '!' OR " + amountText + " LIKE ? ESCAPE '!' OR (" + currency + ") LIKE ? ESCAPE '!'"
-		// Creem's currency requires validating amount/tax fields in its payment
+		// Stripe and Creem currencies require validating their immutable payment
 		// JSON. Stream only those snapshots for a search instead of depending on
 		// dialect-specific JSON casts or inferring an unverified currency.
-		creemIDs, err := invoiceCreemCurrencyMatches(db, userID, keyword)
+		creemIDs, err := invoiceSnapshotCurrencyMatches(db, userID, keyword)
 		if err != nil {
 			return nil, err
 		}
@@ -137,10 +137,10 @@ func invoiceEligibleOrdersQuery(db *gorm.DB, userID int) *gorm.DB {
 	`, userID, constant.TopUpStatusSuccess, userID, constant.TopUpStatusSuccess, userID, constant.TopUpStatusSuccess))
 }
 
-func invoiceCreemCurrencyMatches(db *gorm.DB, userID int, keyword string) (string, error) {
+func invoiceSnapshotCurrencyMatches(db *gorm.DB, userID int, keyword string) (string, error) {
 	rows, err := invoiceEligibleOrdersQuery(db, userID).
 		Select("source_type, id, order_amount, payment_provider, payment_method, provider_payload").
-		Where("COALESCE(NULLIF(payment_provider, ''), payment_method, '') = ?", commerceschema.PaymentProviderCreem).Rows()
+		Where("COALESCE(NULLIF(payment_provider, ''), payment_method, '') IN ?", []string{commerceschema.PaymentProviderCreem, commerceschema.PaymentProviderStripe}).Rows()
 	if err != nil {
 		return "", err
 	}

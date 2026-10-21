@@ -241,6 +241,7 @@ export interface PlanPayload {
 }
 
 export interface SubscriptionPayRequest {
+  currency?: 'HKD' | 'CNY'
   plan_id: number
   payment_method?: string
   purchase_type?: SubscriptionPurchaseType
@@ -259,6 +260,7 @@ export interface SubscriptionPayResponse {
     qrcode_url?: string
     order_id?: string
     amount_due?: number
+    currency?: string
     action?: 'subscribe' | 'renew' | 'upgrade' | 'disabled'
     form?: Record<string, unknown>
   }

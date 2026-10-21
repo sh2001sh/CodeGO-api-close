@@ -10409,5 +10409,7 @@
   "冻结状态加载失败，请刷新重试。": "Unable to load freeze status. Refresh to retry.",
   "该金额已从钱包可用余额中冻结，等待人工结算，不受下方统计范围影响。": "This amount is held from your available wallet balance pending manual settlement, regardless of the filters below.",
   "扣款已完成，历史收益明细正在补齐，请勿重复回收。": "Funds have been recovered. Historical earnings records are being updated. Do not submit this recovery again.",
-  "按渠道主 ID 顺序直扣，单人不超过当前可回收额度。": "Deduct directly in owner ID order, up to each owner’s currently recoverable amount."
+  "按渠道主 ID 顺序直扣，单人不超过当前可回收额度。": "Deduct directly in owner ID order, up to each owner’s currently recoverable amount.",
+  "HKD / credit": "HKD / credit",
+  "CNY / credit": "CNY / credit"
 }

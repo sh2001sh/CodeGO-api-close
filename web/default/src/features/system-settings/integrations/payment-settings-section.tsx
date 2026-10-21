@@ -119,8 +119,10 @@ const paymentSchema = z.object({
   StripeApiSecret: z.string(),
   StripeWebhookSecret: z.string(),
   StripePriceId: z.string(),
+  StripeCNYUnitPrice: z.coerce.number().positive().finite(),
+  StripeHKDUnitPrice: z.coerce.number().positive().finite(),
   StripeUnitPrice: z.coerce.number().min(0),
-  StripeMinTopUp: z.coerce.number().min(0),
+  StripeMinTopUp: z.coerce.number().int().min(5),
   StripePromotionCodesEnabled: z.boolean(),
   CreemApiKey: z.string(),
   CreemWebhookSecret: z.string(),
@@ -431,6 +433,8 @@ export function PaymentSettingsSection({
       StripeApiSecret: values.StripeApiSecret.trim(),
       StripeWebhookSecret: values.StripeWebhookSecret.trim(),
       StripePriceId: values.StripePriceId.trim(),
+      StripeCNYUnitPrice: values.StripeCNYUnitPrice as number,
+      StripeHKDUnitPrice: values.StripeHKDUnitPrice as number,
       StripeUnitPrice: values.StripeUnitPrice as number,
       StripeMinTopUp: values.StripeMinTopUp as number,
       StripePromotionCodesEnabled:
@@ -441,6 +445,8 @@ export function PaymentSettingsSection({
       StripeApiSecret: initialRef.current.StripeApiSecret.trim(),
       StripeWebhookSecret: initialRef.current.StripeWebhookSecret.trim(),
       StripePriceId: initialRef.current.StripePriceId.trim(),
+      StripeCNYUnitPrice: initialRef.current.StripeCNYUnitPrice,
+      StripeHKDUnitPrice: initialRef.current.StripeHKDUnitPrice,
       StripeUnitPrice: initialRef.current.StripeUnitPrice,
       StripeMinTopUp: initialRef.current.StripeMinTopUp,
       StripePromotionCodesEnabled:
@@ -470,6 +476,18 @@ export function PaymentSettingsSection({
       updates.push({ key: 'StripePriceId', value: sanitized.StripePriceId })
     }
 
+    if (sanitized.StripeCNYUnitPrice !== initial.StripeCNYUnitPrice) {
+      updates.push({
+        key: 'StripeCNYUnitPrice',
+        value: sanitized.StripeCNYUnitPrice,
+      })
+    }
+    if (sanitized.StripeHKDUnitPrice !== initial.StripeHKDUnitPrice) {
+      updates.push({
+        key: 'StripeHKDUnitPrice',
+        value: sanitized.StripeHKDUnitPrice,
+      })
+    }
     if (sanitized.StripeUnitPrice !== initial.StripeUnitPrice) {
       updates.push({ key: 'StripeUnitPrice', value: sanitized.StripeUnitPrice })
     }
@@ -707,6 +725,8 @@ export function PaymentSettingsSection({
       StripeApiSecret: values.StripeApiSecret.trim(),
       StripeWebhookSecret: values.StripeWebhookSecret.trim(),
       StripePriceId: values.StripePriceId.trim(),
+      StripeCNYUnitPrice: values.StripeCNYUnitPrice,
+      StripeHKDUnitPrice: values.StripeHKDUnitPrice,
       StripeUnitPrice: values.StripeUnitPrice,
       StripeMinTopUp: values.StripeMinTopUp,
       StripePromotionCodesEnabled: values.StripePromotionCodesEnabled,
@@ -741,6 +761,8 @@ export function PaymentSettingsSection({
       StripeApiSecret: initialRef.current.StripeApiSecret.trim(),
       StripeWebhookSecret: initialRef.current.StripeWebhookSecret.trim(),
       StripePriceId: initialRef.current.StripePriceId.trim(),
+      StripeCNYUnitPrice: initialRef.current.StripeCNYUnitPrice,
+      StripeHKDUnitPrice: initialRef.current.StripeHKDUnitPrice,
       StripeUnitPrice: initialRef.current.StripeUnitPrice,
       StripeMinTopUp: initialRef.current.StripeMinTopUp,
       StripePromotionCodesEnabled:
@@ -890,6 +912,18 @@ export function PaymentSettingsSection({
       updates.push({ key: 'StripePriceId', value: sanitized.StripePriceId })
     }
 
+    if (sanitized.StripeCNYUnitPrice !== initial.StripeCNYUnitPrice) {
+      updates.push({
+        key: 'StripeCNYUnitPrice',
+        value: sanitized.StripeCNYUnitPrice,
+      })
+    }
+    if (sanitized.StripeHKDUnitPrice !== initial.StripeHKDUnitPrice) {
+      updates.push({
+        key: 'StripeHKDUnitPrice',
+        value: sanitized.StripeHKDUnitPrice,
+      })
+    }
     if (sanitized.StripeUnitPrice !== initial.StripeUnitPrice) {
       updates.push({ key: 'StripeUnitPrice', value: sanitized.StripeUnitPrice })
     }
@@ -1052,7 +1086,7 @@ export function PaymentSettingsSection({
                 name='MinTopUp'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Minimum top-up (USD)')}</FormLabel>
+                    <FormLabel>{t('Minimum topup amount')}</FormLabel>
                     <FormControl>
                       <Input
                         type='number'
@@ -1376,11 +1410,13 @@ export function PaymentSettingsSection({
                 <li>
                   {t('Required events:')}{' '}
                   <code className='rounded bg-blue-100 px-1 py-0.5 text-xs dark:bg-blue-900'>
-                    {t('checkout.session.completed')}
+                    checkout.session.completed
                   </code>{' '}
                   {t('and')}{' '}
                   <code className='rounded bg-blue-100 px-1 py-0.5 text-xs dark:bg-blue-900'>
-                    {t('checkout.session.expired')}
+                    checkout.session.expired,
+                    checkout.session.async_payment_succeeded,
+                    checkout.session.async_payment_failed
                   </code>
                 </li>
                 <li>
@@ -1443,96 +1479,69 @@ export function PaymentSettingsSection({
                   </FormItem>
                 )}
               />
-
-              <FormField
-                control={form.control}
-                name='StripePriceId'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Price ID')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={t('price_xxx')}
-                        {...field}
-                        onChange={(event) => field.onChange(event.target.value)}
-                      />
-                    </FormControl>
-
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
 
             <div className='grid gap-6 md:grid-cols-3'>
               <FormField
                 control={form.control}
-                name='StripeUnitPrice'
+                name='StripeHKDUnitPrice'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      {t('Unit price (local currency / USD)')}
-                    </FormLabel>
+                    <FormLabel>{t('HKD / credit')}</FormLabel>
                     <FormControl>
                       <Input
                         type='number'
+                        min={0.01}
                         step='0.01'
-                        min={0}
-                        value={(field.value ?? 0) as number}
+                        value={field.value as number}
                         onChange={(event) =>
                           field.onChange(event.target.valueAsNumber)
                         }
                       />
                     </FormControl>
-                    <FormDescription className='settings-field-fact'>
-                      {t('1 USD = 8')}
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
+              <FormField
+                control={form.control}
+                name='StripeCNYUnitPrice'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('CNY / credit')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={0.01}
+                        step='0.01'
+                        value={field.value as number}
+                        onChange={(event) =>
+                          field.onChange(event.target.valueAsNumber)
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name='StripeMinTopUp'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Minimum top-up (USD)')}</FormLabel>
+                    <FormLabel>{t('Minimum topup amount')}</FormLabel>
                     <FormControl>
                       <Input
                         type='number'
-                        step='0.01'
-                        min={0}
+                        step='1'
+                        min={5}
                         value={(field.value ?? 0) as number}
                         onChange={(event) =>
                           field.onChange(event.target.valueAsNumber)
                         }
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t('Minimum recharge amount in USD')}
-                    </FormDescription>
                     <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name='StripePromotionCodesEnabled'
-                render={({ field }) => (
-                  <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
-                    <div className='space-y-0.5'>
-                      <FormLabel className='text-base'>
-                        {t('Promotion codes')}
-                      </FormLabel>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
                   </FormItem>
                 )}
               />

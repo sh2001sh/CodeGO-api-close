@@ -284,6 +284,12 @@ func loadInvoiceEligibleOrderTx(tx *gorm.DB, userID int, sourceType, tradeNo str
 				currency = plan.Currency
 			}
 		}
+		if order.PaymentProvider == commerceschema.PaymentProviderStripe {
+			currency = commercialPaymentCurrency(order.PaymentProvider, order.PaymentMethod, order.ProviderPayload, order.Money)
+			if currency == "" {
+				return nil, ErrInvoiceOrderUnavailable
+			}
+		}
 		return &InvoiceEligibleOrder{SourceType: sourceType, TradeNo: tradeNo, OrderTitle: title, OrderAmount: order.Money, Currency: currency, PaidAt: order.CompleteTime}, nil
 	case commerceschema.InvoiceSourceTopUp:
 		var subscriptionCount int64
@@ -297,7 +303,14 @@ func loadInvoiceEligibleOrderTx(tx *gorm.DB, userID int, sourceType, tradeNo str
 		if err := tx.Where("user_id = ? AND trade_no = ? AND status = ? AND money > 0", userID, tradeNo, constant.TopUpStatusSuccess).First(&topup).Error; err != nil {
 			return nil, ErrInvoiceOrderUnavailable
 		}
-		return &InvoiceEligibleOrder{SourceType: sourceType, TradeNo: tradeNo, OrderTitle: "钱包充值", OrderAmount: topup.Money, Currency: "CNY", PaidAt: topup.CompleteTime}, nil
+		currency := "CNY"
+		if topup.PaymentProvider == commerceschema.PaymentProviderStripe {
+			currency = commercialPaymentCurrency(topup.PaymentProvider, topup.PaymentMethod, topup.ProviderPayload, topup.Money)
+			if currency == "" {
+				return nil, ErrInvoiceOrderUnavailable
+			}
+		}
+		return &InvoiceEligibleOrder{SourceType: sourceType, TradeNo: tradeNo, OrderTitle: "钱包充值", OrderAmount: topup.Money, Currency: currency, PaidAt: topup.CompleteTime}, nil
 	default:
 		return nil, ErrInvoiceOrderUnavailable
 	}

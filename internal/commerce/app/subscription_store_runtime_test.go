@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/go-redis/redis/v8"
@@ -305,7 +306,15 @@ func TestPaidSubscriptionOrderRequiresWorkflowFulfillment(t *testing.T) {
 	plan := insertSubscriptionResetAppTestPlan(t, 723, 0, int64(platformruntime.QuotaPerUnit)*10)
 	insertSubscriptionStoreTestOrder(t, "sub-workflow-order", 722, plan.Id, commerceschema.PaymentProviderStripe)
 
-	require.NoError(t, CompleteSubscriptionOrder("sub-workflow-order", `{"paid":true}`, commerceschema.PaymentProviderStripe, "card"))
+	var before commerceschema.SubscriptionOrder
+	require.NoError(t, db.Where("trade_no = ?", "sub-workflow-order").First(&before).Error)
+	original := ""
+	require.NoError(t, snapshotStripeCheckout(&original, "cny", before.Money, 0))
+	require.NoError(t, db.Model(&before).Update("provider_payload", original).Error)
+	evidence := stripePaidFixture(before.TradeNo, StripeMoneyToMinorUnits(before.Money))
+	body, err := json.Marshal(evidence)
+	require.NoError(t, err)
+	require.NoError(t, CompleteSubscriptionOrder("sub-workflow-order", string(body), commerceschema.PaymentProviderStripe, "card"))
 
 	var paid commerceschema.SubscriptionOrder
 	require.NoError(t, db.Where("trade_no = ?", "sub-workflow-order").First(&paid).Error)

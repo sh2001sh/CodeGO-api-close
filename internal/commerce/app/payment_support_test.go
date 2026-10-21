@@ -41,6 +41,8 @@ func TestStripeTopUpEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {
 	require.True(t, IsStripeTopUpEnabled())
 
 	commercestore.StripePriceId = ""
+	require.True(t, IsStripeTopUpEnabled())
+	commercestore.StripeApiSecret = ""
 	require.False(t, IsStripeTopUpEnabled())
 }
 

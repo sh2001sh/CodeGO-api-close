@@ -38,6 +38,7 @@ type TopUp struct {
 	PaidQuota                       int64   `json:"paid_quota" gorm:"not null;default:0"` // Immutable paid portion; zero for historical or unverifiable orders.
 	CreditedQuota                   int64   `json:"credited_quota,omitempty" gorm:"-"`
 	Money                           float64 `json:"money"`
+	Currency                        string  `json:"currency,omitempty" gorm:"-"`
 	TradeNo                         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	PaymentMethod                   string  `json:"payment_method" gorm:"type:varchar(50)"`
 	PaymentProvider                 string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`

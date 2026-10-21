@@ -42,8 +42,10 @@ var USDExchangeRate = 7.3
 var StripeApiSecret = ""
 var StripeWebhookSecret = ""
 var StripePriceId = ""
-var StripeUnitPrice = 8.0
-var StripeMinTopUp = 1
+var StripeUnitPrice = 8.0 // Legacy display setting; new checkouts use explicit currency prices.
+var StripeCNYUnitPrice = 1.4
+var StripeHKDUnitPrice = 1.5
+var StripeMinTopUp = 5
 var StripePromotionCodesEnabled = false
 
 var CreemApiKey = ""

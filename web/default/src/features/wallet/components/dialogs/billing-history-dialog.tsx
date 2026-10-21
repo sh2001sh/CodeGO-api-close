@@ -260,7 +260,12 @@ export function BillingHistoryDialog({
                               {t('Payment')}
                             </Label>
                             <div className='commerce-record-amount'>
-                              {formatNumber(record.money)}
+                              {record.currency
+                                ? new Intl.NumberFormat(undefined, {
+                                    style: 'currency',
+                                    currency: record.currency,
+                                  }).format(record.money)
+                                : formatNumber(record.money)}
                             </div>
                           </div>
                         </div>

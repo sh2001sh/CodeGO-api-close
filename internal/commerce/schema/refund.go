@@ -14,6 +14,7 @@ type RefundRequest struct {
 }
 
 type RefundableOrder struct {
+	Currency          string  `json:"currency"`
 	OrderType         string  `json:"order_type"`
 	TradeNo           string  `json:"trade_no"`
 	PaymentMethod     string  `json:"payment_method"`

@@ -20,8 +20,6 @@ import (
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
 	"github.com/shopspring/decimal"
-	"github.com/stripe/stripe-go/v81"
-	"github.com/stripe/stripe-go/v81/checkout/session"
 	"github.com/thanhpk/randstr"
 	waffo "github.com/waffo-com/waffo-go"
 	"github.com/waffo-com/waffo-go/config"
@@ -40,6 +38,7 @@ const CreemSignatureHeader = "creem-signature"
 var newWaffoSDK = waffo.New
 
 type StripePayRequest struct {
+	Currency      string `json:"currency,omitempty"`
 	Amount        int64  `json:"amount"`
 	PaymentMethod string `json:"payment_method"`
 	SuccessURL    string `json:"success_url,omitempty"`
@@ -164,11 +163,11 @@ type CreemWebhookEvent struct {
 func QuoteStripeTopUpAmount(userID int, req StripePayRequest) (string, error) {
 	walletType := NormalizeTopupWalletType(req.WalletType)
 	minTopup := GetStripeMinTopup()
-	if IsClaudeTopupWallet(walletType) {
-		minTopup = 1
-	}
 	if req.Amount < minTopup {
 		return "", fmt.Errorf("充值数量不能小于 %d", GetStripeMinTopup())
+	}
+	if req.Amount > 10000 {
+		return "", errors.New("充值数量不能大于 10000")
 	}
 
 	group, err := loadCommerceUserGroup(userID, true)
@@ -176,9 +175,13 @@ func QuoteStripeTopUpAmount(userID int, req StripePayRequest) (string, error) {
 		return "", errors.New("获取用户分组失败")
 	}
 
-	payMoney := GetStripePayMoney(float64(req.Amount), group)
-	if IsClaudeTopupWallet(walletType) {
-		payMoney = float64(req.Amount)
+	currency, err := stripePresentmentCurrency(req.Currency)
+	if err != nil {
+		return "", err
+	}
+	payMoney, err := stripePriceFromCNY(GetTopupPayMoney(req.Amount, group, walletType), currency)
+	if err != nil {
+		return "", err
 	}
 	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney)
 	if payMoney <= 0.01 {
@@ -188,15 +191,15 @@ func QuoteStripeTopUpAmount(userID int, req StripePayRequest) (string, error) {
 }
 
 func CreateStripeTopUp(ctx context.Context, userID int, req StripePayRequest) (*StripeCheckoutPayload, error) {
+	if !IsStripeTopUpEnabled() {
+		return nil, errors.New("Stripe is not configured")
+	}
 	if req.PaymentMethod != commerceschema.PaymentMethodStripe {
 		return nil, errors.New("不支持的支付渠道")
 	}
 
 	walletType := NormalizeTopupWalletType(req.WalletType)
 	minTopup := GetStripeMinTopup()
-	if IsClaudeTopupWallet(walletType) {
-		minTopup = 1
-	}
 	if req.Amount < minTopup {
 		return nil, fmt.Errorf("充值数量不能小于 %d", GetStripeMinTopup())
 	}
@@ -219,9 +222,13 @@ func CreateStripeTopUp(ctx context.Context, userID int, req StripePayRequest) (*
 		return nil, errors.New("获取用户分组失败")
 	}
 
-	chargedMoney := GetStripePayMoney(float64(req.Amount), group)
-	if IsClaudeTopupWallet(walletType) {
-		chargedMoney = float64(req.Amount)
+	currency, err := stripePresentmentCurrency(req.Currency)
+	if err != nil {
+		return nil, err
+	}
+	chargedMoney, err := stripePriceFromCNY(GetTopupPayMoney(req.Amount, group, walletType), currency)
+	if err != nil {
+		return nil, err
 	}
 
 	reference := fmt.Sprintf("new-api-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
@@ -236,15 +243,18 @@ func CreateStripeTopUp(ctx context.Context, userID int, req StripePayRequest) (*
 		WalletType:      walletType,
 		CreateTime:      time.Now().Unix(),
 		Status:          constant.TopUpStatusPending,
+		ProviderPayload: platformtext.GetJsonString(map[string]string{"stripe_currency": currency}),
 	}
 	if _, err := CreatePendingTopUpOrderWithBlindBoxDiscount(topUp); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("Stripe 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", userID, referenceID, req.Amount, err.Error()))
 		return nil, errors.New("创建订单失败")
 	}
 
-	payLink, err := genStripeLink(referenceID, user.StripeCustomer, user.Email, topUp.Money, req.Amount, walletType, req.SuccessURL, req.CancelURL)
+	payLink, err := genStripeLink(ctx, referenceID, user.StripeCustomer, user.Email, topUp.Money, req.Amount, walletType, req.SuccessURL, req.CancelURL, currency)
 	if err != nil {
-		_ = UpdatePendingTopUpStatus(referenceID, commerceschema.PaymentProviderStripe, constant.TopUpStatusFailed)
+		if stripeCheckoutRejected(err) {
+			_ = UpdatePendingTopUpStatus(referenceID, commerceschema.PaymentProviderStripe, constant.TopUpStatusFailed)
+		}
 		logger.LogError(ctx, fmt.Sprintf("Stripe 创建 Checkout Session 失败 user_id=%d trade_no=%s amount=%d error=%q", userID, referenceID, req.Amount, err.Error()))
 		return nil, errors.New("拉起支付失败")
 	}
@@ -254,35 +264,24 @@ func CreateStripeTopUp(ctx context.Context, userID int, req StripePayRequest) (*
 }
 
 func HandleStripeWebhookFulfillment(ctx context.Context, referenceID string, customerID string, payload map[string]any, clientIP string) error {
-	if len(referenceID) == 0 {
-		logger.LogWarn(ctx, fmt.Sprintf("Stripe 完成订单时缺少订单号 client_ip=%s", clientIP))
+	if referenceID == "" {
 		return nil
 	}
-
 	LockOrder(referenceID)
 	defer UnlockOrder(referenceID)
-
-	if topUp := GetTopUpByTradeNo(referenceID); topUp != nil && topUp.Status == constant.TopUpStatusSuccess {
-		logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook duplicate success ignored trade_no=%s client_ip=%s", referenceID, clientIP))
+	encoded := platformtext.GetJsonString(payload)
+	if err := CompleteSubscriptionOrder(referenceID, encoded, commerceschema.PaymentProviderStripe, ""); err == nil {
 		return nil
-	}
-	if err := CompleteSubscriptionOrder(referenceID, platformtext.GetJsonString(payload), commerceschema.PaymentProviderStripe, ""); err == nil {
-		logger.LogInfo(ctx, fmt.Sprintf("Stripe 订阅订单处理成功 trade_no=%s client_ip=%s", referenceID, clientIP))
-		return nil
-	} else if err != nil && !errors.Is(err, commerceschema.ErrSubscriptionOrderNotFound) {
-		logger.LogError(ctx, fmt.Sprintf("Stripe 订阅订单处理失败 trade_no=%s client_ip=%s error=%q", referenceID, clientIP, err.Error()))
+	} else if !errors.Is(err, commerceschema.ErrSubscriptionOrderNotFound) {
 		return err
 	}
-
-	if err := Recharge(referenceID, customerID, clientIP); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "already") {
-			logger.LogInfo(ctx, fmt.Sprintf("Stripe recharge duplicate ignored trade_no=%s client_ip=%s", referenceID, clientIP))
-			return nil
-		}
-		logger.LogError(ctx, fmt.Sprintf("Stripe 充值处理失败 trade_no=%s client_ip=%s error=%q", referenceID, clientIP, err.Error()))
+	topUp, credited, err := completeVerifiedStripeTopUp(referenceID, customerID, encoded)
+	if err != nil {
 		return err
 	}
-	logger.LogInfo(ctx, fmt.Sprintf("Stripe 充值成功 trade_no=%s client_ip=%s", referenceID, clientIP))
+	if credited > 0 {
+		auditapp.RecordTopupLog(topUp.UserId, fmt.Sprintf("Stripe topup success, quota: %v, paid: %.2f CNY", logger.FormatQuota(credited), topUp.Money), clientIP, topUp.PaymentMethod, commerceschema.PaymentMethodStripe)
+	}
 	return nil
 }
 
@@ -314,36 +313,6 @@ func MarkStripeTopUpFailed(ctx context.Context, referenceID string, clientIP str
 		return err
 	}
 	logger.LogInfo(ctx, fmt.Sprintf("Stripe 充值订单已标记为失败 trade_no=%s client_ip=%s", referenceID, clientIP))
-	return nil
-}
-
-func ExpireStripeOrder(ctx context.Context, referenceID string) error {
-	if len(referenceID) == 0 {
-		logger.LogWarn(ctx, "Stripe checkout.expired 缺少订单号")
-		return nil
-	}
-
-	LockOrder(referenceID)
-	defer UnlockOrder(referenceID)
-
-	if err := ExpireSubscriptionOrder(referenceID, commerceschema.PaymentProviderStripe); err == nil {
-		logger.LogInfo(ctx, fmt.Sprintf("Stripe 订阅订单已过期 trade_no=%s", referenceID))
-		return nil
-	} else if err != nil && !errors.Is(err, commerceschema.ErrSubscriptionOrderNotFound) {
-		logger.LogError(ctx, fmt.Sprintf("Stripe 订阅订单过期处理失败 trade_no=%s error=%q", referenceID, err.Error()))
-		return err
-	}
-
-	err := UpdatePendingTopUpStatus(referenceID, commerceschema.PaymentProviderStripe, constant.TopUpStatusExpired)
-	if errors.Is(err, commerceschema.ErrTopUpNotFound) {
-		logger.LogWarn(ctx, fmt.Sprintf("Stripe 充值订单不存在，无法标记过期 trade_no=%s", referenceID))
-		return nil
-	}
-	if err != nil {
-		logger.LogError(ctx, fmt.Sprintf("Stripe 充值订单过期处理失败 trade_no=%s error=%q", referenceID, err.Error()))
-		return err
-	}
-	logger.LogInfo(ctx, fmt.Sprintf("Stripe 充值订单已过期 trade_no=%s", referenceID))
 	return nil
 }
 
@@ -917,58 +886,14 @@ func StripeMoneyToMinorUnits(amount float64) int64 {
 	return int64(math.Round(amount * 100))
 }
 
-func genStripeLink(referenceID string, customerID string, email string, money float64, amount int64, walletType string, successURL string, cancelURL string) (string, error) {
-	if !strings.HasPrefix(commercestore.StripeApiSecret, "sk_") && !strings.HasPrefix(commercestore.StripeApiSecret, "rk_") {
-		return "", fmt.Errorf("无效的Stripe API密钥")
-	}
-	stripe.Key = commercestore.StripeApiSecret
+func genStripeLink(ctx context.Context, referenceID string, customerID string, email string, money float64, amount int64, walletType string, successURL string, cancelURL string, currency string) (string, error) {
 	if successURL == "" {
-		successURL = BuildPaymentReturnPath("/console/log")
+		successURL = BuildPaymentReturnPath("/wallet?pay=success")
 	}
 	if cancelURL == "" {
-		cancelURL = BuildPaymentReturnPath("/console/topup")
+		cancelURL = BuildPaymentReturnPath("/wallet?pay=cancel")
 	}
-	productName := fmt.Sprintf("账户充值 %d", amount)
-	if IsClaudeTopupWallet(walletType) {
-		productName = fmt.Sprintf("通用额度充值 %d", amount)
-	}
-	unitAmount := StripeMoneyToMinorUnits(money)
-	if unitAmount <= 0 {
-		return "", fmt.Errorf("invalid stripe amount")
-	}
-
-	params := &stripe.CheckoutSessionParams{
-		ClientReferenceID: stripe.String(referenceID),
-		SuccessURL:        stripe.String(successURL),
-		CancelURL:         stripe.String(cancelURL),
-		LineItems: []*stripe.CheckoutSessionLineItemParams{
-			{
-				Quantity: stripe.Int64(1),
-				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
-					Currency:   stripe.String("usd"),
-					UnitAmount: stripe.Int64(unitAmount),
-					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: stripe.String(productName),
-					},
-				},
-			},
-		},
-		Mode:                stripe.String(string(stripe.CheckoutSessionModePayment)),
-		AllowPromotionCodes: stripe.Bool(commercestore.StripePromotionCodesEnabled),
-	}
-	if customerID == "" {
-		if email != "" {
-			params.CustomerEmail = stripe.String(email)
-		}
-		params.CustomerCreation = stripe.String(string(stripe.CheckoutSessionCustomerCreationAlways))
-	} else {
-		params.Customer = stripe.String(customerID)
-	}
-	result, err := session.New(params)
-	if err != nil {
-		return "", err
-	}
-	return result.URL, nil
+	return createStripeCheckout(ctx, referenceID, customerID, email, fmt.Sprintf("CodeGO %d credits", amount), currency, money, successURL, cancelURL, false)
 }
 
 func genCreemLink(ctx context.Context, referenceID string, product *CreemProduct, email string, username string, customPrice float64) (string, error) {

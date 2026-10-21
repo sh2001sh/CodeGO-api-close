@@ -80,6 +80,8 @@ func GetPublicStatus() map[string]any {
 		"default_use_auto_group":        gatewaygroups.DefaultUseAutoGroup,
 		"usd_exchange_rate":             commercestore.USDExchangeRate,
 		"price":                         commercestore.Price,
+		"stripe_cny_unit_price":         commercestore.StripeCNYUnitPrice,
+		"stripe_hkd_unit_price":         commercestore.StripeHKDUnitPrice,
 		"stripe_unit_price":             commercestore.StripeUnitPrice,
 		"api_info_enabled":              cs.ApiInfoEnabled,
 		"uptime_kuma_enabled":           cs.UptimeKumaEnabled,

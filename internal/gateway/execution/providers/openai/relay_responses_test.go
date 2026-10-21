@@ -725,6 +725,27 @@ func setResponsesTestStreamingTimeout(t *testing.T) {
 	t.Cleanup(func() { constant.StreamingTimeout = previous })
 }
 
+func TestOaiResponsesStreamHandlerRejectsTerminalFailuresWithUsage(t *testing.T) {
+	for _, terminal := range []string{
+		`{"type":"response.error","error":{"message":"upstream unavailable"}}`,
+		`{"type":"response.cancelled","response":{"status":"cancelled","usage":{"input_tokens":90000,"output_tokens":0}}}`,
+		`{"type":"response.incomplete","response":{"error":{"message":"upstream unavailable"},"usage":{"input_tokens":90000,"output_tokens":0}}}`,
+	} {
+		t.Run(terminal, func(t *testing.T) {
+			setResponsesTestStreamingTimeout(t)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			info := &relaycommon.RelayInfo{IsStream: true}
+			info.SetEstimatePromptTokens(90000)
+			resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("data: " + terminal + "\n\n")), Header: http.Header{"Content-Type": {"text/event-stream"}}}
+			usage, apiErr := OaiResponsesStreamHandler(c, info, resp)
+			require.Nil(t, usage)
+			require.NotNil(t, apiErr)
+			require.True(t, c.GetBool(string(constant.ContextKeyUpstreamTerminalError)))
+		})
+	}
+}
+
 func TestIsResponsesTextDelta(t *testing.T) {
 	require.True(t, isResponsesTextDelta(dto.ResponsesStreamResponse{
 		Type:  "response.output_text.delta",

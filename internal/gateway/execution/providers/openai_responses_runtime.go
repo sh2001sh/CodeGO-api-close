@@ -34,7 +34,7 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 	if oaiError := responsesResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+		return nil, types.WithOpenAIError(*oaiError, http.StatusBadGateway)
 	}
 
 	chatID := gatewaystream.GetResponseID(c)
@@ -81,7 +81,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	var (
 		usage        = &dto.Usage{}
-		outputText   strings.Builder
 		usageText    strings.Builder
 		sentStart    bool
 		sentStop     bool
@@ -143,11 +142,10 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			}
 		}
 		gatewaystream.MarkSemanticCommitted(c)
+		usageText.WriteString(delta)
 		if !sendStartIfNeeded() {
 			return false
 		}
-
-		usageText.WriteString(delta)
 		chunk := &dto.ChatCompletionsStreamResponse{
 			Id:      responseID,
 			Object:  "chat.completion.chunk",
@@ -174,10 +172,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			return true
 		}
 		gatewaystream.MarkSemanticCommitted(c)
-		if !sendStartIfNeeded() {
-			return false
-		}
-
 		idx, ok := toolCallIndexByID[callID]
 		if !ok {
 			idx = len(toolCallIndexByID)
@@ -217,17 +211,19 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				},
 			},
 		}
-		if !sendChatChunk(chunk) {
-			return false
-		}
-		sawToolCall = true
-
 		if tool.Function.Name != "" {
 			usageText.WriteString(tool.Function.Name)
 		}
 		if argsDelta != "" {
 			usageText.WriteString(argsDelta)
 		}
+		if !sendStartIfNeeded() {
+			return false
+		}
+		if !sendChatChunk(chunk) {
+			return false
+		}
+		sawToolCall = true
 		return true
 	}
 
@@ -242,6 +238,12 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			sr.Error(err)
 			return
 		}
+		if apiErr := streamResp.TerminalError(); apiErr != nil {
+			c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
+			streamErr = types.WithOpenAIError(*apiErr, http.StatusBadGateway)
+			sr.Stop(streamErr)
+			return
+		}
 
 		info.ObserveResponsesStreamOutput(streamResp, sr.ReceivedAt())
 		switch streamResp.Type {
@@ -254,7 +256,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					createAt = int64(streamResp.Response.CreatedAt)
 				}
 			}
-		case "response.reasoning_summary_text.delta":
+		case "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
 			if streamResp.Delta != "" {
 				sr.MarkProgress()
 			}
@@ -267,6 +269,8 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				needsReasoningSummarySeparator = true
 			}
 		case "response.output_text.delta":
+			usageText.WriteString(streamResp.Delta)
+			info.ConversationResponseText = usageText.String()
 			if streamResp.Delta != "" {
 				sr.MarkProgress()
 				gatewaystream.MarkSemanticCommitted(c)
@@ -274,9 +278,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					sr.Stop(streamErr)
 					return
 				}
-				outputText.WriteString(streamResp.Delta)
-				info.ConversationResponseText = outputText.String()
-				usageText.WriteString(streamResp.Delta)
 				delta := streamResp.Delta
 				chunk := &dto.ChatCompletionsStreamResponse{
 					Id:      responseID,
@@ -296,6 +297,23 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					sr.Stop(streamErr)
 					return
 				}
+			}
+		case "response.refusal.delta":
+			usageText.WriteString(streamResp.Delta)
+			if streamResp.Delta != "" {
+				sr.MarkProgress()
+			}
+			if !sendStartIfNeeded() {
+				sr.Stop(streamErr)
+				return
+			}
+			delta := streamResp.Delta
+			if !sendChatChunk(&dto.ChatCompletionsStreamResponse{
+				Id: responseID, Object: "chat.completion.chunk", Created: createAt, Model: model,
+				Choices: []dto.ChatCompletionsStreamResponseChoice{{Index: 0, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Refusal: &delta}}},
+			}) {
+				sr.Stop(streamErr)
+				return
 			}
 		case "response.output_item.added", "response.output_item.done":
 			if streamResp.Item == nil || !isResponsesChatToolCallType(streamResp.Item.Type) {
@@ -389,6 +407,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					if streamResp.Response.Usage.CompletionTokenDetails.ReasoningTokens != 0 {
 						usage.CompletionTokenDetails.ReasoningTokens = streamResp.Response.Usage.CompletionTokenDetails.ReasoningTokens
 					}
+					if streamResp.Response.Usage.OutputTokensDetails != nil {
+						usage.CompletionTokenDetails = *streamResp.Response.Usage.OutputTokensDetails
+					}
 				}
 			}
 			if streamResp.Type == "response.incomplete" {
@@ -413,26 +434,22 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				}
 				sentStop = true
 			}
-		case "response.error", "response.failed":
-			c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
-			if streamResp.Response != nil {
-				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
-					streamErr = types.WithOpenAIError(*oaiErr, http.StatusBadGateway)
-					sr.Stop(streamErr)
-					return
-				}
-			}
-			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusBadGateway)
-			sr.Stop(streamErr)
-			return
+			sr.Done()
 		}
 	})
-	if gatewaystream.IsClientGone(c) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
+	var recoveryErr *types.NewAPIError
+	usage, recoveryErr = gatewaystream.RecoveredUsage(c, info, usage)
+	if recoveryErr != nil {
+		return nil, recoveryErr
+	}
+	info.ConversationResponseText = usageText.String()
+	if gatewaystream.IsClientGone(c) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) && !c.GetBool(string(constant.ContextKeyUpstreamTerminalError)) {
 		if usage.PromptTokens == 0 {
 			usage.PromptTokens = info.GetEstimatePromptTokens()
 		}
 		if usage.CompletionTokens == 0 && usageText.Len() > 0 {
-			usage = tokenx.ResponseText2Usage(c, usageText.String(), info.UpstreamModelName, usage.PromptTokens)
+			usage.CompletionTokens = tokenx.EstimateTokenByModel(info.UpstreamModelName, usageText.String())
+			usage.UsageSource = "local_incomplete_usage"
 		}
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 		gatewaystream.MarkAttemptCompleted(c)
@@ -441,9 +458,13 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	// Preserve partial output for the outer billing finalizer when the stream
 	// fails after semantic output has already been delivered.
-	info.ConversationResponseText = outputText.String()
+	info.ConversationResponseText = usageText.String()
 	if streamErr != nil {
 		return nil, streamErr
+	}
+	if !info.HasSemanticResponse() && usage.TotalTokens == 0 && !sawToolCall {
+		c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
+		return nil, types.NewOpenAIError(fmt.Errorf("upstream stream ended without model output or final usage"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 
 	if usage.TotalTokens == 0 {

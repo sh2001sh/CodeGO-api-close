@@ -49,7 +49,7 @@ func (info *RelayInfo) ObserveResponsesStreamOutput(response dto.ResponsesStream
 	text := response.Type == "response.output_text.delta" && response.Delta != ""
 	semantic := text
 	switch response.Type {
-	case "response.reasoning_summary_text.delta", "response.function_call_arguments.delta":
+	case "response.reasoning_text.delta", "response.reasoning_summary_text.delta", "response.refusal.delta", "response.function_call_arguments.delta", "response.custom_tool_call_input.delta":
 		semantic = response.Delta != ""
 	case "response.output_item.added", "response.output_item.done":
 		semantic = response.Item != nil && (response.Item.Type == "function_call" || response.Item.Type == "custom_tool_call") &&

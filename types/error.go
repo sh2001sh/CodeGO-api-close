@@ -375,7 +375,13 @@ func NewOpenAIError(err error, errorCode ErrorCode, statusCode int, ops ...NewAP
 		Type:    string(errorCode),
 		Code:    errorCode,
 	}
-	return WithOpenAIError(openaiError, statusCode, ops...)
+	e := WithOpenAIError(openaiError, statusCode)
+	// Preserve cancellation and network causes for stream recovery decisions.
+	e.Err = err
+	for _, op := range ops {
+		op(e)
+	}
+	return e
 }
 
 func InitOpenAIError(errorCode ErrorCode, statusCode int, ops ...NewAPIErrorOptions) *NewAPIError {

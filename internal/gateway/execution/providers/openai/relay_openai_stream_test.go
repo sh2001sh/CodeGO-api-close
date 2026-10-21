@@ -88,6 +88,27 @@ func newOpenAIStreamTestContext(t *testing.T) (*gin.Context, *httptest.ResponseR
 	return c, recorder
 }
 
+func TestOaiStreamHandlerRejectsUpstreamErrorsWithoutEstimatingUsage(t *testing.T) {
+	for _, body := range []string{
+		`data: {"error":{"type":"server_error","message":"provider unavailable"}}` + "\n\n",
+		`data: {"error":{"message":"provider unavailable","code":"overloaded"}}` + "\n\n",
+		`data: {"choices":[{"delta":{"role":"assistant"}}]}` + "\n\n",
+		`data: {invalid` + "\n\n",
+	} {
+		t.Run(body, func(t *testing.T) {
+			c, recorder := newOpenAIStreamTestContext(t)
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.6-sol"}, IsStream: true, RelayFormat: types.RelayFormatOpenAI}
+			info.SetEstimatePromptTokens(90000)
+			resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": {"text/event-stream"}}}
+			usage, apiErr := OaiStreamHandler(c, info, resp)
+			require.Nil(t, usage)
+			require.NotNil(t, apiErr)
+			require.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
+			require.NotContains(t, recorder.Body.String(), "[DONE]")
+		})
+	}
+}
+
 func TestOaiStreamHandlerRejectsEmptyUpstreamStream(t *testing.T) {
 	c, recorder := newOpenAIStreamTestContext(t)
 	resp := &http.Response{

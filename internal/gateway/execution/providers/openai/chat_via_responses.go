@@ -60,7 +60,7 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	if oaiError := responsesResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+		return nil, types.WithOpenAIError(*oaiError, http.StatusBadGateway)
 	}
 
 	chatId := helper.GetResponseID(c)
@@ -108,7 +108,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	var (
 		usage       = &dto.Usage{}
-		outputText  strings.Builder
 		usageText   strings.Builder
 		sentStart   bool
 		sentStop    bool
@@ -125,7 +124,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	toolCallCanonicalIDByItemID := make(map[string]string)
 	hasSentReasoningSummary := false
 	needsReasoningSummarySeparator := false
-	//reasoningSummaryTextByKey := make(map[string]string)
 
 	if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo == nil {
 		info.ClaudeConvertInfo = &relaycommon.ClaudeConvertInfo{LastMessagesType: relaycommon.LastMessageTypeNone}
@@ -181,36 +179,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		return true
 	}
 
-	//sendReasoningDelta := func(delta string) bool {
-	//	if delta == "" {
-	//		return true
-	//	}
-	//	if !sendStartIfNeeded() {
-	//		return false
-	//	}
-	//
-	//	usageText.WriteString(delta)
-	//	chunk := &dto.ChatCompletionsStreamResponse{
-	//		Id:      responseId,
-	//		Object:  "chat.completion.chunk",
-	//		Created: createAt,
-	//		Model:   model,
-	//		Choices: []dto.ChatCompletionsStreamResponseChoice{
-	//			{
-	//				Index: 0,
-	//				Delta: dto.ChatCompletionsStreamResponseChoiceDelta{
-	//					ReasoningContent: &delta,
-	//				},
-	//			},
-	//		},
-	//	}
-	//	if err := helper.ObjectData(c, chunk); err != nil {
-	//		streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
-	//		return false
-	//	}
-	//	return true
-	//}
-
 	sendReasoningSummaryDelta := func(delta string) bool {
 		if delta == "" {
 			return true
@@ -226,11 +194,10 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				needsReasoningSummarySeparator = false
 			}
 		}
+		usageText.WriteString(delta)
 		if !sendStartIfNeeded() {
 			return false
 		}
-
-		usageText.WriteString(delta)
 		chunk := &dto.ChatCompletionsStreamResponse{
 			Id:      responseId,
 			Object:  "chat.completion.chunk",
@@ -256,10 +223,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		if callID == "" {
 			return true
 		}
-		if !sendStartIfNeeded() {
-			return false
-		}
-
 		idx, ok := toolCallIndexByID[callID]
 		if !ok {
 			idx = len(toolCallIndexByID)
@@ -299,18 +262,20 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				},
 			},
 		}
-		if !sendChatChunk(chunk) {
-			return false
-		}
-		sawToolCall = true
-
-		// Include tool call data in the local builder for fallback token estimation.
+		// Include tool call data before downstream writes.
 		if tool.Function.Name != "" {
 			usageText.WriteString(tool.Function.Name)
 		}
 		if argsDelta != "" {
 			usageText.WriteString(argsDelta)
 		}
+		if !sendStartIfNeeded() {
+			return false
+		}
+		if !sendChatChunk(chunk) {
+			return false
+		}
+		sawToolCall = true
 		return true
 	}
 
@@ -337,6 +302,12 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			sr.Error(err)
 			return
 		}
+		if apiErr := streamResp.TerminalError(); apiErr != nil {
+			c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
+			streamErr = types.WithOpenAIError(*apiErr, http.StatusBadGateway)
+			sr.Stop(streamErr)
+			return
+		}
 
 		info.ObserveResponsesStreamOutput(streamResp, sr.ReceivedAt())
 		switch streamResp.Type {
@@ -350,16 +321,10 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				}
 			}
 
-		//case "response.reasoning_text.delta":
-		//if !sendReasoningDelta(streamResp.Delta) {
-		//	sr.Stop(streamErr)
-		//	return
-		//}
-
-		//case "response.reasoning_text.done":
-
-		case "response.reasoning_summary_text.delta":
-			sr.MarkProgress()
+		case "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
+			if streamResp.Delta != "" {
+				sr.MarkProgress()
+			}
 			if !sendReasoningSummaryDelta(streamResp.Delta) {
 				sr.Stop(streamErr)
 				return
@@ -370,25 +335,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				needsReasoningSummarySeparator = true
 			}
 
-		//case "response.reasoning_summary_part.added", "response.reasoning_summary_part.done":
-		//	key := responsesStreamIndexKey(strings.TrimSpace(streamResp.ItemID), streamResp.SummaryIndex)
-		//	if key == "" || streamResp.Part == nil {
-		//		break
-		//	}
-		//	// Only handle summary text parts, ignore other part types.
-		//	if streamResp.Part.Type != "" && streamResp.Part.Type != "summary_text" {
-		//		break
-		//	}
-		//	prev := reasoningSummaryTextByKey[key]
-		//	next := streamResp.Part.Text
-		//	delta := stringDeltaFromPrefix(prev, next)
-		//	reasoningSummaryTextByKey[key] = next
-		//	if !sendReasoningSummaryDelta(delta) {
-		//		sr.Stop(streamErr)
-		//		return
-		//	}
-
 		case "response.output_text.delta":
+			usageText.WriteString(streamResp.Delta)
+			info.ConversationResponseText = usageText.String()
 			if streamResp.Delta != "" {
 				sr.MarkProgress()
 			}
@@ -398,9 +347,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			}
 
 			if streamResp.Delta != "" {
-				outputText.WriteString(streamResp.Delta)
-				info.ConversationResponseText = outputText.String()
-				usageText.WriteString(streamResp.Delta)
 				delta := streamResp.Delta
 				chunk := &dto.ChatCompletionsStreamResponse{
 					Id:      responseId,
@@ -423,12 +369,15 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			}
 
 		case "response.refusal.delta":
+			usageText.WriteString(streamResp.Delta)
+			if streamResp.Delta != "" {
+				sr.MarkProgress()
+			}
 			if !sendStartIfNeeded() {
 				sr.Stop(streamErr)
 				return
 			}
 			delta := streamResp.Delta
-			usageText.WriteString(delta)
 			if !sendChatChunk(&dto.ChatCompletionsStreamResponse{
 				Id: responseId, Object: "chat.completion.chunk", Created: createAt, Model: model,
 				Choices: []dto.ChatCompletionsStreamResponseChoice{{Index: 0, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Refusal: &delta}}},
@@ -558,33 +507,22 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			}
 			sr.Done()
 
-		case "error", "response.error", "response.failed", "response.cancelled", "response.canceled":
-			c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
-			if streamResp.Response != nil {
-				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
-					streamErr = types.WithOpenAIError(*oaiErr, http.StatusBadGateway)
-					sr.Stop(streamErr)
-					return
-				}
-			}
-			if oaiErr := dto.GetOpenAIError(streamResp.Error); oaiErr != nil {
-				streamErr = types.WithOpenAIError(*oaiErr, http.StatusBadGateway)
-				sr.Stop(streamErr)
-				return
-			}
-			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusBadGateway)
-			sr.Stop(streamErr)
-			return
-
 		default:
 		}
 	})
-	if helper.IsClientGone(c) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
+	var recoveryErr *types.NewAPIError
+	usage, recoveryErr = helper.RecoveredUsage(c, info, usage)
+	if recoveryErr != nil {
+		return nil, recoveryErr
+	}
+	info.ConversationResponseText = usageText.String()
+	if helper.IsClientGone(c) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) && !c.GetBool(string(constant.ContextKeyUpstreamTerminalError)) {
 		if usage.PromptTokens == 0 {
 			usage.PromptTokens = info.GetEstimatePromptTokens()
 		}
-		if usage.CompletionTokens == 0 && outputText.Len() > 0 {
-			usage = tokenx.ResponseText2Usage(c, outputText.String(), info.UpstreamModelName, usage.PromptTokens)
+		if usage.CompletionTokens == 0 && usageText.Len() > 0 {
+			usage.CompletionTokens = tokenx.EstimateTokenByModel(info.UpstreamModelName, usageText.String())
+			usage.UsageSource = "local_incomplete_usage"
 		}
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 		helper.MarkAttemptCompleted(c)
@@ -592,7 +530,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	}
 	// Preserve partial output for the outer billing finalizer even when the
 	// upstream stream reports an error after semantic output was delivered.
-	info.ConversationResponseText = outputText.String()
+	info.ConversationResponseText = usageText.String()
 	if cyberErr != nil {
 		return nil, cyberErr
 	}

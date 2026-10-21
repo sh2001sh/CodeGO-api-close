@@ -528,6 +528,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	if usage != nil && usage.UsageSource != "" {
 		other["usage_source"] = usage.UsageSource
 	}
+	if usage != nil && usage.CompletionTokenDetails.ReasoningTokens > 0 {
+		other["reasoning_tokens"] = usage.CompletionTokenDetails.ReasoningTokens
+	}
 	appendTextBillingClassification(other, relayInfo, summary, usedFallbackUsage)
 	appendUsageConsumptionDiscountInfo(other, discountDetail)
 	appendServiceTierCalculation(other, relayInfo, quotaBeforeServiceTier, summary.Quota)

@@ -50,7 +50,7 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 	if oaiError := responsesResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+		return nil, types.WithOpenAIError(*oaiError, http.StatusBadGateway)
 	}
 
 	if responsesResponse.HasImageGenerationCall() {
@@ -139,7 +139,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	var firstOutputTimer *time.Timer
 	if firstOutputTimeout > 0 {
 		firstOutputTimer = time.AfterFunc(firstOutputTimeout, func() {
-			if !sawSemanticOutput.Load() && !sawResponseCompleted.Load() {
+			if !sawSemanticOutput.Load() && !sawResponseCompleted.Load() && (info.StreamUsageRecovery == nil || !info.StreamUsageRecovery.IsDraining()) {
 				firstOutputTimedOut.Store(true)
 				if info.StreamStatus != nil {
 					info.StreamStatus.SetEndReason(
@@ -197,7 +197,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		// A split delta may be partly sent before a client disconnects; recording
 		// it only after the complete write loses that output from settlement.
 		switch streamResponse.Type {
-		case "response.output_text.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta", "response.refusal.delta", "response.function_call_arguments.delta":
+		case "response.output_text.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta", "response.refusal.delta", "response.function_call_arguments.delta", "response.custom_tool_call_input.delta":
 			responseTextBuilder.WriteString(streamResponse.Delta)
 		}
 		// Capture provider usage before writing anything downstream. A client
@@ -215,7 +215,13 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				usage.PromptTokensDetails.CachedCreationTokens = providerUsage.InputTokensDetails.GetCachedCreationTokens()
 			}
 		}
-		if streamResponse.Type == "response.incomplete" || streamResponse.Type == "response.cancelled" || streamResponse.Type == "response.canceled" {
+		if streamResponse.Type == "response.incomplete" && !isResponsesFailureEvent(streamResponse) {
+			if !sawSemanticOutput.Load() && !hasResponsesCompletedContent(streamResponse) {
+				c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
+				terminalFailure = errors.New("upstream returned an incomplete response without output")
+				sr.Stop(terminalFailure)
+				return
+			}
 			sawResponseCompleted.Store(true)
 			if err := flushBufferedResponsesStreamEvents(c, info, preOutputEvents, &streamResponse, data); err != nil {
 				sr.Stop(err)
@@ -279,6 +285,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		} else if streamResponse.Type == "response.completed" {
 			if !sawSemanticOutput.Load() && !sawCompactionOutput.Load() && !hasResponsesCompletedContent(streamResponse) {
+				c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
 				terminalFailure = errors.New("upstream returned an empty response.completed event")
 				sr.Stop(terminalFailure)
 				return
@@ -362,8 +369,13 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		}
 	})
+	var recoveryErr *types.NewAPIError
+	usage, recoveryErr = helper.RecoveredUsage(c, info, usage)
 	if cyberPolicyErr != nil {
 		return nil, cyberPolicyErr
+	}
+	if recoveryErr != nil {
+		return nil, recoveryErr
 	}
 	if preOutputBufferErr != nil {
 		return nil, types.NewOpenAIError(preOutputBufferErr, types.ErrorCodeBadResponse, http.StatusBadGateway)
@@ -405,7 +417,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	// upstream has returned 2xx, it may continue billable generation after our
 	// transport is closed. Preserve the known input/output usage instead of
 	// refunding the reservation as if the request never reached the provider.
-	if c.GetBool(string(constant.ContextKeyClientGone)) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
+	if c.GetBool(string(constant.ContextKeyClientGone)) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) && !c.GetBool(string(constant.ContextKeyUpstreamTerminalError)) {
 		if usage.PromptTokens == 0 {
 			usage.PromptTokens = info.GetEstimatePromptTokens()
 			usage.UsageSource = "fallback_prompt_tokens"

@@ -104,6 +104,11 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendBillingInfo(relayInfo, other)
 	appendParamOverrideInfo(relayInfo, other)
 	appendStreamStatus(relayInfo, other)
+	for _, key := range []string{"stream_usage_recovery", "usage_reconciliation_required", "responses_stream_lifecycle"} {
+		if value, exists := ctx.Get(key); exists {
+			other[key] = value
+		}
+	}
 	return other
 }
 

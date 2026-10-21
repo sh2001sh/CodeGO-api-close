@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
@@ -24,7 +25,9 @@ func TestOaiResponsesToChatStreamHandlerPreservesCacheWriteTokens(t *testing.T) 
 	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
 
 	body := strings.Join([]string{
-		`data: {"type":"response.completed","response":{"usage":{"input_tokens":120,"output_tokens":30,"total_tokens":150,"input_tokens_details":{"cached_tokens":80,"cached_creation_tokens":20}}}}`,
+		`data: {"type":"response.reasoning_text.delta","delta":"thinking"}`,
+		``,
+		`data: {"type":"response.completed","response":{"usage":{"input_tokens":120,"output_tokens":30,"total_tokens":150,"input_tokens_details":{"cached_tokens":80,"cached_creation_tokens":20},"output_tokens_details":{"reasoning_tokens":25}}}}`,
 		``,
 		`data: [DONE]`,
 		``,
@@ -39,6 +42,9 @@ func TestOaiResponsesToChatStreamHandlerPreservesCacheWriteTokens(t *testing.T) 
 
 	require.Nil(t, err)
 	require.Equal(t, 20, usage.PromptTokensDetails.CachedCreationTokens)
+	require.Equal(t, 30, usage.CompletionTokens)
+	require.Equal(t, 25, usage.CompletionTokenDetails.ReasoningTokens)
+	require.Contains(t, recorder.Body.String(), `"reasoning_content":"thinking"`)
 }
 
 func TestOaiResponsesToChatStreamHandlerMarksOutputCommittedAndMapsFailureToBadGateway(t *testing.T) {
@@ -87,6 +93,34 @@ func TestOaiResponsesToChatStreamHandlerFinalizesAfterNormalEOF(t *testing.T) {
 	require.NotNil(t, usage)
 	require.Equal(t, 12, usage.PromptTokens)
 	require.Contains(t, recorder.Body.String(), `"finish_reason":"stop"`)
+}
+
+func TestOaiResponsesToChatCompletesWithoutWaitingForUpstreamEOF(t *testing.T) {
+	previous := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = previous })
+	reader, writer := io.Pipe()
+	defer reader.Close()
+	defer writer.Close()
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.5"}, IsStream: true, RelayFormat: types.RelayFormatOpenAI}
+	finished := make(chan struct{})
+	var apiErr *types.NewAPIError
+	go func() {
+		defer close(finished)
+		_, apiErr = OaiResponsesToChatStreamHandler(ctx, info, &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: reader})
+	}()
+	_, err := io.WriteString(writer, `data: {"type":"response.output_text.delta","delta":"hello"}`+"\n\n"+`data: {"type":"response.completed","response":{"usage":{"input_tokens":12,"output_tokens":3}}}`+"\n\n")
+	require.NoError(t, err)
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		_ = writer.Close()
+		<-finished
+		t.Fatal("completed response waited for an upstream EOF")
+	}
+	require.Nil(t, apiErr)
 }
 
 func TestOaiResponsesToChatStreamHandlerMapsIncompleteResponseToLength(t *testing.T) {

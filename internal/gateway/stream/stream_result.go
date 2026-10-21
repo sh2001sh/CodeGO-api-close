@@ -9,6 +9,7 @@ import (
 type Result struct {
 	status     *gatewaycontract.StreamStatus
 	stopped    bool
+	stopErr    error
 	receivedAt time.Time
 	progress   func()
 }
@@ -25,10 +26,15 @@ func (r *Result) Error(err error) {
 }
 
 func (r *Result) Stop(err error) {
+	r.stopErr = err
 	if err != nil {
 		r.status.RecordError(err.Error())
 	}
-	r.status.SetEndReason(gatewaycontract.StreamEndReasonHandlerStop, err)
+	if isDownstreamDisconnect(err) {
+		r.status.SetEndReason(gatewaycontract.StreamEndReasonClientGone, err)
+	} else {
+		r.status.SetEndReason(gatewaycontract.StreamEndReasonHandlerStop, err)
+	}
 	r.stopped = true
 }
 
@@ -62,5 +68,6 @@ func (r *Result) setReceivedAt(receivedAt time.Time) {
 
 func (r *Result) reset() {
 	r.stopped = false
+	r.stopErr = nil
 	r.receivedAt = time.Time{}
 }

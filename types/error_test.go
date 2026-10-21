@@ -1,13 +1,26 @@
 package types
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewOpenAIErrorPreservesStreamDisconnectCause(t *testing.T) {
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded, io.ErrClosedPipe} {
+		err := NewOpenAIError(fmt.Errorf("downstream write: %w", cause), ErrorCodeBadResponse, http.StatusBadGateway)
+		require.ErrorIs(t, err, cause)
+	}
+	err := NewOpenAIError(io.ErrClosedPipe, ErrorCodeBadResponse, http.StatusBadGateway, ErrOptionWithHideErrMsg("hidden"))
+	require.EqualError(t, err, "hidden")
+	require.False(t, errors.Is(err, io.ErrClosedPipe), "explicit hiding options still apply")
+}
 
 func TestNewAPIErrorStatusStringsSanitizeUpstreamQuotaLeak(t *testing.T) {
 	t.Parallel()

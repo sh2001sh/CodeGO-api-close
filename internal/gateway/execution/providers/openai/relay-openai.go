@@ -217,6 +217,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var createAt int64 = 0
 	var systemFingerprint string
 	var containStreamUsage bool
+	var sawModelOutput bool
 	var responseTextBuilder strings.Builder
 	var toolCount int
 	var usage = &dto.Usage{}
@@ -224,6 +225,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var lastStreamData string
 	var lastStreamDataSent bool
 	var cyberPolicyErr *types.NewAPIError
+	var streamErr *types.NewAPIError
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		if err := cyberPolicyAPIError([]byte(data), resp.StatusCode, resp.Header.Get("Content-Type")); err != nil {
@@ -245,7 +247,19 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 		var streamResponse dto.ChatCompletionsStreamResponse
 		var hasOutput bool
-		if err := platformencoding.UnmarshalString(data, &streamResponse); err == nil {
+		if err := platformencoding.UnmarshalString(data, &streamResponse); err != nil {
+			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+			sr.Stop(streamErr)
+			return
+		} else {
+			// Compatible providers send ordinary errors inside an HTTP 200 SSE
+			// response. Do not turn those into prompt-only estimated consumption.
+			if apiErr := dto.GetOpenAIError(streamResponse.Error); apiErr != nil && (apiErr.Type != "" || apiErr.Message != "" || apiErr.Code != nil) {
+				c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
+				streamErr = types.WithOpenAIError(*apiErr, http.StatusBadGateway)
+				sr.Stop(streamErr)
+				return
+			}
 			info.ObserveChatStreamOutput(streamResponse, sr.ReceivedAt())
 			for _, choice := range streamResponse.Choices {
 				if choice.Delta.GetContentString() != "" || choice.Delta.GetReasoningContent() != "" || len(choice.Delta.ToolCalls) > 0 {
@@ -254,6 +268,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 					break
 				}
 			}
+			sawModelOutput = sawModelOutput || hasOutput
 		}
 		if lastStreamData != "" && !lastStreamDataSent {
 			if err := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
@@ -280,7 +295,19 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	if cyberPolicyErr != nil {
 		return nil, cyberPolicyErr
 	}
+	if streamErr != nil {
+		return nil, streamErr
+	}
 	if len(streamItems) == 0 {
+		var recoveryErr *types.NewAPIError
+		usage, recoveryErr = helper.RecoveredUsage(c, info, usage)
+		if recoveryErr != nil {
+			return nil, recoveryErr
+		}
+		if c.GetBool(string(constant.ContextKeyClientGone)) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
+			helper.MarkAttemptCompleted(c)
+			return usage, nil
+		}
 		return nil, types.NewOpenAIError(
 			fmt.Errorf("upstream returned an empty stream"),
 			types.ErrorCodeBadResponseBody,
@@ -304,7 +331,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		logger.LogError(c, fmt.Sprintf("error handling last response: %s, lastStreamData: [%s]", err.Error(), lastStreamData))
 	}
 
-	if info.RelayFormat == types.RelayFormatOpenAI {
+	if info.RelayFormat == types.RelayFormatOpenAI && !helper.IsClientGone(c) {
 		if shouldSendLastResp && !lastStreamDataSent {
 			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
 		}
@@ -315,6 +342,10 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		logger.LogError(c, "error processing tokens: "+err.Error())
 	}
 	info.ConversationResponseText = responseTextBuilder.String()
+	if !sawModelOutput && responseTextBuilder.Len() == 0 && toolCount == 0 && !containStreamUsage && !helper.IsClientGone(c) {
+		c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
+		return nil, types.NewOpenAIError(fmt.Errorf("upstream stream ended without model output"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
 
 	if !containStreamUsage {
 		usage = tokenx.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
@@ -331,6 +362,11 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		httpctx.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 	}
 
+	var recoveryErr *types.NewAPIError
+	usage, recoveryErr = helper.RecoveredUsage(c, info, usage)
+	if recoveryErr != nil {
+		return nil, recoveryErr
+	}
 	applyUsagePostProcessing(info, usage, platformtext.StringToByteSlice(lastStreamData))
 
 	finalStreamData := lastStreamData
@@ -378,7 +414,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	if oaiError := simpleResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+		return nil, types.WithOpenAIError(*oaiError, http.StatusBadGateway)
 	}
 
 	for _, choice := range simpleResponse.Choices {

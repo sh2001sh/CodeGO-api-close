@@ -115,6 +115,7 @@ type RelayInfo struct {
 	firstSemanticResponse   bool
 	isFirstResponse         bool
 	StreamPacer             *StreamPacer
+	StreamUsageRecovery     *StreamUsageRecovery
 	//SendLastReasoningResponse bool
 	IsStream               bool
 	IsGeminiBatchEmbedding bool

@@ -84,14 +84,16 @@ function EmailCodeField(
       <div className='flex min-w-0 gap-2'>
         <Input
           id='payment-password-email-code'
-          inputMode='numeric'
+          type='text'
+          inputMode='text'
           autoComplete='one-time-code'
+          autoCapitalize='none'
+          autoCorrect='off'
+          spellCheck={false}
           maxLength={6}
           value={props.emailCode}
           placeholder={`${t('Send to')} ${props.emailMasked}`}
-          onChange={(event) =>
-            props.onEmailCodeChange(event.target.value.replace(/\D/g, ''))
-          }
+          onChange={(event) => props.onEmailCodeChange(event.target.value)}
         />
         <Button
           type='button'

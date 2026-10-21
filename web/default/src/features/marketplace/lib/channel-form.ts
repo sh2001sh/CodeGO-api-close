@@ -2,6 +2,9 @@ import { z } from 'zod'
 import interfaceI18n from '@/i18n/config'
 import type { MarketplaceChannel } from '../types'
 
+const sourceLinkPattern =
+  /([a-z][a-z0-9+.-]*:\/\/|(?:https?|hxxps?|mailto|javascript|data):|www\.|(?:[\p{L}\p{N}][\p{L}\p{N}-]*\.)+(?:[\p{L}]{2,}|xn--[a-z0-9-]+)|[0-9]{1,3}(?:\.[0-9]{1,3}){3}|(?:[0-9a-f]{0,4}:){2,}[0-9a-f]{0,4})/iu
+
 export const MARKETPLACE_SOURCE_OPTIONS = [
   'Codex Plus',
   'Codex Pro',
@@ -69,7 +72,25 @@ export const channelFormSchema = z.object({
     'anthropic',
     'gemini',
   ]),
-  source_label: z.enum(MARKETPLACE_SOURCE_OPTIONS),
+  source_label: z
+    .string()
+    .transform((value) => value.normalize('NFKC').trim())
+    .refine((value) => value.length > 0, {
+      error: () => interfaceI18n.t('请填写来源声明'),
+    })
+    .refine((value) => Array.from(value).length <= 30, {
+      error: () => interfaceI18n.t('来源声明最多 30 个字符'),
+    })
+    .refine(
+      (value) =>
+        !sourceLinkPattern.test(value.replace(/[^\p{L}\p{N}.:@/+-]/gu, '')),
+      {
+        error: () => interfaceI18n.t('来源声明不能包含链接、域名或 IP 地址'),
+      }
+    )
+    .refine((value) => !/[\p{Cc}\p{Cf}]/u.test(value), {
+      error: () => interfaceI18n.t('来源声明不能包含换行或隐藏字符'),
+    }),
   base_url: z.url({ protocol: /^https?$/ }),
   api_key: z.string().min(1),
   declared_models: z.array(z.string()).min(1),
@@ -119,7 +140,7 @@ export const channelFormDefaults: ChannelFormInput = {
   description: '',
   tags: [],
   provider_type: 'openai_compatible',
-  source_label: 'Codex Plus',
+  source_label: '',
   base_url: '',
   api_key: '',
   declared_models: [],
@@ -143,11 +164,8 @@ export const channelFormDefaults: ChannelFormInput = {
 export function channelFormDefaultsForEdit(
   channel: MarketplaceChannel
 ): ChannelFormInput {
-  const source = MARKETPLACE_SOURCE_OPTIONS.includes(
-    channel.submitted_source_label as (typeof MARKETPLACE_SOURCE_OPTIONS)[number]
-  )
-    ? (channel.submitted_source_label as ChannelFormInput['source_label'])
-    : 'CC其它'
+  const source =
+    channel.submitted_source_label || channel.approved_source_label || ''
   const declaredModels = channel.declared_models ?? []
   return {
     custom_name: channel.custom_name ?? '',

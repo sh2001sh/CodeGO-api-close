@@ -102,21 +102,11 @@ func hasResponsesCompletedContent(streamResponse dto.ResponsesStreamResponse) bo
 }
 
 func isResponsesFailureEvent(streamResponse dto.ResponsesStreamResponse) bool {
-	switch streamResponse.Type {
-	case "error", "response.failed", "response.incomplete":
-		return true
-	default:
-		return false
-	}
+	return streamResponse.TerminalError() != nil
 }
 
 func responsesFailureError(streamResponse dto.ResponsesStreamResponse) error {
-	if streamResponse.Response != nil {
-		if openAIError := streamResponse.Response.GetOpenAIError(); openAIError != nil && openAIError.Message != "" {
-			return errors.New(openAIError.Message)
-		}
-	}
-	if openAIError := dto.GetOpenAIError(streamResponse.Error); openAIError != nil && openAIError.Message != "" {
+	if openAIError := streamResponse.TerminalError(); openAIError != nil && openAIError.Message != "" {
 		return errors.New(openAIError.Message)
 	}
 	return fmt.Errorf("upstream returned terminal event %s", streamResponse.Type)

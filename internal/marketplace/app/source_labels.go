@@ -1,10 +1,24 @@
 package app
 
 import (
+	"regexp"
 	"strings"
+	"unicode"
 
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
 )
+
+var sourceLinkPattern = regexp.MustCompile(`(?i)([a-z][a-z0-9+.-]*://|(?:https?|hxxps?|mailto|javascript|data):|www\.|(?:[\p{L}\p{N}][\p{L}\p{N}-]*\.)+(?:[\p{L}]{2,}|xn--[a-z0-9-]+)|[0-9]{1,3}(?:\.[0-9]{1,3}){3}|(?:[0-9a-f]{0,4}:){2,}[0-9a-f]{0,4})`)
+
+func containsSourceLink(label string) bool {
+	var compact strings.Builder
+	for _, char := range label {
+		if unicode.IsLetter(char) || unicode.IsNumber(char) || strings.ContainsRune(".:@/+-", char) {
+			compact.WriteRune(char)
+		}
+	}
+	return sourceLinkPattern.MatchString(compact.String())
+}
 
 var marketplaceSourcePrefixes = map[string]string{
 	"Codex Plus": "Codex-Plus",
@@ -61,9 +75,9 @@ func marketplaceInternalGroupName(sourceLabel, groupID string) string {
 }
 
 func marketplaceDisplayName(sourceLabel string, multiplier float64, channelID string) string {
-	label, ok := canonicalSourceLabel(sourceLabel)
-	if !ok {
-		label = "来源待审核"
+	label := strings.TrimSpace(sourceLabel)
+	if label == "" {
+		label = "未声明来源"
 	}
 	multiplierText := marketplacedomain.FormatMultiplier(multiplier)
 	return strings.TrimSpace(channelID) + "-" + label + "-" + multiplierText + "x"

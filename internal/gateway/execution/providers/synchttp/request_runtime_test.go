@@ -60,7 +60,7 @@ func TestDoAPIRequestPropagatesClientCancellationToUpstream(t *testing.T) {
 	}
 }
 
-func TestDoAPIRequestCancelsActiveUpstreamStreamAfterClientDisconnect(t *testing.T) {
+func TestDoAPIRequestKeepsAcceptedStreamUntilBodyClosedAfterDisconnect(t *testing.T) {
 	stopped := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
@@ -86,8 +86,14 @@ func TestDoAPIRequestCancelsActiveUpstreamStreamAfterClientDisconnect(t *testing
 	cancel()
 	select {
 	case <-stopped:
+		t.Fatal("accepted stream stopped before final usage could be collected")
+	case <-time.After(50 * time.Millisecond):
+	}
+	require.NoError(t, resp.Body.Close())
+	select {
+	case <-stopped:
 	case <-time.After(2 * time.Second):
-		t.Fatal("active upstream stream continued after client disconnect")
+		t.Fatal("closing response body did not stop upstream")
 	}
 }
 

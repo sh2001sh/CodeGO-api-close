@@ -112,19 +112,21 @@ export function AdminGovernance() {
             aria-label={t('渠道主 ID')}
             className='w-full sm:w-44'
           />
-          <NativeSelect
+          <Input
             value={channelSource}
             onChange={(event) => setChannelSource(event.target.value)}
             aria-label={t('来源')}
-            className='bg-background'
-          >
-            <option value=''>{t('全部来源')}</option>
+            placeholder={t('全部来源')}
+            list='admin-market-source-suggestions'
+            className='bg-background w-full sm:w-44'
+          />
+          <datalist id='admin-market-source-suggestions'>
             {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
               <option key={source} value={source}>
                 {localizedSourceLabel(source, i18n.language)}
               </option>
             ))}
-          </NativeSelect>
+          </datalist>
           <NativeSelect
             value={channelProvider}
             onChange={(event) => setChannelProvider(event.target.value)}
@@ -221,7 +223,8 @@ export function AdminGovernance() {
                       </span>
                       <span>{channel.provider_type}</span>
                       <span className='text-foreground font-medium'>
-                        {t('来源')}: {channel.submitted_source_label || '--'}
+                        {t('渠道主声明')}:{' '}
+                        {channel.submitted_source_label || '--'}
                       </span>
                       <span>
                         {channel.declared_models.length} {t('个模型')}

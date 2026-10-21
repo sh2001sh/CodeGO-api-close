@@ -83,7 +83,7 @@ func findUsageLogMarketplaceChannels(groups []marketplaceschema.Group) (map[stri
 	}
 	channels := make([]marketplaceschema.Channel, 0, len(channelIDs))
 	if len(channelIDs) > 0 {
-		if err := platformdb.DB.Select("id", "approved_source_label", "source_label_status").
+		if err := platformdb.DB.Select("id", "submitted_source_label", "approved_source_label", "source_label_status").
 			Where("id IN ?", channelIDs).Find(&channels).Error; err != nil {
 			return nil, err
 		}

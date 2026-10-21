@@ -37,6 +37,33 @@ func TestCloseTimedOutStreamClosesResponseBody(t *testing.T) {
 	require.True(t, body.closed)
 }
 
+func TestScanResponseReleasesRecoveryWhenTerminalFrameWriteFails(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	recovery := relaycommon.NewStreamUsageRecovery(c.Request.Context(), time.Minute, 2*time.Second)
+	defer recovery.Close()
+	recovery.Accept()
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	go func() {
+		_, _ = io.WriteString(writer, "data: "+`{"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":90,"total_tokens":100}}}`+"\n\n")
+		// Keep the upstream body open after its terminal event.
+	}()
+	info := &relaycommon.RelayInfo{DisablePing: true, StreamUsageRecovery: recovery}
+	started := time.Now()
+	ScanResponse(c, &http.Response{Body: reader}, info, func(_ string, result *Result) {
+		result.Stop(io.ErrClosedPipe)
+	})
+	require.Less(t, time.Since(started), time.Second)
+	usage, _, metadata := recovery.Snapshot()
+	require.NotNil(t, usage)
+	require.Equal(t, 90, usage.CompletionTokens)
+	require.Equal(t, "final_usage_received", metadata["end_reason"])
+}
+
 func TestIsClientGoneMarksRequestContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())

@@ -954,10 +954,12 @@ export function DawnMarket() {
                     }))
                   }
                 />
-                <select
+                <input
                   className='fsel market-source-filter'
                   value={filters.source}
                   aria-label={t('市场来源')}
+                  placeholder={t('全部来源')}
+                  list='market-source-suggestions'
                   onChange={(event) =>
                     setFilters((current) => ({
                       ...current,
@@ -965,10 +967,8 @@ export function DawnMarket() {
                       page: 1,
                     }))
                   }
-                >
-                  <option value=''>
-                    <Trans i18nKey={'全部来源'} />
-                  </option>
+                />
+                <datalist id='market-source-suggestions'>
                   <option value='官方'>
                     <Trans i18nKey={'官方'} />
                   </option>
@@ -977,7 +977,7 @@ export function DawnMarket() {
                       {localizedSourceLabel(source, i18n.language)}
                     </option>
                   ))}
-                </select>
+                </datalist>
                 <select
                   className='fsel'
                   value={filters.credit_pack ?? ''}

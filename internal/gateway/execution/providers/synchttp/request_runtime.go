@@ -88,9 +88,7 @@ func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) context.Canc
 			_ = recover()
 		}()
 
-		if pingInterval <= 0 {
-			pingInterval = gatewaystream.DefaultPingInterval
-		}
+		pingInterval = gatewaystream.EffectivePingInterval(pingInterval)
 
 		ticker := time.NewTicker(pingInterval)
 		defer ticker.Stop()
@@ -144,6 +142,24 @@ func sendPingData(c *gin.Context, mutex *sync.Mutex) error {
 func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (*http.Response, error) {
 	var client *http.Client
 	var err error
+	var recovery *relaycommon.StreamUsageRecovery
+	info.StreamUsageRecovery = nil
+	// Only OpenAI text SSE has a usage collector in the scanner. Preserve
+	// cancellation for other protocols, image jobs and non-streaming requests.
+	if info.IsStream && (info.RelayMode == gatewaycontract.RelayModeResponses || info.RelayMode == gatewaycontract.RelayModeChatCompletions || info.RelayMode == gatewaycontract.RelayModeCompletions) &&
+		(info.ApiType == constant.APITypeOpenAI || info.ApiType == constant.APITypeCodex || info.ApiType == constant.APITypeOpenRouter) {
+		if err := req.Context().Err(); err != nil {
+			return nil, err
+		}
+		recovery = relaycommon.NewStreamUsageRecovery(req.Context(), relaycommon.StreamMaxDurationForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens()), relaycommon.StreamUsageRecoveryTimeout)
+		req = req.WithContext(recovery.Context())
+	}
+	keepRecovery := false
+	defer func() {
+		if recovery != nil && !keepRecovery {
+			recovery.Close()
+		}
+	}()
 	markResponsesStreamRetrySafeBeforeConnect(c, info)
 	responseHeaderTimeout := responseHeaderTimeoutForRequest(c, info)
 	if info.UsesMarketplaceEgress() {
@@ -239,12 +255,20 @@ func DoRequest(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) (
 	if resp == nil {
 		return nil, errors.New("resp is nil")
 	}
+	if recovery != nil && resp.Body != nil {
+		resp.Body = &cancelOnCloseBody{ReadCloser: resp.Body, cancel: recovery.Close}
+		keepRecovery = true
+	}
 	if c != nil && resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
 		// A successful response header means the upstream accepted the work. Any
 		// later parse, conversion, stream or downstream-write failure is no longer
 		// safe to replay through another paid route.
 		c.Set(string(constant.ContextKeyUpstreamRequestAccepted), true)
 		gatewaystream.MarkAttemptConnected(c)
+		if recovery != nil && strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
+			recovery.Accept()
+			info.StreamUsageRecovery = recovery
+		}
 	}
 	if info != nil && info.FirstByteTrace != nil {
 		info.FirstByteTrace.MarkOutboundHTTPVersion(resp.ProtoMajor, resp.ProtoMinor)
@@ -489,11 +513,8 @@ func DoWSSRequest(a RequestAdaptor, c *gin.Context, info *relaycommon.RelayInfo,
 	return targetConn, nil
 }
 
-// requestContext binds a synchronous upstream attempt to the incoming
-// request.  Without this, net/http continues writing/reading an upstream
-// request after the client has cancelled, leaving a charged reservation and a
-// busy route slot alive until the upstream timeout.  Background Responses
-// workers use their own request context and do not pass through this helper.
+// requestContext binds connection setup to the incoming request. Accepted text
+// SSE may then use the bounded usage-recovery lifetime in DoRequest.
 func requestContext(c *gin.Context) context.Context {
 	if c != nil && c.Request != nil {
 		return c.Request.Context()

@@ -132,13 +132,13 @@ func applyChannelPresentationUpdate(channel *marketplaceschema.Channel, group *m
 		group.Visibility = *req.Visibility
 	}
 	if req.SourceLabel != nil {
-		if err := validateSourceLabel(channel.ProviderType, *req.SourceLabel); err != nil {
+		label, err := normalizeSourceLabel(*req.SourceLabel)
+		if err != nil {
 			return false, err
 		}
-		label, _ := canonicalSourceLabel(*req.SourceLabel)
 		if label != channel.SubmittedSourceLabel {
 			channel.SubmittedSourceLabel = label
-			channel.SourceLabelStatus = marketplacedomain.SourceLabelPending
+			channel.SourceLabelStatus = marketplacedomain.SourceLabelDeclared
 			channel.SourceLabelReviewReason = ""
 			refreshInternalGroupName(group, channel.ID, label)
 		}

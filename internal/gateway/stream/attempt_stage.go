@@ -23,6 +23,9 @@ const (
 )
 
 func BeginRelayAttempt(c *gin.Context) {
+	if c != nil {
+		c.Set(string(constant.ContextKeyUpstreamTerminalError), false)
+	}
 	setAttemptStage(c, AttemptStageSelected)
 }
 

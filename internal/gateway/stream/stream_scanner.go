@@ -30,6 +30,14 @@ type scannedEvent struct {
 	receivedAt time.Time
 }
 
+// Keep enabled SSE heartbeats frequent enough for proxies during silent reasoning.
+func EffectivePingInterval(configured time.Duration) time.Duration {
+	if configured <= 0 || configured > DefaultPingInterval {
+		return DefaultPingInterval
+	}
+	return configured
+}
+
 func getScannerBufferSize() int {
 	if constant.StreamScannerMaxBufferMB > 0 {
 		return constant.StreamScannerMaxBufferMB << 20
@@ -64,10 +72,34 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	streamingMaxDuration := relaycommon.StreamMaxDurationForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
 	adaptiveProgressTimeout := relaycommon.StreamAdaptiveProgressTimeoutForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
 	adaptiveInitialTimeout := relaycommon.StreamAdaptiveInitialTimeoutForRequest(c, info.OriginModelName, info.GetEstimatePromptTokens())
-	streamCtx, cancelStream := context.WithCancel(c.Request.Context())
+	recovery := info.StreamUsageRecovery
+	readParent := c.Request.Context()
+	var recoveryDone <-chan struct{}
+	if recovery != nil {
+		readParent = recovery.Context()
+		recoveryDone = readParent.Done()
+	}
+	streamCtx, cancelStream := context.WithCancel(readParent)
 	dataCtx, cancelData := context.WithCancel(c.Request.Context())
 	defer cancelStream()
 	defer cancelData()
+	drainNotify := make(chan struct{}, 1)
+	startDrain := func() bool {
+		if recovery == nil {
+			return false
+		}
+		MarkClientGone(c)
+		info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
+		if !recovery.BeginDrain() {
+			return false
+		}
+		cancelData()
+		select {
+		case drainNotify <- struct{}{}:
+		default:
+		}
+		return true
+	}
 
 	stopChan := make(chan struct{})
 	var stopOnce sync.Once
@@ -94,6 +126,7 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	ticker := time.NewTicker(streamingTimeout)
 	defer ticker.Stop()
 	var firstByteTimer *time.Timer
+	var firstByteTimerC <-chan time.Time
 	var maxTimer *time.Timer
 	var progressTimer *time.Timer
 	var progressTimerC <-chan time.Time
@@ -101,6 +134,7 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 	waitingForInitialProgress := false
 	if firstByteTimeout > 0 {
 		firstByteTimer = time.NewTimer(firstByteTimeout)
+		firstByteTimerC = firstByteTimer.C
 		defer firstByteTimer.Stop()
 	}
 	if streamingMaxDuration > 0 {
@@ -123,10 +157,7 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 
 	generalSettings := platformgeneral.GetSetting()
 	pingEnabled := generalSettings.PingIntervalEnabled && !info.DisablePing
-	pingInterval := time.Duration(generalSettings.PingIntervalSeconds) * time.Second
-	if pingInterval <= 0 {
-		pingInterval = DefaultPingInterval
-	}
+	pingInterval := EffectivePingInterval(time.Duration(generalSettings.PingIntervalSeconds) * time.Second)
 	var pingTicker *time.Ticker
 	if pingEnabled {
 		pingTicker = time.NewTicker(pingInterval)
@@ -207,12 +238,18 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 				sr.setReceivedAt(event.receivedAt)
 				dataHandler(event.data, sr)
 				if sr.IsStopped() {
+					if recovery != nil && (c.Request.Context().Err() != nil || recovery.IsDraining() || isDownstreamDisconnect(sr.stopErr)) && startDrain() {
+						return
+					}
 					stop(true)
 					return
 				}
 			case <-pingRequests:
 				if err := PingData(c); err != nil {
 					logger.LogError(c, "ping data error: "+err.Error())
+					if isDownstreamDisconnect(err) && startDrain() {
+						return
+					}
 					info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonPingFail, err)
 					stop(true)
 					return
@@ -241,10 +278,12 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 			case <-streamCtx.Done():
 				return
 			case <-c.Request.Context().Done():
-				MarkClientGone(c)
-				info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
-				stop(true)
-				return
+				if !startDrain() {
+					MarkClientGone(c)
+					info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
+					stop(true)
+					return
+				}
 			default:
 			}
 
@@ -261,6 +300,9 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 				continue
 			}
 			if strings.HasPrefix(data, "[DONE]") {
+				if recovery != nil {
+					recovery.Done()
+				}
 				info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonDone, nil)
 				return
 			}
@@ -274,14 +316,25 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 			}
 			info.SetFirstResponseTime()
 			info.ReceivedResponseCount++
+			if recovery != nil {
+				recovery.Observe(data)
+				if recovery.IsDraining() {
+					if recovery.Terminal() {
+						return
+					}
+					continue
+				}
+			}
 			select {
 			case dataChan <- scannedEvent{data: data, receivedAt: time.Now()}:
 			case <-streamCtx.Done():
 				return
 			case <-c.Request.Context().Done():
-				MarkClientGone(c)
-				stop(true)
-				return
+				if !startDrain() {
+					MarkClientGone(c)
+					stop(true)
+					return
+				}
 			}
 		}
 
@@ -301,13 +354,18 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 
 	normalScannerEnd := false
 	monitoring := true
+	downstreamDone := c.Request.Context().Done()
 	for monitoring {
 		select {
 		case <-scannerDone:
 			normalScannerEnd = info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors()
 			stop(false)
 			monitoring = false
-		case <-streamingFirstByteTimer(firstByteTimer):
+		case <-firstByteTimerC:
+			if recovery != nil && recovery.IsDraining() {
+				firstByteTimerC = nil
+				continue
+			}
 			relaycommon.MarkLocalStreamTimeout(c, relaycommon.LocalStreamTimeoutFirstByte)
 			info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonTimeout, fmt.Errorf("first byte timeout after %s", firstByteTimeout))
 			stop(true)
@@ -320,6 +378,9 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 			closeTimedOutStream(resp)
 			monitoring = false
 		case <-progressNotify:
+			if recovery != nil && recovery.IsDraining() {
+				continue
+			}
 			waitingForInitialProgress = false
 			if adaptiveProgressTimeout <= 0 {
 				if progressTimer != nil {
@@ -335,6 +396,10 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 				resetStreamTimer(progressTimer, adaptiveProgressTimeout)
 			}
 		case <-progressTimerC:
+			if recovery != nil && recovery.IsDraining() {
+				progressTimerC = nil
+				continue
+			}
 			timeoutReason := relaycommon.LocalStreamTimeoutAdaptiveProgress
 			timeout := adaptiveProgressTimeout
 			if waitingForInitialProgress {
@@ -359,7 +424,37 @@ func ScanResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayIn
 			// timeout after the downstream attempt has already been abandoned.
 			closeTimedOutStream(resp)
 			monitoring = false
-		case <-c.Request.Context().Done():
+		case <-drainNotify:
+			downstreamDone = nil
+			// The terminal frame can already be queued when its downstream write
+			// fails. Do not wait for another upstream read or the recovery deadline.
+			if recovery.Terminal() {
+				closeTimedOutStream(resp)
+				stop(true)
+				monitoring = false
+				continue
+			}
+			if firstByteTimer != nil {
+				firstByteTimer.Stop()
+				firstByteTimerC = nil
+			}
+			if progressTimer != nil {
+				progressTimer.Stop()
+				progressTimerC = nil
+			}
+		case <-recoveryDone:
+			if recovery.Context().Err() == context.DeadlineExceeded && !recovery.IsDraining() {
+				info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonMaxDuration, nil)
+				relaycommon.MarkLocalStreamMaxDurationExceeded(c)
+			}
+			closeTimedOutStream(resp)
+			stop(true)
+			monitoring = false
+		case <-downstreamDone:
+			if startDrain() {
+				downstreamDone = nil
+				continue
+			}
 			MarkClientGone(c)
 			info.StreamStatus.SetEndReason(gatewaycontract.StreamEndReasonClientGone, c.Request.Context().Err())
 			// The request context is also bound to synchronous upstream attempts.

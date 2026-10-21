@@ -18,7 +18,7 @@ type SimpleResponse struct {
 
 // GetOpenAIError 从动态错误类型中提取OpenAIError结构
 func (s *SimpleResponse) GetOpenAIError() *types.OpenAIError {
-	return GetOpenAIError(s.Error)
+	return meaningfulOpenAIError(s.Error)
 }
 
 type TextResponse struct {
@@ -48,7 +48,7 @@ type OpenAITextResponse struct {
 
 // GetOpenAIError 从动态错误类型中提取OpenAIError结构
 func (o *OpenAITextResponse) GetOpenAIError() *types.OpenAIError {
-	return GetOpenAIError(o.Error)
+	return meaningfulOpenAIError(o.Error)
 }
 
 type OpenAIEmbeddingResponseItem struct {
@@ -147,6 +147,7 @@ type ChatCompletionsStreamResponse struct {
 	SystemFingerprint *string                               `json:"system_fingerprint"`
 	Choices           []ChatCompletionsStreamResponseChoice `json:"choices"`
 	Usage             *Usage                                `json:"usage"`
+	Error             any                                   `json:"error,omitempty"`
 }
 
 func (c *ChatCompletionsStreamResponse) IsFinished() bool {
@@ -321,7 +322,31 @@ type OpenAIResponsesResponse struct {
 
 // GetOpenAIError 从动态错误类型中提取OpenAIError结构
 func (o *OpenAIResponsesResponse) GetOpenAIError() *types.OpenAIError {
-	return GetOpenAIError(o.Error)
+	if o == nil {
+		return nil
+	}
+	if apiErr := meaningfulOpenAIError(o.Error); apiErr != nil {
+		return apiErr
+	}
+	var status string
+	_ = json.Unmarshal(o.Status, &status)
+	switch status {
+	case "failed", "cancelled", "canceled":
+		return &types.OpenAIError{Type: "upstream_error", Message: "upstream response " + status}
+	}
+	return nil
+}
+
+func meaningfulOpenAIError(value any) *types.OpenAIError {
+	apiErr := GetOpenAIError(value)
+	if apiErr == nil || (apiErr.Type == "" && apiErr.Message == "" && apiErr.Code == nil) {
+		return nil
+	}
+	copy := *apiErr
+	if copy.Type == "" {
+		copy.Type = "upstream_error"
+	}
+	return &copy
 }
 
 func (o *OpenAIResponsesResponse) HasImageGenerationCall() bool {
@@ -435,6 +460,22 @@ type ResponsesStreamResponse struct {
 	SummaryIndex *int                           `json:"summary_index,omitempty"`
 	ItemID       string                         `json:"item_id,omitempty"`
 	Part         *ResponsesReasoningSummaryPart `json:"part,omitempty"`
+}
+
+// TerminalError keeps provider failures distinct from a usable response that
+// ended at a token limit. HTTP 200 and input usage alone do not prove success.
+func (r ResponsesStreamResponse) TerminalError() *types.OpenAIError {
+	if apiErr := r.Response.GetOpenAIError(); apiErr != nil {
+		return apiErr
+	}
+	if apiErr := meaningfulOpenAIError(r.Error); apiErr != nil {
+		return apiErr
+	}
+	switch r.Type {
+	case "error", "response.error", "response.failed", "response.cancelled", "response.canceled":
+		return &types.OpenAIError{Type: "upstream_error", Message: "upstream returned " + r.Type}
+	}
+	return nil
 }
 
 // GetOpenAIError 从动态错误类型中提取OpenAIError结构

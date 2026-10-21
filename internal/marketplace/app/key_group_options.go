@@ -60,7 +60,7 @@ func listKeyGroupOptions(userID int) ([]KeyGroupOption, error) {
 	}
 	modelsByGroup := make(map[string][]string, len(groups))
 	for _, group := range groups {
-		channel := marketplaceschema.Channel{ID: group.ChannelID, ApprovedSourceLabel: group.ApprovedSourceLabel, SourceLabelStatus: group.SourceLabelStatus, DeclaredModels: group.DeclaredModels, InternalChannelID: group.InternalChannelID}
+		channel := marketplaceschema.Channel{ID: group.ChannelID, SubmittedSourceLabel: group.SubmittedSourceLabel, ApprovedSourceLabel: group.ApprovedSourceLabel, SourceLabelStatus: group.SourceLabelStatus, DeclaredModels: group.DeclaredModels, InternalChannelID: group.InternalChannelID}
 		models := decodeModels(channel.DeclaredModels)
 		multiplier := marketplacedomain.NormalizeMultiplier(group.Multiplier)
 		label := marketplaceDisplayName(publicSourceLabel(channel), multiplier, channel.ID)
@@ -173,17 +173,18 @@ func loadKeyGroupRankingSnapshots(groups []keyGroupOptionRow) (map[string]keyGro
 }
 
 type keyGroupOptionRow struct {
-	ID                  string
-	ChannelID           string
-	OwnerUserID         int
-	SourceType          string
-	CreditPoolPolicy    string
-	Multiplier          float64
-	ApprovedSourceLabel string
-	SourceLabelStatus   string
-	DeclaredModels      string
-	InternalChannelID   *int
-	PersonalMultiplier  float64
+	ID                   string
+	ChannelID            string
+	OwnerUserID          int
+	SourceType           string
+	CreditPoolPolicy     string
+	Multiplier           float64
+	ApprovedSourceLabel  string
+	SubmittedSourceLabel string
+	SourceLabelStatus    string
+	DeclaredModels       string
+	InternalChannelID    *int
+	PersonalMultiplier   float64
 }
 
 // The API key selector searches this complete, lightweight result locally.
@@ -202,7 +203,7 @@ func loadKeyGroupOptionRows(userID int) ([]keyGroupOptionRow, error) {
 	// only selector fields. No 10,000-ID lists or per-option reads are needed.
 	visible := publicGroupsQuery(query).Select("id, channel_id, owner_user_id, source_type, credit_pool_policy, multiplier, lifecycle_status, updated_at")
 	if err := platformdb.DB.Unscoped().Table("(?) AS visible_groups", visible).
-		Select("visible_groups.id, visible_groups.channel_id, visible_groups.owner_user_id, visible_groups.source_type, visible_groups.credit_pool_policy, visible_groups.multiplier, c.approved_source_label, c.source_label_status, c.declared_models, c.internal_channel_id, COALESCE(um.multiplier, 0) AS personal_multiplier").
+		Select("visible_groups.id, visible_groups.channel_id, visible_groups.owner_user_id, visible_groups.source_type, visible_groups.credit_pool_policy, visible_groups.multiplier, c.submitted_source_label, c.approved_source_label, c.source_label_status, c.declared_models, c.internal_channel_id, COALESCE(um.multiplier, 0) AS personal_multiplier").
 		Joins("JOIN "+channelTable+" AS c ON c.id = visible_groups.channel_id AND c.deleted_at IS NULL").
 		Joins("LEFT JOIN "+multiplierTable+" AS um ON um.channel_id = c.id AND um.user_id = ?", userID).
 		Where(fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s b WHERE b.channel_id = c.id AND b.user_id = ?)", blockTable), userID).

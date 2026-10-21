@@ -16,11 +16,11 @@ const (
 var (
 	SubscriptionClaudeConversionEnabled = true
 
-	ErrSubscriptionClaudeConversionDisabled   = errors.New("月卡转通用额度未开启")
-	ErrSubscriptionClaudeConversionInvalid    = errors.New("月卡转换请求无效")
-	ErrSubscriptionClaudeConversionNoTarget   = errors.New("当前月卡不可转换")
-	ErrSubscriptionClaudeConversionInProgress = errors.New("月卡存在待结算请求，请稍后重试")
-	ErrSubscriptionClaudeConversionZeroResult = errors.New("当前月卡剩余价值过低，无法得到通用额度")
+	ErrSubscriptionClaudeConversionDisabled   = errors.New("套餐转余额未开启")
+	ErrSubscriptionClaudeConversionInvalid    = errors.New("套餐转换请求无效")
+	ErrSubscriptionClaudeConversionNoTarget   = errors.New("当前套餐不可转换")
+	ErrSubscriptionClaudeConversionInProgress = errors.New("套餐存在待结算请求，请稍后重试")
+	ErrSubscriptionClaudeConversionZeroResult = errors.New("当前套餐剩余价值过低，无法转换为余额")
 	ErrSubscriptionClaudeConversionResetUsed  = errors.New("该月卡已使用额度刷新，不能再转为通用额度")
 	ErrSubscriptionResetOpportunityConverted  = errors.New("当前生效月卡均已折现，不能使用额度刷新机会")
 )

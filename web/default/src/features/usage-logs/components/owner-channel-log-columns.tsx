@@ -210,8 +210,14 @@ function renderIncomeStatus(
   if (item.income_status === 'reclaimed') {
     return <Badge variant='secondary'>{t('已回收')}</Badge>
   }
+  if (item.income_status === 'forfeited') {
+    return <Badge variant='secondary'>{t('已没收')}</Badge>
+  }
   if (item.income_status === 'pending') {
     return <Badge className='bg-warning/10 text-warning'>{t('待结算')}</Badge>
+  }
+  if (item.income_status === 'none' && item.consumer_amount === 0) {
+    return <Badge variant='secondary'>{t('无收益（未扣费）')}</Badge>
   }
   return <Badge variant='secondary'>{t('未入账')}</Badge>
 }

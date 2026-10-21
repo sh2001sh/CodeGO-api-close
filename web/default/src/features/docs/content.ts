@@ -325,6 +325,10 @@ export const docArticles: readonly DocArticle[] = [
             '已支付购买可在账单的发票页自助开票，填写真实姓名或公司全称及地址，国家和购买方税号可选。CodeGo AI Limited 的香港商业登记号码为 81318858。发票对应购买，不是每次模型调用。香港商业发票通常无需盖章，报销要求以接收机构为准。在发票记录中更正购买方资料会生成新版本并保留原票；退款中或已确认退款后不可更正。已确认退款可下载关联贷项单，原票仍可下载，下载单据不会执行退款。退款条件见退款规则。',
             'Paid purchases offer self-service invoices in Billing → Invoices. Enter a real individual or company name and address; country and buyer tax ID are optional. CodeGo AI Limited’s Hong Kong business registration number is 81318858. Invoices document purchases rather than each model call. Hong Kong commercial invoices generally do not need a company chop; receiving institutions set reimbursement requirements. Correct buyer details through invoice history to create a linked revision while retaining the original. Corrections are unavailable during or after confirmed refunds. Confirmed refunds provide linked credit notes, original invoices remain downloadable, and downloading a document does not refund money. See the refund policy for eligibility.'
           ),
+          p(
+            '在商业发票页勾选 2–100 笔同币种订单，可跨页合并开具一张发票。只能选择未申请开票且未发生退款的已付款订单；金额按原订单实付合计。合并后，从任一成员订单均可下载同一张发票、查看更正记录及已确认退款的贷项单。',
+            'On the commercial invoice page, select 2–100 paid orders in one currency across pages to issue one combined invoice. Only orders without an existing invoice request or refund are eligible. The total uses the original amounts paid. Every member order links to the same invoice, correction history and credit notes for confirmed refunds.'
+          ),
           links([
             ['/user-agreement', '退款规则', 'Refund policy'],
             [

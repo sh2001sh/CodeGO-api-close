@@ -33,6 +33,18 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	tokenDelta := chargedQuota - s.tokenConsumed
 	if !s.fundingSettled {
 		settle := func() error { return s.funding.Settle(fundingDelta) }
+		if s.relayInfo.MarketplaceGroupID != "" && chargedQuota > 0 {
+			if funding, ok := s.funding.(*LedgerRelayFunding); ok {
+				usage, err := marketplaceSettlementUsage(s.relayInfo, chargedQuota)
+				if err != nil {
+					return err
+				}
+				settle = func() error { return funding.settleWithMarketplaceUsage(fundingDelta, usage) }
+			}
+			if funding, ok := s.funding.(*SubscriptionFunding); ok && funding.CreditPackGrantedQuota == 0 && funding.reservationID != "" {
+				settle = func() error { return funding.settleMarketplaceUsage(s.relayInfo, chargedQuota) }
+			}
+		}
 		if funding, ok := s.funding.(*SubscriptionFunding); ok && funding.CreditPackGrantedQuota > 0 {
 			settle = func() error { return funding.settleCreditPackWithReferral(s.relayInfo, chargedQuota) }
 		}

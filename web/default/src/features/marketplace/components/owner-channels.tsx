@@ -265,14 +265,11 @@ export function OwnerChannels(props: { onAdd: () => void }) {
                           <dd className='truncate'>{channel.provider_type}</dd>
                         </div>
                         <div className='flex min-w-0 items-baseline gap-1.5'>
-                          <dt className='shrink-0 opacity-80'>{t('来源')}</dt>
+                          <dt className='shrink-0 opacity-80'>
+                            {t('渠道主声明')}
+                          </dt>
                           <dd className='truncate'>
                             {channel.submitted_source_label}
-                            {channel.source_label_status === 'approved'
-                              ? ` · ${t('已审核')}`
-                              : channel.source_label_status === 'rejected'
-                                ? ` · ${t('未通过')}`
-                                : ` · ${t('待审核')}`}
                           </dd>
                         </div>
                         <div className='flex min-w-0 items-baseline gap-1.5'>
@@ -556,7 +553,7 @@ function ChannelHealthSummary(props: { channel: MarketplaceChannel }) {
   )
 }
 
-/** 审核进度：提交 → 连通检测 → 来源审核 → 上线 */
+/** 上线进度：提交 → 连通检测 → 上线 */
 function ReviewSteps(props: { channel: MarketplaceChannel }) {
   const { t } = useTranslation()
   const c = props.channel
@@ -564,12 +561,6 @@ function ReviewSteps(props: { channel: MarketplaceChannel }) {
     c.connectivity_test_status === 'passed'
       ? 2
       : c.connectivity_test_status === 'failed'
-        ? 1
-        : 0
-  const source =
-    c.source_label_status === 'approved'
-      ? 2
-      : c.source_label_status === 'rejected'
         ? 1
         : 0
   const online =
@@ -582,7 +573,6 @@ function ReviewSteps(props: { channel: MarketplaceChannel }) {
   const steps = [
     { label: t('提交材料'), state: 2 },
     { label: t('连通检测'), state: connectivity },
-    { label: t('来源审核'), state: source },
     { label: t('上线服务'), state: online },
   ]
 

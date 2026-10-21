@@ -212,6 +212,9 @@ func handleLastResponse(lastStreamData string, responseId *string, createAt *int
 func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStreamData string,
 	responseId string, createAt int64, model string, systemFingerprint string,
 	usage *dto.Usage, containStreamUsage bool) {
+	if helper.IsClientGone(c) {
+		return
+	}
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:

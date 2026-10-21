@@ -38,7 +38,7 @@ func OaiChatToResponsesHandler(
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 	if openAIError := chatResponse.GetOpenAIError(); openAIError != nil && openAIError.Type != "" {
-		return nil, types.WithOpenAIError(*openAIError, resp.StatusCode)
+		return nil, types.WithOpenAIError(*openAIError, http.StatusBadGateway)
 	}
 	responsesResponse, usage, err := gatewaytranslation.ChatCompletionsResponseToResponsesResponse(&chatResponse, request, meta)
 	if err != nil {
@@ -73,6 +73,7 @@ func OaiChatToResponsesStreamHandler(
 	gatewaystream.ScanResponse(c, resp, info, func(data string, result *gatewaystream.Result) {
 		var errorEnvelope dto.SimpleResponse
 		if err := platformencoding.UnmarshalString(data, &errorEnvelope); err == nil && errorEnvelope.Error != nil {
+			c.Set(string(constant.ContextKeyUpstreamTerminalError), true)
 			if openAIError := errorEnvelope.GetOpenAIError(); openAIError != nil {
 				streamErr = types.WithOpenAIError(*openAIError, http.StatusInternalServerError)
 			} else {
@@ -103,7 +104,12 @@ func OaiChatToResponsesStreamHandler(
 	if state.Usage() == nil || state.Usage().TotalTokens == 0 {
 		state.SetUsage(tokenx.ResponseText2Usage(c, state.UsageText(), info.UpstreamModelName, info.GetEstimatePromptTokens()))
 	}
-	if gatewaystream.IsClientGone(c) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) {
+	recoveredUsage, recoveryErr := gatewaystream.RecoveredUsage(c, info, state.Usage())
+	if recoveryErr != nil {
+		return nil, recoveryErr
+	}
+	state.SetUsage(recoveredUsage)
+	if gatewaystream.IsClientGone(c) && c.GetBool(string(constant.ContextKeyUpstreamRequestAccepted)) && !c.GetBool(string(constant.ContextKeyUpstreamTerminalError)) {
 		gatewaystream.MarkAttemptCompleted(c)
 		return state.Usage(), nil
 	}

@@ -3,8 +3,10 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	openai "github.com/sh2001sh/new-api/internal/gateway/execution/providers/openai"
 	gatewayroutingapp "github.com/sh2001sh/new-api/internal/gateway/routing/app"
 	relaycommon "github.com/sh2001sh/new-api/internal/gateway/runtime"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
@@ -14,8 +16,10 @@ import (
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
 	"github.com/stretchr/testify/require"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -108,6 +112,35 @@ func TestRefundRelayBillingRefundsExplicitUpstreamTerminalErrorAfterOutput(t *te
 	require.True(t, billing.refunded)
 	require.False(t, billing.settled)
 	require.Nil(t, info.Billing)
+}
+
+func TestUpstreamSSEFailureReleasesReservationWithoutSettlement(t *testing.T) {
+	previous := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = previous })
+	for _, partial := range []bool{false, true} {
+		t.Run(fmt.Sprint(partial), func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			body := ""
+			if partial {
+				body = `data: {"choices":[{"delta":{"content":"partial"}}]}` + "\n\n"
+			}
+			body += `data: {"error":{"message":"provider unavailable","code":"overloaded"}}` + "\n\n"
+			billing := &refundTrackingBilling{}
+			info := &relaycommon.RelayInfo{Billing: billing, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.5"}, IsStream: true, RelayFormat: types.RelayFormatOpenAI}
+			info.SetEstimatePromptTokens(90000)
+			resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))}
+			usage, apiErr := openai.OaiStreamHandler(ctx, info, resp)
+			require.Nil(t, usage)
+			require.NotNil(t, apiErr)
+			refundRelayBillingIfNeeded(ctx, info, apiErr)
+			require.True(t, billing.refunded)
+			require.False(t, billing.settled)
+			require.Nil(t, info.Billing)
+			t.Log("reservation_refunded=true settlement_called=false")
+		})
+	}
 }
 
 func TestFailedResponseTimingFreezesBeforeRefund(t *testing.T) {

@@ -415,7 +415,7 @@ func marketplaceChannelReadMap(groups []marketplaceschema.Group, includeEvidence
 		return result, nil
 	}
 	var channels []marketplaceschema.Channel
-	columns := "id, owner_user_id, provider_type, approved_source_label, source_label_status, model_prices, declared_models, connectivity_test_status, connectivity_test_checked_at, model_consistency_status, transport_capabilities, max_concurrency, user_max_concurrency, internal_channel_id, multiplier_card_supported, multiplier_card_user_enabled, credit_pack_supported"
+	columns := "id, owner_user_id, provider_type, submitted_source_label, approved_source_label, source_label_status, model_prices, declared_models, connectivity_test_status, connectivity_test_checked_at, model_consistency_status, transport_capabilities, max_concurrency, user_max_concurrency, internal_channel_id, multiplier_card_supported, multiplier_card_user_enabled, credit_pack_supported"
 	if len(includeEvidence) == 0 || includeEvidence[0] {
 		columns += ", model_verification_results"
 	}

@@ -12,16 +12,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPublicSourceLabelRequiresApproval(t *testing.T) {
+func TestPublicSourceLabelUsesOwnerDeclarationWithoutApproval(t *testing.T) {
 	channel := marketplaceschema.Channel{
-		SubmittedSourceLabel: "Claude Max",
+		SubmittedSourceLabel: "自营 Pro 号池",
 		ApprovedSourceLabel:  "Claude Max",
 		SourceLabelStatus:    marketplacedomain.SourceLabelPending,
 	}
-	require.Empty(t, publicSourceLabel(channel))
+	require.Equal(t, "自营 Pro 号池", publicSourceLabel(channel))
 
 	channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
+	require.Equal(t, "自营 Pro 号池", publicSourceLabel(channel))
+	channel.SubmittedSourceLabel = ""
 	require.Equal(t, "Claude Max", publicSourceLabel(channel))
+	channel.SubmittedSourceLabel = "https://example.com"
+	require.Empty(t, publicSourceLabel(channel), "unsafe declarations must not expose the stale approved value")
+	channel.SubmittedSourceLabel = "example.gg"
+	require.Empty(t, publicSourceLabel(channel))
+	channel.SubmittedSourceLabel = ""
+	channel.ApprovedSourceLabel = "example.gg"
+	require.Empty(t, publicSourceLabel(channel), "legacy source links must not be published")
 }
 
 func TestRemoteCompactionSupportSummarizesOnlySupportedVersions(t *testing.T) {
@@ -53,7 +62,7 @@ func TestGroupListItemIncludesRemoteCompactionSupport(t *testing.T) {
 	require.Equal(t, "v1_v2", item.RemoteCompactionSupport)
 }
 
-func TestPendingSourceLabelIsNotSearchableOrReturned(t *testing.T) {
+func TestPendingSourceDeclarationIsSearchableAndReturned(t *testing.T) {
 	group := marketplaceschema.Group{
 		ID: "group-1", ChannelID: "channel-1", SystemDisplayName: "用户分组",
 		OwnerDisplayName: "渠道主", PublicSlug: "mg_group1",
@@ -64,11 +73,13 @@ func TestPendingSourceLabelIsNotSearchableOrReturned(t *testing.T) {
 		ID: "channel-1", SubmittedSourceLabel: "Kiro", ApprovedSourceLabel: "Kiro",
 		SourceLabelStatus: marketplacedomain.SourceLabelPending,
 	}
-	require.False(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "Kiro"}))
+	require.True(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "Kiro"}))
+	require.True(t, matchesGroupQuery(group, channel, nil, GroupQuery{Source: "Kiro"}))
+	require.False(t, matchesGroupQuery(group, channel, nil, GroupQuery{Source: "Codex Pro"}))
 	require.False(t, matchesGroupQuery(group, channel, nil, GroupQuery{Search: "渠道主"}))
 	item := groupListItem(group, channel, nil, marketplaceschema.RankingSnapshot{}, nil)
-	require.Empty(t, item.SourceLabel)
-	require.Equal(t, "channel-1-来源待审核-0x", item.SystemDisplayName)
+	require.Equal(t, "Kiro", item.SourceLabel)
+	require.Equal(t, "channel-1-Kiro-0x", item.SystemDisplayName)
 }
 
 func TestMarketplaceGroupFiltersByNumericChannelIDModelSourceAndProvider(t *testing.T) {
@@ -265,8 +276,6 @@ func TestPublicPendingReviewGroupIsExcludedFromMarketplace(t *testing.T) {
 	require.Len(t, groups, 0, "a group still needs verification_status=passed before publication")
 
 	group.VerificationStatus = marketplacedomain.VerificationPassed
-	channel.SourceLabelStatus = marketplacedomain.SourceLabelApproved
-	channel.ApprovedSourceLabel = "Claude Max"
 	require.NoError(t, db.Save(&group).Error)
 	require.NoError(t, db.Save(&channel).Error)
 	groups, channels, err = loadPublicGroups(GroupQuery{})

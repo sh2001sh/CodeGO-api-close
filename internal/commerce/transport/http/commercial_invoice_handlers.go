@@ -13,14 +13,21 @@ func commercialInvoiceHandler(action string) gin.HandlerFunc {
 		c.Header("Cache-Control", "no-store")
 		c.Header("X-Content-Type-Options", "nosniff")
 		var input *commerceapp.CommercialInvoiceInput
-		if action == "issue" || action == "correct" {
+		if action == "issue" || action == "correct" || action == "batch" {
 			input = &commerceapp.CommercialInvoiceInput{}
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
 			if c.ShouldBindJSON(input) != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invoice.invalidDetails"})
 				return
 			}
 		}
-		documents, err := commerceapp.CommercialInvoice(c.GetInt("id"), c.Param("source"), c.Param("trade_no"), action, c.Query("number"), input)
+		var documents []commerceapp.CommercialInvoiceDocument
+		var err error
+		if action == "batch" {
+			documents, err = commerceapp.CommercialInvoiceBatch(c.GetInt("id"), input)
+		} else {
+			documents, err = commerceapp.CommercialInvoice(c.GetInt("id"), c.Param("source"), c.Param("trade_no"), action, c.Query("number"), input)
+		}
 		if err != nil {
 			status, message := http.StatusInternalServerError, "invoice.downloadFailed"
 			switch {
@@ -28,6 +35,8 @@ func commercialInvoiceHandler(action string) gin.HandlerFunc {
 				status, message = http.StatusPreconditionRequired, "invoice.detailsRequired"
 			case errors.Is(err, commerceapp.ErrCommercialInvoiceInvalid):
 				status, message = http.StatusBadRequest, "invoice.invalidDetails"
+			case errors.Is(err, commerceapp.ErrCommercialInvoiceBatchInvalid):
+				status, message = http.StatusBadRequest, "invoice.invalidBatch"
 			case errors.Is(err, commerceapp.ErrCommercialInvoiceConflict):
 				status, message = http.StatusConflict, "invoice.detailsConflict"
 			case errors.Is(err, commerceapp.ErrInvoiceOrderUnavailable):

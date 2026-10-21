@@ -161,10 +161,8 @@ func BuildSubscriptionSelfPayload(userID int) (map[string]any, error) {
 			continue
 		}
 		if plan, planErr := GetSubscriptionPlanByID(item.Subscription.PlanId); planErr == nil && plan != nil {
-			if plan.PlanType != commerceschema.SubscriptionPlanTypeCreditPack {
-				preview := BuildSubscriptionClaudeConversionPreview(plan, item.Subscription)
-				item.Subscription.ConversionPreview = &preview
-			}
+			preview := BuildSubscriptionClaudeConversionPreview(plan, item.Subscription)
+			item.Subscription.ConversionPreview = &preview
 		}
 		activeSubscriptionIDs = append(activeSubscriptionIDs, item.Subscription.Id)
 		activeSubscriptionSet[item.Subscription.Id] = struct{}{}

@@ -28,6 +28,9 @@ export type InvoiceEligibleOrder = {
   paid_at: number
   requested: boolean
   refund_status?: string
+  invoice_order_count?: number
+  invoice_number?: string
+  invoice_refund_status?: string
 }
 
 export type InvoiceRequest = {

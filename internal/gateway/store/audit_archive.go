@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"time"
 
@@ -35,7 +36,7 @@ func ArchiveRequestAuditsBatch(ctx context.Context, sink platformarchive.Sink, n
 		records[i] = platformarchive.Record{Type: "request_audit", Data: rows[i]}
 		ids[i] = rows[i].RequestID
 	}
-	batch := platformarchive.Batch{Dataset: "request-audits", Partition: rows[0].CompletedAt.UTC(), ID: fmt.Sprintf("%d-%s", rows[0].CompletedAt.Unix(), ids[len(ids)-1]), Records: records}
+	batch := platformarchive.Batch{Dataset: "request-audits", Partition: rows[0].CompletedAt.UTC(), ID: auditArchiveBatchID(rows[0].CompletedAt, ids), Records: records}
 	if err := sink.Store(ctx, batch); err != nil {
 		return 0, fmt.Errorf("store request audit archive batch: %w", err)
 	}
@@ -76,7 +77,7 @@ func ArchiveRequestAttemptAuditsBatch(ctx context.Context, sink platformarchive.
 		records[i] = platformarchive.Record{Type: "request_attempt_audit", Data: rows[i]}
 		ids[i] = rows[i].AttemptID
 	}
-	batch := platformarchive.Batch{Dataset: "request-attempt-audits", Partition: rows[0].CompletedAt.UTC(), ID: fmt.Sprintf("%d-%s", rows[0].CompletedAt.Unix(), ids[len(ids)-1]), Records: records}
+	batch := platformarchive.Batch{Dataset: "request-attempt-audits", Partition: rows[0].CompletedAt.UTC(), ID: auditArchiveBatchID(rows[0].CompletedAt, ids), Records: records}
 	if err := sink.Store(ctx, batch); err != nil {
 		return 0, fmt.Errorf("store request attempt audit archive batch: %w", err)
 	}
@@ -93,4 +94,15 @@ func ArchiveRequestAttemptAuditsBatch(ctx context.Context, sink platformarchive.
 		return nil
 	})
 	return deleted, err
+}
+
+// Native attempt IDs contain colons. Hash the complete ordered batch so its
+// filename is a safe path component and retries select the same archive file.
+func auditArchiveBatchID(completedAt time.Time, ids []string) string {
+	hash := sha256.New()
+	for _, id := range ids {
+		_, _ = hash.Write([]byte(id))
+		_, _ = hash.Write([]byte{0})
+	}
+	return fmt.Sprintf("%d-%x", completedAt.UTC().Unix(), hash.Sum(nil))
 }

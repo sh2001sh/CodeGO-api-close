@@ -23,14 +23,17 @@ var (
 )
 
 type InvoiceEligibleOrder struct {
-	SourceType   string  `json:"source_type"`
-	TradeNo      string  `json:"trade_no"`
-	OrderTitle   string  `json:"order_title"`
-	OrderAmount  float64 `json:"order_amount"`
-	Currency     string  `json:"currency"`
-	PaidAt       int64   `json:"paid_at"`
-	Requested    bool    `json:"requested"`
-	RefundStatus string  `json:"refund_status"`
+	SourceType          string  `json:"source_type"`
+	TradeNo             string  `json:"trade_no"`
+	OrderTitle          string  `json:"order_title"`
+	OrderAmount         float64 `json:"order_amount"`
+	Currency            string  `json:"currency"`
+	PaidAt              int64   `json:"paid_at"`
+	Requested           bool    `json:"requested"`
+	RefundStatus        string  `json:"refund_status"`
+	InvoiceOrderCount   int     `json:"invoice_order_count,omitempty"`
+	InvoiceNumber       string  `json:"invoice_number,omitempty"`
+	InvoiceRefundStatus string  `json:"invoice_refund_status,omitempty"`
 }
 
 type CreateInvoiceRequestInput struct {

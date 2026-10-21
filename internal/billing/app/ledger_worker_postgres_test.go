@@ -126,3 +126,68 @@ func TestLedgerReconciliationDoesNotBlockConcurrentCreditPostgres(t *testing.T) 
 	require.NoError(t, db.Where("account_id = ?", account.AccountID).First(&actual).Error)
 	require.EqualValues(t, 1150, actual.AvailableBalance)
 }
+
+func TestLedgerOutboxDoesNotHoldEarlierEventLockDuringLaterEventPostgres(t *testing.T) {
+	dsn := os.Getenv("TEST_LEDGER_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set TEST_LEDGER_POSTGRES_DSN to a dedicated test database")
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	oldDB, oldPG, oldSQLite := platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite
+	platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = db, true, false
+	t.Cleanup(func() {
+		platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = oldDB, oldPG, oldSQLite
+		require.NoError(t, sqlDB.Close())
+	})
+	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS billing").Error)
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingAccount{}, &billingschema.BillingBalanceSnapshot{}, &billingschema.BillingLedgerEntry{}, &billingschema.BillingReservation{}, &billingschema.BillingSettlement{}, &billingschema.BillingOutboxEvent{}))
+	account, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{AccountType: "wallet", OwnerType: "user", OwnerID: time.Now().UnixNano()})
+	require.NoError(t, err)
+	_, err = billingdomain.CreditAccount(billingdomain.CreditAccountParams{AccountID: account.AccountID, Amount: 1000, IdempotencyKey: account.AccountID + ":credit"})
+	require.NoError(t, err)
+	var first billingschema.BillingOutboxEvent
+	require.NoError(t, db.First(&first, "account_id = ?", account.AccountID).Error)
+	second := billingschema.BillingOutboxEvent{
+		AccountID: account.AccountID, AggregateID: "missing-" + account.AccountID,
+		EventType: "billing.reservation_settled", IdempotencyKey: account.AccountID + ":failing-event",
+		CreatedAt: first.CreatedAt.Add(time.Second),
+	}
+	require.NoError(t, db.Create(&second).Error)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	laterEvent, resume := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	injected := errors.New("later event unavailable")
+	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:pause_later_event", func(tx *gorm.DB) {
+		if tx.Statement.Table == "settlements" {
+			once.Do(func() { close(laterEvent) })
+			select {
+			case <-resume:
+			case <-ctx.Done():
+			}
+			tx.AddError(injected)
+		}
+	}))
+	done := make(chan error, 1)
+	go func() {
+		_, err := processLedgerOutboxAccount(ctx, account.AccountID)
+		done <- err
+	}()
+	select {
+	case <-laterEvent:
+	case <-ctx.Done():
+		t.Fatal("worker did not reach the later event")
+	}
+	var published billingschema.BillingOutboxEvent
+	probeErr := db.Transaction(func(tx *gorm.DB) error {
+		return tx.Raw("SELECT * FROM billing.outbox_events WHERE event_id = ? FOR UPDATE NOWAIT", first.EventID).Scan(&published).Error
+	})
+	close(resume)
+	workerErr := <-done
+	require.NoError(t, probeErr, "the earlier event's row lock must be released while the next event is blocked")
+	require.ErrorIs(t, workerErr, injected)
+	require.Equal(t, billingschema.BillingOutboxStatusPublished, published.Status)
+}

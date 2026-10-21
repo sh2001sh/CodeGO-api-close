@@ -23,7 +23,7 @@ func TestKeyGroupOptionsAccessPoolsAndBoundedQueries(t *testing.T) {
 	addGroup := func(id, visibility, status, verification string, owner int) {
 		require.NoError(t, db.Create(&marketplaceschema.Channel{
 			ID: id, OwnerUserID: owner, InternalChannelID: &channelID, DeclaredModels: `["gpt-5.6"]`,
-			ApprovedSourceLabel: "Test", SourceLabelStatus: marketplacedomain.SourceLabelApproved,
+			SubmittedSourceLabel: "Test", ApprovedSourceLabel: "旧来源", SourceLabelStatus: marketplacedomain.SourceLabelDeclared,
 		}).Error)
 		require.NoError(t, db.Create(&marketplaceschema.Group{
 			ID: id, ChannelID: id, OwnerUserID: owner, PublicSlug: id, InternalGroupName: id,
@@ -73,6 +73,7 @@ func TestKeyGroupOptionsAccessPoolsAndBoundedQueries(t *testing.T) {
 	require.Equal(t, 0.7, *byValue["market:public"].Multiplier)
 	require.Equal(t, 2.0, *byValue["market:owned"].Multiplier)
 	require.True(t, byValue["market:public"].SubscriptionEnabled)
+	require.Equal(t, "public-Test-2x", byValue["market:public"].Label)
 	baselineQueries := queryCount
 	for i := 0; i < 1005; i++ {
 		addGroup(fmt.Sprintf("more-%d", i), "public", "active", "passed", 20)

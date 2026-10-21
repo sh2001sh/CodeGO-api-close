@@ -5,11 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Switch } from '@/components/ui/switch'
-import {
-  MARKETPLACE_SOURCE_OPTIONS,
-  type ChannelFormInput,
-} from '../lib/channel-form'
-import { localizedSourceLabel } from '../lib/localized-group-name'
+import type { ChannelFormInput } from '../lib/channel-form'
 import { FormField, FormSection } from './channel-form-layout'
 
 type ChannelForm = UseFormReturn<ChannelFormInput>
@@ -81,23 +77,34 @@ function ConnectionCredentialFields(props: {
   form: ChannelForm
   editing?: boolean
 }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
+  const sourceField = props.form.register('source_label')
+  const sourceLabel = props.form.watch('source_label')
   return (
     <div className='grid gap-4 lg:grid-cols-2'>
       <FormField
-        label={t('上游来源')}
+        label={t('渠道主声明')}
         error={props.form.formState.errors.source_label?.message}
       >
-        <NativeSelect
-          className='w-full'
-          {...props.form.register('source_label')}
-        >
-          {MARKETPLACE_SOURCE_OPTIONS.map((source) => (
-            <option key={source} value={source}>
-              {localizedSourceLabel(source, i18n.language)}
-            </option>
-          ))}
-        </NativeSelect>
+        <Input
+          placeholder={t('例如：Codex Pro 自营号池')}
+          {...sourceField}
+          onChange={(event) => {
+            event.target.value = Array.from(event.target.value)
+              .slice(0, 30)
+              .join('')
+            void sourceField.onChange(event)
+          }}
+        />
+        <div className='text-muted-foreground flex items-start justify-between gap-3 text-xs leading-5'>
+          <p>
+            {t('由渠道主自行声明，最多 30 个字符，平台未核验来源。')}
+            {t('不能填写链接、域名或 IP 地址。')}
+          </p>
+          <span className='shrink-0 tabular-nums'>
+            {Array.from(sourceLabel).length}/30
+          </span>
+        </div>
       </FormField>
       <FormField
         label={t('API Key')}

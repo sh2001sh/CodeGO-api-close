@@ -134,6 +134,9 @@ func SetEventStreamHeaders(c *gin.Context) {
 }
 
 func IsClientGone(c *gin.Context) bool {
+	if c != nil && c.GetBool(string(constant.ContextKeyClientGone)) {
+		return true
+	}
 	if c == nil || c.Request == nil || c.Request.Context().Err() != nil {
 		MarkClientGone(c)
 		return true

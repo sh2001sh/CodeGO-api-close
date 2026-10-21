@@ -136,6 +136,15 @@ func RecordTx(tx *gorm.DB, params RecordParams) error {
 	if params.RequestID == "" || params.GroupID == "" || params.OwnerUserID <= 0 || params.SettlementGrossAmount <= 0 {
 		return nil
 	}
+	if tx == nil {
+		return errors.New("marketplace settlement transaction is required")
+	}
+	var existing marketplaceschema.Settlement
+	if err := tx.Where("request_id = ?", params.RequestID).First(&existing).Error; err == nil {
+		return nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
 	commission := percentage(params.SettlementGrossAmount, 5)
 	discount, fee, err := creditPackCharges(params)
 	if err != nil {
@@ -145,9 +154,6 @@ func RecordTx(tx *gorm.DB, params RecordParams) error {
 		return errors.New("credit pack fees exceed settlement gross amount")
 	}
 	ownerNet := params.SettlementGrossAmount - commission - fee
-	if tx == nil {
-		return errors.New("marketplace settlement transaction is required")
-	}
 	account, err := billingdomain.EnsureBillingAccountTx(tx, billingdomain.EnsureAccountParams{
 		AccountType: "marketplace_owner_pending", OwnerType: "user", OwnerID: int64(params.OwnerUserID), QuotaUnit: "quota",
 	})

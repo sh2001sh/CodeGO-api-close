@@ -12,7 +12,7 @@ func TestBuildUsageLogGroupOptionsUsesPublicIdentityAndPreservesOrder(t *testing
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))
 	require.NoError(t, db.Create(&marketplaceschema.Channel{
-		ID: "41", ApprovedSourceLabel: "Codex Plus", SourceLabelStatus: marketplacedomain.SourceLabelApproved,
+		ID: "41", SubmittedSourceLabel: "Codex Plus", ApprovedSourceLabel: "旧来源", SourceLabelStatus: marketplacedomain.SourceLabelDeclared,
 	}).Error)
 	require.NoError(t, db.Create(&marketplaceschema.Group{
 		ID: "group-41", ChannelID: "41", InternalGroupName: "Codex-Plus-1731f7", Multiplier: 0.13,

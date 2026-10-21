@@ -227,7 +227,8 @@
     "Documentation is organized into seven task-based sections; legacy section links resolve to the corresponding articles.": "La documentation est organisée en sept sections basées sur des tâches ; Les liens de la section héritée renvoient aux articles correspondants.",
     "Historical guides and current entries": "Guides historiques et entrées actuelles",
     "Historical guides describe previous versions. Current entries follow the site navigation; plan entitlements follow the wallet and historical orders.": "Les guides historiques décrivent les versions précédentes. Les entrées actuelles suivent la navigation du site ; les droits au plan suivent le portefeuille et les commandes historiques.",
-    "Current service terms": "Conditions de service actuelles"
+    "Current service terms": "Conditions de service actuelles",
+    "On the commercial invoice page, select 2–100 paid orders in one currency across pages to issue one combined invoice. Only orders without an existing invoice request or refund are eligible. The total uses the original amounts paid. Every member order links to the same invoice, correction history and credit notes for confirmed refunds.": "Sur la page des factures commerciales, sélectionnez de 2 à 100 commandes payées dans une même devise, sur plusieurs pages, pour émettre une facture groupée. Seules les commandes sans demande de facture existante ni remboursement sont admissibles. Le total correspond aux montants réellement payés. Chaque commande donne accès à la même facture, à son historique de corrections et aux avoirs liés aux remboursements confirmés."
   },
   "ru": {
     "400": "400",
@@ -457,7 +458,8 @@
     "Documentation is organized into seven task-based sections; legacy section links resolve to the corresponding articles.": "Документация разделена на семь разделов, основанных на задачах; Ссылки на устаревшие разделы ведут к соответствующим статьям.",
     "Historical guides and current entries": "Исторические путеводители и текущие записи",
     "Historical guides describe previous versions. Current entries follow the site navigation; plan entitlements follow the wallet and historical orders.": "Исторические справочники описывают предыдущие версии. Текущие записи следуют за навигацией по сайту; Права на план соответствуют кошельку и историческим заказам.",
-    "Current service terms": "Текущие условия обслуживания"
+    "Current service terms": "Текущие условия обслуживания",
+    "On the commercial invoice page, select 2–100 paid orders in one currency across pages to issue one combined invoice. Only orders without an existing invoice request or refund are eligible. The total uses the original amounts paid. Every member order links to the same invoice, correction history and credit notes for confirmed refunds.": "На странице коммерческих счетов выберите на разных страницах от 2 до 100 оплаченных заказов в одной валюте, чтобы выставить общий счёт. Подходят только заказы без ранее поданной заявки на счёт и без возврата средств. Сумма рассчитывается по исходным платежам. Из каждого заказа доступны общий счёт, история исправлений и кредит-ноты по подтверждённым возвратам."
   },
   "ja": {
     "400": "400",
@@ -687,7 +689,8 @@
     "Documentation is organized into seven task-based sections; legacy section links resolve to the corresponding articles.": "ドキュメントは 7 つのタスクベースのセクションで構成されています。従来のセクションのリンクは、対応する記事に解決されます。",
     "Historical guides and current entries": "歴史的なガイドと現在のエントリ",
     "Historical guides describe previous versions. Current entries follow the site navigation; plan entitlements follow the wallet and historical orders.": "歴史ガイドでは、以前のバージョンについて説明します。現在のエントリはサイトのナビゲーションに従います。プランの権利はウォレットと過去の注文に従います。",
-    "Current service terms": "現在のサービス条件"
+    "Current service terms": "現在のサービス条件",
+    "On the commercial invoice page, select 2–100 paid orders in one currency across pages to issue one combined invoice. Only orders without an existing invoice request or refund are eligible. The total uses the original amounts paid. Every member order links to the same invoice, correction history and credit notes for confirmed refunds.": "商業請求書ページでは、複数ページから同じ通貨の支払い済み注文を2〜100件選択して、1枚の請求書にまとめられます。請求書の申請歴や返金のない注文のみが対象です。合計金額には元の実際の支払額を使用します。対象の各注文から、同じ請求書、訂正履歴、確定した返金のクレジットノートを確認できます。"
   },
   "vi": {
     "400": "400",
@@ -917,6 +920,7 @@
     "Documentation is organized into seven task-based sections; legacy section links resolve to the corresponding articles.": "Tài liệu được tổ chức thành bảy phần dựa trên nhiệm vụ; các liên kết phần kế thừa giải quyết các bài viết tương ứng.",
     "Historical guides and current entries": "Hướng dẫn lịch sử và các mục hiện tại",
     "Historical guides describe previous versions. Current entries follow the site navigation; plan entitlements follow the wallet and historical orders.": "Hướng dẫn lịch sử mô tả các phiên bản trước đó. Các mục hiện tại tuân theo điều hướng trang web; quyền lợi của kế hoạch tuân theo ví tiền và các đơn đặt hàng lịch sử.",
-    "Current service terms": "Điều khoản dịch vụ hiện tại"
+    "Current service terms": "Điều khoản dịch vụ hiện tại",
+    "On the commercial invoice page, select 2–100 paid orders in one currency across pages to issue one combined invoice. Only orders without an existing invoice request or refund are eligible. The total uses the original amounts paid. Every member order links to the same invoice, correction history and credit notes for confirmed refunds.": "Tại trang hóa đơn thương mại, chọn từ 2 đến 100 đơn đã thanh toán cùng loại tiền tệ trên nhiều trang để xuất một hóa đơn gộp. Chỉ các đơn chưa có yêu cầu xuất hóa đơn và chưa hoàn tiền mới đủ điều kiện. Tổng tiền dựa trên số tiền thực trả của đơn gốc. Từ mỗi đơn trong nhóm đều có thể tải cùng hóa đơn, xem lịch sử chỉnh sửa và phiếu ghi có cho khoản hoàn tiền đã xác nhận."
   }
 }

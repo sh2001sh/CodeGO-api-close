@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
@@ -218,6 +219,10 @@ func (f *LedgerRelayFunding) reserveAdditional(ctx context.Context, amount int64
 }
 
 func (f *LedgerRelayFunding) Settle(delta int) error {
+	return f.settleWithMarketplaceUsage(delta, nil)
+}
+
+func (f *LedgerRelayFunding) settleWithMarketplaceUsage(delta int, usage *auditschema.Log) error {
 	unlock, err := waitRelayWallet(context.WithoutCancel(f.reservationContext()), f.userID)
 	if err != nil {
 		return err
@@ -234,7 +239,10 @@ func (f *LedgerRelayFunding) Settle(delta int) error {
 		return err
 	} else if found {
 		f.settlementID = existing.SettlementID
-		return nil
+		if usage == nil {
+			return nil
+		}
+		return platformdb.DB.Transaction(func(tx *gorm.DB) error { return recordMarketplaceUsageTx(tx, f.accountID, usage) })
 	}
 	if delta != 0 {
 		if err := f.projectLegacyDelta(delta); err != nil {
@@ -242,12 +250,25 @@ func (f *LedgerRelayFunding) Settle(delta int) error {
 		}
 		f.legacyHeld += delta
 	}
-	settlement, err := billingdomain.SettleReservation(billingdomain.SettleReservationParams{
+	params := billingdomain.SettleReservationParams{
 		ReservationID:   f.reservationID,
 		UsageEvidenceID: f.requestID,
 		ActualAmount:    int64(actualAmount),
 		IdempotencyKey:  f.idempotencyKey("settle"),
-	})
+	}
+	var settlement *billingschema.BillingSettlement
+	if usage == nil {
+		settlement, err = billingdomain.SettleReservation(params)
+	} else {
+		err = platformdb.DB.Transaction(func(tx *gorm.DB) error {
+			native, txErr := billingdomain.SettleReservationTx(tx, params)
+			if txErr != nil {
+				return txErr
+			}
+			settlement = native
+			return recordMarketplaceUsageTx(tx, f.accountID, usage)
+		})
+	}
 	if err == nil {
 		f.settlementID = settlement.SettlementID
 		if allocationErr := AllocateSettledFundingFIFO(f.requestID, f.accountID, int64(actualAmount)); allocationErr != nil {

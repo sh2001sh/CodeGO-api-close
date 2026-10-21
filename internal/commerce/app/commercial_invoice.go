@@ -115,9 +115,10 @@ type InvoiceBuyer struct {
 
 type CommercialInvoiceInput struct {
 	InvoiceBuyer
-	PreviousNumber string `json:"previous_number,omitempty"`
-	Reason         string `json:"reason,omitempty"`
-	RequestID      string `json:"request_id,omitempty"`
+	Orders         []InvoiceOrderInput `json:"orders,omitempty"`
+	PreviousNumber string              `json:"previous_number,omitempty"`
+	Reason         string              `json:"reason,omitempty"`
+	RequestID      string              `json:"request_id,omitempty"`
 }
 
 // The existing invoice request's text field holds frozen documents; no schema or
@@ -125,6 +126,7 @@ type CommercialInvoiceInput struct {
 type commercialInvoiceArchive struct {
 	Version   int                         `json:"commercial_invoice_version"`
 	Documents []CommercialInvoiceDocument `json:"documents"`
+	Orders    []commercialInvoiceOrder    `json:"orders,omitempty"`
 }
 
 type CommercialInvoiceDocument struct {
@@ -152,6 +154,8 @@ type commercialOrder struct {
 	currency, title, provider, reference, refundStatus string
 	paidAt, refundAt                                   int64
 	refundAmount                                       float64
+	trade                                              string
+	details, refundDetails                             []string
 }
 
 func loadCommercialOrder(tx *gorm.DB, userID int, source, trade string) (commercialOrder, error) {
@@ -211,6 +215,13 @@ func normalizeCommercialInput(input *CommercialInvoiceInput) error {
 // action is download, issue, correct, credit, or list. The order lock serializes
 // issuance with refunds and repeated clicks; every lookup is scoped to its owner.
 func CommercialInvoice(userID int, source, trade, action, number string, input *CommercialInvoiceInput) ([]CommercialInvoiceDocument, error) {
+	if input != nil && len(input.Orders) > 0 {
+		return nil, ErrCommercialInvoiceBatchInvalid
+	}
+	return commercialInvoice(userID, source, trade, action, number, input, nil)
+}
+
+func commercialInvoice(userID int, source, trade, action, number string, input *CommercialInvoiceInput, refs []InvoiceOrderInput) ([]CommercialInvoiceDocument, error) {
 	if userID <= 0 || !invoiceTextValid(trade, 255, false) {
 		return nil, ErrInvoiceOrderUnavailable
 	}
@@ -227,12 +238,12 @@ func CommercialInvoice(userID int, source, trade, action, number string, input *
 	}
 	var result []CommercialInvoiceDocument
 	err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
-		order, err := loadCommercialOrder(tx, userID, source, trade)
+		order, targetSource, targetTrade, snapshots, err := loadCommercialInvoiceTarget(tx, userID, source, trade, refs)
 		if err != nil {
 			return err
 		}
 		var request commerceschema.InvoiceRequest
-		err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND source_type = ? AND trade_no = ?", userID, source, trade).First(&request).Error
+		err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND source_type = ? AND trade_no = ?", userID, targetSource, targetTrade).First(&request).Error
 		exists := err == nil
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -241,7 +252,7 @@ func CommercialInvoice(userID int, source, trade, action, number string, input *
 		if exists && (decodeInvoiceArchive(request.Remark, &archive) != nil || archive.Version != 1 || len(archive.Documents) == 0) {
 			return ErrCommercialInvoiceConflict
 		}
-		if exists {
+		if exists && len(archive.Orders) == 0 {
 			order.amount, order.currency, order.title = request.OrderAmount, request.Currency, request.OrderTitle
 		}
 		if action == "list" {
@@ -309,20 +320,28 @@ func CommercialInvoice(userID int, source, trade, action, number string, input *
 			return ErrInvoiceOrderUnavailable
 		}
 		if !exists {
-			var reserved int64
-			if err := tx.Model(&commerceschema.InvoiceRequestItem{}).Where("source_type = ? AND trade_no = ?", source, trade).Count(&reserved).Error; err != nil {
-				return err
+			for _, snapshot := range snapshots {
+				var reserved, legacy int64
+				if err := tx.Model(&commerceschema.InvoiceRequestItem{}).Where("source_type = ? AND trade_no = ?", snapshot.SourceType, snapshot.TradeNo).Count(&reserved).Error; err != nil {
+					return err
+				}
+				if err := tx.Model(&commerceschema.InvoiceRequest{}).Where("source_type = ? AND trade_no = ?", snapshot.SourceType, snapshot.TradeNo).Count(&legacy).Error; err != nil {
+					return err
+				}
+				if reserved > 0 || legacy > 0 {
+					return ErrCommercialInvoiceConflict
+				}
 			}
-			if reserved > 0 {
-				return ErrCommercialInvoiceConflict
-			}
-			request = commerceschema.InvoiceRequest{UserID: userID, SourceType: source, TradeNo: trade, OrderAmount: order.amount, Currency: order.currency, OrderTitle: order.title, OrderCount: 1, InvoiceType: commerceschema.InvoiceTypePersonal, Title: input.BuyerName, TaxNumber: input.BuyerTaxID, Status: commerceschema.InvoiceStatusIssued, DeliveryMethod: "download"}
+			request = commerceschema.InvoiceRequest{UserID: userID, SourceType: targetSource, TradeNo: targetTrade, OrderAmount: order.amount, Currency: order.currency, OrderTitle: order.title, OrderCount: len(snapshots), InvoiceType: commerceschema.InvoiceTypePersonal, Title: input.BuyerName, TaxNumber: input.BuyerTaxID, Status: commerceschema.InvoiceStatusIssued, DeliveryMethod: "download"}
 			if err := tx.Create(&request).Error; err != nil {
 				return err
 			}
-			if err := tx.Create(&commerceschema.InvoiceRequestItem{InvoiceID: request.ID, UserID: userID, SourceType: source, TradeNo: trade, OrderAmount: order.amount, Currency: order.currency, OrderTitle: order.title, PaidAt: order.paidAt}).Error; err != nil {
-				return err
+			for _, snapshot := range snapshots {
+				if err := tx.Create(&commerceschema.InvoiceRequestItem{InvoiceID: request.ID, UserID: userID, SourceType: snapshot.SourceType, TradeNo: snapshot.TradeNo, OrderAmount: snapshot.Amount, Currency: snapshot.Currency, OrderTitle: snapshot.Title, PaidAt: snapshot.PaidAt}).Error; err != nil {
+					return err
+				}
 			}
+			archive.Orders = snapshots
 		}
 		now := time.Now().UTC()
 		document := CommercialInvoiceDocument{Number: fmt.Sprintf("CG-%04d-%012d", now.In(time.FixedZone("HKT", 28800)).Year(), request.ID), DocumentType: "invoice", IssuedAt: now.Unix()}
@@ -358,11 +377,11 @@ func CommercialInvoice(userID int, source, trade, action, number string, input *
 			}
 			paid = time.Unix(order.refundAt, 0)
 		}
-		amountDigits := 2
-		if order.currency == "USDT" {
-			amountDigits = 6
+		details := order.details
+		if action == "credit" {
+			details = order.refundDetails
 		}
-		document.PDF, err = renderOrderInvoice(orderInvoiceData{number: document.Number, buyer: document.Buyer.BuyerName, buyerAddress: document.Buyer.BuyerAddress, buyerCountry: document.Buyer.BuyerCountry, buyerTaxID: document.Buyer.BuyerTaxID, sellerAddress: commercialSellerAddress, sellerBRN: "81318858", description: order.title, trade: trade, provider: order.provider, paymentReference: order.reference, currency: strings.ToUpper(order.currency), amount: fmt.Sprintf("%.*f", amountDigits, amount), paid: paid, issued: now, documentType: document.DocumentType, relatedNumber: document.RelatedNumber, correctionReason: document.Reason})
+		document.PDF, err = renderOrderInvoice(orderInvoiceData{number: document.Number, buyer: document.Buyer.BuyerName, buyerAddress: document.Buyer.BuyerAddress, buyerCountry: document.Buyer.BuyerCountry, buyerTaxID: document.Buyer.BuyerTaxID, sellerAddress: commercialSellerAddress, sellerBRN: "81318858", description: order.title, trade: order.trade, provider: order.provider, paymentReference: order.reference, currency: strings.ToUpper(order.currency), amount: fmt.Sprintf("%.*f", commercialInvoiceDigits(order.currency), amount), paid: paid, issued: now, documentType: document.DocumentType, relatedNumber: document.RelatedNumber, correctionReason: document.Reason, details: details})
 		if err != nil {
 			return err
 		}

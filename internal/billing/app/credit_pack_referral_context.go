@@ -110,8 +110,13 @@ func attachCreditPackReferralContextTx(tx *gorm.DB, info *relaycommon.RelayInfo,
 	}
 	for _, settlement := range settlements {
 		var event billingschema.BillingOutboxEvent
-		if err := tx.First(&event, "aggregate_id = ? AND event_type = ?", settlement.SettlementID, "billing.reservation_settled").Error; err != nil {
+		// The idempotency key already has a unique index. Scanning by the
+		// unindexed aggregate ID holds subscription locks while reading all events.
+		if err := tx.First(&event, "idempotency_key = ?", "outbox:"+settlement.IdempotencyKey).Error; err != nil {
 			return err
+		}
+		if event.AggregateID != settlement.SettlementID || event.EventType != "billing.reservation_settled" || event.AccountID != funding.accountID {
+			return errors.New("credit pack settlement outbox identity mismatch")
 		}
 		var payload map[string]json.RawMessage
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {

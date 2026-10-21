@@ -18,6 +18,7 @@ import (
 
 const (
 	ledgerWorkerAccountBatchSize   = 24
+	ledgerWorkerEventBatchSize     = 32
 	ledgerWorkerInterval           = 2 * time.Second
 	ledgerReconciliationInterval   = 24 * time.Hour
 	ledgerReconciliationMinSpacing = time.Minute
@@ -106,20 +107,20 @@ func RunLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 	processed := 0
 	for _, accountID := range accountIDs {
 		count, err := processLedgerOutboxAccount(ctx, accountID)
+		processed += count
 		if err != nil {
 			if markErr := markLedgerOutboxAccountFailure(ctx, accountID, err); markErr != nil {
 				return processed, fmt.Errorf("process ledger account %s: %w; mark failure: %v", accountID, err, markErr)
 			}
 			continue
 		}
-		processed += count
 	}
 	return processed, nil
 }
 
 func pendingLedgerOutboxAccountIDs(ctx context.Context, limit int) ([]string, error) {
 	accountIDs := make([]string, 0, limit)
-	// Failed accounts retain their events for an atomic retry, but must yield to
+	// Failed events remain pending for an atomic retry, but their accounts yield to
 	// less-retried accounts. MAX keeps fresh events from resetting a broken
 	// account's priority while its oldest failing event is still pending.
 	err := platformdb.DB.WithContext(ctx).
@@ -154,7 +155,6 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 
 	processed := 0
 	now := time.Now().UTC()
-	creditedInviters := make(map[int]struct{})
 	reconcile := ledgerReconciliationDue(accountID, now)
 	repair := false
 	if reconcile {
@@ -172,53 +172,74 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 			platformobservability.SysError(fmt.Sprintf("skip timed-out ledger reconciliation account=%s: %s", accountID, checkErr.Error()))
 		}
 	}
-	err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if repair {
-			if err := rebuildBalanceSnapshotTx(tx, accountID); err != nil {
+	if repair {
+		if err := RebuildBalanceSnapshot(ctx, accountID); err != nil {
+			return 0, err
+		}
+	}
+	if reconcile {
+		markLedgerReconciled(accountID, now)
+	}
+
+	// Select a bounded batch, then commit each event with all of its financial
+	// effects. Holding the snapshots of several owners until the whole batch
+	// completes creates lock cycles with live settlement and income release.
+	var events []billingschema.BillingOutboxEvent
+	if err := platformdb.DB.WithContext(ctx).
+		Where("account_id = ? AND status = ?", accountID, billingschema.BillingOutboxStatusPending).
+		Order("created_at asc, event_id asc").Limit(ledgerWorkerEventBatchSize).Find(&events).Error; err != nil {
+		return 0, err
+	}
+	for _, selected := range events {
+		creditedInviters := make(map[int]struct{})
+		published := false
+		err := platformdb.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var event billingschema.BillingOutboxEvent
+			err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+				Where("event_id = ? AND account_id = ? AND status = ?", selected.EventID, accountID, billingschema.BillingOutboxStatusPending).
+				First(&event).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil // Another worker already committed this event.
+			}
+			if err != nil {
 				return err
 			}
-		}
-		var events []billingschema.BillingOutboxEvent
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("account_id = ? AND status = ?", accountID, billingschema.BillingOutboxStatusPending).
-			Order("created_at asc, event_id asc").Limit(1000).Find(&events).Error; err != nil {
-			return err
-		}
-		if len(events) == 0 {
-			return nil
-		}
-		eventIDs := make([]string, 0, len(events))
-		for _, event := range events {
+			if err := consumeMarketplaceUsageTx(tx, event); err != nil {
+				return err
+			}
 			if err := consumeReferralSettlementTx(tx, event, creditedInviters); err != nil {
 				return err
 			}
-			eventIDs = append(eventIDs, event.EventID)
+			publishedAt := time.Now().UTC()
+			result := tx.Model(&billingschema.BillingOutboxEvent{}).
+				Where("event_id = ? AND status = ?", event.EventID, billingschema.BillingOutboxStatusPending).
+				Updates(map[string]any{
+					"status":       billingschema.BillingOutboxStatusPublished,
+					"published_at": &publishedAt,
+					"last_error":   "",
+				})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("ledger event %s publication changed while locked", event.EventID)
+			}
+			published = true
+			return nil
+		})
+		if err != nil {
+			return processed, err
 		}
-
-		result := tx.Model(&billingschema.BillingOutboxEvent{}).
-			Where("event_id IN ? AND status = ?", eventIDs, billingschema.BillingOutboxStatusPending).
-			Updates(map[string]any{
-				"status":       billingschema.BillingOutboxStatusPublished,
-				"published_at": &now,
-				"last_error":   "",
-			})
-		if result.Error != nil {
-			return result.Error
+		if published {
+			processed++
 		}
-		processed = int(result.RowsAffected)
-		return nil
-	})
-	if err == nil && reconcile {
-		markLedgerReconciled(accountID, now)
-	}
-	if err == nil {
 		for inviterID := range creditedInviters {
 			if cacheErr := identitystore.InvalidateUserCache(inviterID); cacheErr != nil {
 				platformobservability.SysError(fmt.Sprintf("invalidate referral rebate recipient cache user=%d: %s", inviterID, cacheErr.Error()))
 			}
 		}
 	}
-	return processed, err
+	return processed, nil
 }
 
 func balanceSnapshotNeedsRepair(ctx context.Context, accountID string) (bool, error) {

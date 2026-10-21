@@ -79,13 +79,25 @@ func GetSubscriptionPlanInfoByUserSubscriptionID(userSubscriptionID int) (*comme
 
 // BuildSubscriptionClaudeConversionLog formats the user-facing settlement log.
 func BuildSubscriptionClaudeConversionLog(planTitle string, conversionPercent int, targetQuota int) string {
-	return fmt.Sprintf("旧套餐转余额成功，套餐：%s，转换比例：%d%%，到账余额：%s", planTitle, conversionPercent, logger.LogQuota(targetQuota))
+	return fmt.Sprintf("套餐转余额成功，套餐：%s，转换比例：%d%%，到账余额：%s", planTitle, conversionPercent, logger.LogQuota(targetQuota))
 }
 
 // BuildSubscriptionClaudeConversionPreview calculates the cash-out value of the whole monthly pass.
 func BuildSubscriptionClaudeConversionPreview(plan *commerceschema.SubscriptionPlan, sub *commerceschema.UserSubscription) commerceschema.SubscriptionClaudeConversionPreview {
 	if plan == nil || sub == nil {
 		return commerceschema.SubscriptionClaudeConversionPreview{}
+	}
+	if sub.CreditPackGrantedQuota > 0 || plan.PlanType == commerceschema.SubscriptionPlanTypeCreditPack {
+		if err := creditPackConversionOrderTx(platformdb.DB, sub); err != nil {
+			return commerceschema.SubscriptionClaudeConversionPreview{IneligibleReason: err.Error()}
+		}
+		quote := calculateCreditPackConversionQuote(sub, 0)
+		return commerceschema.SubscriptionClaudeConversionPreview{
+			Eligible: quote.targetQuota > 0, RemainingQuota: quote.remainingQuota,
+			PlanPriceAmount: quote.planPriceAmount, UnusedRatio: quote.unusedRatio,
+			MaxConversionPercent: quote.maxConversionPercent, PreviewQuota: quote.targetQuota,
+			BaseQuota: quote.baseQuota, TargetType: "wallet",
+		}
 	}
 	pricedPlan, err := legacyConversionPaidPlanTx(platformdb.DB, plan, sub)
 	if err != nil {
@@ -132,7 +144,8 @@ type monthlyPassConversionQuote struct {
 	maxConversionPercent int
 }
 
-// ConvertMonthlyPassToUnifiedCredit cashes out a selected whole-pass percentage.
+// ConvertMonthlyPassToUnifiedCredit preserves legacy whole-pass percentages and
+// converts new credit packs as a percentage of their current remainder.
 func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptionID int, conversionPercent int) (*commerceschema.SubscriptionClaudeConversionResult, error) {
 	config := GetSubscriptionClaudeConversionConfig()
 	if !config.Enabled {
@@ -181,33 +194,48 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 			return commerceschema.ErrSubscriptionClaudeConversionNoTarget
 		}
 		now := platformruntime.GetTimestamp()
-		if err := maybeResetUserSubscriptionWithPlanTx(tx, sub, plan, now); err != nil {
-			return err
+		isCreditPack := sub.CreditPackGrantedQuota > 0 || plan.PlanType == commerceschema.SubscriptionPlanTypeCreditPack
+		var quote monthlyPassConversionQuote
+		var group monthlyPassConversionGroup
+		if isCreditPack {
+			if err := creditPackConversionOrderTx(tx, sub); err != nil {
+				return err
+			}
+			quote = calculateCreditPackConversionQuote(sub, conversionPercent)
+			if err := lockCreditPackConversionBalanceTx(tx, sub); err != nil {
+				return err
+			}
+		} else {
+			if err := maybeResetUserSubscriptionWithPlanTx(tx, sub, plan, now); err != nil {
+				return err
+			}
+			resetUsed, err := subscriptionHasResetOpportunityUsageTx(tx, sub.Id)
+			if err != nil {
+				return err
+			}
+			if resetUsed {
+				return commerceschema.ErrSubscriptionClaudeConversionResetUsed
+			}
+			pricedPlan, err := legacyConversionPaidPlanTx(tx, plan, sub)
+			if err != nil {
+				return err
+			}
+			quote = calculateMonthlyPassConversionQuote(pricedPlan, sub, now, conversionPercent)
+			group, err = monthlyPassConversionGroupTx(tx, sub)
+			if err != nil {
+				return err
+			}
+			applyMonthlyPassGroupBonus(&quote, group)
 		}
-		resetUsed, err := subscriptionHasResetOpportunityUsageTx(tx, sub.Id)
-		if err != nil {
-			return err
-		}
-		if resetUsed {
-			return commerceschema.ErrSubscriptionClaudeConversionResetUsed
-		}
-		pricedPlan, err := legacyConversionPaidPlanTx(tx, plan, sub)
-		if err != nil {
-			return err
-		}
-		quote := calculateMonthlyPassConversionQuote(pricedPlan, sub, now, conversionPercent)
-		group, err := monthlyPassConversionGroupTx(tx, sub)
-		if err != nil {
-			return err
-		}
-		applyMonthlyPassGroupBonus(&quote, group)
 		if quote.targetQuota <= 0 {
 			return commerceschema.ErrSubscriptionClaudeConversionNoTarget
 		}
-		if pending, err := monthlyPassHasPendingReservationTx(tx, sub.Id); err != nil {
-			return err
-		} else if pending {
-			return commerceschema.ErrSubscriptionClaudeConversionInProgress
+		if !isCreditPack {
+			if pending, err := monthlyPassHasPendingReservationTx(tx, sub.Id); err != nil {
+				return err
+			} else if pending {
+				return commerceschema.ErrSubscriptionClaudeConversionInProgress
+			}
 		}
 		if err := consumeMonthlyPassConversionQuotaTx(tx, sub, quote.remainingQuota, requestID); err != nil {
 			if errors.Is(err, billingdomain.ErrInsufficientBalance) {
@@ -229,7 +257,7 @@ func ConvertMonthlyPassToUnifiedCredit(requestID string, userID int, subscriptio
 		if err := tx.Save(sub).Error; err != nil {
 			return err
 		}
-		if ended {
+		if ended && !isCreditPack {
 			downgradeGroup, err = downgradeUserGroupForSubscriptionTx(tx, sub, now)
 			if err != nil {
 				return err

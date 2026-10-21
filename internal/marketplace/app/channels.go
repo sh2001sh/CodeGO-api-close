@@ -75,7 +75,10 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		return nil, nil, err
 	}
 	ownerName := loadOwnerDisplayName(ownerUserID)
-	sourceLabel, _ := canonicalSourceLabel(req.SourceLabel)
+	sourceLabel, err := normalizeSourceLabel(req.SourceLabel)
+	if err != nil {
+		return nil, nil, err
+	}
 	sensitiveWordInterceptionEnabled := true
 	if req.SensitiveWordInterceptionEnabled != nil {
 		sensitiveWordInterceptionEnabled = *req.SensitiveWordInterceptionEnabled
@@ -83,7 +86,7 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 	channel := &marketplaceschema.Channel{
 		ID: channelID, OwnerUserID: ownerUserID, ProviderType: req.ProviderType,
 		SubmittedSourceLabel: sourceLabel,
-		SourceLabelStatus:    marketplacedomain.SourceLabelPending,
+		SourceLabelStatus:    marketplacedomain.SourceLabelDeclared,
 		BaseURLCiphertext:    baseURL, CredentialCiphertext: credential,
 		CredentialTail: credentialTail(req.APIKey), CredentialVersion: 1,
 		DeclaredModels: string(models),

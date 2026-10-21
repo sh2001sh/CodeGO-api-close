@@ -26,7 +26,7 @@ func TestVerifiedPublicationSynchronizesGroupAbilities(t *testing.T) {
 					require.NoError(t, gatewaystore.AddChannelAbilities(&internal, db))
 				}
 				require.NoError(t, db.Model(&marketplaceschema.Channel{}).Where("id = ?", group.ChannelID).Updates(map[string]any{
-					"status": "active", "internal_channel_id": internal.Id, "provider_type": "openai_compatible", "submitted_source_label": "Codex Plus", "source_label_status": "approved", "connectivity_test_status": "passed",
+					"status": "active", "internal_channel_id": internal.Id, "provider_type": "openai_compatible", "submitted_source_label": "自营 Pro 号池", "source_label_status": "pending", "connectivity_test_status": "passed",
 				}).Error)
 				channel, current, err := loadChannelGroup(group.ChannelID)
 				require.NoError(t, err)
@@ -55,6 +55,8 @@ func TestVerifiedPublicationSynchronizesGroupAbilities(t *testing.T) {
 				}
 				require.NoError(t, db.First(&internal, internal.Id).Error)
 				require.NoError(t, db.First(&group, "id = ?", group.ID).Error)
+				require.NoError(t, db.First(channel, "id = ?", channel.ID).Error)
+				require.Equal(t, "自营 Pro 号池", channel.SubmittedSourceLabel)
 				models := gatewaystore.LoadGroupEnabledModels(group.InternalGroupName)
 				if state == "stale_pause" || state == "missing_abilities" {
 					require.Equal(t, constant.ChannelStatusEnabled, internal.Status)

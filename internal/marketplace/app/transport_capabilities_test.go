@@ -175,7 +175,7 @@ func TestCreateMarketplaceChannelQueuesTransportCapabilityDetection(t *testing.T
 
 	view, err := CreateMarketplaceChannel(42, CreateChannelRequest{
 		ProviderType:   "openai_compatible",
-		SourceLabel:    "Codex Plus",
+		SourceLabel:    "  自营 Pro 号池  ",
 		BaseURL:        "https://8.8.8.8",
 		APIKey:         "marketplace-key",
 		DeclaredModels: []string{"gpt-5"},
@@ -185,6 +185,8 @@ func TestCreateMarketplaceChannelQueuesTransportCapabilityDetection(t *testing.T
 	})
 	require.NoError(t, err)
 	require.Equal(t, view.ID, queuedChannelID)
+	require.Equal(t, "自营 Pro 号池", view.SubmittedSourceLabel)
+	require.Equal(t, marketplacedomain.SourceLabelDeclared, view.SourceLabelStatus)
 
 	var persisted marketplaceschema.Channel
 	require.NoError(t, db.First(&persisted, "id = ?", view.ID).Error)

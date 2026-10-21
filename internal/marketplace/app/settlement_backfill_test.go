@@ -1,11 +1,15 @@
 package app
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
 	auditschema "github.com/sh2001sh/new-api/internal/audit/schema"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	"github.com/stretchr/testify/require"
@@ -13,18 +17,31 @@ import (
 
 func TestBackfillCreditPackUsesOnlyFrozenPurchaseAndPolicy(t *testing.T) {
 	db, logDB := openOwnerUsageLogTestDB(t)
-	require.NoError(t, db.AutoMigrate(&billingschema.BillingAccount{}, &billingschema.BillingBalanceSnapshot{}, &billingschema.BillingOutboxEvent{}))
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingAccount{}, &billingschema.BillingBalanceSnapshot{}, &billingschema.BillingOutboxEvent{}, &billingschema.BillingReservation{}, &billingschema.BillingSettlement{}, &commerceschema.UserSubscription{}))
 	internalID := 101
 	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "channel", OwnerUserID: 10, InternalChannelID: &internalID}).Error)
 	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "group", ChannelID: "channel", OwnerUserID: 10, Multiplier: 9}).Error)
 	require.NoError(t, logDB.Create([]auditschema.Log{
-		{RequestId: "new-pack", UserId: 20, ChannelId: internalID, Type: auditschema.LogTypeConsume, Quota: 100000,
+		{RequestId: "new-pack", UserId: 20, ChannelId: internalID, Type: auditschema.LogTypeConsume, Quota: 100000, CreatedAt: time.Now().Unix(),
 			Other: `{"marketplace_group_id":"group","billing_source":"subscription","subscription_billing_version":"credit_pack","credit_pack_granted_quota":103000,"credit_pack_paid_quota":100000,"credit_pack_channel_share_bps":6000,"marketplace_fee_policy_version":"paid_bonus_rate_v2","subscription_id":44,"subscription_plan_id":9,"subscription_plan_title":"Frozen pack"}`},
 		{RequestId: "missing-snapshot", UserId: 20, ChannelId: internalID, Type: auditschema.LogTypeConsume, Quota: 100000,
 			Other: `{"marketplace_group_id":"group","billing_source":"subscription","subscription_billing_version":"credit_pack"}`},
-		{RequestId: "old-pack", UserId: 20, ChannelId: internalID, Type: auditschema.LogTypeConsume, Quota: 110000,
+		{RequestId: "old-pack", UserId: 20, ChannelId: internalID, Type: auditschema.LogTypeConsume, Quota: 110000, CreatedAt: time.Now().Unix(),
 			Other: `{"marketplace_group_id":"group","billing_source":"subscription","subscription_billing_version":"credit_pack","credit_pack_granted_quota":110000,"credit_pack_paid_quota":100000,"credit_pack_channel_share_bps":6000}`},
 	}).Error)
+	for i, request := range []string{"new-pack", "old-pack"} {
+		granted := int64(103000)
+		amount := int64(100000)
+		if i == 1 {
+			granted, amount = 110000, 110000
+		}
+		subID := 44 + i
+		require.NoError(t, db.Create(&commerceschema.UserSubscription{Id: subID, UserId: 20, CreditPackGrantedQuota: granted, CreditPackPaidQuota: 100000, CreditPackChannelShareBPS: 6000}).Error)
+		require.NoError(t, db.Create(&billingschema.BillingAccount{AccountID: request, OwnerType: "user_subscription", OwnerID: int64(subID), AccountType: "subscription", QuotaUnit: "quota"}).Error)
+		digest := sha256.Sum256([]byte("credit-pack:" + request))
+		require.NoError(t, db.Create(&billingschema.BillingReservation{ReservationID: request, RequestID: fmt.Sprintf("cp:%x", digest[:30]), AccountID: request, Status: "settled", IdempotencyKey: request}).Error)
+		require.NoError(t, db.Create(&billingschema.BillingSettlement{ReservationID: request, ActualAmount: amount, Status: "completed", IdempotencyKey: request + ":settle"}).Error)
+	}
 	dry, err := BackfillMissingSettlements(0, false)
 	require.NoError(t, err)
 	require.Equal(t, 3, dry.Candidates)
@@ -54,6 +71,22 @@ func TestBackfillCreditPackUsesOnlyFrozenPurchaseAndPolicy(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, replay.Existing)
 	require.Zero(t, replay.Created)
+}
+
+func TestBackfillDoesNotCreateIncomeFromLogWithoutNativeDebit(t *testing.T) {
+	db, logDB := openOwnerUsageLogTestDB(t)
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingReservation{}))
+	internalID := 101
+	require.NoError(t, db.Create(&marketplaceschema.Channel{ID: "channel", OwnerUserID: 10, InternalChannelID: &internalID}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.Group{ID: "group", ChannelID: "channel", OwnerUserID: 10}).Error)
+	require.NoError(t, logDB.Create(&auditschema.Log{RequestId: "unpaid", UserId: 20, ChannelId: internalID, Type: auditschema.LogTypeConsume, Quota: 100000, CreatedAt: time.Now().Unix(), Other: `{"marketplace_group_id":"group","marketplace_multiplier":1.5,"billing_source":"wallet"}`}).Error)
+	report, err := BackfillMissingSettlements(0, true)
+	require.NoError(t, err)
+	require.Zero(t, report.Created)
+	require.Equal(t, 1, report.Skipped)
+	var count int64
+	require.NoError(t, db.Model(&marketplaceschema.Settlement{}).Count(&count).Error)
+	require.Zero(t, count)
 }
 
 func TestSettlementBackfillBatchFitsPostgresParameterLimit(t *testing.T) {

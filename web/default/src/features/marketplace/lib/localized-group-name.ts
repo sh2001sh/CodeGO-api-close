@@ -25,13 +25,13 @@ const sourceNames: Record<string, Record<string, string>> = {
     ja: '中国製モデル',
     vi: 'Mô hình Trung Quốc',
   },
-  来源待审核: {
-    en: 'Source pending review',
-    'zh-TW': '來源待審核',
-    fr: 'Source en attente',
-    ru: 'Источник на проверке',
-    ja: '審査待ち',
-    vi: 'Nguồn đang xét duyệt',
+  未声明来源: {
+    en: 'Source not declared',
+    'zh-TW': '未聲明來源',
+    fr: 'Source non déclarée',
+    ru: 'Источник не указан',
+    ja: '提供元未申告',
+    vi: 'Chưa khai báo nguồn',
   },
   官方: {
     en: 'Official',
@@ -71,8 +71,7 @@ export function localizedGroupName(
   sourceLabel: string,
   language: string
 ): string {
-  const translated = localizedSourceLabel(sourceLabel, language)
-  return sourceLabel && translated !== sourceLabel
-    ? name.replace(sourceLabel, translated)
-    : name
+  const label = sourceLabel || '未声明来源'
+  const translated = localizedSourceLabel(label, language)
+  return translated !== label ? name.replace(label, translated) : name
 }

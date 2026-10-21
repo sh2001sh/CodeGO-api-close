@@ -9,6 +9,7 @@ import (
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
+	"gorm.io/gorm"
 )
 
 var ErrPrimaryDatabaseNotInitialized = errors.New("primary database is not initialized")
@@ -42,8 +43,8 @@ type settlementBackfillPayload struct {
 
 // BackfillMissingSettlements inspects successful request logs carrying the
 // immutable marketplace routing metadata and creates any missing settlement
-// rows. It is idempotent and intentionally refuses to infer ownership from the
-// display group name or from a channel that does not match the log channel ID.
+// rows only after the native ledger confirms the full debit. Existing receipts
+// retain their status, including reclaimed and forfeited income.
 func BackfillMissingSettlements(limit int, apply bool) (SettlementBackfillReport, error) {
 	var report SettlementBackfillReport
 	logDB := platformdb.LogDB
@@ -175,24 +176,14 @@ func backfillSettlementBatch(logs []auditschema.Log, apply bool, report *Settlem
 		if !apply {
 			continue
 		}
-		multiplier := payload.MarketplaceMultiplier
-		if multiplier <= 0 && !creditPack {
-			multiplier = group.Multiplier
-		}
-		share := int64(0)
-		if payload.CreditPackChannelShareBPS != nil {
-			share = *payload.CreditPackChannelShareBPS
-		}
-		err := marketplacesettlement.Record(marketplacesettlement.RecordParams{
-			RequestID: log.RequestId, GroupID: group.ID, OwnerUserID: group.OwnerUserID,
-			ConsumerUserID: log.UserId, BillingSource: payload.BillingSource,
-			ConsumerDebitAmount: int64(log.Quota), SettlementGrossAmount: int64(gross),
-			WalletMultiplier: multiplier, SubscriptionMultiplier: payload.SubscriptionMultiplier,
-			CreditPackGrantedQuota: payload.CreditPackGrantedQuota, CreditPackPaidQuota: payload.CreditPackPaidQuota,
-			CreditPackChannelShareBPS: share, FeePolicyVersion: payload.FeePolicyVersion,
-			SubscriptionID: payload.SubscriptionID, SubscriptionPlanID: payload.SubscriptionPlanID,
-			SubscriptionPlanTitle: payload.SubscriptionPlanTitle,
+		err := platformdb.DB.Transaction(func(tx *gorm.DB) error {
+			_, err := marketplacesettlement.RecoverUsageTx(tx, log)
+			return err
 		})
+		if errors.Is(err, marketplacesettlement.ErrUsageFundingUnconfirmed) || errors.Is(err, marketplacesettlement.ErrUsageNoIncome) {
+			report.Skipped++
+			continue
+		}
 		if err != nil {
 			return err
 		}

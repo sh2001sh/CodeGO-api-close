@@ -37,6 +37,7 @@ const (
 	VisibilityPublic   = "public"
 
 	SourceLabelPending  = "pending"
+	SourceLabelDeclared = "declared"
 	SourceLabelApproved = "approved"
 	SourceLabelRejected = "rejected"
 

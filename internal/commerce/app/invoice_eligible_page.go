@@ -84,32 +84,13 @@ func ListInvoiceEligibleOrdersPageWithContext(ctx context.Context, userID int, k
 		return nil, err
 	}
 	orders := make([]InvoiceEligibleOrder, 0, len(rows))
-	trades := make([]string, 0, len(rows))
-	for _, row := range rows {
-		trades = append(trades, row.TradeNo)
-	}
-	requested := make(map[string]bool)
-	if len(trades) > 0 {
-		var items []commerceschema.InvoiceRequestItem
-		if err := db.Select("source_type, trade_no").Where("user_id = ? AND trade_no IN ?", userID, trades).Find(&items).Error; err != nil {
-			return nil, err
-		}
-		var requests []commerceschema.InvoiceRequest
-		if err := db.Select("source_type, trade_no").Where("user_id = ? AND trade_no IN ?", userID, trades).Find(&requests).Error; err != nil {
-			return nil, err
-		}
-		for _, item := range items {
-			requested[invoiceOrderKey(item.SourceType, item.TradeNo)] = true
-		}
-		for _, request := range requests {
-			requested[invoiceOrderKey(request.SourceType, request.TradeNo)] = true
-		}
-	}
 	for _, row := range rows {
 		order := row.InvoiceEligibleOrder
 		order.Currency = commercialPaymentCurrency(row.PaymentProvider, row.PaymentMethod, row.ProviderPayload, order.OrderAmount)
-		order.Requested = requested[invoiceOrderKey(order.SourceType, order.TradeNo)]
 		orders = append(orders, order)
+	}
+	if err := annotateCommercialInvoiceOrders(db, userID, orders); err != nil {
+		return nil, err
 	}
 	page.SetTotal(int(total))
 	page.SetItems(orders)

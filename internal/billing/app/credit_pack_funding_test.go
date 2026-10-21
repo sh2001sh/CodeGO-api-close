@@ -57,18 +57,12 @@ func TestCreditPackPricingAndMarketplaceIsolation(t *testing.T) {
 			require.Nil(t, apiErr)
 			require.NotNil(t, session)
 			require.Equal(t, tc.want, reserved)
-			if tc.legacy {
-				require.NoError(t, session.Settle(80))
-				require.Equal(t, -tc.want/5, settled)
-			} else {
-				// A pricing-only mock cannot commit a pack without native ledger
-				// evidence. Production's transactional hook is exercised by the
-				// commerce integration tests using real reservations and outbox.
-				require.Equal(t, 80, session.scaledSettlementQuota(80))
-				require.ErrorContains(t, session.Settle(80), "transactional subscription settlement hook is not registered")
-				require.False(t, info.BillingSettled)
-				require.Zero(t, settled)
-			}
+			// A pricing-only mock cannot atomically commit the native debit and
+			// marketplace intent. Real reservations are covered by integration tests.
+			require.EqualValues(t, tc.want*4/5, session.scaledSettlementQuota(80))
+			require.ErrorContains(t, session.Settle(80), "transactional subscription settlement hook is not registered")
+			require.False(t, info.BillingSettled)
+			require.Zero(t, settled)
 			params := marketplaceSettlementParams(info, int(tc.want*4/5))
 			require.Equal(t, int64(80), params.SettlementGrossAmount)
 			if !tc.legacy {

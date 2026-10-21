@@ -49,7 +49,7 @@ func TestAdminCanUpdateMarketplaceChannelContent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, newSource, updated.SubmittedSourceLabel)
-	require.Equal(t, marketplacedomain.SourceLabelPending, updated.SourceLabelStatus)
+	require.Equal(t, marketplacedomain.SourceLabelDeclared, updated.SourceLabelStatus)
 	require.Equal(t, newMultiplier, updated.Multiplier)
 	require.Equal(t, consistency, updated.ModelConsistencyStatus)
 	var savedChannel marketplaceschema.Channel
@@ -58,6 +58,13 @@ func TestAdminCanUpdateMarketplaceChannelContent(t *testing.T) {
 	var savedGroup marketplaceschema.Group
 	require.NoError(t, db.First(&savedGroup, "channel_id = ?", channel.ID).Error)
 	require.Equal(t, "CC-Kiro-ae381d", savedGroup.InternalGroupName)
+	invalidSource := "example.gg"
+	_, err = UpdateAdminChannel(channel.ID, AdminUpdateChannelRequest{
+		UpdateChannelRequest: UpdateChannelRequest{SourceLabel: &invalidSource},
+	})
+	require.EqualError(t, err, "来源声明不能包含链接、域名或 IP 地址")
+	require.NoError(t, db.First(&savedChannel, "id = ?", channel.ID).Error)
+	require.Equal(t, newSource, savedChannel.SubmittedSourceLabel, "a rejected edit must preserve the saved declaration")
 }
 
 func TestModelConsistencyStatusValidation(t *testing.T) {

@@ -16,6 +16,7 @@ import { COMPANY } from '@/lib/company'
 import { formatTimestamp } from '@/lib/format'
 import { useDebounce } from '@/hooks/use-debounce'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,12 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import '@/features/wallet/commerce.css'
 import { getInvoiceEligibleOrdersPage, getInvoiceRequests } from './api'
+import {
+  canMergeInvoiceOrder,
+  invoiceBatchLimit,
+  invoiceOrderKey,
+  invoiceSelectionTotal,
+} from './batch-selection'
 import {
   downloadInvoice,
   getInvoiceDocuments,
@@ -40,6 +47,7 @@ import type { InvoiceEligibleOrder } from './types'
 
 type BuyerDraft = {
   order: InvoiceEligibleOrder
+  orders?: InvoiceEligibleOrder[]
   previous?: InvoiceDocument
   requestId?: string
 }
@@ -72,6 +80,41 @@ export function OrderInvoices() {
     setPagination({ scope: keyword, page: pageCount })
   }
   const pageOrders = orders.data?.items ?? []
+  const [selection, setSelection] = useState<{
+    userId: number
+    items: InvoiceEligibleOrder[]
+  }>({ userId: 0, items: [] })
+  const selected = (selection.userId === userId ? selection.items : [])
+    .map(
+      (item) =>
+        pageOrders.find(
+          (current) => invoiceOrderKey(current) === invoiceOrderKey(item)
+        ) ?? item
+    )
+    .filter(canMergeInvoiceOrder)
+  const selectedKeys = new Set(selected.map(invoiceOrderKey))
+  const selectedCurrency = selected[0]?.currency
+  const selectionTotal = invoiceSelectionTotal(selected)
+  const formatAmount = (amount: number, currency: string) =>
+    amount.toLocaleString(getIntlLocale(), {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: currency === 'USDT' ? 6 : 2,
+    })
+  const historyRefundStatus =
+    history?.invoice_refund_status || history?.refund_status
+  const toggleOrder = (order: InvoiceEligibleOrder, checked: boolean) => {
+    const items = selected.filter(
+      (item) => invoiceOrderKey(item) !== invoiceOrderKey(order)
+    )
+    if (
+      checked &&
+      canMergeInvoiceOrder(order) &&
+      (!selectedCurrency || selectedCurrency === order.currency) &&
+      items.length < invoiceBatchLimit
+    )
+      items.push(order)
+    setSelection({ userId, items })
+  }
   const setPage = (value: number) => {
     if (!Number.isFinite(value)) return
     setPagination({
@@ -90,9 +133,18 @@ export function OrderInvoices() {
       action?: 'document' | 'corrections' | 'credit-note'
       body?: InvoiceIssueInput
       number?: string
-    }) => downloadInvoice(input.order, input.action, input.body, input.number),
-    onSuccess: () => {
+      orders?: InvoiceEligibleOrder[]
+    }) =>
+      downloadInvoice(
+        input.order,
+        input.action,
+        input.body,
+        input.number,
+        input.orders
+      ),
+    onSuccess: (_, input) => {
       setDraft(null)
+      if (input.orders) setSelection({ userId, items: [] })
       void queryClient.invalidateQueries({
         queryKey: ['order-invoice-documents'],
       })
@@ -212,6 +264,67 @@ export function OrderInvoices() {
           {t('No results found')}
         </div>
       )}
+      <div className='bg-muted/25 space-y-3 rounded-xl border p-4'>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <div className='space-y-1'>
+            <h3 className='font-semibold'>{t('invoice.mergeInvoices')}</h3>
+            <p className='text-muted-foreground text-sm'>
+              {t('invoice.mergeHint')}
+            </p>
+          </div>
+          <Button
+            disabled={selected.length < 2 || download.isPending}
+            onClick={() => setDraft({ order: selected[0], orders: selected })}
+          >
+            <Download size={15} aria-hidden='true' />
+            {t('invoice.mergeInvoices')}
+          </Button>
+        </div>
+        <div className='flex flex-wrap items-center gap-3'>
+          <Button
+            variant='outline'
+            size='sm'
+            disabled={download.isPending || orders.isFetching}
+            onClick={() => {
+              const items = [...selected]
+              let currency = selectedCurrency
+              for (const order of pageOrders) {
+                if (items.length >= invoiceBatchLimit) break
+                if (
+                  selectedKeys.has(invoiceOrderKey(order)) ||
+                  !canMergeInvoiceOrder(order) ||
+                  (currency && currency !== order.currency)
+                )
+                  continue
+                currency = order.currency
+                items.push(order)
+              }
+              setSelection({ userId, items })
+            }}
+          >
+            {t('invoice.selectPage')}
+          </Button>
+          <Button
+            variant='ghost'
+            size='sm'
+            disabled={selected.length === 0 || download.isPending}
+            onClick={() => setSelection({ userId, items: [] })}
+          >
+            {t('invoice.clearSelection')}
+          </Button>
+          <span
+            role='status'
+            aria-live='polite'
+            className='text-sm tabular-nums'
+          >
+            {t('invoice.selectionSummary', {
+              count: selected.length,
+              amount: formatAmount(selectionTotal, selectedCurrency ?? ''),
+              currency: selectedCurrency ?? '',
+            })}
+          </span>
+        </div>
+      </div>
       <div className='commerce-invoice-list'>
         {pageOrders.map((order) => (
           <article
@@ -219,11 +332,33 @@ export function OrderInvoices() {
             className='commerce-invoice-order'
           >
             <div className='commerce-invoice-summary'>
-              <div className='commerce-invoice-identity space-y-1'>
+              <Checkbox
+                aria-label={t('invoice.selectOrder', { trade: order.trade_no })}
+                checked={selectedKeys.has(invoiceOrderKey(order))}
+                disabled={
+                  download.isPending ||
+                  !canMergeInvoiceOrder(order) ||
+                  (!selectedKeys.has(invoiceOrderKey(order)) &&
+                    (selected.length >= invoiceBatchLimit ||
+                      Boolean(
+                        selectedCurrency && selectedCurrency !== order.currency
+                      )))
+                }
+                onCheckedChange={(checked) => toggleOrder(order, checked)}
+              />
+              <div className='commerce-invoice-identity min-w-0 space-y-1'>
                 <code className='block'>{order.trade_no}</code>
                 <div className='text-muted-foreground text-base'>
                   {t(order.order_title)} · {formatTimestamp(order.paid_at)}
                 </div>
+                {(order.invoice_order_count ?? 0) > 1 ? (
+                  <div className='text-muted-foreground text-sm'>
+                    {t('invoice.mergedOrders', {
+                      count: order.invoice_order_count,
+                    })}{' '}
+                    · {order.invoice_number}
+                  </div>
+                ) : null}
               </div>
               <div className='commerce-invoice-amount'>
                 {order.order_amount.toLocaleString(getIntlLocale(), {
@@ -269,7 +404,7 @@ export function OrderInvoices() {
         </section>
       ) : null}
       <InvoiceBuyerDialog
-        key={`${draft?.order.trade_no}:${draft?.previous?.number}`}
+        key={`${draft?.order.trade_no}:${draft?.orders?.length}:${draft?.previous?.number}`}
         draft={draft}
         pending={download.isPending}
         onClose={() => setDraft(null)}
@@ -277,6 +412,7 @@ export function OrderInvoices() {
           if (!draft) return
           download.mutate({
             order: draft.order,
+            orders: draft.orders,
             action: draft.previous ? 'corrections' : 'document',
             body: {
               ...body,
@@ -357,8 +493,7 @@ export function OrderInvoices() {
                 >
                   {t('invoice.downloadPdf')}
                 </Button>
-                {(!history?.refund_status ||
-                  history.refund_status === 'failed') &&
+                {(!historyRefundStatus || historyRefundStatus === 'failed') &&
                 document ===
                   documents.data
                     ?.filter((item) => item.document_type === 'invoice')
@@ -383,7 +518,9 @@ export function OrderInvoices() {
               </div>
             </article>
           ))}
-          {history?.refund_status === 'success' && documents.data?.length ? (
+          {history &&
+          historyRefundStatus === 'success' &&
+          documents.data?.length ? (
             <Button
               variant='outline'
               disabled={download.isPending}
@@ -408,6 +545,9 @@ function InvoiceBuyerDialog(props: {
 }) {
   const { t } = useTranslation()
   const buyer = props.draft?.previous?.buyer
+  let title = 'invoice.issue'
+  if (props.draft?.previous) title = 'invoice.correctBuyer'
+  else if (props.draft?.orders) title = 'invoice.mergeTitle'
   return (
     <Dialog
       open={Boolean(props.draft)}
@@ -420,12 +560,42 @@ function InvoiceBuyerDialog(props: {
         className='commerce-dialog commerce-workspace max-h-[85dvh] overflow-y-auto sm:max-w-[720px]'
       >
         <DialogHeader>
-          <DialogTitle>
-            {t(
-              props.draft?.previous ? 'invoice.correctBuyer' : 'invoice.issue'
-            )}
-          </DialogTitle>
+          <DialogTitle>{t(title)}</DialogTitle>
         </DialogHeader>
+        {props.draft?.orders ? (
+          <details className='rounded-lg border p-3 text-sm'>
+            <summary className='cursor-pointer font-medium'>
+              {t('invoice.selectionSummary', {
+                count: props.draft.orders.length,
+                amount: invoiceSelectionTotal(
+                  props.draft.orders
+                ).toLocaleString(getIntlLocale(), {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits:
+                    props.draft.order.currency === 'USDT' ? 6 : 2,
+                }),
+                currency: props.draft.order.currency,
+              })}
+            </summary>
+            <ul className='mt-3 max-h-48 space-y-2 overflow-y-auto'>
+              {props.draft.orders.map((order) => (
+                <li
+                  key={invoiceOrderKey(order)}
+                  className='flex flex-wrap justify-between gap-x-3 gap-y-1'
+                >
+                  <code className='min-w-0 break-all'>{order.trade_no}</code>
+                  <span className='tabular-nums'>
+                    {order.order_amount.toLocaleString(getIntlLocale(), {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: order.currency === 'USDT' ? 6 : 2,
+                    })}{' '}
+                    {order.currency}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
         <form
           className='commerce-invoice-form'
           onSubmit={(event) => {

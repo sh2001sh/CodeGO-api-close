@@ -216,7 +216,7 @@ export interface MarketplaceChannel {
   provider_type: string
   submitted_source_label: string
   approved_source_label: string
-  source_label_status: 'pending' | 'approved' | 'rejected'
+  source_label_status: 'declared' | 'pending' | 'approved' | 'rejected'
   source_label_review_reason: string
   credential_tail: string
   credential_version: number
@@ -468,7 +468,7 @@ export interface MarketplaceOwnerUsageLog {
   owner_income: number
   platform_commission: number
   multiplier: number
-  income_status: 'pending' | 'released' | 'reclaimed' | 'none'
+  income_status: 'pending' | 'released' | 'reclaimed' | 'forfeited' | 'none'
   reclaimed_income: number
   available_at?: string | null
   released_at?: string | null

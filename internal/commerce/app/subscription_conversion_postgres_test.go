@@ -73,6 +73,63 @@ func TestWalletConversionAndResetRedemptionPostgres(t *testing.T) {
 		return results
 	}
 
+	for _, sameKey := range []bool{true, false} {
+		t.Run(fmt.Sprintf("credit pack concurrent full conversion same key %t", sameKey), func(t *testing.T) {
+			user, plan, _ := seed(t)
+			sub := seedCreditPackConversion(t, db, user.Id, plan.Id)
+			results := runConcurrent(func(i int) error {
+				if sameKey {
+					i = 0
+				}
+				_, err := ConvertMonthlyPassToUnifiedCredit(fmt.Sprintf("pg-pack-%d-%d", sub.Id, i), user.Id, sub.Id, 100)
+				return err
+			})
+			success := 0
+			for _, err := range results {
+				if err == nil {
+					success++
+				} else {
+					require.ErrorIs(t, err, commerceschema.ErrSubscriptionClaudeConversionNoTarget)
+				}
+			}
+			if sameKey {
+				require.Equal(t, 12, success)
+			} else {
+				require.Equal(t, 1, success)
+			}
+			var saved identityschema.User
+			require.NoError(t, db.First(&saved, user.Id).Error)
+			require.Equal(t, 32000100, saved.ClaudeQuota)
+			var count int64
+			require.NoError(t, db.Model(&commerceschema.SubscriptionClaudeConversion{}).Where("user_subscription_id = ?", sub.Id).Count(&count).Error)
+			require.EqualValues(t, 1, count)
+		})
+	}
+	t.Run("credit pack concurrent partial conversions use current remainder", func(t *testing.T) {
+		user, plan, _ := seed(t)
+		sub := seedCreditPackConversion(t, db, user.Id, plan.Id)
+		for _, err := range runConcurrent(func(i int) error {
+			_, err := ConvertMonthlyPassToUnifiedCredit(fmt.Sprintf("pg-pack-partial-%d-%d", sub.Id, i), user.Id, sub.Id, 25)
+			return err
+		}) {
+			require.NoError(t, err)
+		}
+		var records []commerceschema.SubscriptionClaudeConversion
+		require.NoError(t, db.Where("user_subscription_id = ?", sub.Id).Find(&records).Error)
+		require.Len(t, records, 12)
+		remaining, credited := sub.AmountTotal, int64(0)
+		for range 12 {
+			remaining -= remaining * 25 / 100
+		}
+		for _, record := range records {
+			credited += int64(record.TargetQuota)
+		}
+		var source billingschema.BillingBalanceSnapshot
+		require.NoError(t, db.Table("billing.balance_snapshots AS b").Select("b.*").Joins("JOIN billing.accounts a ON a.account_id=b.account_id").Where("a.owner_type = ? AND a.owner_id = ?", "user_subscription", sub.Id).First(&source).Error)
+		require.Equal(t, remaining, source.AvailableBalance)
+		require.Zero(t, source.ReservedBalance)
+		require.LessOrEqual(t, credited, (sub.AmountTotal-remaining)*32000000/33600000)
+	})
 	t.Run("same conversion key twelve callers one credit", func(t *testing.T) {
 		user, _, sub := seed(t)
 		key := fmt.Sprintf("pg-convert-same-%d", user.Id)

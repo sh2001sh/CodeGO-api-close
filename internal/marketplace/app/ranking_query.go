@@ -321,10 +321,16 @@ func betterFastest(current *GroupHighlight, candidate GroupHighlight) bool {
 }
 
 func publicSourceLabel(channel marketplaceschema.Channel) string {
-	if channel.SourceLabelStatus != marketplacedomain.SourceLabelApproved {
+	label := channel.SubmittedSourceLabel
+	if strings.TrimSpace(label) == "" {
+		// Older rows may only have the former reviewed label.
+		label = channel.ApprovedSourceLabel
+	}
+	label, err := normalizeSourceLabel(label)
+	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(channel.ApprovedSourceLabel)
+	return label
 }
 
 func sortGroupItems(items []GroupListItem, field, direction string, models ...string) {

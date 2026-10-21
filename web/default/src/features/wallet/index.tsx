@@ -136,9 +136,7 @@ export function Wallet(props: WalletProps) {
                 <TabsTrigger value='funding'>
                   {t('Top up and redeem')}
                 </TabsTrigger>
-                <TabsTrigger value='conversion'>
-                  {t('旧套餐转余额')}
-                </TabsTrigger>
+                <TabsTrigger value='conversion'>{t('套餐转余额')}</TabsTrigger>
                 <TabsTrigger value='reset-redemption'>
                   {t('刷新权益')}
                 </TabsTrigger>

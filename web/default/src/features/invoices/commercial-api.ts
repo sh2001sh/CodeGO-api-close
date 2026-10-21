@@ -55,14 +55,25 @@ export async function downloadInvoice(
   order: InvoiceEligibleOrder,
   action: 'document' | 'corrections' | 'credit-note' = 'document',
   body?: InvoiceIssueInput,
-  number?: string
+  number?: string,
+  batchOrders?: InvoiceEligibleOrder[]
 ) {
   let response
   try {
     response = await api.request<Blob>({
-      url: `${path(order)}/${action}`,
-      method: body || action === 'credit-note' ? 'POST' : 'GET',
-      data: body,
+      url: batchOrders
+        ? '/api/invoices/batches/document'
+        : `${path(order)}/${action}`,
+      method: batchOrders || body || action === 'credit-note' ? 'POST' : 'GET',
+      data: batchOrders
+        ? {
+            ...body,
+            orders: batchOrders.map((item) => ({
+              source_type: item.source_type,
+              trade_no: item.trade_no,
+            })),
+          }
+        : body,
       params: number ? { number } : undefined,
       responseType: 'blob',
       skipErrorHandler: true,

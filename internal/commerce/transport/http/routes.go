@@ -77,6 +77,7 @@ func RegisterCommerceRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimi
 		invoiceRoute.GET("/eligible-orders", listInvoiceEligibleOrders)
 		invoiceRoute.GET("/requests", listSelfInvoiceRequests)
 		invoiceRoute.POST("/requests", middleware.CriticalRateLimit(), createInvoiceRequest)
+		invoiceRoute.POST("/batches/document", middleware.CriticalRateLimit(), commercialInvoiceHandler("batch"))
 		invoiceRoute.GET("/orders/:source/:trade_no/document", commercialInvoiceHandler("download"))
 		invoiceRoute.POST("/orders/:source/:trade_no/document", middleware.CriticalRateLimit(), commercialInvoiceHandler("issue"))
 		invoiceRoute.GET("/orders/:source/:trade_no/documents", commercialInvoiceHandler("list"))

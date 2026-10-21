@@ -1,5 +1,7 @@
 // Hong Kong Traditional Chinese article text. Keep in sync with content.ts.
 export const traditionalText: Readonly<Record<string, string>> = {
+  '在商业发票页勾选 2–100 笔同币种订单，可跨页合并开具一张发票。只能选择未申请开票且未发生退款的已付款订单；金额按原订单实付合计。合并后，从任一成员订单均可下载同一张发票、查看更正记录及已确认退款的贷项单。':
+    '在商業發票頁勾選 2–100 筆同幣種訂單，可跨頁合併開具一張發票。只能選擇未申請開票且未發生退款的已付款訂單；金額按原訂單實付合計。合併後，從任一成員訂單均可下載同一張發票、查看更正記錄及已確認退款的貸項單。',
   'Codex Fast 模式与双倍计费': 'Codex Fast 模式與雙倍計費',
   '在支持 Fast 的模型与渠道上，Responses 或 Chat Completions 请求可设置 service_tier: "fast"；旧名称 "priority" 含义相同。Codex 客户端可在配置中设置 service_tier = "fast"，支持此功能的版本也可使用 /fast。Fast 是否可用取决于上游，开启后不承诺固定速度。':
     '在支持 Fast 的模型與渠道上，Responses 或 Chat Completions 請求可設置 service_tier: "fast"；舊名稱 "priority" 含義相同。Codex 客戶端可在配置中設置 service_tier = "fast"，支持此功能的版本也可使用 /fast。Fast 是否可用取決於上游，開啟後不承諾固定速度。',

@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com.
 */
 import { Link } from '@tanstack/react-router'
 import i18n from '@/i18n/config'
-import { BadgeCheck, Check, ChevronDown, Info, Plus, Store } from 'lucide-react'
+import { Check, ChevronDown, Info, Plus, Store } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
 import { classifyRequestHealth } from '@/lib/request-health'
@@ -165,21 +165,33 @@ export function MarketGroupCard(props: {
               <Popover>
                 <PopoverTrigger
                   render={
-                    <button type='button' className='market-source-trigger' />
+                    <button
+                      type='button'
+                      className='market-source-trigger max-w-full min-w-0'
+                    />
                   }
                 >
-                  {localizedSourceLabel(group.source_label, i18n.language)}
-                  {group.model_consistency_status === 'passed' ? (
-                    <BadgeCheck size={12} aria-hidden='true' />
-                  ) : (
-                    <Info size={12} aria-hidden='true' />
-                  )}
+                  <span className='min-w-0 truncate'>
+                    {!isOfficial && `${t('渠道主声明')} · `}
+                    {localizedSourceLabel(
+                      group.source_label || '未声明来源',
+                      i18n.language
+                    )}
+                  </span>
+                  <Info size={12} className='shrink-0' aria-hidden='true' />
                 </PopoverTrigger>
                 <PopoverContent
                   className='market-source-popover w-[min(360px,calc(100vw-32px))] rounded-2xl p-4'
                   align='start'
                 >
-                  <strong>{t('来源核验')}</strong>
+                  <strong>
+                    {isOfficial ? t('来源核验') : t('渠道主声明')}
+                  </strong>
+                  {!isOfficial && (
+                    <p className='text-muted-foreground text-xs leading-relaxed'>
+                      {t('来源由渠道主自行声明，平台检测不代表来源核验。')}
+                    </p>
+                  )}
                   <ModelConsistencyBadge
                     status={group.model_consistency_status}
                   />
@@ -188,7 +200,7 @@ export function MarketGroupCard(props: {
                       <dt>{t('来源')}</dt>
                       <dd>
                         {localizedSourceLabel(
-                          group.source_label,
+                          group.source_label || '未声明来源',
                           i18n.language
                         )}
                       </dd>

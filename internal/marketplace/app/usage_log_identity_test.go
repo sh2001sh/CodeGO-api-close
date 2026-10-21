@@ -14,7 +14,7 @@ func TestEnrichUsageLogMarketplaceIdentity(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	require.NoError(t, db.AutoMigrate(&marketplaceschema.Channel{}, &marketplaceschema.Group{}))
 	require.NoError(t, db.Create(&[]marketplaceschema.Channel{
-		{ID: "10001", ApprovedSourceLabel: "Codex Plus", SourceLabelStatus: marketplacedomain.SourceLabelApproved},
+		{ID: "10001", SubmittedSourceLabel: "Codex Plus", ApprovedSourceLabel: "旧来源", SourceLabelStatus: marketplacedomain.SourceLabelDeclared},
 		{ID: "10002", ApprovedSourceLabel: "Codex Pro", SourceLabelStatus: marketplacedomain.SourceLabelApproved},
 	}).Error)
 	require.NoError(t, db.Create(&[]marketplaceschema.Group{

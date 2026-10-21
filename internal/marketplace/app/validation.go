@@ -9,6 +9,10 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 
 	gatewaycontract "github.com/sh2001sh/new-api/internal/gateway/contract"
 	marketplacedomain "github.com/sh2001sh/new-api/internal/marketplace/domain"
@@ -153,10 +157,29 @@ func validateMultiplier(multiplier float64) error {
 }
 
 func validateSourceLabel(_ string, label string) error {
-	if _, ok := canonicalSourceLabel(label); !ok {
-		return errors.New("请选择有效的渠道来源")
+	_, err := normalizeSourceLabel(label)
+	return err
+}
+
+const maxSourceLabelLength = 30
+
+func normalizeSourceLabel(label string) (string, error) {
+	label = strings.TrimSpace(norm.NFKC.String(label))
+	if label == "" {
+		return "", errors.New("请填写来源声明")
 	}
-	return nil
+	if !utf8.ValidString(label) || utf8.RuneCountInString(label) > maxSourceLabelLength {
+		return "", errors.New("来源声明最多 30 个字符")
+	}
+	for _, char := range label {
+		if unicode.IsControl(char) || unicode.In(char, unicode.Cf) {
+			return "", errors.New("来源声明不能包含换行或隐藏字符")
+		}
+	}
+	if containsSourceLink(label) {
+		return "", errors.New("来源声明不能包含链接、域名或 IP 地址")
+	}
+	return normalizePublicText(label, maxSourceLabelLength, false)
 }
 
 func validateVisibility(visibility string) error {

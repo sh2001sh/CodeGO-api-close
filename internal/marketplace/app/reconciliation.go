@@ -46,11 +46,15 @@ func ReconcileMarketplaceChannels() error {
 			if channel.Status == marketplacedomain.LifecycleSuspended || group.LifecycleStatus == marketplacedomain.LifecycleSuspended {
 				return syncPausedMarketplaceChannelWithDB(tx, channel, true)
 			}
-			label := reconciledSourceLabel(channel.ProviderType, channel.SubmittedSourceLabel)
+			sourceLabel := channel.SubmittedSourceLabel
+			if strings.TrimSpace(sourceLabel) == "" {
+				sourceLabel = channel.ApprovedSourceLabel
+			}
+			label := reconciledSourceLabel(channel.ProviderType, sourceLabel)
 			channel.SubmittedSourceLabel = label
-			// Startup reconciliation is not an administrator source review.
+			// Source labels are owner declarations, not administrator approvals.
 			if channel.SourceLabelStatus == "" {
-				channel.SourceLabelStatus = marketplacedomain.SourceLabelPending
+				channel.SourceLabelStatus = marketplacedomain.SourceLabelDeclared
 			}
 			normalizeInternalGroupName(&group, channel.ID, label)
 			if err := backfillConnectivityTestStatus(tx, channel); err != nil {
@@ -135,7 +139,7 @@ func needsVerificationUpgrade(channel *marketplaceschema.Channel) (bool, error) 
 }
 
 func reconciledSourceLabel(provider, value string) string {
-	if label, ok := canonicalSourceLabel(value); ok {
+	if label := strings.TrimSpace(value); label != "" {
 		return label
 	}
 	switch strings.TrimSpace(provider) {

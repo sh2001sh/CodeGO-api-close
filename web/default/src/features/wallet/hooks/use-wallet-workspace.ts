@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { getSelf } from '@/lib/api'
 import { useStatus } from '@/hooks/use-status'
@@ -18,7 +19,7 @@ import {
   isStripePayment,
   isWaffoPancakePayment,
 } from '../lib'
-import { type StripeCurrency } from '../lib/stripe'
+import { getStripeCurrencyForLanguage } from '../lib/stripe'
 import type {
   CreemProduct,
   PaymentMethod,
@@ -33,6 +34,8 @@ import { useWaffoPancakePayment } from './use-waffo-pancake-payment'
 import { useWaffoPayment } from './use-waffo-payment'
 
 export function useWalletWorkspace() {
+  const { i18n } = useTranslation()
+  const stripeCurrency = getStripeCurrencyForLanguage(i18n.language)
   // Keep the authenticated profile visible while the wallet profile request is
   // loading. The request can be slow when the ledger is busy; rendering a
   // zero-valued placeholder here makes a real balance look like it was lost.
@@ -53,7 +56,6 @@ export function useWalletWorkspace() {
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null)
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<PaymentMethod>()
-  const [stripeCurrency, setStripeCurrency] = useState<StripeCurrency>('HKD')
   const [paymentLoading, setPaymentLoading] = useState<string | null>(null)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [billingDialogOpen, setBillingDialogOpen] = useState(false)
@@ -87,7 +89,7 @@ export function useWalletWorkspace() {
     processPayment,
     nowPaymentsPayment,
     clearNowPaymentsPayment,
-  } = usePayment()
+  } = usePayment(topupAmount, selectedPaymentMethod?.type || '', stripeCurrency)
   const { redeeming, redeemCode } = useRedemption()
   const { processing: creemProcessing, processCreemPayment } = useCreemPayment()
   const { processWaffoPayment } = useWaffoPayment()
@@ -188,64 +190,54 @@ export function useWalletWorkspace() {
       const minTopup = getMinTopupAmount(topupInfo)
       setTopupAmount(minTopup)
 
-      const defaultPaymentType = getDefaultPaymentType(topupInfo)
+      const defaultPaymentType =
+        stripeCurrency !== 'CNY' && topupInfo.enable_stripe_topup
+          ? 'stripe'
+          : getDefaultPaymentType(topupInfo)
       setSelectedPaymentMethod(
         topupInfo.pay_methods.find(
           (method) => method.type === defaultPaymentType
         )
       )
-      calculatePaymentAmount(minTopup, defaultPaymentType)
     }
-  }, [topupInfo, topupAmount, calculatePaymentAmount])
+  }, [topupInfo, topupAmount, stripeCurrency])
 
-  const getCurrentPaymentType = useCallback(() => {
-    return selectedPaymentMethod?.type || getDefaultPaymentType(topupInfo)
-  }, [selectedPaymentMethod, topupInfo])
-
-  const handleSelectPreset = useCallback(
-    (preset: PresetAmount) => {
-      setTopupAmount(preset.value)
-      setSelectedPreset(preset.value)
-      calculatePaymentAmount(
-        preset.value,
-        getCurrentPaymentType(),
+  useEffect(() => {
+    if (topupAmount > 0 && selectedPaymentMethod) {
+      void calculatePaymentAmount(
+        topupAmount,
+        selectedPaymentMethod.type,
         stripeCurrency
       )
-    },
-    [calculatePaymentAmount, getCurrentPaymentType, stripeCurrency]
-  )
+    }
+  }, [
+    calculatePaymentAmount,
+    selectedPaymentMethod,
+    stripeCurrency,
+    topupAmount,
+  ])
 
-  const handleTopupAmountChange = useCallback(
-    (amount: number) => {
-      setTopupAmount(amount)
-      setSelectedPreset(null)
-      calculatePaymentAmount(amount, getCurrentPaymentType(), stripeCurrency)
-    },
-    [calculatePaymentAmount, getCurrentPaymentType, stripeCurrency]
-  )
+  const handleSelectPreset = useCallback((preset: PresetAmount) => {
+    setTopupAmount(preset.value)
+    setSelectedPreset(preset.value)
+  }, [])
+
+  const handleTopupAmountChange = useCallback((amount: number) => {
+    setTopupAmount(amount)
+    setSelectedPreset(null)
+  }, [])
 
   const handlePaymentMethodSelect = useCallback(
-    async (method: PaymentMethod) => {
-      setSelectedPaymentMethod(method)
-      setPaymentLoading(method.type)
-
-      try {
-        const minTopup = method.min_topup || getMinTopupAmount(topupInfo)
-        if (topupAmount < minTopup) {
-          return
-        }
-
-        const quoted = await calculatePaymentAmount(
-          topupAmount,
-          method.type,
-          stripeCurrency
-        )
-        if (quoted > 0) setConfirmDialogOpen(true)
-      } finally {
-        setPaymentLoading(null)
+    (method: PaymentMethod) => {
+      const minTopup = method.min_topup || getMinTopupAmount(topupInfo)
+      if (topupAmount < minTopup) {
+        return
       }
+
+      setSelectedPaymentMethod(method)
+      setConfirmDialogOpen(true)
     },
-    [calculatePaymentAmount, topupAmount, topupInfo, stripeCurrency]
+    [topupAmount, topupInfo]
   )
 
   const handlePricingMethodChange = useCallback(
@@ -253,22 +245,8 @@ export function useWalletWorkspace() {
       const method = topupInfo?.pay_methods.find((item) => item.type === type)
       if (!method) return
       setSelectedPaymentMethod(method)
-      void calculatePaymentAmount(topupAmount, method.type, stripeCurrency)
     },
-    [calculatePaymentAmount, topupAmount, topupInfo, stripeCurrency]
-  )
-
-  const handleStripeCurrencyChange = useCallback(
-    (value: StripeCurrency) => {
-      setStripeCurrency(value)
-      const method = topupInfo?.pay_methods.find(
-        (item) => item.type === 'stripe'
-      )
-      if (!method) return
-      setSelectedPaymentMethod({ ...method, currency: value })
-      void calculatePaymentAmount(topupAmount, method.type, value)
-    },
-    [calculatePaymentAmount, topupAmount, topupInfo]
+    [topupInfo]
   )
 
   const paymentCurrency = isStripePayment(selectedPaymentMethod?.type || '')
@@ -276,7 +254,13 @@ export function useWalletWorkspace() {
     : selectedPaymentMethod?.currency || 'CNY'
 
   const handlePaymentConfirm = useCallback(async () => {
-    if (!selectedPaymentMethod) return
+    if (
+      !selectedPaymentMethod ||
+      calculating ||
+      paymentAmount <= 0 ||
+      processing
+    )
+      return
 
     const isPancake = isWaffoPancakePayment(selectedPaymentMethod.type)
     const success = isPancake
@@ -292,6 +276,9 @@ export function useWalletWorkspace() {
       await fetchUser()
     }
   }, [
+    calculating,
+    paymentAmount,
+    processing,
     fetchUser,
     processPayment,
     processWaffoPancakePayment,
@@ -365,7 +352,6 @@ export function useWalletWorkspace() {
     paymentAmount,
     paymentCurrency,
     stripeCurrency,
-    handleStripeCurrencyChange,
     handlePricingMethodChange,
     calculating,
     paymentLoading,

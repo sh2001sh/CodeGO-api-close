@@ -42,9 +42,15 @@ import type { NowPaymentsPaymentResponse } from '../types'
 // Payment Hook
 // ============================================================================
 
-export function usePayment() {
+export function usePayment(
+  topupAmount: number,
+  paymentType: string,
+  currency: StripeCurrency
+) {
   const quoteSequence = useRef(0)
   const [amount, setAmount] = useState<number>(0)
+  const [quoteKey, setQuoteKey] = useState('')
+  const currentQuoteKey = JSON.stringify([topupAmount, paymentType, currency])
   const [calculating, setCalculating] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [nowPaymentsPayment, setNowPaymentsPayment] =
@@ -93,7 +99,10 @@ export function usePayment() {
         if (sequence === quoteSequence.current) setAmount(0)
         return 0
       } finally {
-        if (sequence === quoteSequence.current) setCalculating(false)
+        if (sequence === quoteSequence.current) {
+          setQuoteKey(JSON.stringify([topupAmount, paymentType, currency]))
+          setCalculating(false)
+        }
       }
     },
     []
@@ -186,12 +195,12 @@ export function usePayment() {
   )
 
   return {
-    amount,
-    calculating,
+    amount: quoteKey === currentQuoteKey ? amount : 0,
+    calculating:
+      calculating || (topupAmount > 0 && quoteKey !== currentQuoteKey),
     processing,
     calculatePaymentAmount,
     processPayment,
-    setAmount,
     nowPaymentsPayment,
     clearNowPaymentsPayment: () => setNowPaymentsPayment(undefined),
   }

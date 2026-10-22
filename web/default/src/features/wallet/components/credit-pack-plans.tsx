@@ -13,7 +13,6 @@ import { formatPaymentAmount } from '../lib/format'
 import { getStripePlanAmount, type StripeCurrency } from '../lib/stripe'
 import type { TopupInfo } from '../types'
 import { CheckoutMethodSelect } from './checkout-method-select'
-import { StripeCurrencySelect } from './stripe-currency-select'
 import { getEpayMethods } from './subscription-plans-card'
 
 export function CreditPackPlans(props: {
@@ -24,7 +23,6 @@ export function CreditPackPlans(props: {
   paymentMethod?: string
   onPaymentMethodChange: (value: string) => void
   stripeCurrency: StripeCurrency
-  onStripeCurrencyChange: (value: StripeCurrency) => void
   status?: Record<string, unknown> | null
 }) {
   const { t } = useTranslation()
@@ -54,12 +52,6 @@ export function CreditPackPlans(props: {
             methods={getEpayMethods(props.topupInfo?.pay_methods)}
             enableStripe={props.topupInfo?.enable_stripe_topup}
           />
-          {props.paymentMethod === 'stripe' && (
-            <StripeCurrencySelect
-              value={props.stripeCurrency}
-              onChange={props.onStripeCurrencyChange}
-            />
-          )}
         </div>
       </header>
       <div className='commerce-credit-list'>

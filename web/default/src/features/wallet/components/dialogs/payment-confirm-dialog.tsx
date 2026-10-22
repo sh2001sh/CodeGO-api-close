@@ -32,9 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { DEFAULT_DISCOUNT_RATE } from '../../constants'
 import { formatPaymentAmount, getPaymentIcon } from '../../lib'
 import { isStripePayment } from '../../lib/payment'
-import type { StripeCurrency } from '../../lib/stripe'
 import type { PaymentMethod } from '../../types'
-import { StripeCurrencySelect } from '../stripe-currency-select'
 
 interface PaymentConfirmDialogProps {
   open: boolean
@@ -42,8 +40,6 @@ interface PaymentConfirmDialogProps {
   onConfirm: () => void
   topupAmount: number
   currency: string
-  stripeCurrency: StripeCurrency
-  onStripeCurrencyChange: (currency: StripeCurrency) => void
   paymentAmount: number
   paymentMethod: PaymentMethod | undefined
   calculating: boolean
@@ -58,8 +54,6 @@ export function PaymentConfirmDialog({
   topupAmount,
   paymentAmount,
   currency,
-  stripeCurrency,
-  onStripeCurrencyChange,
   paymentMethod,
   calculating,
   processing,
@@ -85,11 +79,7 @@ export function PaymentConfirmDialog({
               <span className='text-muted-foreground text-sm'>
                 {t('Payment currency')}
               </span>
-              <StripeCurrencySelect
-                value={stripeCurrency}
-                onChange={onStripeCurrencyChange}
-                disabled={processing}
-              />
+              <span className='font-medium'>{currency}</span>
             </div>
           )}
           <div className='flex items-center justify-between'>

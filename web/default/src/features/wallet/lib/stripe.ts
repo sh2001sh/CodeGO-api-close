@@ -1,7 +1,14 @@
+import { normalizeInterfaceLanguage } from '@/i18n/languages'
+
 export type StripeCurrency = 'HKD' | 'CNY' | 'USD'
 
-export function isStripeCurrency(value: string): value is StripeCurrency {
-  return value === 'HKD' || value === 'CNY' || value === 'USD'
+export function getStripeCurrencyForLanguage(
+  language?: string
+): StripeCurrency {
+  const normalized = normalizeInterfaceLanguage(language)
+  if (normalized === 'zh-TW') return 'HKD'
+  if (normalized === 'zh') return 'CNY'
+  return 'USD'
 }
 
 export function getStripeUnitPrice(

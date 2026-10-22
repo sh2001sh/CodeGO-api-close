@@ -38,7 +38,6 @@ import { formatSubscriptionPlanPrice } from '@/features/subscriptions/lib'
 import type { PlanRecord } from '@/features/subscriptions/types'
 import { CheckoutMethodSelect } from '@/features/wallet/components/checkout-method-select'
 import { ResetOpportunityEntryCard } from '@/features/wallet/components/reset-opportunity-entry-card'
-import { StripeCurrencySelect } from '@/features/wallet/components/stripe-currency-select'
 import { getEpayMethods } from '@/features/wallet/components/subscription-plans-card'
 import { WalletWorkspaceShell } from '@/features/wallet/components/wallet-workspace-shell'
 import { useWalletWorkspace } from '@/features/wallet/hooks/use-wallet-workspace'
@@ -86,6 +85,7 @@ export function PackagesPage() {
 
   const selectedPlanPaymentMethod =
     planPaymentMethod ||
+    workspace.selectedPaymentMethod?.type ||
     epayMethods[0]?.type ||
     (topupInfo?.enable_stripe_topup ? 'stripe' : '')
   const formatPlanPrice = (amount: number, currency: string) => {
@@ -264,12 +264,6 @@ export function PackagesPage() {
                           methods={epayMethods}
                           enableStripe={topupInfo?.enable_stripe_topup}
                         />
-                        {selectedPlanPaymentMethod === 'stripe' && (
-                          <StripeCurrencySelect
-                            value={workspace.stripeCurrency}
-                            onChange={workspace.handleStripeCurrencyChange}
-                          />
-                        )}
                       </div>
                     }
                     formatPrice={formatPlanPrice}

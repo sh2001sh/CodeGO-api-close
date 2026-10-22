@@ -38,7 +38,6 @@ import {
   getMinTopupAmount,
 } from '../lib'
 import { isStripePayment } from '../lib/payment'
-import { type StripeCurrency } from '../lib/stripe'
 import type {
   PaymentMethod,
   PresetAmount,
@@ -48,7 +47,6 @@ import type {
 } from '../types'
 import { CreemProductsSection } from './creem-products-section'
 import { RedemptionCodePanel } from './redemption-code-panel'
-import { StripeCurrencySelect } from './stripe-currency-select'
 
 interface RechargeFormCardProps {
   topupInfo: TopupInfo | null
@@ -58,8 +56,6 @@ interface RechargeFormCardProps {
   topupAmount: number
   onTopupAmountChange: (amount: number) => void
   paymentCurrency: string
-  stripeCurrency: StripeCurrency
-  onStripeCurrencyChange: (currency: StripeCurrency) => void
   stripeUnitPrice: number
   discountRate: number
   paymentAmount: number
@@ -144,13 +140,6 @@ export function RechargeFormCard(props: RechargeFormCardProps) {
         {hasAnyTopup || !redemptionEnabled ? (
           <header className='commerce-recharge-heading'>
             <h2>{t('Balance top-up')}</h2>
-            {props.topupInfo?.enable_stripe_topup && (
-              <StripeCurrencySelect
-                value={stripeSelected ? props.stripeCurrency : 'CNY'}
-                onChange={props.onStripeCurrencyChange}
-                disabled={!!props.paymentLoading}
-              />
-            )}
           </header>
         ) : null}
         {hasConfigurableTopup ? (

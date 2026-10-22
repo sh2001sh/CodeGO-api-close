@@ -158,9 +158,6 @@ export function Wallet(props: WalletProps) {
                     paymentMethod={workspace.selectedPaymentMethod?.type}
                     onPaymentMethodChange={workspace.handlePricingMethodChange}
                     stripeCurrency={workspace.stripeCurrency}
-                    onStripeCurrencyChange={
-                      workspace.handleStripeCurrencyChange
-                    }
                     status={workspace.status}
                     plans={
                       workspace.publicPlansError ? [] : workspace.publicPlans
@@ -182,10 +179,6 @@ export function Wallet(props: WalletProps) {
                     topupAmount={workspace.topupAmount}
                     onTopupAmountChange={workspace.handleTopupAmountChange}
                     paymentCurrency={workspace.paymentCurrency}
-                    stripeCurrency={workspace.stripeCurrency}
-                    onStripeCurrencyChange={
-                      workspace.handleStripeCurrencyChange
-                    }
                     stripeUnitPrice={getStripeUnitPrice(
                       workspace.stripeCurrency,
                       workspace.status
@@ -291,8 +284,6 @@ export function Wallet(props: WalletProps) {
         onConfirm={workspace.handlePaymentConfirm}
         topupAmount={workspace.topupAmount}
         currency={workspace.paymentCurrency}
-        stripeCurrency={workspace.stripeCurrency}
-        onStripeCurrencyChange={workspace.handleStripeCurrencyChange}
         paymentAmount={workspace.paymentAmount}
         paymentMethod={workspace.selectedPaymentMethod}
         calculating={workspace.calculating}

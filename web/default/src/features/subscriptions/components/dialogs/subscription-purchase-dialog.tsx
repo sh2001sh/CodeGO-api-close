@@ -29,10 +29,10 @@ import {
   translatePlanTitle,
 } from '@/features/packages/lib/display'
 import { CheckoutMethodSelect } from '@/features/wallet/components/checkout-method-select'
-import { StripeCurrencySelect } from '@/features/wallet/components/stripe-currency-select'
 import { formatPaymentAmount } from '@/features/wallet/lib/format'
 import {
   getStripePlanAmount,
+  getStripeCurrencyForLanguage,
   type StripeCurrency,
 } from '@/features/wallet/lib/stripe'
 import {
@@ -182,11 +182,10 @@ function StatusItem(props: { label: string; value: ReactNode }) {
 }
 
 export function SubscriptionPurchaseDialog(props: Props) {
-  const { t } = useTranslation()
+  const { t, i18n: interfaceI18n } = useTranslation()
   const { status } = useStatus()
-  const [stripeCurrency, setStripeCurrency] = useState<StripeCurrency>(
-    props.stripeCurrency || 'HKD'
-  )
+  const stripeCurrency =
+    props.stripeCurrency || getStripeCurrencyForLanguage(interfaceI18n.language)
   const [paying, setPaying] = useState(false)
   const [selectedEpayMethod, setSelectedEpayMethod] = useState('')
   const [paymentTracker, setPaymentTracker] = useState<PaymentTracker>(
@@ -207,16 +206,15 @@ export function SubscriptionPurchaseDialog(props: Props) {
   useEffect(() => {
     if (!props.open) {
       setSelectedEpayMethod('')
-      setStripeCurrency(props.stripeCurrency || 'HKD')
       setPaymentTracker(EMPTY_PAYMENT_TRACKER)
       hasTriggeredSuccessRef.current = false
       return
     }
-    setStripeCurrency(props.stripeCurrency || 'HKD')
     setSelectedEpayMethod(
       (current) =>
         current ||
         props.preferredPaymentMethod ||
+        (props.enableStripe && stripeCurrency !== 'CNY' ? 'stripe' : '') ||
         paymentMethods[0]?.type ||
         (props.enableStripe ? 'stripe' : 'creem')
     )
@@ -224,8 +222,8 @@ export function SubscriptionPurchaseDialog(props: Props) {
     paymentMethods,
     props.open,
     props.preferredPaymentMethod,
-    props.stripeCurrency,
     props.enableStripe,
+    stripeCurrency,
   ])
 
   useEffect(() => {
@@ -365,7 +363,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
           stripeCurrency
         )
       : formatSubscriptionPlanPrice(amount, plan.currency)
-  const displayPrice = formatSelectedPrice(effectiveAmount)
+  const displayPrice = paymentTracker.orderId
+    ? formatPaymentAmount(paymentTracker.amountDue, paymentTracker.currency)
+    : formatSelectedPrice(effectiveAmount)
   const actionLabel = translatePlanAction(planRecord.action, t)
   const purchaseType = props.purchaseType || 'normal'
   const groupBuyId = props.groupBuyId || 0
@@ -765,7 +765,8 @@ export function SubscriptionPurchaseDialog(props: Props) {
                   </div>
                   <div className='commerce-purchase-amount'>
                     {firstPurchaseDiscountApplied &&
-                    baseAmount > effectiveAmount ? (
+                    baseAmount > effectiveAmount &&
+                    !paymentTracker.orderId ? (
                       <div className='text-muted-foreground text-sm line-through'>
                         {formatSelectedPrice(baseAmount)}
                       </div>
@@ -872,13 +873,6 @@ export function SubscriptionPurchaseDialog(props: Props) {
                       enableCreem={hasCreem}
                       disabled={disablePurchase}
                     />
-                    {stripeSelected && (
-                      <StripeCurrencySelect
-                        value={stripeCurrency}
-                        onChange={setStripeCurrency}
-                        disabled={disablePurchase}
-                      />
-                    )}
                     <Button
                       className='w-full sm:ml-auto sm:w-auto'
                       disabled={disablePurchase || !selectedEpayMethod}

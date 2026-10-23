@@ -6,7 +6,6 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { formatUsdAmount } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { SecureVerificationDialog } from '@/features/auth/secure-verification'
 import {
   getWalletTransfers,
   isApiSuccess,
@@ -105,7 +104,6 @@ function WalletPeerTransferForm(
   }, [t])
 
   const password = useWalletTransferPassword({
-    security: overview?.security,
     reload: loadOverview,
   })
 
@@ -458,18 +456,6 @@ function WalletPeerTransferForm(
         onSendEmailCode={() => void password.sendEmailCode()}
         onBindEmail={() => window.location.assign('/profile')}
         onSubmit={password.configure}
-      />
-      <SecureVerificationDialog
-        open={password.verification.open}
-        onOpenChange={password.verification.setOpen}
-        methods={password.verification.methods}
-        state={password.verification.state}
-        onVerify={(method, code) => {
-          void password.verification.executeVerification(method, code)
-        }}
-        onCancel={password.verification.cancel}
-        onCodeChange={password.verification.setCode}
-        onMethodChange={password.verification.switchMethod}
       />
     </>
   )

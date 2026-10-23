@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import type { ConfigureWalletTransferPasswordRequest } from '../types'
 import {
+  EmailCodeField,
   PasswordField,
   PaymentPasswordVerification,
   type VerificationMethod,
@@ -82,7 +83,11 @@ export function WalletTransferPasswordDialog(
 function usePasswordDialogForm(
   props: Pick<
     WalletTransferPasswordDialogProps,
-    'open' | 'passwordSet' | 'requiresAccountPassword' | 'submitting'
+    | 'open'
+    | 'passwordSet'
+    | 'requiresAccountPassword'
+    | 'emailBound'
+    | 'submitting'
   >
 ): PasswordDialogFormState {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -103,14 +108,20 @@ function usePasswordDialogForm(
     setConfirmPassword('')
     setEmailCode('')
     setVisible(false)
-    setVerificationMethod('payment_password')
-  }, [props.open])
+    setVerificationMethod(
+      !props.passwordSet && !props.requiresAccountPassword
+        ? 'email'
+        : 'payment_password'
+    )
+  }, [props.open, props.passwordSet, props.requiresAccountPassword])
 
   const verified = props.passwordSet
     ? verificationMethod === 'payment_password'
       ? oldPaymentPassword.length > 0
       : emailCode.length === 6
-    : !props.requiresAccountPassword || currentPassword.length > 0
+    : props.requiresAccountPassword
+      ? currentPassword.length > 0
+      : props.emailBound && emailCode.length === 6
   const validNewPassword =
     newPaymentPassword.length >= 8 &&
     /[A-Za-z]/.test(newPaymentPassword) &&
@@ -196,11 +207,26 @@ function PasswordIdentityVerification(
       />
     )
   }
+  if (props.emailBound) {
+    return (
+      <EmailCodeField
+        emailCode={props.emailCode}
+        emailMasked={props.emailMasked}
+        emailSending={props.emailSending}
+        emailSecondsLeft={props.emailSecondsLeft}
+        emailCountdownActive={props.emailCountdownActive}
+        emailBound={props.emailBound}
+        visible={props.visible}
+        onEmailCodeChange={props.setEmailCode}
+        onSendEmailCode={props.onSendEmailCode}
+      />
+    )
+  }
   return (
-    <div className='border-border bg-muted/35 rounded-md border px-3 py-2 text-xs leading-5'>
-      {t(
-        'Your account uses passwordless sign-in. You can set a payment password directly.'
-      )}
+    <div className='flex justify-start'>
+      <Button type='button' variant='outline' onClick={props.onBindEmail}>
+        {t('绑定邮箱')}
+      </Button>
     </div>
   )
 }
@@ -262,15 +288,23 @@ function buildPasswordRequest(
   return {
     verification_method: props.passwordSet
       ? props.verificationMethod
-      : undefined,
-    current_password: props.currentPassword,
+      : props.requiresAccountPassword
+        ? undefined
+        : 'email',
+    current_password:
+      !props.passwordSet && props.requiresAccountPassword
+        ? props.currentPassword
+        : undefined,
     old_payment_password:
-      props.verificationMethod === 'payment_password'
+      props.passwordSet && props.verificationMethod === 'payment_password'
         ? props.oldPaymentPassword
         : undefined,
     new_payment_password: props.newPaymentPassword,
     confirm_password: props.confirmPassword,
     email_code:
-      props.verificationMethod === 'email' ? props.emailCode : undefined,
+      (!props.requiresAccountPassword && !props.passwordSet) ||
+      props.verificationMethod === 'email'
+        ? props.emailCode
+        : undefined,
   }
 }

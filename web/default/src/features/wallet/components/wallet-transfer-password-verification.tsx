@@ -66,7 +66,7 @@ export function PaymentPasswordVerification(props: {
   )
 }
 
-function EmailCodeField(
+export function EmailCodeField(
   props: Omit<
     Parameters<typeof PaymentPasswordVerification>[0],
     | 'method'

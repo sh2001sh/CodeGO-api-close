@@ -3,22 +3,17 @@ import interfaceI18n from '@/i18n/config'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useCountdown } from '@/hooks/use-countdown'
-import { useSecureVerification } from '@/features/auth/secure-verification'
 import {
   configureWalletTransferPassword,
   isApiSuccess,
   sendWalletTransferPasswordEmailCode,
 } from '../api'
-import type {
-  ConfigureWalletTransferPasswordRequest,
-  WalletTransferSecurityOverview,
-} from '../types'
+import type { ConfigureWalletTransferPasswordRequest } from '../types'
 
 export function useWalletTransferPassword(options: {
-  security: WalletTransferSecurityOverview | undefined
   reload: () => Promise<void>
 }) {
-  const { security, reload } = options
+  const { reload } = options
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -31,8 +26,6 @@ export function useWalletTransferPassword(options: {
     countdown.reset()
     await reload()
   }, [countdown, reload, t])
-  const verification = useSecureVerification({ onSuccess: () => void finish() })
-
   const configure = async (request: ConfigureWalletTransferPasswordRequest) => {
     const perform = async () => {
       const response = await configureWalletTransferPassword(request)
@@ -45,16 +38,6 @@ export function useWalletTransferPassword(options: {
     }
     setSubmitting(true)
     try {
-      if (!security?.password_set && !security?.requires_account_password) {
-        const result = await verification.withVerification(perform, {
-          title: t('Verify before setting a payment password'),
-          description: t(
-            'Confirm your identity with 2FA or Passkey before enabling quota transfers.'
-          ),
-        })
-        if (result) await finish()
-        return
-      }
       await perform()
       await finish()
     } catch (reason) {
@@ -97,7 +80,6 @@ export function useWalletTransferPassword(options: {
     setOpen,
     submitting,
     configure,
-    verification,
     emailSending,
     emailSecondsLeft: countdown.secondsLeft,
     emailCountdownActive: countdown.isActive,

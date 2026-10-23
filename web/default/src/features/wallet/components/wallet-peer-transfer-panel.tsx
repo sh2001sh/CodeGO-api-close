@@ -74,17 +74,16 @@ export function WalletPeerTransferPanel(props: {
         </div>
       </header>
 
-      {!props.overview.security.email_bound ||
-      !props.overview.security.password_set ||
-      props.locked ? (
+      {!props.overview.security.password_set || props.locked ? (
         <div className='border-border bg-muted/35 mt-4 flex items-start gap-3 rounded-md border p-3'>
           <LockKeyhole className='text-primary mt-0.5 size-4 shrink-0' />
           <div className='min-w-0 text-xs leading-5'>
             <p className='font-medium'>
-              {!props.overview.security.email_bound
-                ? i18n.t('绑定邮箱后才能设置支付密码')
-                : props.locked
-                  ? t('Transfers are temporarily locked')
+              {props.locked
+                ? t('Transfers are temporarily locked')
+                : !props.overview.security.requires_account_password &&
+                    !props.overview.security.email_bound
+                  ? i18n.t('绑定邮箱后才能设置支付密码')
                   : t('Set a payment password before your first transfer')}
             </p>
             {props.locked ? (
@@ -110,7 +109,9 @@ export function WalletPeerTransferPanel(props: {
               className='font-mono tracking-widest uppercase'
               placeholder='ABC123'
               onChange={(event) =>
-                props.onRecipientIdChange(event.target.value.trim().toUpperCase())
+                props.onRecipientIdChange(
+                  event.target.value.trim().toUpperCase()
+                )
               }
               onKeyDown={(event) => {
                 if (event.key === 'Enter') props.onLookupRecipient()

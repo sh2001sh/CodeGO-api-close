@@ -76,6 +76,7 @@ export interface PlanRecord {
   action?: 'subscribe' | 'renew' | 'upgrade' | 'disabled'
   base_amount_due?: number
   amount_due?: number
+  applied_blind_box_discount_rate?: number
   disabled_reason?: string
   first_purchase_discount_applied?: boolean
   first_purchase_discount_multiplier?: number

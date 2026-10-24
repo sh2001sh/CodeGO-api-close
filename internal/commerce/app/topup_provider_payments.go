@@ -183,7 +183,7 @@ func QuoteStripeTopUpAmount(userID int, req StripePayRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney)
+	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney, req.Amount)
 	if payMoney <= 0.01 {
 		return "", errors.New("充值金额过低")
 	}
@@ -467,7 +467,7 @@ func QuoteWaffoTopUpAmount(userID int, req WaffoPayRequest) (string, error) {
 	if IsClaudeTopupWallet(walletType) {
 		payMoney = float64(req.Amount)
 	}
-	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney)
+	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney, req.Amount)
 	if payMoney <= 0.01 {
 		return "", errors.New("充值金额过低")
 	}
@@ -659,7 +659,7 @@ func QuoteWaffoPancakeTopUpAmount(userID int, req WaffoPancakePayRequest) (strin
 	if IsClaudeTopupWallet(walletType) {
 		payMoney = float64(req.Amount)
 	}
-	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney)
+	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney, req.Amount)
 	if payMoney <= 0.01 {
 		return "", errors.New("充值金额过低")
 	}

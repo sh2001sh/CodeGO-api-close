@@ -347,6 +347,8 @@ export function SubscriptionPurchaseDialog(props: Props) {
   )
   const firstPurchaseDiscountApplied =
     planRecord.first_purchase_discount_applied === true
+  const blindBoxDiscountApplied =
+    Number(planRecord.applied_blind_box_discount_rate || 0) > 0
   const firstPurchaseDiscount = Number(
     (planRecord.first_purchase_discount_multiplier || 0) * 10
   )
@@ -439,6 +441,14 @@ export function SubscriptionPurchaseDialog(props: Props) {
       label: i18n.t('支付价格'),
       value: displayPrice,
     },
+    ...(blindBoxDiscountApplied
+      ? [
+          {
+            label: i18n.t('九折充值卡'),
+            value: i18n.t('单笔最高优惠 100 credits'),
+          },
+        ]
+      : []),
   ]
 
   const startPendingPayment = (

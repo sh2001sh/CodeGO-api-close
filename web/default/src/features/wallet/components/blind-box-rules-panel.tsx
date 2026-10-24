@@ -190,7 +190,7 @@ export function BlindBoxPropRules() {
     {
       title: i18n.t('九折充值卡'),
       detail: i18n.t(
-        '低概率权益；下一笔套餐购买或余额充值自动享受九折，仅使用一次'
+        '低概率权益；下一笔套餐购买或余额充值自动享受九折，单笔最高优惠 100 credits，仅使用一次'
       ),
     },
   ]

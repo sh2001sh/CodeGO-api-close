@@ -103,7 +103,7 @@ func CreatePendingSubscriptionOrderWithDiscounts(order *commerceschema.Subscript
 		}
 		if prop != nil {
 			appliedRate = prop.DiscountRate
-			order.Money = commercedomain.ApplyDiscountRateToMoney(baseMoney, prop.DiscountRate)
+			order.Money = commercedomain.ApplyDiscountRateToMoneyWithCap(baseMoney, prop.DiscountRate, blindBoxCheckoutMaximumDiscountCredits)
 		}
 		propID := 0
 		if prop != nil {

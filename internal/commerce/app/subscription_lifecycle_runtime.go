@@ -144,7 +144,7 @@ func applySubscriptionPreviewDiscounts(tx *gorm.DB, userID int, plan *commercesc
 	discountRate := GetUserBlindBoxSubscriptionDiscountRate(userID)
 	if discountRate > 0 {
 		preview.AppliedBlindBoxDiscountRate = discountRate
-		preview.AmountDue = commercedomain.ApplyDiscountRateToMoney(preview.AmountDue, discountRate)
+		preview.AmountDue = commercedomain.ApplyDiscountRateToMoneyWithCap(preview.AmountDue, discountRate, blindBoxCheckoutMaximumDiscountCredits)
 	}
 	return nil
 }

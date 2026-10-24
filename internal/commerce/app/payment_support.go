@@ -204,7 +204,9 @@ func GetTopupPayMoney(amount int64, group string, walletType string) float64 {
 	return GetPayMoney(amount, group)
 }
 
-func ApplyTopupBlindBoxDiscount(userID int, payMoney float64) float64 {
+const blindBoxCheckoutMaximumDiscountCredits = 100.0
+
+func ApplyTopupBlindBoxDiscount(userID int, payMoney float64, credits int64) float64 {
 	if userID <= 0 || payMoney <= 0 {
 		return payMoney
 	}
@@ -212,7 +214,8 @@ func ApplyTopupBlindBoxDiscount(userID int, payMoney float64) float64 {
 	if discountRate <= 0 {
 		return payMoney
 	}
-	return commercedomain.ApplyDiscountRateToMoney(payMoney, discountRate)
+	effectiveRate := commercedomain.CappedDiscountRate(float64(credits), discountRate, blindBoxCheckoutMaximumDiscountCredits)
+	return commercedomain.ApplyDiscountRateToMoney(payMoney, effectiveRate)
 }
 
 func NormalizeStoredTopupAmount(amount int64, walletType string) int64 {

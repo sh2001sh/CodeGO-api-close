@@ -126,7 +126,7 @@ func QuoteNowPaymentsTopUpAmount(userID int, req AmountRequest) (string, error) 
 		return "", fmt.Errorf("充值数量不能小于 %d", GetNowPaymentsMinTopup())
 	}
 	amount := GetNowPaymentsUSDTAmount(req.Amount)
-	amount = ApplyTopupBlindBoxDiscount(userID, amount)
+	amount = ApplyTopupBlindBoxDiscount(userID, amount, req.Amount)
 	if amount <= 0 {
 		return "", errors.New("充值金额过低")
 	}

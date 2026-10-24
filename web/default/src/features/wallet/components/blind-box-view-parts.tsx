@@ -184,6 +184,7 @@ function getPropFacts(
       value: `${t('套餐购买')} / ${t('余额充值')}`,
     })
     facts.push({ label: t('次数'), value: '1' })
+    facts.push({ label: t('优惠上限'), value: '100 credits' })
     facts.push({ label: t('生效方式'), value: t('下次订单自动生效') })
   }
   return facts

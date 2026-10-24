@@ -62,7 +62,8 @@ func CreatePendingTopUpOrderWithBlindBoxDiscount(topUp *commerceschema.TopUp) (f
 		}
 		if prop != nil {
 			appliedRate = prop.DiscountRate
-			topUp.Money = commercedomain.ApplyDiscountRateToMoney(topUp.Money, prop.DiscountRate)
+			effectiveRate := commercedomain.CappedDiscountRate(float64(topUp.Amount), prop.DiscountRate, blindBoxCheckoutMaximumDiscountCredits)
+			topUp.Money = commercedomain.ApplyDiscountRateToMoney(topUp.Money, effectiveRate)
 		}
 		// Freeze the same-currency checkout discount before mutable provider
 		// prices or card settings can change. Zero means no verifiable basis.

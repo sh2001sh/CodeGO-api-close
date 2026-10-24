@@ -71,6 +71,9 @@ export function PackagePlanCard(props: {
       : (props.record.amount_due ?? plan.price_amount)
   const firstPurchaseDiscountApplied =
     !isCreditPack && props.record.first_purchase_discount_applied === true
+  const blindBoxDiscountApplied =
+    !isCreditPack &&
+    Number(props.record.applied_blind_box_discount_rate || 0) > 0
   const firstPurchaseDiscount = Number(
     (props.record.first_purchase_discount_multiplier || 0) * 10
   )
@@ -161,6 +164,12 @@ export function PackagePlanCard(props: {
                 <Trans i18nKey={'套餐首购'} />{' '}
                 {Number(firstPurchaseDiscount.toFixed(1))}{' '}
                 <Trans i18nKey={'折'} />
+              </span>
+            ) : null}
+            {blindBoxDiscountApplied ? (
+              <span className='inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400'>
+                <Trans i18nKey={'九折充值卡'} /> ·{' '}
+                <Trans i18nKey={'单笔最高优惠 100 credits'} />
               </span>
             ) : null}
           </div>

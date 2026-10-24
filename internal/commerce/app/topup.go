@@ -127,7 +127,7 @@ func QuoteTopUpAmount(userID int, req AmountRequest) (string, error) {
 	}
 
 	payMoney := GetTopupPayMoney(req.Amount, group, walletType)
-	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney)
+	payMoney = ApplyTopupBlindBoxDiscount(userID, payMoney, req.Amount)
 	if payMoney <= 0.01 {
 		return "", errors.New("充值金额过低")
 	}

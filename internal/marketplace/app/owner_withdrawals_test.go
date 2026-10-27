@@ -47,6 +47,11 @@ func TestOwnerWithdrawalUsesFixedManualPayoutRateAndHidesPaymentAccount(t *testi
 	plaintext, err := platformsecurity.DecryptSecret(stored.PaymentDetailsCiphertext)
 	require.NoError(t, err)
 	require.Contains(t, plaintext, "owner@example.com")
+	overview, err := GetOwnerWithdrawalOverview(42)
+	require.NoError(t, err)
+	require.NotNil(t, overview.SavedPayment)
+	require.Equal(t, marketplaceschema.OwnerWithdrawalMethodAlipay, overview.SavedPayment.PaymentMethod)
+	require.Equal(t, "owner@example.com", overview.SavedPayment.PaymentAccount)
 
 	admin, err := ListAdminOwnerWithdrawals(AdminOwnerWithdrawalQuery{})
 	require.NoError(t, err)

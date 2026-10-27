@@ -110,6 +110,8 @@ export function OwnerWithdrawalPanel() {
   })
   const paymentMethod = form.watch('payment_method')
   const editPaymentMethod = editForm.watch('payment_method')
+  const paymentQRCodeID = form.watch('payment_qr_code_id')
+  const editPaymentQRCodeID = editForm.watch('payment_qr_code_id')
   const credits = Number(form.watch('credits') || 0)
   const rate = overview.data?.rate_cny_cents_per_credit ?? 95
   const payout = Number.isFinite(credits) ? credits * rate : 0
@@ -125,6 +127,15 @@ export function OwnerWithdrawalPanel() {
     },
     [editQRPreview, qrPreview]
   )
+
+  useEffect(() => {
+    const savedPayment = overview.data?.saved_payment
+    if (!savedPayment || form.formState.isDirty) return
+    form.reset({
+      ...savedPayment,
+      credits: Number(form.getValues('credits') || 100),
+    })
+  }, [form, form.formState.isDirty, overview.data?.saved_payment])
 
   const submit = form.handleSubmit((values) => {
     if (!canSubmit) {
@@ -148,7 +159,7 @@ export function OwnerWithdrawalPanel() {
       {
         onSuccess: () => {
           operation.current = null
-          form.reset({ ...defaultPayment, credits: 100 })
+          form.reset({ ...normalizedPayment(values), credits: 100 })
           setQRPreview('')
           toast.success(t('回收申请已提交'))
         },
@@ -162,13 +173,16 @@ export function OwnerWithdrawalPanel() {
 
   const startEdit = (item: OwnerWithdrawal) => {
     setEditing(item)
-    editForm.reset({
-      payment_method: item.payment_method,
-      payee_name: item.payee_name,
-      payment_account: '',
-      payment_bank_name: '',
-      payment_qr_code_id: '',
-    })
+    const savedPayment = overview.data?.saved_payment
+    editForm.reset(
+      savedPayment ?? {
+        payment_method: item.payment_method,
+        payee_name: item.payee_name,
+        payment_account: '',
+        payment_bank_name: '',
+        payment_qr_code_id: '',
+      }
+    )
   }
 
   const submitEdit = editForm.handleSubmit((values) => {
@@ -351,6 +365,7 @@ export function OwnerWithdrawalPanel() {
               <QRCodeUploadField
                 label={t('收款码')}
                 preview={qrPreview}
+                selected={paymentQRCodeID !== ''}
                 uploading={uploadQRCode.isPending}
                 error={form.formState.errors.payment_qr_code_id}
                 onFile={(file) => uploadPaymentQRCode(file, false)}
@@ -428,6 +443,7 @@ export function OwnerWithdrawalPanel() {
                 <QRCodeUploadField
                   label={t('收款码')}
                   preview={editQRPreview}
+                  selected={editPaymentQRCodeID !== ''}
                   uploading={uploadQRCode.isPending}
                   error={editForm.formState.errors.payment_qr_code_id}
                   onFile={(file) => uploadPaymentQRCode(file, true)}
@@ -556,10 +572,12 @@ function normalizedPayment(values: PaymentForm): OwnerWithdrawalPaymentInput {
 function QRCodeUploadField(props: {
   label: string
   preview: string
+  selected: boolean
   uploading: boolean
   error?: { message?: string }
   onFile: (file: File) => void
 }) {
+  const { t } = useTranslation()
   return (
     <label className='min-w-0 space-y-1.5'>
       <span className='text-sm font-medium'>{props.label}</span>
@@ -567,9 +585,9 @@ function QRCodeUploadField(props: {
         <ImageUp className='size-4 shrink-0' />
         <span className='min-w-0 flex-1 truncate text-sm'>
           {props.uploading
-            ? 'Uploading...'
-            : props.preview
-              ? 'Uploaded'
+            ? t('加载中…')
+            : props.selected
+              ? t('已上传')
               : props.label}
         </span>
         {props.preview && (

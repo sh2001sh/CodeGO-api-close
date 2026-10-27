@@ -53,6 +53,7 @@ import {
   updateSecurityAuditEvent,
   createOwnerWithdrawal,
   getAdminOwnerWithdrawals,
+  getAdminOwnerWithdrawalQRCode,
   getOwnerWithdrawalOverview,
   getOwnerWithdrawals,
   updateAdminOwnerWithdrawal,
@@ -471,6 +472,10 @@ export function useAdminOwnerWithdrawalUpdate() {
       })
     },
   })
+}
+
+export function useAdminOwnerWithdrawalQRCode() {
+  return useMutation({ mutationFn: getAdminOwnerWithdrawalQRCode })
 }
 
 export function useMyMarketplaceUsageLogs(

@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Check,
   ChevronDown,
   Clipboard,
+  LoaderCircle,
+  QrCode,
   RefreshCw,
   UserRoundPen,
 } from 'lucide-react'
@@ -15,10 +17,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import {
   useAdminOwnerWithdrawals,
+  useAdminOwnerWithdrawalQRCode,
   useAdminOwnerWithdrawalUpdate,
 } from '../hooks'
 import type { OwnerWithdrawal, OwnerWithdrawalStatus } from '../types'
@@ -32,8 +41,13 @@ export function AdminOwnerWithdrawals() {
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<OwnerWithdrawal | null>(null)
   const [note, setNote] = useState('')
+  const [qrPreview, setQRPreview] = useState<{
+    id: string
+    url: string
+  } | null>(null)
   const query = useAdminOwnerWithdrawals(status, page)
   const update = useAdminOwnerWithdrawalUpdate()
+  const qrCode = useAdminOwnerWithdrawalQRCode()
   const pages = Math.max(1, Math.ceil((query.data?.total ?? 0) / 20))
   const labels = useMemo<Record<OwnerWithdrawalStatus, string>>(
     () => ({
@@ -45,6 +59,22 @@ export function AdminOwnerWithdrawals() {
     }),
     [t]
   )
+
+  useEffect(
+    () => () => {
+      if (qrPreview) URL.revokeObjectURL(qrPreview.url)
+    },
+    [qrPreview]
+  )
+
+  const viewQRCode = (item: OwnerWithdrawal) => {
+    qrCode.mutate(item.id, {
+      onSuccess: (blob) => {
+        setQRPreview({ id: item.id, url: URL.createObjectURL(blob) })
+      },
+      onError: () => toast.error(t('加载失败')),
+    })
+  }
 
   const runAction = (
     item: OwnerWithdrawal,
@@ -167,18 +197,23 @@ export function AdminOwnerWithdrawals() {
                         </div>
                       )}
                       {item.has_payment_qr_code && item.payment_qr_code_url ? (
-                        <a
-                          href={item.payment_qr_code_url}
-                          target='_blank'
-                          rel='noreferrer'
-                          className='mt-1 inline-block'
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          className='mt-1'
+                          disabled={
+                            qrCode.isPending && qrCode.variables === item.id
+                          }
+                          onClick={() => viewQRCode(item)}
                         >
-                          <img
-                            src={item.payment_qr_code_url}
-                            alt={t('收款码')}
-                            className='border-border size-20 border object-contain'
-                          />
-                        </a>
+                          {qrCode.isPending && qrCode.variables === item.id ? (
+                            <LoaderCircle className='animate-spin' />
+                          ) : (
+                            <QrCode />
+                          )}
+                          {t('View')}
+                        </Button>
                       ) : (
                         <div className='flex items-center gap-1 font-mono text-xs'>
                           <span>{item.payment_account}</span>
@@ -310,6 +345,25 @@ export function AdminOwnerWithdrawals() {
           )}
         </CollapsibleContent>
       </Collapsible>
+      <Dialog
+        open={qrPreview !== null}
+        onOpenChange={(open) => {
+          if (!open) setQRPreview(null)
+        }}
+      >
+        <DialogContent className='sm:max-w-md'>
+          <DialogHeader>
+            <DialogTitle>{t('收款码')}</DialogTitle>
+          </DialogHeader>
+          {qrPreview && (
+            <img
+              src={qrPreview.url}
+              alt={t('收款码')}
+              className='max-h-[70dvh] w-full object-contain'
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

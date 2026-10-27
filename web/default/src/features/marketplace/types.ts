@@ -387,6 +387,7 @@ export interface OwnerWithdrawalOverview {
   quota_per_credit: number
   rate_cny_cents_per_credit: number
   minimum_credits: number
+  saved_payment?: OwnerWithdrawalPaymentInput
 }
 
 export interface OwnerWithdrawalList {

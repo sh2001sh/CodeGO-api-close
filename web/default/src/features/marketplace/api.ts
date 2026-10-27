@@ -129,6 +129,18 @@ export async function updateAdminOwnerWithdrawal(input: {
   return requireData(response.data)
 }
 
+export async function getAdminOwnerWithdrawalQRCode(id: string) {
+  const response = await api.get<Blob>(
+    `/api/marketplace/admin/owner-withdrawals/${encodeURIComponent(id)}/qr-code`,
+    {
+      responseType: 'blob',
+      disableDuplicate: true,
+      skipErrorHandler: true,
+    } as Record<string, unknown>
+  )
+  return response.data
+}
+
 export async function createMarketplaceBargainRequest(input: {
   groupId: string
   proposedMultiplier: number

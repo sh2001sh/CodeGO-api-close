@@ -88,12 +88,13 @@ type OwnerWithdrawalView struct {
 }
 
 type OwnerWithdrawalOverview struct {
-	ReclaimableQuota          int64 `json:"reclaimable_quota"`
-	ReclaimableCredits        int64 `json:"reclaimable_credits"`
-	ReclaimableAmountCNYCents int64 `json:"reclaimable_amount_cny_cents"`
-	QuotaPerCredit            int64 `json:"quota_per_credit"`
-	RateCNYCentsPerCredit     int64 `json:"rate_cny_cents_per_credit"`
-	MinimumCredits            int64 `json:"minimum_credits"`
+	ReclaimableQuota          int64                        `json:"reclaimable_quota"`
+	ReclaimableCredits        int64                        `json:"reclaimable_credits"`
+	ReclaimableAmountCNYCents int64                        `json:"reclaimable_amount_cny_cents"`
+	QuotaPerCredit            int64                        `json:"quota_per_credit"`
+	RateCNYCentsPerCredit     int64                        `json:"rate_cny_cents_per_credit"`
+	MinimumCredits            int64                        `json:"minimum_credits"`
+	SavedPayment              *OwnerWithdrawalPaymentInput `json:"saved_payment,omitempty"`
 }
 
 type OwnerWithdrawalList struct {
@@ -118,12 +119,41 @@ func GetOwnerWithdrawalOverview(ownerUserID int) (*OwnerWithdrawalOverview, erro
 	if err != nil {
 		return nil, err
 	}
+	savedPayment, err := ownerWithdrawalSavedPayment(ownerUserID)
+	if err != nil {
+		return nil, err
+	}
 	credits := quota / quotaPerCredit
 	return &OwnerWithdrawalOverview{
 		ReclaimableQuota: quota, ReclaimableCredits: credits,
 		ReclaimableAmountCNYCents: credits * OwnerWithdrawalRateCNYCents,
 		QuotaPerCredit:            quotaPerCredit, RateCNYCentsPerCredit: OwnerWithdrawalRateCNYCents,
-		MinimumCredits: OwnerWithdrawalMinimumCredits,
+		MinimumCredits: OwnerWithdrawalMinimumCredits, SavedPayment: savedPayment,
+	}, nil
+}
+
+func ownerWithdrawalSavedPayment(ownerUserID int) (*OwnerWithdrawalPaymentInput, error) {
+	var record marketplaceschema.OwnerWithdrawal
+	err := platformdb.DB.
+		Where("owner_user_id = ? AND status NOT IN ?", ownerUserID, []string{
+			marketplaceschema.OwnerWithdrawalStatusNeedsUpdate,
+			marketplaceschema.OwnerWithdrawalStatusFailed,
+		}).
+		Order("updated_at DESC, id DESC").First(&record).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	details, err := decryptOwnerWithdrawalPayment(record)
+	if err != nil {
+		return nil, err
+	}
+	return &OwnerWithdrawalPaymentInput{
+		PaymentMethod: record.PaymentMethod, PayeeName: record.PayeeName,
+		PaymentAccount: details.Account, PaymentBankName: details.BankName,
+		PaymentQRCodeID: details.QRCodeID,
 	}, nil
 }
 

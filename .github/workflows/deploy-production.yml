@@ -2,6 +2,11 @@ name: Deploy V2 production (manual)
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Published image version to deploy (for example, v2-withdrawal-i18n-20261027)'
+        required: false
+        type: string
 
 jobs:
   deploy:
@@ -88,12 +93,13 @@ jobs:
           PRODUCTION_DEPLOY_SERVICE: ${{ secrets.PRODUCTION_DEPLOY_SERVICE }}
           PRODUCTION_DEPLOY_POST_COMMAND: ${{ secrets.PRODUCTION_DEPLOY_POST_COMMAND }}
           DEPLOY_COMMIT_SHA: ${{ github.sha }}
+          REQUESTED_DEPLOY_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           port="${PRODUCTION_DEPLOY_PORT:-22}"
           ssh_key="$HOME/.ssh/new-api-production"
           ssh_target="${PRODUCTION_DEPLOY_USER}@${PRODUCTION_DEPLOY_HOST}"
-          deploy_version="sha-${DEPLOY_COMMIT_SHA:0:7}"
+          deploy_version="${REQUESTED_DEPLOY_VERSION:-sha-${DEPLOY_COMMIT_SHA:0:7}}"
           service="${PRODUCTION_DEPLOY_SERVICE:-}"
           post_command="${PRODUCTION_DEPLOY_POST_COMMAND:-}"
 
@@ -151,11 +157,12 @@ jobs:
         env:
           PRODUCTION_PUBLIC_BASE_URL: ${{ secrets.PRODUCTION_PUBLIC_BASE_URL }}
           DEPLOY_COMMIT_SHA: ${{ github.sha }}
+          REQUESTED_DEPLOY_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           base_url="${PRODUCTION_PUBLIC_BASE_URL:-https://codegoai.com}"
           base_url="${base_url%/}"
-          expected_version="sha-${DEPLOY_COMMIT_SHA:0:7}"
+          expected_version="${REQUESTED_DEPLOY_VERSION:-sha-${DEPLOY_COMMIT_SHA:0:7}}"
 
           success=0
           for _ in $(seq 1 24); do

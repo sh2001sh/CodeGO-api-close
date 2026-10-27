@@ -19,6 +19,10 @@ import (
 const (
 	ledgerWorkerAccountBatchSize   = 24
 	ledgerWorkerEventBatchSize     = 32
+	ledgerWorkerAccountConcurrency = 4
+	ledgerWorkerCandidateFactor    = 512
+	ledgerWorkerCandidateMax       = 16384
+	ledgerWorkerNoopBatchSize      = 10000
 	ledgerWorkerInterval           = 2 * time.Second
 	ledgerReconciliationInterval   = 24 * time.Hour
 	ledgerReconciliationMinSpacing = time.Minute
@@ -28,6 +32,15 @@ const (
 	ledgerOutboxPublishedRetention = 72 * time.Hour
 	ledgerOutboxCleanupBatchSize   = 5000
 )
+
+var ledgerWorkerNoopEventTypes = []string{
+	"billing.adjustment_recorded",
+	"billing.balance_adjusted",
+	"billing.credit_granted",
+	"billing.reservation_created",
+	"billing.reservation_released",
+	"billing.reservation_increased",
+}
 
 var ledgerReconciliationState = struct {
 	sync.Mutex
@@ -99,40 +112,116 @@ func RunLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 		limit = ledgerWorkerAccountBatchSize
 	}
 
-	accountIDs, err := pendingLedgerOutboxAccountIDs(ctx, limit)
+	noopProcessed, err := publishNoopLedgerOutboxBatch(ctx, ledgerWorkerNoopBatchSize)
 	if err != nil {
 		return 0, err
 	}
 
-	processed := 0
-	for _, accountID := range accountIDs {
-		count, err := processLedgerOutboxAccount(ctx, accountID)
-		processed += count
-		if err != nil {
-			if markErr := markLedgerOutboxAccountFailure(ctx, accountID, err); markErr != nil {
-				return processed, fmt.Errorf("process ledger account %s: %w; mark failure: %v", accountID, err, markErr)
+	accountIDs, err := pendingLedgerOutboxAccountIDs(ctx, limit)
+	if err != nil {
+		return int(noopProcessed), err
+	}
+
+	processed := int(noopProcessed)
+	if len(accountIDs) == 0 {
+		return processed, nil
+	}
+
+	concurrency := ledgerWorkerAccountConcurrency
+	if !platformdb.UsingPostgreSQL {
+		concurrency = 1
+	}
+	concurrency = min(concurrency, len(accountIDs))
+	type accountResult struct {
+		count int
+		err   error
+	}
+	jobs := make(chan string)
+	results := make(chan accountResult, len(accountIDs))
+	var workers sync.WaitGroup
+	for range concurrency {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for accountID := range jobs {
+				count, processErr := processLedgerOutboxAccount(ctx, accountID)
+				if processErr != nil {
+					if markErr := markLedgerOutboxAccountFailure(ctx, accountID, processErr); markErr != nil {
+						processErr = fmt.Errorf("process ledger account %s: %w; mark failure: %v", accountID, processErr, markErr)
+					} else {
+						processErr = nil
+					}
+				}
+				results <- accountResult{count: count, err: processErr}
 			}
-			continue
+		}()
+	}
+	for _, accountID := range accountIDs {
+		jobs <- accountID
+	}
+	close(jobs)
+	workers.Wait()
+	close(results)
+	var firstError error
+	for result := range results {
+		processed += result.count
+		if firstError == nil && result.err != nil {
+			firstError = result.err
 		}
 	}
-	return processed, nil
+	return processed, firstError
 }
 
 func pendingLedgerOutboxAccountIDs(ctx context.Context, limit int) ([]string, error) {
 	accountIDs := make([]string, 0, limit)
-	// Failed events remain pending for an atomic retry, but their accounts yield to
-	// less-retried accounts. MAX keeps fresh events from resetting a broken
-	// account's priority while its oldest failing event is still pending.
-	err := platformdb.DB.WithContext(ctx).
+	candidateLimit := limit * ledgerWorkerCandidateFactor
+	if candidateLimit < limit || candidateLimit > ledgerWorkerCandidateMax {
+		candidateLimit = ledgerWorkerCandidateMax
+	}
+	candidates := platformdb.DB.WithContext(ctx).
 		Where("status = ?", billingschema.BillingOutboxStatusPending).
 		Where("account_id <> ?", "").
 		Model(&billingschema.BillingOutboxEvent{}).
+		Select("account_id, attempts, created_at, event_id").
+		Order("created_at asc, event_id asc").
+		Limit(candidateLimit)
+	// Bound the fairness aggregation to the oldest indexed window instead of
+	// grouping every pending event. MAX keeps a fresh event from resetting the
+	// retry history of a broken account inside that window.
+	err := platformdb.DB.WithContext(ctx).Table("(?) AS pending_candidates", candidates).
 		Select("account_id").
 		Group("account_id").
 		Order("MAX(attempts) asc, MIN(created_at) asc, account_id asc").
 		Limit(limit).
 		Pluck("account_id", &accountIDs).Error
 	return accountIDs, err
+}
+
+func publishNoopLedgerOutboxBatch(ctx context.Context, limit int) (int64, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	candidateLimit := limit * 5
+	candidates := platformdb.DB.WithContext(ctx).
+		Model(&billingschema.BillingOutboxEvent{}).
+		Select("event_id, event_type").
+		Where("status = ?", billingschema.BillingOutboxStatusPending).
+		Order("created_at asc, event_id asc").
+		Limit(candidateLimit)
+	ids := platformdb.DB.WithContext(ctx).Table("(?) AS pending_candidates", candidates).
+		Select("event_id").
+		Where("event_type IN ?", ledgerWorkerNoopEventTypes).
+		Limit(limit)
+	now := time.Now().UTC()
+	result := platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).
+		Where("status = ?", billingschema.BillingOutboxStatusPending).
+		Where("event_id IN (?)", ids).
+		Updates(map[string]any{
+			"status":       billingschema.BillingOutboxStatusPublished,
+			"published_at": &now,
+			"last_error":   "",
+		})
+	return result.RowsAffected, result.Error
 }
 
 // RebuildBalanceSnapshot recalculates one account projection from immutable ledger data.

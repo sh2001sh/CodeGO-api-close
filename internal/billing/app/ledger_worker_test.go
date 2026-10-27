@@ -115,6 +115,33 @@ func TestCleanupPublishedLedgerOutboxBatchPreservesRecentAndPendingEvents(t *tes
 	require.Equal(t, "recent", remaining[1].AccountID)
 }
 
+func TestPublishNoopLedgerOutboxBatchLeavesFinancialEventsPending(t *testing.T) {
+	db, _ := referralTestDB(t)
+	now := time.Now().UTC()
+	events := []billingschema.BillingOutboxEvent{
+		{AccountID: "noop", EventType: "billing.credit_granted", IdempotencyKey: "noop-credit", CreatedAt: now},
+		{AccountID: "noop", EventType: "billing.reservation_released", IdempotencyKey: "noop-release", CreatedAt: now.Add(time.Second)},
+		{AccountID: "financial", EventType: "billing.reservation_settled", IdempotencyKey: "financial", CreatedAt: now.Add(2 * time.Second)},
+		{AccountID: "future", EventType: "billing.future_event", IdempotencyKey: "future", CreatedAt: now.Add(3 * time.Second)},
+	}
+	require.NoError(t, db.Create(&events).Error)
+
+	processed, err := publishNoopLedgerOutboxBatch(context.Background(), 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, processed)
+
+	for index := range events {
+		require.NoError(t, db.First(&events[index], "event_id = ?", events[index].EventID).Error)
+		if index < 2 {
+			require.Equal(t, billingschema.BillingOutboxStatusPublished, events[index].Status)
+			require.NotNil(t, events[index].PublishedAt)
+			continue
+		}
+		require.Equal(t, billingschema.BillingOutboxStatusPending, events[index].Status)
+		require.Nil(t, events[index].PublishedAt)
+	}
+}
+
 func TestLedgerReconciliationDueUsesPerAccountInterval(t *testing.T) {
 	now := time.Now().UTC()
 	accountID := "reconcile-interval-test"

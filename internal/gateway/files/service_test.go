@@ -236,3 +236,20 @@ func TestZeroRetentionDisablesExpiration(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, deleted)
 }
+
+func TestWithdrawalQRCodeDoesNotExpire(t *testing.T) {
+	setupFileTestDB(t)
+	t.Setenv("FILE_STORAGE_RETENTION_DAYS", "7")
+	file, err := Create(7, "payment.png", PurposeMarketplaceOwnerWithdrawalQRCode, "image/png", bytes.NewReader([]byte("qr-code")), 1024)
+	require.NoError(t, err)
+	old := time.Now().UTC().Add(-365 * 24 * time.Hour)
+	require.NoError(t, platformdb.DB.Model(file).Update("last_used_at", old).Error)
+	file.LastUsedAt = &old
+
+	require.Nil(t, ExpiresAt(file))
+	_, err = Get(file.ID, 7, false)
+	require.NoError(t, err)
+	deleted, err := cleanupExpiredFiles(time.Now().UTC(), retentionSettingsFromEnv())
+	require.NoError(t, err)
+	require.Zero(t, deleted)
+}

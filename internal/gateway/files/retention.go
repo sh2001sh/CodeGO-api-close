@@ -86,7 +86,7 @@ func markUsedAt(file *gatewaySchema.UserFile, now time.Time, retention time.Dura
 // ExpiresAt returns the current sliding expiration time, or nil when disabled.
 func ExpiresAt(file *gatewaySchema.UserFile) *time.Time {
 	retention := retentionSettingsFromEnv().Retention
-	if file == nil || retention <= 0 {
+	if file == nil || file.Purpose == PurposeMarketplaceOwnerWithdrawalQRCode || retention <= 0 {
 		return nil
 	}
 	expires := effectiveLastUsedAt(file).Add(retention)
@@ -94,7 +94,7 @@ func ExpiresAt(file *gatewaySchema.UserFile) *time.Time {
 }
 
 func isExpiredAt(file *gatewaySchema.UserFile, now time.Time, retention time.Duration) bool {
-	return file == nil || retention > 0 && effectiveLastUsedAt(file).Before(now.Add(-retention))
+	return file == nil || file.Purpose != PurposeMarketplaceOwnerWithdrawalQRCode && retention > 0 && effectiveLastUsedAt(file).Before(now.Add(-retention))
 }
 
 func effectiveLastUsedAt(file *gatewaySchema.UserFile) time.Time {

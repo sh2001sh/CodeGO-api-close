@@ -363,11 +363,6 @@ func SettleMarketplaceOwnerWithdrawalTx(tx *gorm.DB, reservationID string, owner
 	}); err != nil {
 		return err
 	}
-	if tx.Migrator().HasTable(&billingschema.FundingAllocation{}) {
-		if err := allocateSettledFundingFIFOTx(tx, ledgerSyncRequestID(operationID), account.AccountID, amount); err != nil {
-			return err
-		}
-	}
 	if err := decreaseCanonicalUserClaudeWalletQuotaTx(tx, ownerUserID, amount); err != nil {
 		return err
 	}

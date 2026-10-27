@@ -17,6 +17,7 @@ import (
 func TestOwnerWithdrawalUsesFixedManualPayoutRateAndHidesPaymentAccount(t *testing.T) {
 	db := openMarketplaceAppTestDB(t)
 	migrateOwnerWithdrawalTestSchema(t, db)
+	require.NoError(t, db.AutoMigrate(&billingschema.FundingLot{}, &billingschema.FundingAllocation{}))
 	unit := int64(platformruntime.QuotaPerUnit)
 	require.NoError(t, db.Create([]identityschema.User{
 		{Id: 1, ExternalId: "ADMIN1", Username: "admin", AffCode: "admin"},
@@ -83,6 +84,9 @@ func TestOwnerWithdrawalUsesFixedManualPayoutRateAndHidesPaymentAccount(t *testi
 	require.Equal(t, int(50*unit), owner.ClaudeQuota)
 	adminAfterPaid := ownerWithdrawalWalletSnapshot(t, db, 1)
 	require.EqualValues(t, 100*unit, adminAfterPaid.AvailableBalance)
+	var fundingAllocations int64
+	require.NoError(t, db.Model(&billingschema.FundingAllocation{}).Count(&fundingAllocations).Error)
+	require.Zero(t, fundingAllocations, "wallet-internal reclaim must not run consumption funding attribution")
 
 	repeated, err := UpdateAdminOwnerWithdrawal(1, result.ID, AdminOwnerWithdrawalActionInput{
 		Status: marketplaceschema.OwnerWithdrawalStatusPaid,

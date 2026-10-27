@@ -2,15 +2,10 @@ package http
 
 import (
 	"github.com/gin-gonic/gin"
-	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
-	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"github.com/sh2001sh/new-api/internal/platform/transport/http/middleware"
 )
 
 func RegisterMarketplaceRoutes(apiRouter *gin.RouterGroup) {
-	if err := marketplaceapp.ReconcileMarketplaceChannels(); err != nil {
-		platformobservability.SysError("reconcile marketplace channels: " + err.Error())
-	}
 	publicMarketplaceRoute := apiRouter.Group("/marketplace")
 	publicMarketplaceRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))
 	{

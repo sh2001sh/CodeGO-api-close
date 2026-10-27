@@ -23,6 +23,11 @@ func startControlBackgroundTasks() {
 	marketplacesettlement.RegisterForfeitHook(billingapp.ForfeitMarketplacePendingEarningsTx)
 
 	startOptionSyncLoop()
+	go func() {
+		if err := marketplaceapp.ReconcileMarketplaceChannels(); err != nil {
+			platformobservability.SysError("reconcile marketplace channels: " + err.Error())
+		}
+	}()
 
 	if frequencyText := getenvTrimmed("CHANNEL_UPDATE_FREQUENCY"); frequencyText != "" {
 		frequency, err := strconv.Atoi(frequencyText)

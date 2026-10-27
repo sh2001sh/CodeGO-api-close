@@ -19,10 +19,11 @@ import (
 const (
 	ledgerWorkerAccountBatchSize   = 24
 	ledgerWorkerEventBatchSize     = 32
-	ledgerWorkerAccountConcurrency = 4
+	ledgerWorkerAccountConcurrency = 8
 	ledgerWorkerCandidateFactor    = 512
 	ledgerWorkerCandidateMax       = 16384
 	ledgerWorkerNoopBatchSize      = 10000
+	ledgerWorkerNoopBusyDelay      = 250 * time.Millisecond
 	ledgerWorkerInterval           = 2 * time.Second
 	ledgerReconciliationInterval   = 24 * time.Hour
 	ledgerReconciliationMinSpacing = time.Minute
@@ -50,6 +51,7 @@ var ledgerReconciliationState = struct {
 
 // StartLedgerWorker begins asynchronous outbox processing for the ledger runtime.
 func StartLedgerWorker(ctx context.Context) {
+	go runNoopLedgerOutboxWorker(ctx)
 	go func() {
 		ticker := time.NewTicker(ledgerWorkerInterval)
 		defer ticker.Stop()
@@ -77,6 +79,28 @@ func StartLedgerWorker(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func runNoopLedgerOutboxWorker(ctx context.Context) {
+	for {
+		processed, err := publishNoopLedgerOutboxBatch(ctx, ledgerWorkerNoopBatchSize)
+		if err != nil {
+			platformobservability.SysError("publish no-op ledger outbox batch: " + err.Error())
+		}
+		delay := ledgerWorkerInterval
+		if err == nil && processed == ledgerWorkerNoopBatchSize {
+			delay = ledgerWorkerNoopBusyDelay
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+		}
+	}
 }
 
 func runStaleReservationRecovery(ctx context.Context, now time.Time) {
@@ -112,9 +136,13 @@ func RunLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 		limit = ledgerWorkerAccountBatchSize
 	}
 
-	noopProcessed, err := publishNoopLedgerOutboxBatch(ctx, ledgerWorkerNoopBatchSize)
-	if err != nil {
-		return 0, err
+	var noopProcessed int64
+	if !platformdb.UsingPostgreSQL {
+		var err error
+		noopProcessed, err = publishNoopLedgerOutboxBatch(ctx, ledgerWorkerNoopBatchSize)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	accountIDs, err := pendingLedgerOutboxAccountIDs(ctx, limit)
@@ -408,6 +436,7 @@ func markLedgerOutboxAccountFailure(ctx context.Context, accountID string, cause
 	}
 	return platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).
 		Where("account_id = ? AND status = ?", accountID, billingschema.BillingOutboxStatusPending).
+		Where("event_type NOT IN ?", ledgerWorkerNoopEventTypes).
 		Updates(map[string]any{
 			"attempts":   gorm.Expr("attempts + ?", 1),
 			"last_error": cause.Error(),

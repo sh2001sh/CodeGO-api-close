@@ -1,15 +1,55 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sh2001sh/new-api/constant"
+	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 )
+
+func TestLegacyInvoiceDocumentDownloadIsOwnerScoped(t *testing.T) {
+	db := setupCommerceHTTPTestDB(t)
+	pdf := []byte("%PDF-1.4\nlegacy-invoice\n%%EOF")
+	stored, err := commerceapp.EncodeLegacyInvoiceDocuments([]commerceapp.CommercialInvoiceDocument{{Number: "CG-2026-L000000000176", DocumentType: "invoice", PDF: pdf}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := &commerceschema.InvoiceRequest{UserID: 9032, SourceType: commerceschema.InvoiceSourceTopUp, TradeNo: "legacy-176", OrderAmount: 64, Currency: "CNY", OrderTitle: "钱包充值", InvoiceType: commerceschema.InvoiceTypePersonal, Title: "Legacy buyer", Email: "invoice@example.com", Status: commerceschema.InvoiceStatusIssued, InvoiceNumber: "CG-2026-L000000000176", DocumentURL: stored}
+	if err := db.Create(request).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, recorder := newCommerceContext(t, http.MethodGet, "/api/invoices/requests?p=1&page_size=100", nil, request.UserID)
+	listSelfInvoiceRequests(ctx)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"document_available":true`) || strings.Contains(recorder.Body.String(), "legacy-invoice") || strings.Contains(recorder.Body.String(), "codego-legacy-invoice-gzip") {
+		t.Fatalf("legacy list availability or privacy mismatch: %d %s", recorder.Code, recorder.Body.String())
+	}
+
+	call := func(userID int, number string) (int, []byte) {
+		t.Helper()
+		ctx, recorder := newCommerceContext(t, http.MethodGet, "/api/invoices/requests/1/document?number="+number, nil, userID)
+		ctx.Params = append(ctx.Params, gin.Param{Key: "id", Value: "1"})
+		downloadLegacyInvoiceRequest(ctx)
+		return recorder.Code, recorder.Body.Bytes()
+	}
+	if status, body := call(request.UserID, ""); status != http.StatusOK || !bytes.Equal(body, pdf) {
+		t.Fatalf("owner download mismatch: %d %q", status, body)
+	}
+	if status, _ := call(request.UserID+1, ""); status != http.StatusNotFound {
+		t.Fatalf("foreign owner downloaded legacy invoice: %d", status)
+	}
+	if status, _ := call(request.UserID, "CG-2026-L000000000999"); status != http.StatusNotFound {
+		t.Fatalf("unknown document number downloaded: %d", status)
+	}
+}
 
 func TestCreateInvoiceRequestReservesPaidTopUpOnce(t *testing.T) {
 	db := setupCommerceHTTPTestDB(t)

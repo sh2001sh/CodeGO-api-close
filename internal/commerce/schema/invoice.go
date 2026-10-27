@@ -37,12 +37,13 @@ type InvoiceRequest struct {
 	Email       string `json:"email" gorm:"type:varchar(255);not null"`
 	Remark      string `json:"remark" gorm:"type:text"`
 
-	Status         string `json:"status" gorm:"type:varchar(16);not null;default:'pending';index"`
-	InvoiceNumber  string `json:"invoice_number" gorm:"type:varchar(128);default:''"`
-	DeliveryMethod string `json:"delivery_method" gorm:"type:varchar(16);default:''"`
-	DocumentURL    string `json:"document_url" gorm:"type:text"`
-	AdminNote      string `json:"admin_note" gorm:"type:text"`
-	HandledBy      int    `json:"handled_by" gorm:"not null;default:0"`
+	Status            string `json:"status" gorm:"type:varchar(16);not null;default:'pending';index"`
+	InvoiceNumber     string `json:"invoice_number" gorm:"type:varchar(128);default:''"`
+	DeliveryMethod    string `json:"delivery_method" gorm:"type:varchar(16);default:''"`
+	DocumentURL       string `json:"-" gorm:"type:text"`
+	DocumentAvailable bool   `json:"document_available" gorm:"-"`
+	AdminNote         string `json:"admin_note" gorm:"type:text"`
+	HandledBy         int    `json:"handled_by" gorm:"not null;default:0"`
 
 	IssuedAt  int64 `json:"issued_at" gorm:"bigint;not null;default:0"`
 	CreatedAt int64 `json:"created_at" gorm:"bigint;not null"`

@@ -49,6 +49,7 @@ export type InvoiceRequest = {
   remark: string
   status: InvoiceStatus
   invoice_number: string
+  document_available: boolean
   admin_note: string
   handled_by: number
   issued_at: number

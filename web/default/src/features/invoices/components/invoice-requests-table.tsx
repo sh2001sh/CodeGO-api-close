@@ -15,12 +15,21 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 */
+import { useState } from 'react'
 import i18n from '@/i18n/config'
 import { getIntlLocale } from '@/i18n/format'
 import { toIntlLocale } from '@/i18n/languages'
-import { FileCheck2, FileClock, FileX2 } from 'lucide-react'
+import {
+  Download,
+  FileCheck2,
+  FileClock,
+  FileX2,
+  LoaderCircle,
+} from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -29,6 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { downloadLegacyInvoice } from '../commercial-api'
 import type { InvoiceRequest, InvoiceStatus } from '../types'
 
 type InvoiceRequestsTableProps = { requests: InvoiceRequest[] }
@@ -74,6 +84,35 @@ export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
       <Icon />
       {t(meta.label)}
     </Badge>
+  )
+}
+
+function LegacyInvoiceDownload({ request }: { request: InvoiceRequest }) {
+  const { t } = useTranslation()
+  const [pending, setPending] = useState(false)
+  if (!request.document_available) return null
+  return (
+    <Button
+      type='button'
+      size='sm'
+      variant='outline'
+      disabled={pending}
+      onClick={async () => {
+        setPending(true)
+        try {
+          await downloadLegacyInvoice(request)
+        } catch (error) {
+          toast.error(
+            t(error instanceof Error ? error.message : 'invoice.downloadFailed')
+          )
+        } finally {
+          setPending(false)
+        }
+      }}
+    >
+      {pending ? <LoaderCircle className='animate-spin' /> : <Download />}
+      {t('invoice.downloadPdf')}
+    </Button>
   )
 }
 
@@ -149,6 +188,7 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                 {request.admin_note}
               </div>
             ) : null}
+            <LegacyInvoiceDownload request={request} />
           </div>
         ))}
       </div>
@@ -169,6 +209,7 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
               <TableHead>
                 <Trans i18nKey={'发票号码'} />
               </TableHead>
+              <TableHead className='w-28' />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -207,6 +248,9 @@ export function InvoiceRequestsTable({ requests }: InvoiceRequestsTableProps) {
                       {request.admin_note}
                     </div>
                   ) : null}
+                </TableCell>
+                <TableCell className='align-top'>
+                  <LegacyInvoiceDownload request={request} />
                 </TableCell>
               </TableRow>
             ))}

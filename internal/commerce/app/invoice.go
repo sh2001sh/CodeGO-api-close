@@ -119,7 +119,10 @@ func ListUserInvoiceRequests(userID int, page *platformpagination.PageInfo) (*pl
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err
 	}
-	if err := query.Order("id desc").Limit(page.GetPageSize()).Offset(page.GetStartIdx()).Find(&requests).Error; err != nil {
+	if err := query.Omit("document_url").Order("id desc").Limit(page.GetPageSize()).Offset(page.GetStartIdx()).Find(&requests).Error; err != nil {
+		return nil, err
+	}
+	if err := markLegacyInvoiceDocumentsAvailable(requests); err != nil {
 		return nil, err
 	}
 	page.SetTotal(int(total))
@@ -138,7 +141,7 @@ func ListAdminInvoiceRequests(status string, page *platformpagination.PageInfo) 
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err
 	}
-	if err := query.Order("status asc, id asc").Limit(page.GetPageSize()).Offset(page.GetStartIdx()).Find(&requests).Error; err != nil {
+	if err := query.Omit("document_url").Order("status asc, id asc").Limit(page.GetPageSize()).Offset(page.GetStartIdx()).Find(&requests).Error; err != nil {
 		return nil, err
 	}
 	page.SetTotal(int(total))

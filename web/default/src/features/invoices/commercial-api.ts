@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { api } from '@/lib/api'
-import type { InvoiceEligibleOrder } from './types'
+import type { InvoiceEligibleOrder, InvoiceRequest } from './types'
 
 export type InvoiceBuyer = {
   buyer_name: string
@@ -107,6 +107,55 @@ export async function downloadInvoice(
     String(response.headers['content-disposition'] ?? '').match(
       /\b(CG-[A-Za-z0-9-]+\.pdf)\b/
     )?.[1] ?? 'CodeGo-invoice.pdf'
+  const url = URL.createObjectURL(response.data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export async function downloadLegacyInvoice(request: InvoiceRequest) {
+  let response
+  try {
+    response = await api.get<Blob>(
+      `/api/invoices/requests/${request.id}/document`,
+      {
+        responseType: 'blob',
+        skipErrorHandler: true,
+        headers: { Accept: 'application/pdf' },
+      }
+    )
+  } catch (error) {
+    if (!axios.isAxiosError<Blob>(error)) throw error
+    let message = 'invoice.downloadFailed'
+    try {
+      const data: unknown = JSON.parse(
+        (await error.response?.data.text()) ?? '{}'
+      )
+      if (
+        data &&
+        typeof data === 'object' &&
+        'message' in data &&
+        typeof data.message === 'string'
+      )
+        message = data.message
+    } catch {
+      /* Proxy responses use the localized download error. */
+    }
+    throw new InvoiceError(error.response?.status ?? 0, message)
+  }
+  if (
+    response.data.type.split(';')[0] !== 'application/pdf' ||
+    response.data.size === 0
+  )
+    throw new InvoiceError(0, 'invoice.downloadFailed')
+  const filename =
+    String(response.headers['content-disposition'] ?? '').match(
+      /\b(CG-[A-Za-z0-9-]+\.pdf)\b/
+    )?.[1] ?? `${request.invoice_number || 'CodeGo-invoice'}.pdf`
   const url = URL.createObjectURL(response.data)
   const link = document.createElement('a')
   link.href = url

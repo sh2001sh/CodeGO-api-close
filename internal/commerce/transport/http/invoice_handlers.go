@@ -1,6 +1,9 @@
 package http
 
 import (
+	"errors"
+	"mime"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -48,6 +51,27 @@ func createInvoiceRequest(c *gin.Context) {
 		return
 	}
 	httpapi.ApiSuccess(c, request)
+}
+
+func downloadLegacyInvoiceRequest(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "invoice.documentUnavailable"})
+		return
+	}
+	document, err := commerceapp.LegacyInvoiceDocument(c.GetInt("id"), id, c.Query("number"))
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, commerceapp.ErrLegacyInvoiceDocumentUnavailable) {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"success": false, "message": "invoice.documentUnavailable"})
+		return
+	}
+	c.Header("Cache-Control", "private, no-store")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": document.Number + ".pdf"}))
+	c.Data(http.StatusOK, "application/pdf", document.PDF)
 }
 
 func listAdminInvoiceRequests(c *gin.Context) {

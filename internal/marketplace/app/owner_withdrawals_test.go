@@ -7,6 +7,7 @@ import (
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformruntime "github.com/sh2001sh/new-api/internal/platform/runtime"
 	platformsecurity "github.com/sh2001sh/new-api/internal/platform/security"
 	"github.com/stretchr/testify/require"
@@ -89,7 +90,17 @@ func TestOwnerWithdrawalUsesFixedManualPayoutRateAndHidesPaymentAccount(t *testi
 	var reclaim marketplaceschema.IncomeReclaim
 	require.NoError(t, db.First(&reclaim, "id = ?", stored.ReclaimOperationID).Error)
 	require.EqualValues(t, 100*unit, reclaim.Amount)
+	require.Equal(t, "charged", reclaim.Status)
+	var settlement marketplaceschema.Settlement
+	require.NoError(t, db.First(&settlement, "id = ?", "withdraw-income").Error)
+	require.Zero(t, settlement.ReclaimedAmount, "confirmation must not wait for settlement-history audit")
+
+	_, err = marketplacesettlement.ProcessDirectIncomeReclaimTask(stored.ReclaimOperationID)
+	require.NoError(t, err)
+	require.NoError(t, db.First(&reclaim, "id = ?", stored.ReclaimOperationID).Error)
 	require.Equal(t, "completed", reclaim.Status)
+	require.NoError(t, db.First(&settlement, "id = ?", "withdraw-income").Error)
+	require.EqualValues(t, 100*unit, settlement.ReclaimedAmount)
 }
 
 func TestOwnerWithdrawalRejectsSmallAmountAndPreventsDuplicateDebit(t *testing.T) {

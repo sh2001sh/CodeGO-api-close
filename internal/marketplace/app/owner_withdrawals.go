@@ -365,10 +365,10 @@ func UpdateAdminOwnerWithdrawal(adminUserID int, withdrawalID string, input Admi
 		updates := map[string]any{"status": input.Status, "admin_note": input.AdminNote}
 		if input.Status == marketplaceschema.OwnerWithdrawalStatusPaid {
 			if record.ReservationID != "" {
-				if _, err := marketplacesettlement.CreateChargedIncomeReclaimTaskTx(tx, record.OwnerUserID, record.RequestedQuota, record.ReclaimOperationID); err != nil {
+				if err := billingapp.SettleMarketplaceOwnerWithdrawalTx(tx, record.ReservationID, record.OwnerUserID, adminUserID, record.RequestedQuota, record.ReclaimOperationID); err != nil {
 					return err
 				}
-				if err := billingapp.SettleMarketplaceOwnerWithdrawalTx(tx, record.ReservationID, record.OwnerUserID, adminUserID, record.RequestedQuota, record.ReclaimOperationID); err != nil {
+				if _, err := marketplacesettlement.CreateChargedIncomeReclaimTaskTx(tx, record.OwnerUserID, record.RequestedQuota, record.ReclaimOperationID); err != nil {
 					return err
 				}
 			}
@@ -394,9 +394,6 @@ func UpdateAdminOwnerWithdrawal(adminUserID int, withdrawalID string, input Admi
 	}
 	if input.Status == marketplaceschema.OwnerWithdrawalStatusPaid && record.ReservationID != "" {
 		invalidateOwnerWithdrawalWalletCaches(record.OwnerUserID, adminUserID)
-		if _, auditErr := marketplacesettlement.ProcessDirectIncomeReclaimTask(record.ReclaimOperationID); auditErr != nil {
-			platformobservability.SysError("audit paid owner withdrawal: " + auditErr.Error())
-		}
 	}
 	view, err := adminOwnerWithdrawalView(record)
 	return &view, err
@@ -440,10 +437,13 @@ func ownerWithdrawalReclaimableQuotaDB(db *gorm.DB, ownerUserID int, lockBalance
 	if ownerUserID <= 0 {
 		return 0, errors.New("invalid owner")
 	}
+	facts, err := incomeFacts(db, 0, 0)
+	if err != nil {
+		return 0, err
+	}
 	var released int64
-	err := db.Model(&marketplaceschema.Settlement{}).
-		Where("owner_user_id = ? AND status = ? AND owner_net_amount > reclaimed_amount", ownerUserID, "released").
-		Select("COALESCE(SUM(owner_net_amount - reclaimed_amount), 0)").Scan(&released).Error
+	err = facts.Where("owner_user_id = ?", ownerUserID).
+		Select("COALESCE(SUM(released_income), 0)").Scan(&released).Error
 	if err != nil {
 		return 0, err
 	}

@@ -23,20 +23,15 @@ const (
 	reclaimTaskCharged      = "charged"
 )
 
-// CreateChargedIncomeReclaimTaskTx records a wallet transfer that was already
-// committed from a reservation. The direct worker only materializes settlement
-// history for this task and never debits the wallet again.
+// CreateChargedIncomeReclaimTaskTx records a wallet transfer committed from a
+// reservation. It deliberately avoids the settlement-history advisory lock:
+// the direct worker acquires that lock later while materializing history, so a
+// slow audit can never delay the administrator's payout confirmation.
 func CreateChargedIncomeReclaimTaskTx(tx *gorm.DB, ownerUserID int, amount int64, operationID string) (marketplaceschema.IncomeReclaim, error) {
 	if tx == nil || ownerUserID <= 0 || amount <= 0 || operationID == "" || len(operationID) > 64 {
 		return marketplaceschema.IncomeReclaim{}, errors.New("invalid reserved income reclaim task")
 	}
 	owners := []int{ownerUserID}
-	if err := lockReclaimOwnersTx(tx, owners); err != nil {
-		return marketplaceschema.IncomeReclaim{}, err
-	}
-	if err := checkOutstandingDirectReclaimsTx(tx, operationID, owners); err != nil {
-		return marketplaceschema.IncomeReclaim{}, err
-	}
 	amounts := map[int]int64{ownerUserID: amount}
 	filter := ReleaseFilter{
 		OwnerUserIDs: owners, MaxAmount: amount, Direct: true,

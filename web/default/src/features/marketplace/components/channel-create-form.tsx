@@ -170,6 +170,7 @@ export function ChannelEditorForm(props: {
             multiplier_card_supported: values.multiplier_card_supported,
             multiplier_card_user_enabled: values.multiplier_card_user_enabled,
             credit_pack_supported: values.credit_pack_supported,
+            security_alert_email_enabled: values.security_alert_email_enabled,
             auto_probe_enabled: values.auto_probe_enabled,
             auto_probe_interval_minutes: values.auto_probe_interval_minutes,
             auto_probe_model: values.auto_probe_model,

@@ -47,6 +47,7 @@ func channelViewWithLatestVerification(
 		SensitiveWordInterceptionEnabled: marketplaceSensitiveWordInterceptionEnabled(channel),
 		MultiplierCardSupported:          channel.MultiplierCardSupported,
 		CreditPackSupported:              channel.CreditPackSupported,
+		SecurityAlertEmailEnabled:        channel.SecurityAlertEmailEnabled,
 		MultiplierCardUserEnabled:        channel.MultiplierCardUserEnabled,
 		LastReviewReason:                 channel.LastReviewReason, VerificationDueAt: group.VerificationDueAt,
 		CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt,

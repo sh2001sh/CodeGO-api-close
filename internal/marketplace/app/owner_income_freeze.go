@@ -3,13 +3,14 @@ package app
 import (
 	"errors"
 
+	billingapp "github.com/sh2001sh/new-api/internal/billing/app"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 )
 
-// OwnerIncomeFreezeWorkflow identifies administrative wallet reservations. They
-// have no request ID or expiry and remain held until manual settlement/release.
-const OwnerIncomeFreezeWorkflow = "marketplace_owner_income_freeze"
+// OwnerIncomeFreezeWorkflow identifies manual holds on owner income, including
+// withdrawal requests waiting for administrator settlement.
+const OwnerIncomeFreezeWorkflow = billingapp.MarketplaceOwnerIncomeFreezeWorkflow
 
 type OwnerIncomeFreeze struct {
 	FrozenAmount int64 `json:"frozen_amount"`

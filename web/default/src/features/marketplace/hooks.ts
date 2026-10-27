@@ -51,6 +51,13 @@ import {
   getSecurityAuditEvents,
   getMarketplaceChannelUserBlocks,
   updateSecurityAuditEvent,
+  createOwnerWithdrawal,
+  getAdminOwnerWithdrawals,
+  getOwnerWithdrawalOverview,
+  getOwnerWithdrawals,
+  updateAdminOwnerWithdrawal,
+  updateOwnerWithdrawalPayment,
+  uploadOwnerWithdrawalQRCode,
 } from './api'
 import type {
   AdminMarketplaceChannelFilters,
@@ -59,6 +66,7 @@ import type {
   MarketplaceRoutePool,
   MarketplaceRoutePoolSummary,
   SecurityAuditEventFilters,
+  OwnerWithdrawalStatus,
 } from './types'
 
 export function useSecurityAuditEvents(
@@ -382,6 +390,86 @@ export function useMyMarketplaceIncomeFreeze() {
     enabled: Boolean(userId),
     staleTime: 0,
     refetchInterval: 30_000,
+  })
+}
+
+export function useOwnerWithdrawalOverview() {
+  const userId = useAuthStore((state) => state.auth.user?.id ?? 0)
+  return useQuery({
+    queryKey: ['marketplace-owner-withdrawal-overview', userId],
+    queryFn: ({ signal }) => getOwnerWithdrawalOverview(signal),
+    enabled: Boolean(userId),
+    staleTime: 0,
+  })
+}
+
+export function useOwnerWithdrawals(page = 1) {
+  const userId = useAuthStore((state) => state.auth.user?.id ?? 0)
+  return useQuery({
+    queryKey: ['marketplace-owner-withdrawals', userId, page],
+    queryFn: () => getOwnerWithdrawals(page),
+    enabled: Boolean(userId),
+    placeholderData: (previousData) => previousData,
+  })
+}
+
+export function useOwnerWithdrawalCreate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createOwnerWithdrawal,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['marketplace-owner-withdrawal-overview'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['marketplace-owner-withdrawals'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['marketplace-channels', 'mine', 'usage-logs'],
+        }),
+      ])
+    },
+  })
+}
+
+export function useOwnerWithdrawalQRCodeUpload() {
+  return useMutation({ mutationFn: uploadOwnerWithdrawalQRCode })
+}
+
+export function useOwnerWithdrawalPaymentUpdate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: updateOwnerWithdrawalPayment,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['marketplace-owner-withdrawals'],
+      })
+    },
+  })
+}
+
+export function useAdminOwnerWithdrawals(
+  status: OwnerWithdrawalStatus | '' = '',
+  page = 1
+) {
+  return useQuery({
+    queryKey: ['marketplace-owner-withdrawals', 'admin', status, page],
+    queryFn: () => getAdminOwnerWithdrawals({ status, page }),
+    placeholderData: (previousData) => previousData,
+    refetchInterval: status === 'pending_transfer' ? 15_000 : false,
+  })
+}
+
+export function useAdminOwnerWithdrawalUpdate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: updateAdminOwnerWithdrawal,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['marketplace-owner-withdrawals'],
+      })
+    },
   })
 }
 

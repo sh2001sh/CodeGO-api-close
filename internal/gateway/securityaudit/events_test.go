@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/sh2001sh/new-api/constant"
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
@@ -61,6 +62,45 @@ func TestListAndUpdateEventsEnforceOwnerScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ReviewStatusAcknowledged, updated.ReviewStatus)
 	require.Equal(t, 101, updated.ReviewedBy)
+}
+
+func TestSecurityEventNotificationRecipientRequiresOwnerOptInAndExcludesAdmins(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &marketplaceschema.Channel{}))
+	originalDB := platformdb.DB
+	platformdb.DB = db
+	t.Cleanup(func() { platformdb.DB = originalDB })
+
+	users := []identityschema.User{
+		{Id: 101, Username: "owner", Role: constant.RoleCommonUser, Email: "owner@example.com", AffCode: "owner-101"},
+		{Id: 202, Username: "admin-owner", Role: constant.RoleAdminUser, Email: "admin@example.com", AffCode: "admin-202"},
+	}
+	require.NoError(t, db.Create(&users).Error)
+	channels := []marketplaceschema.Channel{
+		{ID: "disabled", OwnerUserID: 101, ProviderType: "openai", Status: "active"},
+		{ID: "enabled", OwnerUserID: 101, ProviderType: "openai", Status: "active", SecurityAlertEmailEnabled: true},
+		{ID: "admin-enabled", OwnerUserID: 202, ProviderType: "openai", Status: "active", SecurityAlertEmailEnabled: true},
+	}
+	require.NoError(t, db.Create(&channels).Error)
+
+	for _, event := range []gatewayschema.SecurityAuditEvent{
+		{OwnerUserID: 0, MarketplaceChannelID: "enabled"},
+		{OwnerUserID: 101, MarketplaceChannelID: ""},
+		{OwnerUserID: 101, MarketplaceChannelID: "disabled"},
+		{OwnerUserID: 202, MarketplaceChannelID: "admin-enabled"},
+		{OwnerUserID: 999, MarketplaceChannelID: "enabled"},
+	} {
+		recipient, loadErr := securityEventNotificationRecipient(event)
+		require.NoError(t, loadErr)
+		require.Nil(t, recipient)
+	}
+	recipient, err := securityEventNotificationRecipient(gatewayschema.SecurityAuditEvent{
+		OwnerUserID: 101, MarketplaceChannelID: "enabled",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, recipient)
+	require.Equal(t, 101, recipient.Id)
 }
 
 func TestEventDedupeKeyChangesWithEvidence(t *testing.T) {

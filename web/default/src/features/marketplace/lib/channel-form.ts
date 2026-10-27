@@ -109,6 +109,7 @@ export const channelFormSchema = z.object({
   multiplier_card_supported: z.boolean(),
   multiplier_card_user_enabled: z.boolean(),
   credit_pack_supported: z.boolean(),
+  security_alert_email_enabled: z.boolean(),
   auto_probe_enabled: z.boolean(),
   auto_probe_interval_minutes: z.number().int().min(1).max(1440),
   auto_probe_model: z.string().max(128),
@@ -155,6 +156,7 @@ export const channelFormDefaults: ChannelFormInput = {
   multiplier_card_supported: false,
   multiplier_card_user_enabled: false,
   credit_pack_supported: false,
+  security_alert_email_enabled: false,
   auto_probe_enabled: false,
   auto_probe_interval_minutes: 10,
   auto_probe_model: '',
@@ -195,6 +197,7 @@ export function channelFormDefaultsForEdit(
     multiplier_card_supported: channel.multiplier_card_supported ?? false,
     multiplier_card_user_enabled: channel.multiplier_card_user_enabled ?? false,
     credit_pack_supported: channel.credit_pack_supported ?? false,
+    security_alert_email_enabled: channel.security_alert_email_enabled ?? false,
     auto_probe_enabled:
       channel.auto_probe_enabled ?? channelFormDefaults.auto_probe_enabled,
     auto_probe_interval_minutes:

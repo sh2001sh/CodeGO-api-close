@@ -95,6 +95,22 @@ func TestDirectMarketplaceReclaimUsesSpendableWalletAndPreservesReservations(t *
 		marketplacesettlement.RegisterReclaimHook(nil)
 		marketplacesettlement.RegisterReclaimBalancesHook(nil)
 	})
+	overLimit, err := marketplacesettlement.CreateIncomeReclaimTask(marketplacesettlement.ReleaseFilter{
+		Direct: true, OwnerUserIDs: []int{10}, MaxAmount: 36, OperationID: "direct-over-wallet-limit",
+	})
+	require.NoError(t, err)
+	_, err = marketplacesettlement.ProcessDirectIncomeReclaimTask(overLimit.ID)
+	require.ErrorContains(t, err, "可用余额不足")
+	var unchangedOwner, unchangedAdmin identityschema.User
+	require.NoError(t, db.First(&unchangedOwner, 10).Error)
+	require.NoError(t, db.First(&unchangedAdmin, 1).Error)
+	require.Equal(t, 35, unchangedOwner.ClaudeQuota)
+	require.Equal(t, 100, unchangedAdmin.ClaudeQuota)
+	var unchangedBalance billingschema.BillingBalanceSnapshot
+	require.NoError(t, db.First(&unchangedBalance, "account_id = ?", accountID).Error)
+	require.EqualValues(t, 35, unchangedBalance.AvailableBalance)
+	require.EqualValues(t, 60, unchangedBalance.ReservedBalance)
+
 	filter := marketplacesettlement.ReleaseFilter{Direct: true, OwnerUserIDs: []int{10}, OperationID: "direct-money"}
 	task, err := marketplacesettlement.CreateIncomeReclaimTask(filter)
 	require.NoError(t, err)

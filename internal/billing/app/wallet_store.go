@@ -18,11 +18,12 @@ import (
 )
 
 const (
-	billingOwnerTypeUser           = "user"
-	billingQuotaUnitQuota          = "quota"
-	billingAccountTypeWallet       = "wallet"
-	billingAccountTypeClaudeWallet = "claude_wallet"
-	billingReservationRequestIDMax = 64
+	billingOwnerTypeUser                 = "user"
+	billingQuotaUnitQuota                = "quota"
+	billingAccountTypeWallet             = "wallet"
+	billingAccountTypeClaudeWallet       = "claude_wallet"
+	billingReservationRequestIDMax       = 64
+	MarketplaceOwnerIncomeFreezeWorkflow = "marketplace_owner_income_freeze"
 )
 
 type mirroredWalletStore struct {
@@ -291,6 +292,83 @@ func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int64, ide
 // from the channel owner to the administrator wallet in one transaction.
 func ReclaimMarketplaceOwnerEarningsTx(tx *gorm.DB, ownerUserID, adminUserID int, amount int64, operationID string) error {
 	if err := debitClaudeWalletQuotaAmountTx(tx, ownerUserID, amount, operationID+":debit", "marketplace_owner_reclaim"); err != nil {
+		return err
+	}
+	return CreditMarketplaceOwnerEarningsTx(tx, adminUserID, amount, operationID+":credit", "marketplace_owner_reclaim")
+}
+
+// ReserveMarketplaceOwnerWithdrawalTx moves spendable owner credits into the
+// reserved balance. The legacy projection is intentionally unchanged until the
+// administrator confirms the payout.
+func ReserveMarketplaceOwnerWithdrawalTx(tx *gorm.DB, ownerUserID int, amount int64, operationID string) (string, error) {
+	if tx == nil {
+		return "", errors.New("transaction is required")
+	}
+	if ownerUserID <= 0 || amount <= 0 || strings.TrimSpace(operationID) == "" {
+		return "", errors.New("invalid marketplace owner withdrawal reservation")
+	}
+	legacyBalance, err := getUserClaudeWalletQuotaTx(tx, ownerUserID)
+	if err != nil {
+		return "", err
+	}
+	account, err := ensureMirroredUserAccountTx(tx, ownerUserID, billingAccountTypeClaudeWallet, legacyBalance)
+	if err != nil {
+		return "", err
+	}
+	reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
+		AccountID: account.AccountID, RequestID: ledgerSyncRequestID(operationID),
+		WorkflowID: MarketplaceOwnerIncomeFreezeWorkflow, ReservedAmount: amount,
+		IdempotencyKey: operationID + ":reserve",
+	})
+	if err != nil {
+		return "", err
+	}
+	return reservation.ReservationID, nil
+}
+
+// SettleMarketplaceOwnerWithdrawalTx permanently consumes a withdrawal hold
+// and credits the administrator in the same database transaction.
+func SettleMarketplaceOwnerWithdrawalTx(tx *gorm.DB, reservationID string, ownerUserID, adminUserID int, amount int64, operationID string) error {
+	if tx == nil {
+		return errors.New("transaction is required")
+	}
+	if strings.TrimSpace(reservationID) == "" || ownerUserID <= 0 || adminUserID <= 0 || amount <= 0 || strings.TrimSpace(operationID) == "" {
+		return errors.New("invalid marketplace owner withdrawal settlement")
+	}
+	var reservation billingschema.BillingReservation
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&reservation, "reservation_id = ?", reservationID).Error; err != nil {
+		return err
+	}
+	var account billingschema.BillingAccount
+	if err := tx.First(&account, "account_id = ?", reservation.AccountID).Error; err != nil {
+		return err
+	}
+	if account.OwnerType != billingOwnerTypeUser || account.OwnerID != int64(ownerUserID) ||
+		account.AccountType != billingAccountTypeClaudeWallet || reservation.WorkflowID != MarketplaceOwnerIncomeFreezeWorkflow ||
+		reservation.ReservedAmount != amount {
+		return errors.New("withdrawal reservation does not match owner or amount")
+	}
+	settlementKey := operationID + ":settle"
+	var existing billingschema.BillingSettlement
+	if err := tx.Where("idempotency_key = ?", settlementKey).First(&existing).Error; err == nil {
+		if existing.ReservationID != reservationID || existing.ActualAmount != amount {
+			return billingdomain.ErrLedgerConflict
+		}
+		return nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if _, err := billingdomain.SettleReservationTx(tx, billingdomain.SettleReservationParams{
+		ReservationID: reservationID, ActualAmount: amount, IdempotencyKey: settlementKey,
+	}); err != nil {
+		return err
+	}
+	if tx.Migrator().HasTable(&billingschema.FundingAllocation{}) {
+		if err := allocateSettledFundingFIFOTx(tx, ledgerSyncRequestID(operationID), account.AccountID, amount); err != nil {
+			return err
+		}
+	}
+	if err := decreaseCanonicalUserClaudeWalletQuotaTx(tx, ownerUserID, amount); err != nil {
 		return err
 	}
 	return CreditMarketplaceOwnerEarningsTx(tx, adminUserID, amount, operationID+":credit", "marketplace_owner_reclaim")

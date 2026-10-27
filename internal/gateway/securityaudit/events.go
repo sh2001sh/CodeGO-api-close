@@ -465,50 +465,54 @@ func populateRecentTriggerCounts(query EventQuery, events []gatewayschema.Securi
 
 func notifySecurityEvent(event gatewayschema.SecurityAuditEvent) {
 	gopool.Go(func() {
-		recipients := make(map[int]identityschema.User)
-		var users []identityschema.User
-		query := platformdb.DB.Select("id", "email", "setting", "role")
-		if event.OwnerUserID > 0 {
-			query = query.Where("id = ? OR role >= ?", event.OwnerUserID, constant.RoleAdminUser)
-		} else {
-			query = query.Where("role >= ?", constant.RoleAdminUser)
-		}
-		if err := query.Find(&users).Error; err != nil {
+		user, err := securityEventNotificationRecipient(event)
+		if err != nil {
 			platformobservability.SysError("load security audit notification recipients failed: " + err.Error())
 			updateNotificationDelivery(event.ID, NotificationStatusFailed, 0, 0, nil)
 			return
 		}
-		for _, user := range users {
-			recipients[user.Id] = user
+		if user == nil {
+			updateNotificationDelivery(event.ID, NotificationStatusSkipped, 0, 0, nil)
+			return
 		}
 		subject := "安全审计发现高风险请求"
 		content := fmt.Sprintf("事件 %s 于 %s 触发，模型：%s，渠道：%s，风险：%s。请进入安全审计页面查看。",
 			event.ID, event.CreatedAt.Format("2006-01-02 15:04:05"), event.Model, defaultText(event.MarketplaceChannelID, fmt.Sprint(event.ChannelID)), event.RiskCode)
-		success := 0
-		for _, user := range recipients {
-			if err := notifyx.NotifyUser(user.Id, user.Email, identitydomain.GetSetting(&user), dto.NewNotify("security_audit", subject, content, nil)); err != nil {
-				platformobservability.SysError(fmt.Sprintf("notify security audit recipient %d failed: %s", user.Id, err.Error()))
-				continue
-			}
-			success++
+		if err := notifyx.NotifyUser(user.Id, user.Email, identitydomain.GetSetting(user), dto.NewNotify("security_audit", subject, content, nil)); err != nil {
+			platformobservability.SysError(fmt.Sprintf("notify security audit recipient %d failed: %s", user.Id, err.Error()))
+			updateNotificationDelivery(event.ID, NotificationStatusFailed, 1, 0, nil)
+			return
 		}
-		targets := len(recipients)
-		status := NotificationStatusDispatched
-		switch {
-		case targets == 0:
-			status = NotificationStatusSkipped
-		case success == 0:
-			status = NotificationStatusFailed
-		case success < targets:
-			status = NotificationStatusPartial
-		}
-		var notifiedAt *time.Time
-		if success > 0 {
-			now := time.Now()
-			notifiedAt = &now
-		}
-		updateNotificationDelivery(event.ID, status, targets, success, notifiedAt)
+		now := time.Now()
+		updateNotificationDelivery(event.ID, NotificationStatusDispatched, 1, 1, &now)
 	})
+}
+
+func securityEventNotificationRecipient(event gatewayschema.SecurityAuditEvent) (*identityschema.User, error) {
+	if event.OwnerUserID <= 0 || strings.TrimSpace(event.MarketplaceChannelID) == "" {
+		return nil, nil
+	}
+	var channel marketplaceschema.Channel
+	err := platformdb.DB.Select("id", "owner_user_id", "security_alert_email_enabled").
+		Where("id = ? AND owner_user_id = ? AND security_alert_email_enabled = ?", event.MarketplaceChannelID, event.OwnerUserID, true).
+		First(&channel).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var user identityschema.User
+	err = platformdb.DB.Select("id", "email", "setting", "role").
+		Where("id = ? AND role < ?", event.OwnerUserID, constant.RoleAdminUser).
+		First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func updateNotificationDelivery(eventID, status string, targets, success int, notifiedAt *time.Time) {

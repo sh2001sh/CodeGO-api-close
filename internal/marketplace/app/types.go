@@ -30,6 +30,7 @@ type CreateChannelRequest struct {
 	SensitiveWordInterceptionEnabled *bool                        `json:"sensitive_word_interception_enabled"`
 	MultiplierCardSupported          bool                         `json:"multiplier_card_supported"`
 	CreditPackSupported              bool                         `json:"credit_pack_supported"`
+	SecurityAlertEmailEnabled        bool                         `json:"security_alert_email_enabled"`
 	MultiplierCardUserEnabled        bool                         `json:"multiplier_card_user_enabled"`
 	AutoProbeEnabled                 bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         int                          `json:"auto_probe_interval_minutes"`
@@ -52,6 +53,7 @@ type UpdateChannelRequest struct {
 	SensitiveWordInterceptionEnabled *bool                         `json:"sensitive_word_interception_enabled"`
 	MultiplierCardSupported          *bool                         `json:"multiplier_card_supported"`
 	CreditPackSupported              *bool                         `json:"credit_pack_supported"`
+	SecurityAlertEmailEnabled        *bool                         `json:"security_alert_email_enabled"`
 	MultiplierCardUserEnabled        *bool                         `json:"multiplier_card_user_enabled"`
 	AutoProbeEnabled                 *bool                         `json:"auto_probe_enabled"`
 	AutoProbeIntervalMinutes         *int                          `json:"auto_probe_interval_minutes"`
@@ -121,6 +123,7 @@ type ChannelView struct {
 	SensitiveWordInterceptionEnabled bool                         `json:"sensitive_word_interception_enabled"`
 	MultiplierCardSupported          bool                         `json:"multiplier_card_supported"`
 	CreditPackSupported              bool                         `json:"credit_pack_supported"`
+	SecurityAlertEmailEnabled        bool                         `json:"security_alert_email_enabled"`
 	MultiplierCardUserEnabled        bool                         `json:"multiplier_card_user_enabled"`
 	InternalChannelID                *int                         `json:"internal_channel_id"`
 	LastReviewReason                 string                       `json:"last_review_reason"`

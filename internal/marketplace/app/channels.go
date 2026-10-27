@@ -96,6 +96,7 @@ func buildMarketplaceRecords(tx *gorm.DB, ownerUserID int, req CreateChannelRequ
 		SensitiveWordInterceptionEnabled: &sensitiveWordInterceptionEnabled,
 		MultiplierCardSupported:          req.MultiplierCardSupported,
 		CreditPackSupported:              req.CreditPackSupported,
+		SecurityAlertEmailEnabled:        req.SecurityAlertEmailEnabled,
 		MultiplierCardUserEnabled:        req.MultiplierCardUserEnabled,
 		AutoProbeEnabled:                 req.AutoProbeEnabled, AutoProbeIntervalMinutes: req.AutoProbeIntervalMinutes,
 		AutoProbeModel: strings.TrimSpace(req.AutoProbeModel),

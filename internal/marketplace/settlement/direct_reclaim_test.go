@@ -147,3 +147,46 @@ func TestDirectReclaimExactAmountUsesOwnerOrderAndRejectsInsufficientTotalBefore
 	require.EqualValues(t, 45, task.Amount)
 	require.Equal(t, map[int]int64{10: 30, 11: 15}, transfers)
 }
+
+func TestDirectReclaimExcludesIncomeHeldForOwnerWithdrawal(t *testing.T) {
+	db := openSettlementTestDB(t)
+	require.NoError(t, db.AutoMigrate(&marketplaceschema.OwnerWithdrawal{}))
+	require.NoError(t, db.Create(&marketplaceschema.Settlement{
+		ID: "held-income", RequestID: "held-income", GroupID: "g", OwnerUserID: 10,
+		OwnerNetAmount: 150, Status: statusReleased,
+	}).Error)
+	require.NoError(t, db.Create(&marketplaceschema.OwnerWithdrawal{
+		ID: "held-withdrawal", OwnerUserID: 10, ReclaimOperationID: "held-withdrawal-reclaim",
+		ReservationID: "held-reservation", RequestFingerprint: "held-fingerprint",
+		RequestedCredits: 100, RequestedQuota: 100, RateCNYCentsPerCredit: 95,
+		PayoutAmountCents: 9500, PaymentMethod: marketplaceschema.OwnerWithdrawalMethodAlipay,
+		PayeeName: "owner", PaymentDetailsCiphertext: "encrypted", PaymentDetailsTail: "1234",
+		Status: marketplaceschema.OwnerWithdrawalStatusPendingTransfer,
+	}).Error)
+	RegisterReclaimBalancesHook(func(_ *gorm.DB, _ []int) (map[int]int64, error) {
+		return map[int]int64{10: 500}, nil
+	})
+	debited := int64(0)
+	RegisterReclaimHook(func(_ *gorm.DB, _ int, _ int, amount int64, _ string) error {
+		debited += amount
+		return nil
+	})
+	t.Cleanup(func() { RegisterReclaimHook(nil); RegisterReclaimBalancesHook(nil) })
+
+	tooMuch, err := CreateIncomeReclaimTask(ReleaseFilter{
+		Direct: true, OwnerUserIDs: []int{10}, MaxAmount: 51, OperationID: "held-too-much",
+	})
+	require.NoError(t, err)
+	_, err = ProcessDirectIncomeReclaimTask(tooMuch.ID)
+	require.ErrorContains(t, err, "可用余额不足")
+	require.Zero(t, debited)
+
+	allowed, err := CreateIncomeReclaimTask(ReleaseFilter{
+		Direct: true, OwnerUserIDs: []int{10}, MaxAmount: 50, OperationID: "held-allowed",
+	})
+	require.NoError(t, err)
+	allowed, err = ProcessDirectIncomeReclaimTask(allowed.ID)
+	require.NoError(t, err)
+	require.EqualValues(t, 50, allowed.Amount)
+	require.EqualValues(t, 50, debited)
+}

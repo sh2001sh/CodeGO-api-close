@@ -33,6 +33,10 @@ test('presentation corrections can save independently of invalid legacy configur
   )
 })
 
+test('security alert email defaults to explicit opt-in', () => {
+  assert.equal(channelFormDefaults.security_alert_email_enabled, false)
+})
+
 test('presentation still enforces title, note and tag limits and permits clearing', () => {
   const valid = {
     custom_name: '名'.repeat(20),

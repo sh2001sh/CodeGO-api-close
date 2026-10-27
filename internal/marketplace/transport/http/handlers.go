@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/csv"
 	"errors"
+	"io"
 	"mime"
 	"net/http"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	commerceapp "github.com/sh2001sh/new-api/internal/commerce/app"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
+	gatewayfiles "github.com/sh2001sh/new-api/internal/gateway/files"
 	marketplaceapp "github.com/sh2001sh/new-api/internal/marketplace/app"
 	httpapi "github.com/sh2001sh/new-api/internal/platform/transport/http/httpapi"
 	"math"
@@ -23,6 +25,113 @@ import (
 func GetMyIncomeFreeze(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	result, err := marketplaceapp.GetOwnerIncomeFreeze(c.GetInt("id"))
+	respond(c, result, err)
+}
+
+func GetMyOwnerWithdrawalOverview(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	result, err := marketplaceapp.GetOwnerWithdrawalOverview(c.GetInt("id"))
+	respond(c, result, err)
+}
+
+func ListMyOwnerWithdrawals(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	result, err := marketplaceapp.ListOwnerWithdrawals(
+		c.GetInt("id"), queryInt(c, "page", 1), queryInt(c, "page_size", 20),
+	)
+	respond(c, result, err)
+}
+
+func CreateMyOwnerWithdrawal(c *gin.Context) {
+	var req marketplaceapp.OwnerWithdrawalCreateInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.CreateOwnerWithdrawal(c.GetInt("id"), req)
+	respond(c, result, err)
+}
+
+func UploadMyOwnerWithdrawalQRCode(c *gin.Context) {
+	header, err := c.FormFile("file")
+	if err != nil {
+		httpapi.ApiError(c, errors.New("请选择收款码图片"))
+		return
+	}
+	if c.Request.MultipartForm != nil {
+		defer c.Request.MultipartForm.RemoveAll()
+	}
+	opened, err := header.Open()
+	if err != nil {
+		httpapi.ApiError(c, errors.New("收款码图片无法读取"))
+		return
+	}
+	defer opened.Close()
+	const maximumQRCodeBytes = int64(2 << 20)
+	content, err := io.ReadAll(io.LimitReader(opened, maximumQRCodeBytes+1))
+	if err != nil || len(content) == 0 {
+		httpapi.ApiError(c, errors.New("收款码图片无法读取"))
+		return
+	}
+	if int64(len(content)) > maximumQRCodeBytes {
+		httpapi.ApiError(c, errors.New("收款码图片不能超过 2 MiB"))
+		return
+	}
+	mimeType := http.DetectContentType(content[:min(len(content), 512)])
+	if mimeType != "image/png" && mimeType != "image/jpeg" && mimeType != "image/webp" {
+		httpapi.ApiError(c, errors.New("收款码仅支持 PNG、JPEG 或 WebP 图片"))
+		return
+	}
+	file, err := gatewayfiles.Create(
+		c.GetInt("id"), header.Filename, gatewayfiles.PurposeMarketplaceOwnerWithdrawalQRCode,
+		mimeType, bytes.NewReader(content), maximumQRCodeBytes,
+	)
+	if err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	respond(c, gin.H{"id": file.ID}, nil)
+}
+
+func GetMyOwnerWithdrawalQRCode(c *gin.Context) {
+	serveOwnerWithdrawalQRCode(c, false)
+}
+
+func GetAdminOwnerWithdrawalQRCode(c *gin.Context) {
+	serveOwnerWithdrawalQRCode(c, true)
+}
+
+func serveOwnerWithdrawalQRCode(c *gin.Context, admin bool) {
+	file, err := marketplaceapp.GetOwnerWithdrawalQRCode(c.Param("id"), c.GetInt("id"), admin)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	content, err := gatewayfiles.OpenContent(file)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	defer content.Close()
+	info, err := content.Stat()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	c.Header("Cache-Control", "private, no-store")
+	c.Header("Content-Type", file.MimeType)
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Security-Policy", "sandbox")
+	http.ServeContent(c.Writer, c.Request, file.Filename, info.ModTime(), content)
+}
+
+func UpdateMyOwnerWithdrawalPayment(c *gin.Context) {
+	var req marketplaceapp.OwnerWithdrawalPaymentInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.UpdateOwnerWithdrawalPayment(c.GetInt("id"), c.Param("id"), req)
 	respond(c, result, err)
 }
 
@@ -568,6 +677,23 @@ func ListAdminOwnerIncome(c *gin.Context) {
 		StartTimestamp: queryInt64(c, "start_timestamp"),
 		EndTimestamp:   queryInt64(c, "end_timestamp"),
 	})
+	respond(c, result, err)
+}
+
+func ListAdminOwnerWithdrawals(c *gin.Context) {
+	result, err := marketplaceapp.ListAdminOwnerWithdrawals(marketplaceapp.AdminOwnerWithdrawalQuery{
+		Status: c.Query("status"), Page: queryInt(c, "page", 1), PageSize: queryInt(c, "page_size", 20),
+	})
+	respond(c, result, err)
+}
+
+func UpdateAdminOwnerWithdrawal(c *gin.Context) {
+	var req marketplaceapp.AdminOwnerWithdrawalActionInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpapi.ApiError(c, err)
+		return
+	}
+	result, err := marketplaceapp.UpdateAdminOwnerWithdrawal(c.GetInt("id"), c.Param("id"), req)
 	respond(c, result, err)
 }
 

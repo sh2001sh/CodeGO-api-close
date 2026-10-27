@@ -43,6 +43,9 @@ func applyChannelUpdate(channel *marketplaceschema.Channel, group *marketplacesc
 	if req.CreditPackSupported != nil {
 		channel.CreditPackSupported = *req.CreditPackSupported
 	}
+	if req.SecurityAlertEmailEnabled != nil {
+		channel.SecurityAlertEmailEnabled = *req.SecurityAlertEmailEnabled
+	}
 	if req.MultiplierCardUserEnabled != nil {
 		channel.MultiplierCardUserEnabled = *req.MultiplierCardUserEnabled
 		channel.MultiplierCardSupported = channel.MultiplierCardUserEnabled

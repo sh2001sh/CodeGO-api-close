@@ -202,6 +202,7 @@ export type OwnerChannelOption = Pick<
 
 export interface MarketplaceChannel {
   credit_pack_supported?: boolean
+  security_alert_email_enabled: boolean
   custom_name?: string
   description?: string
   tags?: string[]
@@ -332,8 +333,72 @@ export interface AdminOwnerIncomeReleaseResult {
   items: AdminOwnerIncomeReleaseItem[]
 }
 
+export type OwnerWithdrawalStatus =
+  | 'reclaiming'
+  | 'pending_transfer'
+  | 'needs_update'
+  | 'paid'
+  | 'failed'
+
+export type OwnerWithdrawalPaymentMethod = 'alipay' | 'bank_card' | 'qr_code'
+
+export interface OwnerWithdrawalPaymentInput {
+  payment_method: OwnerWithdrawalPaymentMethod
+  payee_name: string
+  payment_account: string
+  payment_bank_name: string
+  payment_qr_code_id: string
+}
+
+export interface OwnerWithdrawalCreateInput extends OwnerWithdrawalPaymentInput {
+  operation_id: string
+  credits: number
+}
+
+export interface OwnerWithdrawal {
+  id: string
+  owner_user_id?: number
+  owner_external_id?: string
+  requested_credits: number
+  requested_quota: number
+  rate_cny_cents_per_credit: number
+  payout_amount_cents: number
+  payment_method: OwnerWithdrawalPaymentMethod
+  payee_name: string
+  payment_details_tail: string
+  payment_account?: string
+  payment_bank_name?: string
+  has_payment_qr_code: boolean
+  payment_qr_code_url?: string
+  status: OwnerWithdrawalStatus
+  admin_note?: string
+  transfer_reference?: string
+  paid_by?: number
+  paid_at?: string
+  created_at: string
+  updated_at: string
+  failure_message?: string
+}
+
+export interface OwnerWithdrawalOverview {
+  reclaimable_quota: number
+  reclaimable_credits: number
+  reclaimable_amount_cny_cents: number
+  quota_per_credit: number
+  rate_cny_cents_per_credit: number
+  minimum_credits: number
+}
+
+export interface OwnerWithdrawalList {
+  items: OwnerWithdrawal[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export interface ChannelFormValues {
   credit_pack_supported: boolean
+  security_alert_email_enabled: boolean
   custom_name?: string
   description?: string
   tags?: string[]
@@ -359,6 +424,7 @@ export interface ChannelFormValues {
 
 export interface ChannelUpdateValues {
   credit_pack_supported?: boolean
+  security_alert_email_enabled?: boolean
   custom_name?: string
   description?: string
   tags?: string[]

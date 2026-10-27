@@ -140,10 +140,35 @@ export function ChannelStrategySection(props: { form: ChannelForm }) {
         />
       </FormField>
       <ChannelInterceptionPolicy form={form} />
+      <ChannelSecurityAlertEmailPolicy form={form} />
       <ChannelMultiplierCardPolicy form={form} />
       <ChannelCreditPackPolicy form={form} />
       <ChannelAutoProbePolicy form={form} />
     </FormSection>
+  )
+}
+
+function ChannelSecurityAlertEmailPolicy(props: { form: ChannelForm }) {
+  const { t } = useTranslation()
+  const enabled = props.form.watch('security_alert_email_enabled')
+  return (
+    <div className='flex min-h-16 items-center justify-between gap-4 rounded-md border px-3 py-2.5'>
+      <label
+        htmlFor='channel-security-alert-email-enabled'
+        className='text-sm font-medium'
+      >
+        {t('安全风险邮件')}
+      </label>
+      <Switch
+        id='channel-security-alert-email-enabled'
+        checked={enabled}
+        onCheckedChange={(checked) =>
+          props.form.setValue('security_alert_email_enabled', checked, {
+            shouldDirty: true,
+          })
+        }
+      />
+    </div>
   )
 }
 

@@ -33,6 +33,12 @@ import type {
   SecurityAuditEventFilters,
   SecurityAuditEventList,
   MarketplaceChannelUserBlockList,
+  OwnerWithdrawal,
+  OwnerWithdrawalCreateInput,
+  OwnerWithdrawalList,
+  OwnerWithdrawalOverview,
+  OwnerWithdrawalPaymentInput,
+  OwnerWithdrawalStatus,
 } from './types'
 
 interface ApiResponse<T = unknown> {
@@ -45,6 +51,80 @@ export async function getMyMarketplaceIncomeFreeze(signal?: AbortSignal) {
   const response = await api.get<ApiResponse<{ frozen_amount: number }>>(
     '/api/marketplace/channels/mine/income-freeze',
     { signal }
+  )
+  return requireData(response.data)
+}
+
+export async function getOwnerWithdrawalOverview(signal?: AbortSignal) {
+  const response = await api.get<ApiResponse<OwnerWithdrawalOverview>>(
+    '/api/marketplace/owner-withdrawals/overview',
+    { signal }
+  )
+  return requireData(response.data)
+}
+
+export async function getOwnerWithdrawals(page = 1, pageSize = 20) {
+  const response = await api.get<ApiResponse<OwnerWithdrawalList>>(
+    `/api/marketplace/owner-withdrawals?page=${page}&page_size=${pageSize}`
+  )
+  return requireData(response.data)
+}
+
+export async function createOwnerWithdrawal(input: OwnerWithdrawalCreateInput) {
+  const response = await api.post<ApiResponse<OwnerWithdrawal>>(
+    '/api/marketplace/owner-withdrawals',
+    input
+  )
+  return requireData(response.data)
+}
+
+export async function uploadOwnerWithdrawalQRCode(file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  const response = await api.post<ApiResponse<{ id: string }>>(
+    '/api/marketplace/owner-withdrawals/qr-code',
+    body,
+    { headers: { 'Content-Type': 'multipart/form-data' } }
+  )
+  return requireData(response.data)
+}
+
+export async function updateOwnerWithdrawalPayment(input: {
+  id: string
+  payment: OwnerWithdrawalPaymentInput
+}) {
+  const response = await api.patch<ApiResponse<OwnerWithdrawal>>(
+    `/api/marketplace/owner-withdrawals/${encodeURIComponent(input.id)}/payment-details`,
+    input.payment
+  )
+  return requireData(response.data)
+}
+
+export async function getAdminOwnerWithdrawals(input: {
+  status?: OwnerWithdrawalStatus | ''
+  page?: number
+  pageSize?: number
+}) {
+  const search = new URLSearchParams({
+    page: String(input.page ?? 1),
+    page_size: String(input.pageSize ?? 20),
+  })
+  if (input.status) search.set('status', input.status)
+  const response = await api.get<ApiResponse<OwnerWithdrawalList>>(
+    `/api/marketplace/admin/owner-withdrawals?${search.toString()}`
+  )
+  return requireData(response.data)
+}
+
+export async function updateAdminOwnerWithdrawal(input: {
+  id: string
+  status: Extract<OwnerWithdrawalStatus, 'needs_update' | 'paid'>
+  admin_note?: string
+  transfer_reference?: string
+}) {
+  const response = await api.patch<ApiResponse<OwnerWithdrawal>>(
+    `/api/marketplace/admin/owner-withdrawals/${encodeURIComponent(input.id)}`,
+    input
   )
   return requireData(response.data)
 }

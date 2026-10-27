@@ -226,6 +226,9 @@ func V2MigrationIDs() []string {
 		"20261015_route_pool_credit_pack_filter",
 		"20261015_referral_consumption_rebate",
 		"20261016_referral_channel_funding",
+		"20261027_marketplace_security_alert_email",
+		"20261027_marketplace_owner_withdrawals",
+		"20261027_marketplace_owner_withdrawal_reservations",
 	}
 }
 
@@ -539,6 +542,9 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20261015_route_pool_credit_pack_filter", Run: migrateRoutePoolCreditPackFilter},
 		{ID: "20261015_referral_consumption_rebate", Run: migrateReferralConsumptionRebate},
 		{ID: "20261016_referral_channel_funding", Run: migrateReferralChannelFunding},
+		{ID: "20261027_marketplace_security_alert_email", Run: migrateMarketplaceSecurityAlertEmail},
+		{ID: "20261027_marketplace_owner_withdrawals", Run: migrateMarketplaceOwnerWithdrawals},
+		{ID: "20261027_marketplace_owner_withdrawal_reservations", Run: migrateMarketplaceOwnerWithdrawals},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -1234,6 +1240,14 @@ func appliedMigrationNeedsRepair(db *gorm.DB, migrationID string) bool {
 	switch migrationID {
 	case "20260831_gateway_upstream_files":
 		return !db.Migrator().HasTable(&gatewayschema.UpstreamFileMapping{})
+	case "20261027_marketplace_security_alert_email":
+		return db.Migrator().HasTable(&marketplaceschema.Channel{}) &&
+			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "SecurityAlertEmailEnabled")
+	case "20261027_marketplace_owner_withdrawals":
+		return !db.Migrator().HasTable(&marketplaceschema.OwnerWithdrawal{})
+	case "20261027_marketplace_owner_withdrawal_reservations":
+		return !db.Migrator().HasColumn(&marketplaceschema.OwnerWithdrawal{}, "ReservationID") ||
+			!db.Migrator().HasIndex(&marketplaceschema.OwnerWithdrawal{}, "uq_marketplace_owner_withdrawal_reservation")
 	case "20260915_marketplace_pelican_artifacts":
 		return !db.Migrator().HasTable(&marketplaceschema.PelicanArtifact{}) ||
 			!db.Migrator().HasColumn(&marketplaceschema.Channel{}, "PelicanProbeEnabled") ||

@@ -111,6 +111,7 @@ func cleanupExpiredFiles(now time.Time, settings retentionSettings) (int64, erro
 	cutoff := now.Add(-settings.Retention)
 	var candidates []gatewaySchema.UserFile
 	err := platformdb.DB.Where("COALESCE(last_used_at, created_at) < ?", cutoff).
+		Where("purpose <> ?", PurposeMarketplaceOwnerWithdrawalQRCode).
 		Order("COALESCE(last_used_at, created_at) ASC").Limit(settings.BatchSize).Find(&candidates).Error
 	if err != nil {
 		return 0, err

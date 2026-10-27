@@ -90,6 +90,7 @@ func TestReleaseLegacyDeltaPostgres(t *testing.T) {
 		{"20261015_route_pool_credit_pack_filter", migrateRoutePoolCreditPackFilter},
 		{"20261015_referral_consumption_rebate", migrateReferralConsumptionRebate},
 		{"20261016_referral_channel_funding", migrateReferralChannelFunding},
+		{"20261027_marketplace_security_alert_email", migrateMarketplaceSecurityAlertEmail},
 	}
 	lastIndex := -1
 	for _, step := range steps {
@@ -200,7 +201,7 @@ var releaseLegacyDeltaColumns = map[string]map[string]string{
 	"public.user_subscriptions":              {"credit_pack_granted_quota": "0", "credit_pack_paid_quota": "0", "credit_pack_channel_share_bps": "0"},
 	"public.subscription_claude_conversions": {"target_credit_pack_subscription_id": "0"},
 	"public.channels":                        {"credit_pack_supported": "false"},
-	"marketplace.channels":                   {"credit_pack_supported": "false"},
+	"marketplace.channels":                   {"credit_pack_supported": "false", "security_alert_email_enabled": "false"},
 	"marketplace.groups":                     {"custom_name": "NULL", "description": "NULL", "tags": "NULL", "moderation_status": "NULL", "moderation_reason": "NULL", "moderation_checked_at": "NULL"},
 	"marketplace.settlements":                {"credit_pack_granted_quota": "0", "credit_pack_paid_quota": "0", "credit_pack_channel_share_bps": "0", "credit_pack_discount_amount": "0", "credit_pack_platform_subsidy_amount": "0", "referral_rebate_amount": "0", "referral_rebate_pending": "false"},
 	"marketplace.route_pools":                {"auto_build_credit_pack_only": "false"},

@@ -22,6 +22,7 @@ import type {
   AdminOwnerIncomeReleaseResult,
 } from '../types'
 import { AdminIncomeFilter, type AdminIncomeRange } from './admin-income-filter'
+import { AdminOwnerWithdrawals } from './admin-owner-withdrawals'
 
 export function AdminOwnerIncomePanel(props: {
   ownerSearch: string
@@ -373,6 +374,7 @@ export function AdminOwnerIncomePanel(props: {
           </div>
         </section>
       )}
+      <AdminOwnerWithdrawals />
     </section>
   )
 }

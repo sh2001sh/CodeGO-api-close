@@ -23,6 +23,10 @@ var ErrStorageQuota = errors.New("file storage quota exceeded")
 
 const defaultPurpose = "user_data"
 
+// PurposeMarketplaceOwnerWithdrawalQRCode identifies private, durable payout
+// QR codes. Access still requires the linked withdrawal's ownership check.
+const PurposeMarketplaceOwnerWithdrawalQRCode = "marketplace_owner_withdrawal_qr"
+
 // Create persists an uploaded file and deduplicates identical content per user.
 func Create(userID int, filename, purpose, mimeType string, src io.Reader, maxBytes int64) (*gatewaySchema.UserFile, error) {
 	if userID <= 0 {

@@ -13,6 +13,7 @@ import {
   useMyMarketplaceUsageLogs,
 } from '../hooks'
 import type { OwnerChannelOption } from '../types'
+import { OwnerWithdrawalPanel } from './owner-withdrawal-panel'
 
 interface DateRange {
   start?: Date
@@ -161,6 +162,7 @@ export function OwnerIncomeOverview(props: { channels: OwnerChannelOption[] }) {
           </div>
         ))}
       </dl>
+      <OwnerWithdrawalPanel />
     </div>
   )
 }

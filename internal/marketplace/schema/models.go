@@ -48,6 +48,7 @@ type Channel struct {
 	SensitiveWordInterceptionEnabled *bool          `json:"sensitive_word_interception_enabled" gorm:"column:sensitive_word_interception_enabled;default:true"`
 	MultiplierCardSupported          bool           `json:"multiplier_card_supported" gorm:"column:multiplier_card_supported;not null;default:false"`
 	CreditPackSupported              bool           `json:"credit_pack_supported" gorm:"column:credit_pack_supported;not null;default:false"`
+	SecurityAlertEmailEnabled        bool           `json:"security_alert_email_enabled" gorm:"column:security_alert_email_enabled;not null;default:false"`
 	MultiplierCardUserEnabled        bool           `json:"multiplier_card_user_enabled" gorm:"column:multiplier_card_user_enabled;not null;default:false"`
 	Status                           string         `json:"status" gorm:"column:status;size:24;index;not null"`
 	InternalChannelID                *int           `json:"internal_channel_id" gorm:"column:internal_channel_id;index"`
@@ -324,6 +325,47 @@ type IncomeReclaim struct {
 }
 
 func (IncomeReclaim) TableName() string { return tableName("income_reclaims") }
+
+const (
+	OwnerWithdrawalStatusReclaiming      = "reclaiming"
+	OwnerWithdrawalStatusPendingTransfer = "pending_transfer"
+	OwnerWithdrawalStatusNeedsUpdate     = "needs_update"
+	OwnerWithdrawalStatusPaid            = "paid"
+	OwnerWithdrawalStatusFailed          = "failed"
+
+	OwnerWithdrawalMethodAlipay   = "alipay"
+	OwnerWithdrawalMethodBankCard = "bank_card"
+	OwnerWithdrawalMethodQRCode   = "qr_code"
+)
+
+// OwnerWithdrawal records a channel owner's manual CNY payout request. The
+// payout amount and exchange rate are immutable snapshots; payment details are
+// encrypted and are only exposed by administrator-only application views.
+type OwnerWithdrawal struct {
+	ID                       string     `json:"id" gorm:"column:id;primaryKey;size:64"`
+	OwnerUserID              int        `json:"owner_user_id" gorm:"column:owner_user_id;not null;index:idx_marketplace_owner_withdrawals_owner_created,priority:1"`
+	ReclaimOperationID       string     `json:"-" gorm:"column:reclaim_operation_id;size:64;not null;uniqueIndex"`
+	ReservationID            string     `json:"-" gorm:"column:reservation_id;size:64;uniqueIndex:uq_marketplace_owner_withdrawal_reservation,where:reservation_id <> ''"`
+	RequestFingerprint       string     `json:"-" gorm:"column:request_fingerprint;size:64;not null"`
+	RequestedCredits         int64      `json:"requested_credits" gorm:"column:requested_credits;not null"`
+	RequestedQuota           int64      `json:"requested_quota" gorm:"column:requested_quota;not null"`
+	RateCNYCentsPerCredit    int64      `json:"rate_cny_cents_per_credit" gorm:"column:rate_cny_cents_per_credit;not null"`
+	PayoutAmountCents        int64      `json:"payout_amount_cents" gorm:"column:payout_amount_cents;not null"`
+	PaymentMethod            string     `json:"payment_method" gorm:"column:payment_method;size:24;not null"`
+	PayeeName                string     `json:"payee_name" gorm:"column:payee_name;size:100;not null"`
+	PaymentDetailsCiphertext string     `json:"-" gorm:"column:payment_details_ciphertext;type:text;not null"`
+	PaymentDetailsTail       string     `json:"payment_details_tail" gorm:"column:payment_details_tail;size:16;not null"`
+	Status                   string     `json:"status" gorm:"column:status;size:24;not null;index:idx_marketplace_owner_withdrawals_status_created,priority:1"`
+	FailureMessage           string     `json:"failure_message,omitempty" gorm:"column:failure_message;type:text;not null;default:''"`
+	AdminNote                string     `json:"admin_note,omitempty" gorm:"column:admin_note;type:text;not null;default:''"`
+	TransferReference        string     `json:"transfer_reference,omitempty" gorm:"column:transfer_reference;size:128;not null;default:''"`
+	PaidBy                   int        `json:"paid_by,omitempty" gorm:"column:paid_by;not null;default:0"`
+	PaidAt                   *time.Time `json:"paid_at,omitempty" gorm:"column:paid_at"`
+	CreatedAt                time.Time  `json:"created_at" gorm:"column:created_at;autoCreateTime;index:idx_marketplace_owner_withdrawals_owner_created,priority:2;index:idx_marketplace_owner_withdrawals_status_created,priority:2"`
+	UpdatedAt                time.Time  `json:"updated_at" gorm:"column:updated_at;autoUpdateTime"`
+}
+
+func (OwnerWithdrawal) TableName() string { return tableName("owner_withdrawals") }
 
 func (settlement *Settlement) BeforeCreate(_ *gorm.DB) error {
 	if settlement.ID == "" {

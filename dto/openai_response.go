@@ -255,15 +255,21 @@ type OpenAIVideoResponse struct {
 }
 
 type InputTokenDetails struct {
-	CachedTokens             int `json:"cached_tokens"`
-	CachedCreationTokens     int `json:"cached_creation_tokens,omitempty"`
-	CacheCreationTokens      int `json:"cache_creation_tokens,omitempty"`
-	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
-	CacheWriteTokens         int `json:"cache_write_tokens,omitempty"`
-	CacheWriteInputTokens    int `json:"cache_write_input_tokens,omitempty"`
-	TextTokens               int `json:"text_tokens"`
-	AudioTokens              int `json:"audio_tokens"`
-	ImageTokens              int `json:"image_tokens"`
+	CachedTokens             int                      `json:"cached_tokens"`
+	CachedCreationTokens     int                      `json:"cached_creation_tokens,omitempty"`
+	CacheCreationTokens      int                      `json:"cache_creation_tokens,omitempty"`
+	CacheCreationInputTokens int                      `json:"cache_creation_input_tokens,omitempty"`
+	CacheWriteTokens         int                      `json:"cache_write_tokens,omitempty"`
+	CacheWriteInputTokens    int                      `json:"cache_write_input_tokens,omitempty"`
+	CacheWriteTokensDetails  *CacheWriteTokensDetails `json:"cache_write_tokens_details,omitempty"`
+	TextTokens               int                      `json:"text_tokens"`
+	AudioTokens              int                      `json:"audio_tokens"`
+	ImageTokens              int                      `json:"image_tokens"`
+}
+
+type CacheWriteTokensDetails struct {
+	TTL30mTokens int `json:"ttl_30m_tokens,omitempty"`
+	TTL12hTokens int `json:"ttl_12h_tokens,omitempty"`
 }
 
 // GetCachedCreationTokens normalizes cache-write usage reported by OpenAI-compatible upstreams.
@@ -279,7 +285,24 @@ func (details InputTokenDetails) GetCachedCreationTokens() int {
 			return value
 		}
 	}
+	if details.CacheWriteTokensDetails != nil {
+		return details.CacheWriteTokensDetails.TTL30mTokens + details.CacheWriteTokensDetails.TTL12hTokens
+	}
 	return 0
+}
+
+// GetCacheWriteTokenSplit returns separately priced cache-write token counts.
+// Older upstreams only expose an aggregate count; keep treating it as the
+// default cache-write class so existing expressions remain compatible.
+func (details InputTokenDetails) GetCacheWriteTokenSplit() (defaultTokens, ttl12hTokens int) {
+	if details.CacheWriteTokensDetails != nil {
+		defaultTokens = details.CacheWriteTokensDetails.TTL30mTokens
+		ttl12hTokens = details.CacheWriteTokensDetails.TTL12hTokens
+		if defaultTokens > 0 || ttl12hTokens > 0 {
+			return defaultTokens, ttl12hTokens
+		}
+	}
+	return details.GetCachedCreationTokens(), 0
 }
 
 type OutputTokenDetails struct {

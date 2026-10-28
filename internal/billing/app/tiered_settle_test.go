@@ -470,6 +470,70 @@ func TestBuildTieredTokenParams_GPT_WithCache(t *testing.T) {
 	}
 }
 
+func TestBuildTieredTokenParams_GPT_CacheWriteTTLs(t *testing.T) {
+	usage := &dto.Usage{
+		PromptTokens:     1000,
+		CompletionTokens: 100,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens: 200,
+			CacheWriteTokensDetails: &dto.CacheWriteTokensDetails{
+				TTL30mTokens: 100,
+				TTL12hTokens: 200,
+			},
+		},
+	}
+	expr := `tier("base", p * 2 + cr * 0.1 + cc * 2.5 + cc12h * 5 + c * 10)`
+	params := BuildTieredTokenParams(usage, false, billingexpr.UsedVars(expr))
+
+	if params.P != 500 || params.CR != 200 || params.CC != 100 || params.CC12h != 200 {
+		t.Fatalf("unexpected params: %+v", params)
+	}
+	cost, _, err := billingexpr.RunExpr(expr, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 500.0*2 + 200.0*0.1 + 100.0*2.5 + 200.0*5 + 100.0*10
+	if math.Abs(cost-want) > 1e-6 {
+		t.Fatalf("cost = %f, want %f", cost, want)
+	}
+}
+
+func TestBuildTieredTokenParams_GPT_AggregateCacheWriteCompatibility(t *testing.T) {
+	usage := &dto.Usage{
+		PromptTokens: 1000,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CacheWriteTokens: 300,
+		},
+	}
+	expr := `tier("base", p * 2 + cc * 2.5 + cc12h * 5)`
+	params := BuildTieredTokenParams(usage, false, billingexpr.UsedVars(expr))
+
+	if params.P != 700 || params.CC != 300 || params.CC12h != 0 {
+		t.Fatalf("unexpected compatibility params: %+v", params)
+	}
+}
+
+func TestBuildTieredTokenParams_GPT_272KBoundary(t *testing.T) {
+	const expr = `len <= 272000 ? tier("0_272k", p * 2 + cr * 0.1 + cc * 2.5 + cc12h * 5 + c * 10) : tier("272k_plus", p * 4 + cr * 0.2 + cc * 5 + cc12h * 10 + c * 15)`
+	for _, tc := range []struct {
+		prompt int
+		tier   string
+	}{
+		{prompt: 272000, tier: "0_272k"},
+		{prompt: 272001, tier: "272k_plus"},
+	} {
+		usage := &dto.Usage{PromptTokens: tc.prompt, CompletionTokens: 10}
+		params := BuildTieredTokenParams(usage, false, billingexpr.UsedVars(expr))
+		_, trace, err := billingexpr.RunExpr(expr, params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if trace.MatchedTier != tc.tier {
+			t.Fatalf("prompt=%d tier=%q, want %q", tc.prompt, trace.MatchedTier, tc.tier)
+		}
+	}
+}
+
 func TestBuildTieredTokenParams_GPT_NoCacheVar(t *testing.T) {
 	usage := &dto.Usage{
 		PromptTokens:     1000,

@@ -126,6 +126,7 @@ func executePortableAlphaSearch(c *gin.Context, info *relaycommon.RelayInfo, alp
 		if responsesResponse.Usage.InputTokensDetails != nil {
 			usage.PromptTokensDetails.CachedTokens = responsesResponse.Usage.InputTokensDetails.CachedTokens
 			usage.PromptTokensDetails.CachedCreationTokens = responsesResponse.Usage.InputTokensDetails.GetCachedCreationTokens()
+			usage.PromptTokensDetails.CacheWriteTokensDetails = responsesResponse.Usage.InputTokensDetails.CacheWriteTokensDetails
 		}
 	}
 	info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearchPreview].CallCount = 1

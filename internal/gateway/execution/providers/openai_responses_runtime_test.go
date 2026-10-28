@@ -27,7 +27,7 @@ func TestOaiResponsesToChatStreamHandlerPreservesCacheWriteTokens(t *testing.T) 
 	body := strings.Join([]string{
 		`data: {"type":"response.reasoning_text.delta","delta":"thinking"}`,
 		``,
-		`data: {"type":"response.completed","response":{"usage":{"input_tokens":120,"output_tokens":30,"total_tokens":150,"input_tokens_details":{"cached_tokens":80,"cached_creation_tokens":20},"output_tokens_details":{"reasoning_tokens":25}}}}`,
+		`data: {"type":"response.completed","response":{"usage":{"input_tokens":120,"output_tokens":30,"total_tokens":150,"input_tokens_details":{"cached_tokens":80,"cache_write_tokens":20,"cache_write_tokens_details":{"ttl_30m_tokens":12,"ttl_12h_tokens":8}},"output_tokens_details":{"reasoning_tokens":25}}}}`,
 		``,
 		`data: [DONE]`,
 		``,
@@ -42,6 +42,8 @@ func TestOaiResponsesToChatStreamHandlerPreservesCacheWriteTokens(t *testing.T) 
 
 	require.Nil(t, err)
 	require.Equal(t, 20, usage.PromptTokensDetails.CachedCreationTokens)
+	require.Equal(t, 12, usage.PromptTokensDetails.CacheWriteTokensDetails.TTL30mTokens)
+	require.Equal(t, 8, usage.PromptTokensDetails.CacheWriteTokensDetails.TTL12hTokens)
 	require.Equal(t, 30, usage.CompletionTokens)
 	require.Equal(t, 25, usage.CompletionTokenDetails.ReasoningTokens)
 	require.Contains(t, recorder.Body.String(), `"reasoning_content":"thinking"`)

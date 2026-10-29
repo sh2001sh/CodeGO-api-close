@@ -229,6 +229,7 @@ func V2MigrationIDs() []string {
 		"20261027_marketplace_security_alert_email",
 		"20261027_marketplace_owner_withdrawals",
 		"20261027_marketplace_owner_withdrawal_reservations",
+		"20261029_settlement_backlog_indexes",
 	}
 }
 
@@ -545,6 +546,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20261027_marketplace_security_alert_email", Run: migrateMarketplaceSecurityAlertEmail},
 		{ID: "20261027_marketplace_owner_withdrawals", Run: migrateMarketplaceOwnerWithdrawals},
 		{ID: "20261027_marketplace_owner_withdrawal_reservations", Run: migrateMarketplaceOwnerWithdrawals},
+		{ID: "20261029_settlement_backlog_indexes", RunOutsideTx: migrateSettlementBacklogIndexes},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -783,6 +785,57 @@ func migrateMarketplaceSettlementDueIndex(_ *gorm.DB) error {
 		return fmt.Errorf("create marketplace settlement due index: %w", err)
 	}
 	return nil
+}
+
+// migrateSettlementBacklogIndexes separates immediately actionable work from
+// the much larger retained pending sets. PostgreSQL indexes are built
+// concurrently because production continues accepting relay settlements.
+func migrateSettlementBacklogIndexes(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&marketplaceschema.Settlement{}) ||
+		!db.Migrator().HasTable(&billingschema.BillingOutboxEvent{}) {
+		return nil
+	}
+	for _, statement := range settlementBacklogIndexStatements(db.Dialector.Name()) {
+		if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return err
+		}
+	}
+	return nil
+}
+
+func settlementBacklogIndexStatements(dialect string) []string {
+	switch strings.ToLower(dialect) {
+	case "postgres":
+		return []string{
+			`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_marketplace_settlements_releasable
+			 ON marketplace.settlements (available_at ASC, id ASC)
+			 WHERE status = 'pending' AND referral_rebate_pending = false`,
+			`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_outbox_pending_referral
+			 ON billing.outbox_events (attempts ASC, created_at ASC, event_id ASC) INCLUDE (account_id)
+			 WHERE status = 'pending' AND event_type = 'billing.reservation_settled'`,
+			`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_outbox_pending_referral_account
+			 ON billing.outbox_events (account_id, created_at ASC, event_id ASC)
+			 WHERE status = 'pending' AND event_type = 'billing.reservation_settled'`,
+		}
+	case "mysql":
+		return []string{
+			`CREATE INDEX idx_marketplace_settlements_releasable
+			 ON marketplace_settlements (status, referral_rebate_pending, available_at, id)`,
+			`CREATE INDEX idx_billing_outbox_pending_referral
+			 ON billing_outbox_events (status, event_type, attempts, created_at, event_id, account_id)`,
+			`CREATE INDEX idx_billing_outbox_pending_referral_account
+			 ON billing_outbox_events (status, event_type, account_id, created_at, event_id)`,
+		}
+	default:
+		return []string{
+			`CREATE INDEX IF NOT EXISTS idx_marketplace_settlements_releasable
+			 ON marketplace_settlements (status, referral_rebate_pending, available_at, id)`,
+			`CREATE INDEX IF NOT EXISTS idx_billing_outbox_pending_referral
+			 ON billing_outbox_events (status, event_type, attempts, created_at, event_id, account_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_billing_outbox_pending_referral_account
+			 ON billing_outbox_events (status, event_type, account_id, created_at, event_id)`,
+		}
+	}
 }
 
 // migrateMarketplaceSettlementReclaimIndex keeps administrator reclaim scans

@@ -23,9 +23,15 @@ const (
 	ledgerWorkerAccountConcurrency = 8
 	ledgerWorkerCandidateFactor    = 512
 	ledgerWorkerCandidateMax       = 16384
+	ledgerReferralAccountBatchSize = 48
+	ledgerReferralEventBatchSize   = 64
+	ledgerReferralConcurrency      = 16
+	ledgerReferralCandidateFactor  = 1024
+	ledgerReferralCandidateMax     = 65536
 	ledgerWorkerNoopBatchSize      = 10000
 	ledgerWorkerNoopBusyDelay      = 250 * time.Millisecond
 	ledgerWorkerInterval           = 2 * time.Second
+	ledgerReferralBusyDelay        = 25 * time.Millisecond
 	ledgerReconciliationInterval   = 24 * time.Hour
 	ledgerReconciliationMinSpacing = time.Minute
 	ledgerReconciliationTimeout    = 15 * time.Second
@@ -53,6 +59,7 @@ var ledgerReconciliationState = struct {
 // StartLedgerWorker begins asynchronous outbox processing for the ledger runtime.
 func StartLedgerWorker(ctx context.Context) {
 	go runNoopLedgerOutboxWorker(ctx)
+	go runReferralLedgerOutboxWorker(ctx)
 	go func() {
 		ticker := time.NewTicker(ledgerWorkerInterval)
 		defer ticker.Stop()
@@ -80,6 +87,28 @@ func StartLedgerWorker(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func runReferralLedgerOutboxWorker(ctx context.Context) {
+	for {
+		processed, err := RunReferralLedgerWorkerBatch(ctx, ledgerReferralAccountBatchSize)
+		if err != nil {
+			platformobservability.SysError("referral ledger worker batch failed: " + err.Error())
+		}
+		delay := ledgerWorkerInterval
+		if err != nil || processed > 0 {
+			delay = ledgerReferralBusyDelay
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+		}
+	}
 }
 
 func runNoopLedgerOutboxWorker(ctx context.Context) {
@@ -212,6 +241,86 @@ func RunLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 	return processed, firstError
 }
 
+// RunReferralLedgerWorkerBatch drains settlement events from a dedicated
+// candidate window so unrelated outbox traffic cannot hide referral work.
+func RunReferralLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
+	if platformdb.DB == nil {
+		return 0, fmt.Errorf("primary database is not initialized")
+	}
+	if limit <= 0 {
+		limit = ledgerReferralAccountBatchSize
+	}
+	accountIDs, err := pendingReferralOutboxAccountIDs(ctx, limit)
+	if err != nil || len(accountIDs) == 0 {
+		return 0, err
+	}
+	concurrency := min(ledgerReferralConcurrency, len(accountIDs))
+	if !platformdb.UsingPostgreSQL {
+		concurrency = 1
+	}
+	type accountResult struct {
+		count int
+		err   error
+	}
+	jobs := make(chan string)
+	results := make(chan accountResult, len(accountIDs))
+	var workers sync.WaitGroup
+	for range concurrency {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for accountID := range jobs {
+				count, processErr := processLedgerOutboxAccountEvents(ctx, accountID, "billing.reservation_settled", ledgerReferralEventBatchSize)
+				if processErr != nil {
+					if markErr := markLedgerReferralOutboxAccountFailure(ctx, accountID, processErr); markErr != nil {
+						processErr = fmt.Errorf("process referral ledger account %s: %w; mark failure: %v", accountID, processErr, markErr)
+					} else {
+						processErr = nil
+					}
+				}
+				results <- accountResult{count: count, err: processErr}
+			}
+		}()
+	}
+	for _, accountID := range accountIDs {
+		jobs <- accountID
+	}
+	close(jobs)
+	workers.Wait()
+	close(results)
+	processed := 0
+	var firstError error
+	for result := range results {
+		processed += result.count
+		if firstError == nil && result.err != nil {
+			firstError = result.err
+		}
+	}
+	return processed, firstError
+}
+
+func pendingReferralOutboxAccountIDs(ctx context.Context, limit int) ([]string, error) {
+	accountIDs := make([]string, 0, limit)
+	candidateLimit := limit * ledgerReferralCandidateFactor
+	if candidateLimit < limit || candidateLimit > ledgerReferralCandidateMax {
+		candidateLimit = ledgerReferralCandidateMax
+	}
+	candidates := platformdb.DB.WithContext(ctx).
+		Where("status = ? AND event_type = ?", billingschema.BillingOutboxStatusPending, "billing.reservation_settled").
+		Where("account_id <> ?", "").
+		Model(&billingschema.BillingOutboxEvent{}).
+		Select("account_id, attempts, created_at, event_id").
+		Order("attempts asc, created_at asc, event_id asc").
+		Limit(candidateLimit)
+	err := platformdb.DB.WithContext(ctx).Table("(?) AS pending_referral_candidates", candidates).
+		Select("account_id").
+		Group("account_id").
+		Order("MAX(attempts) asc, MIN(created_at) asc, account_id asc").
+		Limit(limit).
+		Pluck("account_id", &accountIDs).Error
+	return accountIDs, err
+}
+
 func pendingLedgerOutboxAccountIDs(ctx context.Context, limit int) ([]string, error) {
 	accountIDs := make([]string, 0, limit)
 	candidateLimit := limit * ledgerWorkerCandidateFactor
@@ -313,7 +422,6 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 		return 0, nil
 	}
 
-	processed := 0
 	now := time.Now().UTC()
 	reconcile := ledgerReconciliationDue(accountID, now)
 	repair := false
@@ -341,13 +449,25 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 		markLedgerReconciled(accountID, now)
 	}
 
+	return processLedgerOutboxAccountEvents(ctx, accountID, "", ledgerWorkerEventBatchSize)
+}
+
+func processLedgerOutboxAccountEvents(ctx context.Context, accountID string, eventType string, batchSize int) (int, error) {
+	if accountID == "" || batchSize <= 0 {
+		return 0, nil
+	}
+	processed := 0
 	// Select a bounded batch, then commit each event with all of its financial
 	// effects. Holding the snapshots of several owners until the whole batch
 	// completes creates lock cycles with live settlement and income release.
 	var events []billingschema.BillingOutboxEvent
-	if err := platformdb.DB.WithContext(ctx).
+	query := platformdb.DB.WithContext(ctx).
 		Where("account_id = ? AND status = ?", accountID, billingschema.BillingOutboxStatusPending).
-		Order("created_at asc, event_id asc").Limit(ledgerWorkerEventBatchSize).Find(&events).Error; err != nil {
+		Order("created_at asc, event_id asc").Limit(batchSize)
+	if eventType != "" {
+		query = query.Where("event_type = ?", eventType)
+	}
+	if err := query.Find(&events).Error; err != nil {
 		return 0, err
 	}
 	for _, selected := range events {
@@ -480,6 +600,18 @@ func markLedgerOutboxAccountFailure(ctx context.Context, accountID string, cause
 	return platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).
 		Where("account_id = ? AND status = ?", accountID, billingschema.BillingOutboxStatusPending).
 		Where("event_type NOT IN ?", ledgerWorkerNoopEventTypes).
+		Updates(map[string]any{
+			"attempts":   gorm.Expr("attempts + ?", 1),
+			"last_error": cause.Error(),
+		}).Error
+}
+
+func markLedgerReferralOutboxAccountFailure(ctx context.Context, accountID string, cause error) error {
+	if accountID == "" {
+		return nil
+	}
+	return platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).
+		Where("account_id = ? AND status = ? AND event_type = ?", accountID, billingschema.BillingOutboxStatusPending, "billing.reservation_settled").
 		Updates(map[string]any{
 			"attempts":   gorm.Expr("attempts + ?", 1),
 			"last_error": cause.Error(),

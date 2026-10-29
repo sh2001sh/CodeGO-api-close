@@ -93,6 +93,7 @@ func loadStaleReservationCandidates(ctx context.Context, now time.Time, limit in
 		Joins("JOIN "+accountTable+" AS account ON account.account_id = reservation.account_id").
 		Where("reservation.status = ?", billingschema.BillingReservationStatusOpen).
 		Where("reservation.request_id <> ?", "").
+		Where("(reservation.workflow_id IS NULL OR reservation.workflow_id <> ?)", MarketplaceOwnerIncomeFreezeWorkflow).
 		Where("account.account_type IN ?", []string{billingAccountTypeWallet, billingAccountTypeClaudeWallet, "subscription"}).
 		Where("(reservation.expires_at IS NOT NULL AND reservation.expires_at <= ?) OR (reservation.expires_at IS NULL AND reservation.created_at <= ?)", now, legacyCutoff).
 		Group("reservation.account_id, reservation.request_id").
@@ -151,6 +152,9 @@ func lockRecoveryTarget(tx *gorm.DB, candidate staleReservationCandidate, now ti
 	}
 	legacyCutoff := now.Add(-staleRelayReservationAge)
 	for _, reservation := range reservations {
+		if reservation.WorkflowID == MarketplaceOwnerIncomeFreezeWorkflow {
+			return account, nil, false, nil
+		}
 		if reservation.ExpiresAt != nil && reservation.ExpiresAt.After(now) {
 			return account, nil, false, nil
 		}

@@ -29,6 +29,7 @@ const (
 	ledgerReferralCandidateFactor  = 1024
 	ledgerReferralCandidateMax     = 65536
 	ledgerWorkerNoopBatchSize      = 10000
+	ledgerNonReferralBatchSize     = 2000
 	ledgerWorkerNoopBusyDelay      = 250 * time.Millisecond
 	ledgerWorkerInterval           = 2 * time.Second
 	ledgerReferralBusyDelay        = 25 * time.Millisecond
@@ -117,12 +118,17 @@ func runNoopLedgerOutboxWorker(ctx context.Context) {
 		if err != nil {
 			platformobservability.SysError("publish no-op ledger outbox batch: " + err.Error())
 		}
+		nonReferralProcessed, nonReferralErr := publishNonReferralSettlementBatch(ctx, ledgerNonReferralBatchSize)
+		if nonReferralErr != nil {
+			platformobservability.SysError("publish non-referral settlement outbox batch: " + nonReferralErr.Error())
+		}
 		projectedProcessed, projectedErr := publishProjectedMarketplaceUsageBatch(ctx, ledgerWorkerNoopBatchSize)
 		if projectedErr != nil {
 			platformobservability.SysError("publish projected marketplace usage batch: " + projectedErr.Error())
 		}
 		delay := ledgerWorkerInterval
-		if err == nil && projectedErr == nil && (noopProcessed == ledgerWorkerNoopBatchSize || projectedProcessed == ledgerWorkerNoopBatchSize) {
+		if err == nil && nonReferralErr == nil && projectedErr == nil &&
+			(noopProcessed == ledgerWorkerNoopBatchSize || nonReferralProcessed == ledgerNonReferralBatchSize || projectedProcessed == ledgerWorkerNoopBatchSize) {
 			delay = ledgerWorkerNoopBusyDelay
 		}
 		timer := time.NewTimer(delay)
@@ -360,6 +366,42 @@ func publishNoopLedgerOutboxBatch(ctx context.Context, limit int) (int64, error)
 	ids := platformdb.DB.WithContext(ctx).Table("(?) AS pending_candidates", candidates).
 		Select("event_id").
 		Where("event_type IN ?", ledgerWorkerNoopEventTypes).
+		Limit(limit)
+	now := time.Now().UTC()
+	result := platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).
+		Where("status = ?", billingschema.BillingOutboxStatusPending).
+		Where("event_id IN (?)", ids).
+		Updates(map[string]any{
+			"status":       billingschema.BillingOutboxStatusPublished,
+			"published_at": &now,
+			"last_error":   "",
+		})
+	return result.RowsAffected, result.Error
+}
+
+// Marketplace owner pending accounts only receive release and reclaim ledger
+// entries. Their settlement events cannot produce consumption rebates, so they
+// can be published in bulk without bypassing wallet or subscription accounting.
+func publishNonReferralSettlementBatch(ctx context.Context, limit int) (int64, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	candidateLimit := limit * 5
+	candidates := platformdb.DB.WithContext(ctx).
+		Model(&billingschema.BillingOutboxEvent{}).
+		Select("event_id, account_id, aggregate_id").
+		Where("status = ? AND event_type = ?", billingschema.BillingOutboxStatusPending, "billing.reservation_settled").
+		Order("attempts asc, created_at asc, event_id asc").
+		Limit(candidateLimit)
+	accountTable := billingschema.BillingAccount{}.TableName()
+	reservationTable := billingschema.BillingReservation{}.TableName()
+	settlementTable := billingschema.BillingSettlement{}.TableName()
+	ids := platformdb.DB.WithContext(ctx).Table("(?) AS pending_settlements", candidates).
+		Select("pending_settlements.event_id").
+		Joins("JOIN "+settlementTable+" AS settled ON settled.settlement_id = pending_settlements.aggregate_id").
+		Joins("JOIN "+reservationTable+" AS reserved ON reserved.reservation_id = settled.reservation_id AND reserved.account_id = pending_settlements.account_id").
+		Joins("JOIN "+accountTable+" AS account ON account.account_id = pending_settlements.account_id").
+		Where("account.account_type = ? AND account.owner_type = ?", "marketplace_owner_pending", "user").
 		Limit(limit)
 	now := time.Now().UTC()
 	result := platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).

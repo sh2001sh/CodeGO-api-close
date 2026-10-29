@@ -105,3 +105,82 @@ func TestReferralWorkerConcurrentBacklogPostgres(t *testing.T) {
 	require.EqualValues(t, len(events), published)
 	t.Logf("processed=%d elapsed=%s throughput=%.1f events/s", processed, elapsed, float64(processed)/elapsed.Seconds())
 }
+
+func TestPublishNonReferralSettlementBacklogPostgres(t *testing.T) {
+	dsn := os.Getenv("TEST_LEDGER_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set TEST_LEDGER_POSTGRES_DSN to a dedicated test database")
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	oldDB, oldPG, oldSQLite := platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite
+	platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = db, true, false
+	t.Cleanup(func() {
+		platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = oldDB, oldPG, oldSQLite
+		require.NoError(t, sqlDB.Close())
+	})
+	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS billing").Error)
+	require.NoError(t, db.AutoMigrate(
+		&billingschema.BillingAccount{}, &billingschema.BillingReservation{},
+		&billingschema.BillingSettlement{}, &billingschema.BillingOutboxEvent{},
+	))
+
+	eventCount := 10000
+	if os.Getenv("RUN_LEDGER_LOAD_TEST") == "1" {
+		eventCount = 200000
+	}
+	unique := time.Now().UnixNano()
+	accountID := fmt.Sprintf("non-referral-load-%d", unique)
+	require.NoError(t, db.Create(&billingschema.BillingAccount{
+		AccountID: accountID, AccountType: "marketplace_owner_pending", OwnerType: "user",
+		OwnerID: unique, QuotaUnit: "quota", Status: billingschema.BillingAccountStatusActive,
+	}).Error)
+	createdAt := time.Now().UTC().Add(-24 * time.Hour)
+	for offset := 0; offset < eventCount; offset += 1000 {
+		batchSize := min(1000, eventCount-offset)
+		reservations := make([]billingschema.BillingReservation, 0, batchSize)
+		settlements := make([]billingschema.BillingSettlement, 0, batchSize)
+		events := make([]billingschema.BillingOutboxEvent, 0, batchSize)
+		for index := offset; index < offset+batchSize; index++ {
+			id := fmt.Sprintf("non-referral-%d-%06d", unique, index)
+			reservationID := "reservation-" + id
+			settlementID := "settlement-" + id
+			reservations = append(reservations, billingschema.BillingReservation{
+				ReservationID: reservationID, RequestID: "request-" + id, AccountID: accountID,
+				ReservedAmount: 1, Status: billingschema.BillingReservationStatusSettled,
+				IdempotencyKey: reservationID, CreatedAt: createdAt, UpdatedAt: createdAt,
+			})
+			settlements = append(settlements, billingschema.BillingSettlement{
+				SettlementID: settlementID, ReservationID: reservationID, ActualAmount: 1,
+				Status: billingschema.BillingSettlementStatusCompleted, IdempotencyKey: settlementID,
+				SettledAt: createdAt, CreatedAt: createdAt,
+			})
+			events = append(events, billingschema.BillingOutboxEvent{
+				EventID: id, AccountID: accountID, AggregateID: settlementID, EventType: "billing.reservation_settled",
+				IdempotencyKey: id, Status: billingschema.BillingOutboxStatusPending,
+				CreatedAt: createdAt.Add(time.Duration(index) * time.Microsecond), UpdatedAt: createdAt,
+			})
+		}
+		require.NoError(t, db.CreateInBatches(&reservations, 1000).Error)
+		require.NoError(t, db.CreateInBatches(&settlements, 1000).Error)
+		require.NoError(t, db.CreateInBatches(&events, 1000).Error)
+	}
+
+	start := time.Now()
+	processed := int64(0)
+	for processed < int64(eventCount) {
+		count, runErr := publishNonReferralSettlementBatch(context.Background(), ledgerNonReferralBatchSize)
+		require.NoError(t, runErr)
+		require.Positive(t, count)
+		processed += count
+	}
+	elapsed := time.Since(start)
+	var pending int64
+	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).
+		Where("event_id LIKE ? AND status = ?", fmt.Sprintf("non-referral-%d-%%", unique), billingschema.BillingOutboxStatusPending).
+		Count(&pending).Error)
+	require.Zero(t, pending)
+	t.Logf("processed=%d elapsed=%s throughput=%.1f events/s", processed, elapsed, float64(processed)/elapsed.Seconds())
+}

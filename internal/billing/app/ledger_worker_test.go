@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -128,6 +129,55 @@ func TestPublishNoopLedgerOutboxBatchLeavesFinancialEventsPending(t *testing.T) 
 	require.NoError(t, db.Create(&events).Error)
 
 	processed, err := publishNoopLedgerOutboxBatch(context.Background(), 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, processed)
+
+	for index := range events {
+		require.NoError(t, db.First(&events[index], "event_id = ?", events[index].EventID).Error)
+		if index < 2 {
+			require.Equal(t, billingschema.BillingOutboxStatusPublished, events[index].Status)
+			require.NotNil(t, events[index].PublishedAt)
+			continue
+		}
+		require.Equal(t, billingschema.BillingOutboxStatusPending, events[index].Status)
+		require.Nil(t, events[index].PublishedAt)
+	}
+}
+
+func TestPublishNonReferralSettlementBatchLeavesWalletAndSubscriptionPending(t *testing.T) {
+	db, _ := referralTestDB(t)
+	now := time.Now().UTC()
+	accounts := []billingschema.BillingAccount{
+		{AccountID: "market-owner", AccountType: "marketplace_owner_pending", OwnerType: "user", OwnerID: 11},
+		{AccountID: "wallet", AccountType: billingAccountTypeClaudeWallet, OwnerType: "user", OwnerID: 12},
+		{AccountID: "subscription", AccountType: "subscription", OwnerType: "user_subscription", OwnerID: 13},
+	}
+	require.NoError(t, db.Create(&accounts).Error)
+	reservations := make([]billingschema.BillingReservation, 0, len(accounts)+1)
+	settlements := make([]billingschema.BillingSettlement, 0, len(accounts)+1)
+	for index, accountID := range []string{"market-owner", "market-owner", "wallet", "subscription"} {
+		id := fmt.Sprintf("non-referral-%d", index)
+		reservations = append(reservations, billingschema.BillingReservation{
+			ReservationID: "reservation-" + id, RequestID: "request-" + id, AccountID: accountID,
+			ReservedAmount: 1, Status: billingschema.BillingReservationStatusSettled, IdempotencyKey: "reservation-" + id,
+		})
+		settlements = append(settlements, billingschema.BillingSettlement{
+			SettlementID: "settlement-" + id, ReservationID: "reservation-" + id, ActualAmount: 1,
+			Status: billingschema.BillingSettlementStatusCompleted, IdempotencyKey: "settlement-" + id,
+		})
+	}
+	require.NoError(t, db.Create(&reservations).Error)
+	require.NoError(t, db.Create(&settlements).Error)
+	events := []billingschema.BillingOutboxEvent{
+		{AccountID: "market-owner", AggregateID: settlements[0].SettlementID, EventType: "billing.reservation_settled", IdempotencyKey: "market-owner-1", CreatedAt: now},
+		{AccountID: "market-owner", AggregateID: settlements[1].SettlementID, EventType: "billing.reservation_settled", IdempotencyKey: "market-owner-2", CreatedAt: now.Add(time.Millisecond)},
+		{AccountID: "wallet", AggregateID: settlements[2].SettlementID, EventType: "billing.reservation_settled", IdempotencyKey: "wallet", CreatedAt: now.Add(2 * time.Millisecond)},
+		{AccountID: "subscription", AggregateID: settlements[3].SettlementID, EventType: "billing.reservation_settled", IdempotencyKey: "subscription", CreatedAt: now.Add(3 * time.Millisecond)},
+		{AccountID: "market-owner", AggregateID: "missing-settlement", EventType: "billing.reservation_settled", IdempotencyKey: "market-owner-orphan", CreatedAt: now.Add(4 * time.Millisecond)},
+	}
+	require.NoError(t, db.Create(&events).Error)
+
+	processed, err := publishNonReferralSettlementBatch(context.Background(), 100)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, processed)
 

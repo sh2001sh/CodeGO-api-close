@@ -53,6 +53,9 @@ func TestReleaseDueSerializesEachOwnerPostgres(t *testing.T) {
 		&billingschema.BillingOutboxEvent{},
 		&marketplaceschema.Settlement{},
 	))
+	require.NoError(t, db.Exec(`CREATE INDEX idx_release_test_releasable
+		ON marketplace.settlements (available_at, id)
+		WHERE status = 'pending' AND referral_rebate_pending = false`).Error)
 
 	t.Run("one hot owner", func(t *testing.T) {
 		owners := []int{1001}
@@ -160,6 +163,55 @@ func TestReleaseDueSerializesEachOwnerPostgres(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, total, selected)
 		require.EqualValues(t, total, credited)
+	})
+
+	t.Run("large backlog selection stays bounded", func(t *testing.T) {
+		const total = 250000
+		require.NoError(t, db.Exec(`
+			INSERT INTO marketplace.settlements
+				(id, request_id, group_id, owner_user_id, consumer_user_id,
+				 consumer_amount, settlement_gross_amount, platform_commission,
+				 transaction_fee, owner_net_amount, multiplier, status,
+				 pending_account_id, available_at, created_at)
+			SELECT 'selector-large-' || value,
+			       'selector-large-' || value,
+			       'release-stress',
+			       6001 + (value % 16),
+			       1, 1, 1, 0, 0, 1, 1, 'pending',
+			       'pending-' || (6001 + (value % 16)),
+			       now() - interval '1 hour' + value * interval '1 microsecond',
+			       now() - interval '1 hour' + value * interval '1 microsecond'
+			FROM generate_series(1, ?) AS value`, total).Error)
+		require.NoError(t, db.Exec("ANALYZE marketplace.settlements").Error)
+
+		now := time.Now().UTC()
+		var oldSelection []marketplaceschema.Settlement
+		oldStarted := time.Now()
+		require.NoError(t, db.Raw(`
+			SELECT id, owner_user_id, pending_account_id, available_at
+			FROM (
+				SELECT id, owner_user_id, pending_account_id, available_at,
+				       ROW_NUMBER() OVER (
+				           PARTITION BY owner_user_id ORDER BY available_at, id
+				       ) AS owner_rank
+				FROM marketplace.settlements
+				WHERE status = 'pending'
+				  AND available_at <= ?
+				  AND referral_rebate_pending = false
+			) AS ranked_due_settlements
+			WHERE owner_rank <= 63
+			ORDER BY available_at, id
+			LIMIT 1000`, now).Scan(&oldSelection).Error)
+		oldDuration := time.Since(oldStarted)
+		require.Len(t, oldSelection, releaseBatchSize)
+
+		newStarted := time.Now()
+		newSelection, err := selectDueSettlements(t.Context(), releaseBatchSize, releaseOwnerSelectionSize)
+		newDuration := time.Since(newStarted)
+		require.NoError(t, err)
+		require.Len(t, newSelection, releaseBatchSize)
+		require.Less(t, newDuration, oldDuration)
+		t.Logf("selected 1000 of %d rows: bounded=%s full-window=%s", total, newDuration, oldDuration)
 	})
 }
 

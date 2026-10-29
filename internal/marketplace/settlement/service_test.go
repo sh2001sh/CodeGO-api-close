@@ -163,6 +163,35 @@ func TestSelectDueSettlementsIncludesMoreThanLegacyOwnerWindow(t *testing.T) {
 	require.Len(t, ownerIDs, len(items))
 }
 
+func TestSelectDueSettlementsBoundsCandidateQuery(t *testing.T) {
+	db := openSettlementTestDB(t)
+	availableAt := time.Now().UTC().Add(-time.Hour)
+	items := make([]marketplaceschema.Settlement, 160)
+	for index := range items {
+		ownerID := 20
+		if index >= 60 {
+			ownerID += index - 59
+		}
+		id := fmt.Sprintf("bounded-candidate-%03d", index)
+		items[index] = marketplaceschema.Settlement{
+			ID: id, RequestID: id, GroupID: "group", OwnerUserID: ownerID, ConsumerUserID: 1,
+			OwnerNetAmount: 1, Multiplier: 1, Status: statusPending,
+			AvailableAt: availableAt.Add(time.Duration(index) * time.Microsecond),
+		}
+	}
+	require.NoError(t, db.CreateInBatches(items, 100).Error)
+
+	selected, err := selectDueSettlements(context.Background(), 20, 20)
+	require.NoError(t, err)
+	require.Len(t, selected, 20)
+	ownerCounts := make(map[int]int)
+	for index := range selected {
+		ownerCounts[selected[index].OwnerUserID]++
+	}
+	require.Equal(t, 1, ownerCounts[20])
+	require.Len(t, ownerCounts, 20)
+}
+
 func TestReleaseDueContinuesAfterOneSettlementFails(t *testing.T) {
 	db := openSettlementTestDB(t)
 	now := time.Now().UTC()

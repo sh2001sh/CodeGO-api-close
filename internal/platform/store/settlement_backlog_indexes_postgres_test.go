@@ -32,11 +32,15 @@ func TestSettlementBacklogIndexesPostgres(t *testing.T) {
 	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS marketplace").Error)
 	require.NoError(t, db.AutoMigrate(&billingschema.BillingOutboxEvent{}, &marketplaceschema.Settlement{}))
 	require.NoError(t, migrateSettlementBacklogIndexes(db))
+	require.NoError(t, migrateMarketplaceReferralBacklogIndex(db))
+	require.NoError(t, migrateMarketplaceReleaseOwnerIndex(db))
 
 	for _, name := range []string{
 		"idx_marketplace_settlements_releasable",
 		"idx_billing_outbox_pending_referral",
 		"idx_billing_outbox_pending_referral_account",
+		"idx_billing_outbox_pending_marketplace_referral",
+		"idx_marketplace_settlements_releasable_owner",
 	} {
 		var count int64
 		require.NoError(t, db.Raw(`SELECT count(*) FROM pg_indexes WHERE indexname = ?`, name).Scan(&count).Error)

@@ -116,12 +116,16 @@ func runNonReferralSettlementOutboxWorker(ctx context.Context) {
 
 func runReferralLedgerOutboxWorker(ctx context.Context) {
 	for {
+		marketplaceProcessed, marketplaceErr := RunMarketplaceReferralLedgerWorkerBatch(ctx, ledgerReferralAccountBatchSize)
+		if marketplaceErr != nil {
+			platformobservability.SysError("marketplace referral ledger worker batch failed: " + marketplaceErr.Error())
+		}
 		processed, err := RunReferralLedgerWorkerBatch(ctx, ledgerReferralAccountBatchSize)
 		if err != nil {
 			platformobservability.SysError("referral ledger worker batch failed: " + err.Error())
 		}
 		delay := ledgerWorkerInterval
-		if err != nil || processed > 0 {
+		if marketplaceErr != nil || err != nil || marketplaceProcessed > 0 || processed > 0 {
 			delay = ledgerReferralBusyDelay
 		}
 		timer := time.NewTimer(delay)
@@ -269,13 +273,31 @@ func RunLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 // RunReferralLedgerWorkerBatch drains settlement events from a dedicated
 // candidate window so unrelated outbox traffic cannot hide referral work.
 func RunReferralLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
+	return runReferralLedgerWorkerBatch(ctx, limit, false)
+}
+
+// RunMarketplaceReferralLedgerWorkerBatch prioritizes credit-pack marketplace
+// settlements whose owner earnings cannot be released until referral allocation
+// finishes. The generic referral worker remains responsible for wallet events
+// that do not carry this context.
+func RunMarketplaceReferralLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
+	return runReferralLedgerWorkerBatch(ctx, limit, true)
+}
+
+func runReferralLedgerWorkerBatch(ctx context.Context, limit int, marketplaceOnly bool) (int, error) {
 	if platformdb.DB == nil {
 		return 0, fmt.Errorf("primary database is not initialized")
 	}
 	if limit <= 0 {
 		limit = ledgerReferralAccountBatchSize
 	}
-	accountIDs, err := pendingReferralOutboxAccountIDs(ctx, limit)
+	var accountIDs []string
+	var err error
+	if marketplaceOnly {
+		accountIDs, err = pendingMarketplaceReferralOutboxAccountIDs(ctx, limit)
+	} else {
+		accountIDs, err = pendingReferralOutboxAccountIDs(ctx, limit)
+	}
 	if err != nil || len(accountIDs) == 0 {
 		return 0, err
 	}
@@ -295,9 +317,15 @@ func RunReferralLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 		go func() {
 			defer workers.Done()
 			for accountID := range jobs {
-				count, processErr := processLedgerOutboxAccountEvents(ctx, accountID, "billing.reservation_settled", ledgerReferralEventBatchSize)
+				count, processErr := processLedgerOutboxAccountEvents(ctx, accountID, "billing.reservation_settled", ledgerReferralEventBatchSize, marketplaceOnly)
 				if processErr != nil {
-					if markErr := markLedgerReferralOutboxAccountFailure(ctx, accountID, processErr); markErr != nil {
+					var markErr error
+					if marketplaceOnly {
+						markErr = markMarketplaceReferralOutboxAccountFailure(ctx, accountID, processErr)
+					} else {
+						markErr = markLedgerReferralOutboxAccountFailure(ctx, accountID, processErr)
+					}
+					if markErr != nil {
 						processErr = fmt.Errorf("process referral ledger account %s: %w; mark failure: %v", accountID, processErr, markErr)
 					} else {
 						processErr = nil
@@ -322,6 +350,40 @@ func RunReferralLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 		}
 	}
 	return processed, firstError
+}
+
+func pendingMarketplaceReferralOutboxAccountIDs(ctx context.Context, limit int) ([]string, error) {
+	accountIDs := make([]string, 0, limit)
+	candidateLimit := limit * ledgerReferralCandidateFactor
+	if candidateLimit < limit || candidateLimit > ledgerReferralCandidateMax {
+		candidateLimit = ledgerReferralCandidateMax
+	}
+	candidates := platformdb.DB.WithContext(ctx).
+		Where("status = ? AND event_type = ?", billingschema.BillingOutboxStatusPending, "billing.reservation_settled").
+		Where(marketplaceReferralContextPredicate()).
+		Where("account_id <> ?", "").
+		Model(&billingschema.BillingOutboxEvent{}).
+		Select("account_id, attempts, created_at, event_id").
+		Order("attempts asc, created_at asc, event_id asc").
+		Limit(candidateLimit)
+	err := platformdb.DB.WithContext(ctx).Table("(?) AS pending_marketplace_referral_candidates", candidates).
+		Select("account_id").
+		Group("account_id").
+		Order("MAX(attempts) asc, MIN(created_at) asc, account_id asc").
+		Limit(limit).
+		Pluck("account_id", &accountIDs).Error
+	return accountIDs, err
+}
+
+func marketplaceReferralContextPredicate() string {
+	switch platformdb.DB.Dialector.Name() {
+	case "postgres":
+		return "payload::jsonb ? 'referral_context'"
+	case "mysql":
+		return "JSON_EXTRACT(payload, '$.referral_context') IS NOT NULL"
+	default:
+		return "json_type(payload, '$.referral_context') IS NOT NULL"
+	}
 }
 
 func pendingReferralOutboxAccountIDs(ctx context.Context, limit int) ([]string, error) {
@@ -516,10 +578,10 @@ func processLedgerOutboxAccount(ctx context.Context, accountID string) (int, err
 		markLedgerReconciled(accountID, now)
 	}
 
-	return processLedgerOutboxAccountEvents(ctx, accountID, "", ledgerWorkerEventBatchSize)
+	return processLedgerOutboxAccountEvents(ctx, accountID, "", ledgerWorkerEventBatchSize, false)
 }
 
-func processLedgerOutboxAccountEvents(ctx context.Context, accountID string, eventType string, batchSize int) (int, error) {
+func processLedgerOutboxAccountEvents(ctx context.Context, accountID string, eventType string, batchSize int, marketplaceReferralOnly bool) (int, error) {
 	if accountID == "" || batchSize <= 0 {
 		return 0, nil
 	}
@@ -533,6 +595,9 @@ func processLedgerOutboxAccountEvents(ctx context.Context, accountID string, eve
 		Order("created_at asc, event_id asc").Limit(batchSize)
 	if eventType != "" {
 		query = query.Where("event_type = ?", eventType)
+	}
+	if marketplaceReferralOnly {
+		query = query.Where(marketplaceReferralContextPredicate())
 	}
 	if err := query.Find(&events).Error; err != nil {
 		return 0, err
@@ -679,6 +744,19 @@ func markLedgerReferralOutboxAccountFailure(ctx context.Context, accountID strin
 	}
 	return platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).
 		Where("account_id = ? AND status = ? AND event_type = ?", accountID, billingschema.BillingOutboxStatusPending, "billing.reservation_settled").
+		Updates(map[string]any{
+			"attempts":   gorm.Expr("attempts + ?", 1),
+			"last_error": cause.Error(),
+		}).Error
+}
+
+func markMarketplaceReferralOutboxAccountFailure(ctx context.Context, accountID string, cause error) error {
+	if accountID == "" {
+		return nil
+	}
+	return platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).
+		Where("account_id = ? AND status = ? AND event_type = ?", accountID, billingschema.BillingOutboxStatusPending, "billing.reservation_settled").
+		Where(marketplaceReferralContextPredicate()).
 		Updates(map[string]any{
 			"attempts":   gorm.Expr("attempts + ?", 1),
 			"last_error": cause.Error(),

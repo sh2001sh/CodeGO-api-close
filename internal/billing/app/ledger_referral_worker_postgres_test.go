@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -38,10 +39,12 @@ func TestReferralWorkerConcurrentBacklogPostgres(t *testing.T) {
 
 	accountCount := 64
 	eventsPerAccount := 64
+	noiseCount := 1000
 	timeout := 60 * time.Second
 	if os.Getenv("RUN_LEDGER_LOAD_TEST") == "1" {
 		accountCount = 500
 		eventsPerAccount = 100
+		noiseCount = 200000
 		timeout = 3 * time.Minute
 	}
 	unique := time.Now().UnixNano()
@@ -50,6 +53,25 @@ func TestReferralWorkerConcurrentBacklogPostgres(t *testing.T) {
 	reservations := make([]billingschema.BillingReservation, 0, accountCount*eventsPerAccount)
 	settlements := make([]billingschema.BillingSettlement, 0, accountCount*eventsPerAccount)
 	events := make([]billingschema.BillingOutboxEvent, 0, accountCount*eventsPerAccount)
+	noiseAccountID := fmt.Sprintf("referral-noise-%d", unique)
+	require.NoError(t, db.Create(&billingschema.BillingAccount{
+		AccountID: noiseAccountID, AccountType: "marketplace_owner_pending",
+		OwnerType: "user", OwnerID: unique, QuotaUnit: "quota",
+	}).Error)
+	for offset := 0; offset < noiseCount; offset += 1000 {
+		batchSize := min(1000, noiseCount-offset)
+		noise := make([]billingschema.BillingOutboxEvent, 0, batchSize)
+		for index := offset; index < offset+batchSize; index++ {
+			id := fmt.Sprintf("referral-noise-%d-%06d", unique, index)
+			noise = append(noise, billingschema.BillingOutboxEvent{
+				EventID: id, AccountID: noiseAccountID, AggregateID: "missing-" + id,
+				EventType: "billing.reservation_settled", IdempotencyKey: id,
+				Status:    billingschema.BillingOutboxStatusPending,
+				CreatedAt: createdAt.Add(-24 * time.Hour), UpdatedAt: createdAt,
+			})
+		}
+		require.NoError(t, db.CreateInBatches(&noise, 1000).Error)
+	}
 	for accountIndex := range accountCount {
 		accountID := fmt.Sprintf("referral-load-%d-%02d", unique, accountIndex)
 		accounts = append(accounts, billingschema.BillingAccount{
@@ -74,6 +96,7 @@ func TestReferralWorkerConcurrentBacklogPostgres(t *testing.T) {
 				EventID: "event-" + id, AccountID: accountID, AggregateType: "settlement",
 				AggregateID: settlementID, EventType: "billing.reservation_settled",
 				IdempotencyKey: "outbox-" + id, Status: billingschema.BillingOutboxStatusPending,
+				Payload:   json.RawMessage(`{"referral_context":{}}`),
 				CreatedAt: createdAt, UpdatedAt: createdAt,
 			})
 		}
@@ -88,7 +111,7 @@ func TestReferralWorkerConcurrentBacklogPostgres(t *testing.T) {
 	started := time.Now()
 	processed := 0
 	for processed < len(events) {
-		count, runErr := RunReferralLedgerWorkerBatch(ctx, ledgerReferralAccountBatchSize)
+		count, runErr := RunMarketplaceReferralLedgerWorkerBatch(ctx, ledgerReferralAccountBatchSize)
 		require.NoError(t, runErr)
 		require.Positive(t, count)
 		processed += count
@@ -103,7 +126,12 @@ func TestReferralWorkerConcurrentBacklogPostgres(t *testing.T) {
 		Count(&published).Error)
 	require.Zero(t, pending)
 	require.EqualValues(t, len(events), published)
-	t.Logf("processed=%d elapsed=%s throughput=%.1f events/s", processed, elapsed, float64(processed)/elapsed.Seconds())
+	var noisePending int64
+	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).
+		Where("event_id LIKE ? AND status = ?", fmt.Sprintf("referral-noise-%d-%%", unique), billingschema.BillingOutboxStatusPending).
+		Count(&noisePending).Error)
+	require.EqualValues(t, noiseCount, noisePending)
+	t.Logf("processed=%d settlement_noise=%d elapsed=%s throughput=%.1f events/s", processed, noisePending, elapsed, float64(processed)/elapsed.Seconds())
 }
 
 func TestPublishNonReferralSettlementBacklogPostgres(t *testing.T) {

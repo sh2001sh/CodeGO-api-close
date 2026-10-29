@@ -1,6 +1,7 @@
 package settlement
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -93,6 +94,33 @@ func TestGroupSettlementReleasesByOwnerPreservesOrder(t *testing.T) {
 		{ownerUserID: 11, settlementIDs: []string{"owner-11-first", "owner-11-second"}},
 		{ownerUserID: 12, settlementIDs: []string{"owner-12-first"}},
 	}, batches)
+}
+
+func TestSelectDueSettlementsBalancesOwners(t *testing.T) {
+	db := openSettlementTestDB(t)
+	availableAt := time.Now().UTC().Add(-time.Hour)
+	items := make([]marketplaceschema.Settlement, 20)
+	for index := range items {
+		id := fmt.Sprintf("hot-owner-%02d", index)
+		items[index] = marketplaceschema.Settlement{
+			ID: id, RequestID: id, GroupID: "group", OwnerUserID: 10, ConsumerUserID: 1,
+			OwnerNetAmount: 1, Multiplier: 1, Status: statusPending, AvailableAt: availableAt,
+		}
+	}
+	items = append(items, marketplaceschema.Settlement{
+		ID: "second-owner", RequestID: "second-owner", GroupID: "group", OwnerUserID: 11, ConsumerUserID: 1,
+		OwnerNetAmount: 1, Multiplier: 1, Status: statusPending, AvailableAt: availableAt.Add(time.Minute),
+	})
+	require.NoError(t, db.Create(&items).Error)
+
+	selected, err := selectDueSettlements(context.Background(), 10, 32)
+	require.NoError(t, err)
+	require.Len(t, selected, 6)
+	ownerCounts := map[int]int{}
+	for _, item := range selected {
+		ownerCounts[item.OwnerUserID]++
+	}
+	require.Equal(t, map[int]int{10: 5, 11: 1}, ownerCounts)
 }
 
 func TestReleaseDueContinuesAfterOneSettlementFails(t *testing.T) {

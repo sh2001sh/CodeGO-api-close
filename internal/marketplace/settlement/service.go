@@ -28,12 +28,13 @@ const (
 	statusReclaimed = "reclaimed"
 	statusForfeited = "forfeited"
 
-	releaseBatchSize   = 1000
-	releaseConcurrency = 8
-	releaseMaxAttempts = 3
-	releaseIdleDelay   = 5 * time.Second
-	releaseErrorDelay  = time.Second
-	releaseRetryDelay  = 25 * time.Millisecond
+	releaseBatchSize          = 1000
+	releaseConcurrency        = 8
+	releaseOwnerSelectionSize = 32
+	releaseMaxAttempts        = 3
+	releaseIdleDelay          = 5 * time.Second
+	releaseErrorDelay         = time.Second
+	releaseRetryDelay         = 25 * time.Millisecond
 )
 
 type RecordParams struct {
@@ -255,7 +256,7 @@ func StartReleaseWorker(ctx context.Context) {
 				switch {
 				case err != nil || compactErr != nil:
 					delay = releaseErrorDelay
-				case selected < releaseBatchSize && compacted < 10000:
+				case selected == 0 && compacted < 10000:
 					delay = releaseIdleDelay
 				}
 				if delay == 0 {
@@ -322,11 +323,8 @@ func releaseDue(ctx context.Context, limit int, concurrency int) (int, error) {
 	if !platformdb.UsingPostgreSQL {
 		concurrency = 1
 	}
-	var settlements []marketplaceschema.Settlement
-	if err := platformdb.DB.WithContext(ctx).Select("id, owner_user_id").
-		Where("status = ? AND available_at <= ?", statusPending, time.Now().UTC()).
-		Where("referral_rebate_pending = ?", false).
-		Order("available_at asc, id asc").Limit(limit).Find(&settlements).Error; err != nil {
+	settlements, err := selectDueSettlements(ctx, limit, releaseOwnerSelectionSize)
+	if err != nil {
 		return 0, err
 	}
 	if len(settlements) == 0 {
@@ -374,6 +372,44 @@ func releaseDue(ctx context.Context, limit int, concurrency int) (int, error) {
 		return len(settlements), fmt.Errorf("%d of %d marketplace settlements failed to release; first error: %w", errorCount, len(settlements), firstError)
 	}
 	return len(settlements), nil
+}
+
+func selectDueSettlements(ctx context.Context, limit int, ownerLimit int) ([]marketplaceschema.Settlement, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	ownerLimit = min(max(ownerLimit, 1), limit)
+	now := time.Now().UTC()
+	type dueOwner struct {
+		OwnerUserID int `gorm:"column:owner_user_id"`
+	}
+	var owners []dueOwner
+	if err := platformdb.DB.WithContext(ctx).Model(&marketplaceschema.Settlement{}).
+		Select("owner_user_id").
+		Where("status = ? AND available_at <= ?", statusPending, now).
+		Where("referral_rebate_pending = ?", false).
+		Group("owner_user_id").Order("MIN(available_at) asc, owner_user_id asc").Limit(ownerLimit).
+		Find(&owners).Error; err != nil {
+		return nil, err
+	}
+	if len(owners) == 0 {
+		return nil, nil
+	}
+	ownerIDs := make([]int, len(owners))
+	for index := range owners {
+		ownerIDs[index] = owners[index].OwnerUserID
+	}
+	perOwner := (limit + len(ownerIDs) - 1) / len(ownerIDs)
+	ranked := platformdb.DB.WithContext(ctx).Model(&marketplaceschema.Settlement{}).
+		Select("id, owner_user_id, available_at, ROW_NUMBER() OVER (PARTITION BY owner_user_id ORDER BY available_at ASC, id ASC) AS owner_rank").
+		Where("status = ? AND available_at <= ?", statusPending, now).
+		Where("referral_rebate_pending = ? AND owner_user_id IN ?", false, ownerIDs)
+	var settlements []marketplaceschema.Settlement
+	err := platformdb.DB.WithContext(ctx).Table("(?) AS ranked_due_settlements", ranked).
+		Select("id, owner_user_id, available_at").
+		Where("owner_rank <= ?", perOwner).
+		Order("available_at asc, id asc").Limit(limit).Find(&settlements).Error
+	return settlements, err
 }
 
 func groupSettlementReleasesByOwner(settlements []marketplaceschema.Settlement) []releaseOwnerBatch {

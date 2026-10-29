@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -47,4 +48,40 @@ func TestReferralWorkerBypassesGenericPendingWindow(t *testing.T) {
 	var inviter identityschema.User
 	require.NoError(t, db.First(&inviter, 1).Error)
 	require.Equal(t, 2, inviter.ClaudeQuota)
+}
+
+func TestMarketplaceReferralWorkerBypassesNonContextSettlements(t *testing.T) {
+	db, now := referralTestDB(t)
+	older := time.Unix(now-3600, 0).UTC()
+	noise := make([]billingschema.BillingOutboxEvent, 1000)
+	for index := range noise {
+		noise[index] = billingschema.BillingOutboxEvent{
+			AccountID: fmt.Sprintf("settlement-noise-%04d", index), AggregateID: fmt.Sprintf("missing-%04d", index),
+			EventType: "billing.reservation_settled", IdempotencyKey: fmt.Sprintf("settlement-noise-%04d", index),
+			CreatedAt: older,
+		}
+	}
+	require.NoError(t, db.CreateInBatches(&noise, 500).Error)
+
+	accountID := referralPaidWallet(t, db, 1000, 800)
+	settlement := referralSettle(t, db, accountID, "marketplace-priority", "relay:wallet:marketplace-priority", 100, 100, now)
+	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).
+		Where("aggregate_id = ?", settlement.SettlementID).
+		Update("payload", json.RawMessage(`{"referral_context":{}}`)).Error)
+
+	accountIDs, err := pendingMarketplaceReferralOutboxAccountIDs(context.Background(), 1)
+	require.NoError(t, err)
+	require.Equal(t, []string{accountID}, accountIDs)
+	processed, err := RunMarketplaceReferralLedgerWorkerBatch(context.Background(), 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+
+	var event billingschema.BillingOutboxEvent
+	require.NoError(t, db.First(&event, "aggregate_id = ?", settlement.SettlementID).Error)
+	require.Equal(t, billingschema.BillingOutboxStatusPublished, event.Status)
+	var noisePending int64
+	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).
+		Where("idempotency_key LIKE ? AND status = ?", "settlement-noise-%", billingschema.BillingOutboxStatusPending).
+		Count(&noisePending).Error)
+	require.EqualValues(t, len(noise), noisePending)
 }

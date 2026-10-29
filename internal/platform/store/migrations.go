@@ -230,6 +230,8 @@ func V2MigrationIDs() []string {
 		"20261027_marketplace_owner_withdrawals",
 		"20261027_marketplace_owner_withdrawal_reservations",
 		"20261029_settlement_backlog_indexes",
+		"20261029_marketplace_referral_backlog_index",
+		"20261030_marketplace_release_owner_index",
 	}
 }
 
@@ -547,6 +549,8 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20261027_marketplace_owner_withdrawals", Run: migrateMarketplaceOwnerWithdrawals},
 		{ID: "20261027_marketplace_owner_withdrawal_reservations", Run: migrateMarketplaceOwnerWithdrawals},
 		{ID: "20261029_settlement_backlog_indexes", RunOutsideTx: migrateSettlementBacklogIndexes},
+		{ID: "20261029_marketplace_referral_backlog_index", RunOutsideTx: migrateMarketplaceReferralBacklogIndex},
+		{ID: "20261030_marketplace_release_owner_index", RunOutsideTx: migrateMarketplaceReleaseOwnerIndex},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -835,6 +839,62 @@ func settlementBacklogIndexStatements(dialect string) []string {
 			`CREATE INDEX IF NOT EXISTS idx_billing_outbox_pending_referral_account
 			 ON billing_outbox_events (status, event_type, account_id, created_at, event_id)`,
 		}
+	}
+}
+
+func migrateMarketplaceReferralBacklogIndex(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&billingschema.BillingOutboxEvent{}) {
+		return nil
+	}
+	for _, statement := range marketplaceReferralBacklogIndexStatements(db.Dialector.Name()) {
+		if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return err
+		}
+	}
+	return nil
+}
+
+func marketplaceReferralBacklogIndexStatements(dialect string) []string {
+	switch strings.ToLower(dialect) {
+	case "postgres":
+		return []string{`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_outbox_pending_marketplace_referral
+			 ON billing.outbox_events (attempts ASC, created_at ASC, event_id ASC) INCLUDE (account_id)
+			 WHERE status = 'pending' AND event_type = 'billing.reservation_settled'
+			   AND payload::jsonb ? 'referral_context'`}
+	case "mysql":
+		return nil
+	default:
+		return []string{`CREATE INDEX IF NOT EXISTS idx_billing_outbox_pending_marketplace_referral
+			 ON billing_outbox_events (attempts, created_at, event_id, account_id)
+			 WHERE status = 'pending' AND event_type = 'billing.reservation_settled'
+			   AND json_type(payload, '$.referral_context') IS NOT NULL`}
+	}
+}
+
+func migrateMarketplaceReleaseOwnerIndex(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&marketplaceschema.Settlement{}) {
+		return nil
+	}
+	for _, statement := range marketplaceReleaseOwnerIndexStatements(db.Dialector.Name()) {
+		if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return err
+		}
+	}
+	return nil
+}
+
+func marketplaceReleaseOwnerIndexStatements(dialect string) []string {
+	switch strings.ToLower(dialect) {
+	case "postgres":
+		return []string{`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_marketplace_settlements_releasable_owner
+			 ON marketplace.settlements (owner_user_id, available_at ASC, id ASC)
+			 WHERE status = 'pending' AND referral_rebate_pending = false`}
+	case "mysql":
+		return []string{`CREATE INDEX idx_marketplace_settlements_releasable_owner
+			 ON marketplace_settlements (status, referral_rebate_pending, owner_user_id, available_at, id)`}
+	default:
+		return []string{`CREATE INDEX IF NOT EXISTS idx_marketplace_settlements_releasable_owner
+			 ON marketplace_settlements (status, referral_rebate_pending, owner_user_id, available_at, id)`}
 	}
 }
 

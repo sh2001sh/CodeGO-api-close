@@ -667,6 +667,16 @@ func ensureBalanceSnapshot(tx *gorm.DB, accountID string) error {
 	return nil
 }
 
+// LockBalanceSnapshotTx lets multi-account workflows establish their complete
+// lock order before they mutate another account or a compatibility projection.
+func LockBalanceSnapshotTx(tx *gorm.DB, accountID string) error {
+	if tx == nil || strings.TrimSpace(accountID) == "" {
+		return fmt.Errorf("transaction and account_id are required")
+	}
+	_, err := ensureAndLockBalanceSnapshot(tx, accountID)
+	return err
+}
+
 func ensureAndLockBalanceSnapshot(tx *gorm.DB, accountID string) (*billingschema.BillingBalanceSnapshot, error) {
 	// Existing accounts need only the locked read. A preliminary unlocked
 	// existence check adds a database round trip to every wallet operation.

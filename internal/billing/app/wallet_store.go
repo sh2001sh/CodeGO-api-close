@@ -242,6 +242,9 @@ func CreditMarketplaceOwnerEarningsTx(tx *gorm.DB, userID int, amount int64, ide
 	if userID <= 0 || amount <= 0 || idempotencyKey == "" {
 		return errors.New("invalid marketplace owner credit")
 	}
+	if err := lockMirroredUserTx(tx, userID); err != nil {
+		return err
+	}
 
 	legacyBalance, err := getUserClaudeWalletQuotaTx(tx, userID)
 	if err != nil {
@@ -483,6 +486,9 @@ func creditUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64, idempotencyK
 	}
 	if idempotencyKey == "" {
 		return errors.New("idempotency key is required")
+	}
+	if err := lockMirroredUserTx(tx, userID); err != nil {
+		return err
 	}
 
 	legacyBalance, err := mirrored.readBalance(tx, userID)
@@ -759,6 +765,17 @@ func getUserWalletQuotaTx(tx *gorm.DB, userID int) (int, error) {
 		return 0, err
 	}
 	return quota, nil
+}
+
+// Mirrored wallet transactions always lock the compatibility projection before
+// the canonical balance snapshot. Referral processing already uses this order;
+// keeping every wallet mutation consistent prevents users/snapshots lock cycles.
+func lockMirroredUserTx(tx *gorm.DB, userID int) error {
+	if tx == nil || userID <= 0 {
+		return errors.New("invalid mirrored wallet user lock")
+	}
+	var user identityschema.User
+	return tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").First(&user, userID).Error
 }
 
 func getUserClaudeWalletQuotaTx(tx *gorm.DB, userID int) (int, error) {

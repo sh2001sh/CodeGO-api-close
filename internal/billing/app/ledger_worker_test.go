@@ -8,6 +8,7 @@ import (
 	"github.com/glebarez/sqlite"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -133,6 +134,37 @@ func TestPublishNoopLedgerOutboxBatchLeavesFinancialEventsPending(t *testing.T) 
 	for index := range events {
 		require.NoError(t, db.First(&events[index], "event_id = ?", events[index].EventID).Error)
 		if index < 2 {
+			require.Equal(t, billingschema.BillingOutboxStatusPublished, events[index].Status)
+			require.NotNil(t, events[index].PublishedAt)
+			continue
+		}
+		require.Equal(t, billingschema.BillingOutboxStatusPending, events[index].Status)
+		require.Nil(t, events[index].PublishedAt)
+	}
+}
+
+func TestPublishProjectedMarketplaceUsageBatchLeavesMissingIncomePending(t *testing.T) {
+	db, _ := referralTestDB(t)
+	now := time.Now().UTC()
+	receipt := marketplaceschema.Settlement{
+		ID: "existing-income", RequestID: "projected-request", GroupID: "group",
+		OwnerUserID: 1, ConsumerUserID: 2, OwnerNetAmount: 95, Status: "pending",
+	}
+	require.NoError(t, db.Create(&receipt).Error)
+	events := []billingschema.BillingOutboxEvent{
+		{AccountID: "projected", AggregateID: receipt.RequestID, EventType: marketplaceUsageSettledEvent, IdempotencyKey: "projected", CreatedAt: now},
+		{AccountID: "missing", AggregateID: "missing-request", EventType: marketplaceUsageSettledEvent, IdempotencyKey: "missing", CreatedAt: now.Add(time.Second)},
+		{AccountID: "referral", AggregateID: "native-settlement", EventType: "billing.reservation_settled", IdempotencyKey: "referral", CreatedAt: now.Add(2 * time.Second)},
+	}
+	require.NoError(t, db.Create(&events).Error)
+
+	processed, err := publishProjectedMarketplaceUsageBatch(context.Background(), 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, processed)
+
+	for index := range events {
+		require.NoError(t, db.First(&events[index], "event_id = ?", events[index].EventID).Error)
+		if index == 0 {
 			require.Equal(t, billingschema.BillingOutboxStatusPublished, events[index].Status)
 			require.NotNil(t, events[index].PublishedAt)
 			continue

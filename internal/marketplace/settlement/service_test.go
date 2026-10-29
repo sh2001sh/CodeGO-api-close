@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/jackc/pgx/v5/pgconn"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -61,6 +62,21 @@ func TestRecordAndReleaseSettlementAreIdempotent(t *testing.T) {
 	require.NoError(t, db.First(&pendingSnapshot, "account_id = ?", item.PendingAccountID).Error)
 	require.Zero(t, pendingSnapshot.AvailableBalance)
 	require.Equal(t, int64(95), pendingSnapshot.ConsumedTotal)
+}
+
+func TestMarketplaceReleaseRetryOnlyDefinitePostgresRollback(t *testing.T) {
+	for _, test := range []struct {
+		err   error
+		retry bool
+	}{
+		{nil, false},
+		{&pgconn.PgError{Code: "40P01"}, true},
+		{fmt.Errorf("wrapped: %w", &pgconn.PgError{Code: "40001"}), true},
+		{&pgconn.PgError{Code: "55P03"}, false},
+		{errors.New("network error mentioning SQLSTATE 40P01"), false},
+	} {
+		require.Equal(t, test.retry, retryableMarketplaceReleaseError(test.err), "error=%v", test.err)
+	}
 }
 
 func TestReleaseDueContinuesAfterOneSettlementFails(t *testing.T) {

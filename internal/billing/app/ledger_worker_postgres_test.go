@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -11,6 +12,9 @@ import (
 
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
+	identityschema "github.com/sh2001sh/new-api/internal/identity/schema"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
+	marketplacesettlement "github.com/sh2001sh/new-api/internal/marketplace/settlement"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
@@ -190,4 +194,221 @@ func TestLedgerOutboxDoesNotHoldEarlierEventLockDuringLaterEventPostgres(t *test
 	require.NoError(t, probeErr, "the earlier event's row lock must be released while the next event is blocked")
 	require.ErrorIs(t, workerErr, injected)
 	require.Equal(t, billingschema.BillingOutboxStatusPublished, published.Status)
+}
+
+func TestMarketplaceOwnerCreditWaitsForUserBeforeLockingBalancePostgres(t *testing.T) {
+	dsn := os.Getenv("TEST_LEDGER_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set TEST_LEDGER_POSTGRES_DSN to a dedicated test database")
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	oldDB, oldPG, oldSQLite := platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite
+	platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = db, true, false
+	t.Cleanup(func() {
+		platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = oldDB, oldPG, oldSQLite
+		require.NoError(t, sqlDB.Close())
+	})
+	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS billing").Error)
+	require.NoError(t, db.AutoMigrate(&identityschema.User{}, &billingschema.BillingAccount{}, &billingschema.BillingBalanceSnapshot{}, &billingschema.BillingLedgerEntry{}, &billingschema.BillingOutboxEvent{}, &billingschema.FundingLot{}))
+	userID := int(time.Now().UnixNano()%1_000_000_000) + 1000
+	require.NoError(t, db.Create(&identityschema.User{Id: userID, Username: fmt.Sprintf("owner-%d", userID), Password: "unused", AffCode: fmt.Sprintf("o%d", userID)}).Error)
+	var account *billingschema.BillingAccount
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		var ensureErr error
+		account, ensureErr = ensureMirroredUserAccountTx(tx, userID, billingAccountTypeClaudeWallet, 0)
+		return ensureErr
+	}))
+
+	holder := db.Begin()
+	require.NoError(t, holder.Error)
+	defer holder.Rollback()
+	require.NoError(t, holder.Exec("SET LOCAL lock_timeout = '2s'").Error)
+	require.NoError(t, holder.Exec("SELECT id FROM users WHERE id = ? FOR UPDATE", userID).Error)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	backendPID := make(chan int, 1)
+	creditDone := make(chan error, 1)
+	go func() {
+		creditDone <- db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var pid int
+			if err := tx.Raw("SELECT pg_backend_pid()").Scan(&pid).Error; err != nil {
+				return err
+			}
+			backendPID <- pid
+			return CreditMarketplaceOwnerEarningsTx(tx, userID, 10, fmt.Sprintf("lock-order-credit-%d", userID), "marketplace_owner_release")
+		})
+	}()
+	pid := <-backendPID
+	for {
+		var waitType string
+		require.NoError(t, db.Raw("SELECT COALESCE(wait_event_type, '') FROM pg_stat_activity WHERE pid = ?", pid).Scan(&waitType).Error)
+		if waitType == "Lock" {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("credit transaction did not wait on the held user row")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	probeErr := holder.Exec("SELECT account_id FROM billing.balance_snapshots WHERE account_id = ? FOR UPDATE NOWAIT", account.AccountID).Error
+	if probeErr == nil {
+		require.NoError(t, holder.Commit().Error)
+	} else {
+		require.NoError(t, holder.Rollback().Error)
+	}
+	require.NoError(t, <-creditDone)
+	require.NoError(t, probeErr, "a wallet writer waiting on users must not hold the balance snapshot lock")
+}
+
+func TestMarketplaceReferralWaitsForPendingBalanceBeforeLockingUserPostgres(t *testing.T) {
+	dsn := os.Getenv("TEST_LEDGER_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set TEST_LEDGER_POSTGRES_DSN to a dedicated test database")
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	oldDB, oldPG, oldSQLite := platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite
+	platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = db, true, false
+	t.Cleanup(func() {
+		platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = oldDB, oldPG, oldSQLite
+		require.NoError(t, sqlDB.Close())
+	})
+	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS billing").Error)
+	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS marketplace").Error)
+	require.NoError(t, db.AutoMigrate(
+		&identityschema.User{}, &billingschema.BillingAccount{}, &billingschema.BillingBalanceSnapshot{},
+		&billingschema.BillingLedgerEntry{}, &billingschema.BillingReservation{}, &billingschema.BillingSettlement{},
+		&billingschema.BillingOutboxEvent{}, &billingschema.FundingLot{}, &marketplaceschema.Settlement{},
+	))
+
+	unique := time.Now().UnixNano()
+	userID := int(unique%1_000_000_000) + 1000
+	requestID := fmt.Sprintf("referral-lock-order-%d", unique)
+	require.NoError(t, db.Create(&identityschema.User{Id: userID, Username: fmt.Sprintf("lock-%d", userID), Password: "unused", AffCode: fmt.Sprintf("l%d", userID)}).Error)
+	pending, err := billingdomain.EnsureBillingAccount(billingdomain.EnsureAccountParams{
+		AccountType: "marketplace_owner_pending", OwnerType: "user", OwnerID: int64(userID), QuotaUnit: "quota",
+	})
+	require.NoError(t, err)
+	_, err = billingdomain.CreditAccount(billingdomain.CreditAccountParams{
+		AccountID: pending.AccountID, Amount: 1000, IdempotencyKey: requestID + ":pending-credit",
+	})
+	require.NoError(t, err)
+	params := marketplacesettlement.RecordParams{
+		RequestID: requestID, GroupID: "lock-order", OwnerUserID: userID, ConsumerUserID: userID + 1,
+		ConsumerDebitAmount: 1000, SettlementGrossAmount: 1000, CreditPackGrantedQuota: 1000,
+		CreditPackPaidQuota: 900, CreditPackChannelShareBPS: 6000,
+	}
+	item := marketplaceschema.Settlement{
+		ID: requestID, RequestID: requestID, GroupID: params.GroupID, OwnerUserID: params.OwnerUserID,
+		ConsumerUserID: params.ConsumerUserID, ConsumerAmount: params.ConsumerDebitAmount,
+		SettlementGrossAmount: params.SettlementGrossAmount, PlatformCommission: 50, OwnerNetAmount: 950,
+		CreditPackGrantedQuota: params.CreditPackGrantedQuota, CreditPackPaidQuota: params.CreditPackPaidQuota,
+		CreditPackChannelShareBPS: params.CreditPackChannelShareBPS, ReferralRebatePending: true,
+		Status: "pending", PendingAccountID: pending.AccountID, AvailableAt: time.Now().UTC().Add(time.Hour),
+	}
+	require.NoError(t, db.Create(&item).Error)
+
+	holder := db.Begin()
+	require.NoError(t, holder.Error)
+	defer holder.Rollback()
+	require.NoError(t, holder.Exec("SET LOCAL lock_timeout = '2s'").Error)
+	require.NoError(t, holder.Exec("SELECT account_id FROM billing.balance_snapshots WHERE account_id = ? FOR UPDATE", pending.AccountID).Error)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	backendPID := make(chan int, 1)
+	referralDone := make(chan error, 1)
+	go func() {
+		referralDone <- db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var pid int
+			if err := tx.Raw("SELECT pg_backend_pid()").Scan(&pid).Error; err != nil {
+				return err
+			}
+			backendPID <- pid
+			locked, err := marketplacesettlement.LockCreditPackReferralTx(tx, params)
+			if err != nil {
+				return err
+			}
+			if err := CreditMarketplaceOwnerEarningsTx(tx, userID, 10, requestID+":inviter-credit", "referral_rebate"); err != nil {
+				return err
+			}
+			return marketplacesettlement.DebitCreditPackReferralTx(tx, locked, fmt.Sprintf("n%d", userID), 10)
+		})
+	}()
+	pid := <-backendPID
+	for {
+		var waitType string
+		require.NoError(t, db.Raw("SELECT COALESCE(wait_event_type, '') FROM pg_stat_activity WHERE pid = ?", pid).Scan(&waitType).Error)
+		if waitType == "Lock" {
+			break
+		}
+		select {
+		case err := <-referralDone:
+			t.Fatalf("referral transaction completed before waiting on the pending balance: %v", err)
+		case <-ctx.Done():
+			t.Fatal("referral transaction did not wait on the held pending balance")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	probeErr := holder.Exec("SELECT id FROM users WHERE id = ? FOR UPDATE NOWAIT", userID).Error
+	if probeErr == nil {
+		require.NoError(t, holder.Commit().Error)
+	} else {
+		require.NoError(t, holder.Rollback().Error)
+	}
+	require.NoError(t, <-referralDone)
+	require.NoError(t, probeErr, "a referral waiting on the pending balance must not already hold the user lock")
+}
+
+func TestPublishProjectedMarketplaceUsageBatchPostgres(t *testing.T) {
+	dsn := os.Getenv("TEST_LEDGER_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set TEST_LEDGER_POSTGRES_DSN to a dedicated test database")
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	oldDB, oldPG, oldSQLite := platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite
+	platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = db, true, false
+	t.Cleanup(func() {
+		platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = oldDB, oldPG, oldSQLite
+		require.NoError(t, sqlDB.Close())
+	})
+	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS billing").Error)
+	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS marketplace").Error)
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingOutboxEvent{}, &marketplaceschema.Settlement{}))
+
+	unique := time.Now().UnixNano()
+	projectedRequest := fmt.Sprintf("projected-%d", unique)
+	missingRequest := fmt.Sprintf("missing-%d", unique)
+	receipt := marketplaceschema.Settlement{
+		ID: projectedRequest, RequestID: projectedRequest, GroupID: "postgres-batch", OwnerUserID: 1,
+		ConsumerUserID: 2, SettlementGrossAmount: 100, OwnerNetAmount: 95, Status: "pending",
+	}
+	require.NoError(t, db.Create(&receipt).Error)
+	events := []billingschema.BillingOutboxEvent{
+		{AccountID: projectedRequest, AggregateID: projectedRequest, EventType: marketplaceUsageSettledEvent, IdempotencyKey: projectedRequest, CreatedAt: time.Now().UTC()},
+		{AccountID: missingRequest, AggregateID: missingRequest, EventType: marketplaceUsageSettledEvent, IdempotencyKey: missingRequest, CreatedAt: time.Now().UTC().Add(time.Millisecond)},
+	}
+	require.NoError(t, db.Create(&events).Error)
+
+	processed, err := publishProjectedMarketplaceUsageBatch(context.Background(), 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, processed)
+	require.NoError(t, db.First(&events[0], "event_id = ?", events[0].EventID).Error)
+	require.NoError(t, db.First(&events[1], "event_id = ?", events[1].EventID).Error)
+	require.Equal(t, billingschema.BillingOutboxStatusPublished, events[0].Status)
+	require.NotNil(t, events[0].PublishedAt)
+	require.Equal(t, billingschema.BillingOutboxStatusPending, events[1].Status)
+	require.Nil(t, events[1].PublishedAt)
 }

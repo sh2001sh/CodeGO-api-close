@@ -43,6 +43,9 @@ func debitUserWalletQuotaTx(tx *gorm.DB, userID int, amount int64, operationID s
 	if userID <= 0 || amount <= 0 || operationID == "" {
 		return errors.New("invalid wallet debit")
 	}
+	if err := lockMirroredUserTx(tx, userID); err != nil {
+		return err
+	}
 
 	legacyBalance, err := mirrored.readBalance(tx, userID)
 	if err != nil {

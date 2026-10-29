@@ -10,6 +10,7 @@ import (
 
 	billingschema "github.com/sh2001sh/new-api/internal/billing/schema"
 	identitystore "github.com/sh2001sh/new-api/internal/identity/store"
+	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
 	platformobservability "github.com/sh2001sh/new-api/internal/platform/observability"
 	"gorm.io/gorm"
@@ -83,12 +84,16 @@ func StartLedgerWorker(ctx context.Context) {
 
 func runNoopLedgerOutboxWorker(ctx context.Context) {
 	for {
-		processed, err := publishNoopLedgerOutboxBatch(ctx, ledgerWorkerNoopBatchSize)
+		noopProcessed, err := publishNoopLedgerOutboxBatch(ctx, ledgerWorkerNoopBatchSize)
 		if err != nil {
 			platformobservability.SysError("publish no-op ledger outbox batch: " + err.Error())
 		}
+		projectedProcessed, projectedErr := publishProjectedMarketplaceUsageBatch(ctx, ledgerWorkerNoopBatchSize)
+		if projectedErr != nil {
+			platformobservability.SysError("publish projected marketplace usage batch: " + projectedErr.Error())
+		}
 		delay := ledgerWorkerInterval
-		if err == nil && processed == ledgerWorkerNoopBatchSize {
+		if err == nil && projectedErr == nil && (noopProcessed == ledgerWorkerNoopBatchSize || projectedProcessed == ledgerWorkerNoopBatchSize) {
 			delay = ledgerWorkerNoopBusyDelay
 		}
 		timer := time.NewTimer(delay)
@@ -142,6 +147,13 @@ func RunLedgerWorkerBatch(ctx context.Context, limit int) (int, error) {
 		noopProcessed, err = publishNoopLedgerOutboxBatch(ctx, ledgerWorkerNoopBatchSize)
 		if err != nil {
 			return 0, err
+		}
+		if platformdb.DB.Migrator().HasTable(&marketplaceschema.Settlement{}) {
+			projected, err := publishProjectedMarketplaceUsageBatch(ctx, ledgerWorkerNoopBatchSize)
+			if err != nil {
+				return int(noopProcessed), err
+			}
+			noopProcessed += projected
 		}
 	}
 
@@ -239,6 +251,37 @@ func publishNoopLedgerOutboxBatch(ctx context.Context, limit int) (int64, error)
 	ids := platformdb.DB.WithContext(ctx).Table("(?) AS pending_candidates", candidates).
 		Select("event_id").
 		Where("event_type IN ?", ledgerWorkerNoopEventTypes).
+		Limit(limit)
+	now := time.Now().UTC()
+	result := platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).
+		Where("status = ?", billingschema.BillingOutboxStatusPending).
+		Where("event_id IN (?)", ids).
+		Updates(map[string]any{
+			"status":       billingschema.BillingOutboxStatusPublished,
+			"published_at": &now,
+			"last_error":   "",
+		})
+	return result.RowsAffected, result.Error
+}
+
+// Existing marketplace receipts prove that the inline projection committed.
+// Publishing those durable repair intents in bulk keeps the per-event worker
+// available for genuinely missing receipts and referral allocation.
+func publishProjectedMarketplaceUsageBatch(ctx context.Context, limit int) (int64, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	candidateLimit := limit * 5
+	candidates := platformdb.DB.WithContext(ctx).
+		Model(&billingschema.BillingOutboxEvent{}).
+		Select("event_id, aggregate_id").
+		Where("status = ? AND event_type = ?", billingschema.BillingOutboxStatusPending, marketplaceUsageSettledEvent).
+		Order("created_at asc, event_id asc").
+		Limit(candidateLimit)
+	settlementTable := marketplaceschema.Settlement{}.TableName()
+	ids := platformdb.DB.WithContext(ctx).Table("(?) AS pending_candidates", candidates).
+		Select("pending_candidates.event_id").
+		Joins("JOIN " + settlementTable + " AS settlement ON settlement.request_id = pending_candidates.aggregate_id").
 		Limit(limit)
 	now := time.Now().UTC()
 	result := platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).

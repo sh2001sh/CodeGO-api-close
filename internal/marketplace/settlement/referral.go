@@ -10,8 +10,9 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// LockCreditPackReferralTx recreates a late projection and holds the same row
-// lock as owner release until referral debits and receipts have committed.
+// LockCreditPackReferralTx recreates a late projection and holds the same
+// settlement and pending-balance locks as owner release until referral debits
+// and receipts have committed.
 func LockCreditPackReferralTx(tx *gorm.DB, params RecordParams) (*marketplaceschema.Settlement, error) {
 	if params.RequestID == "" || params.GroupID == "" || params.OwnerUserID <= 0 || params.ConsumerUserID <= 0 || params.CreditPackGrantedQuota <= 0 {
 		return nil, errors.New("invalid marketplace credit pack referral context")
@@ -30,6 +31,12 @@ func LockCreditPackReferralTx(tx *gorm.DB, params RecordParams) (*marketplacesch
 	}
 	if item.Status != statusPending {
 		return nil, errors.New("marketplace referral funding is no longer pending")
+	}
+	// Owner release locks settlement -> pending balance -> user wallet. Take the
+	// pending balance here before referral credits any inviter wallet so both
+	// workflows use the same global order.
+	if err := billingdomain.LockBalanceSnapshotTx(tx, item.PendingAccountID); err != nil {
+		return nil, err
 	}
 	return &item, nil
 }

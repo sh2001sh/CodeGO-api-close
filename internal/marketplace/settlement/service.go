@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	billingdomain "github.com/sh2001sh/new-api/internal/billing/domain"
 	marketplaceschema "github.com/sh2001sh/new-api/internal/marketplace/schema"
 	platformdb "github.com/sh2001sh/new-api/internal/platform/db"
@@ -29,8 +30,10 @@ const (
 
 	releaseBatchSize   = 1000
 	releaseConcurrency = 8
+	releaseMaxAttempts = 3
 	releaseIdleDelay   = 5 * time.Second
 	releaseErrorDelay  = time.Second
+	releaseRetryDelay  = 25 * time.Millisecond
 )
 
 type RecordParams struct {
@@ -335,7 +338,7 @@ func releaseDue(ctx context.Context, limit int, concurrency int) (int, error) {
 		go func() {
 			defer workers.Done()
 			for settlementID := range jobs {
-				if err := releaseOne(settlementID); err != nil {
+				if err := releaseOneContext(ctx, settlementID); err != nil {
 					errorMu.Lock()
 					errorCount++
 					if firstError == nil {
@@ -897,7 +900,11 @@ func forfeitOneTx(tx *gorm.DB, item *marketplaceschema.Settlement) error {
 }
 
 func releaseOne(settlementID string) error {
-	return platformdb.DB.Transaction(func(tx *gorm.DB) error {
+	return releaseOneContext(context.Background(), settlementID)
+}
+
+func releaseOneContext(ctx context.Context, settlementID string) error {
+	return runMarketplaceReleaseTransaction(ctx, platformdb.DB, func(tx *gorm.DB) error {
 		var item marketplaceschema.Settlement
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, "id = ?", settlementID).Error; err != nil {
 			return err
@@ -931,6 +938,36 @@ func releaseOne(settlementID string) error {
 		now := time.Now().UTC()
 		return tx.Model(&item).Updates(map[string]any{"status": statusReleased, "released_at": now}).Error
 	})
+}
+
+func runMarketplaceReleaseTransaction(ctx context.Context, db *gorm.DB, execute func(*gorm.DB) error) error {
+	for attempt := 0; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := db.WithContext(ctx).Transaction(execute)
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return errors.Join(ctx.Err(), err)
+		}
+		if attempt+1 >= releaseMaxAttempts || db.Dialector.Name() != "postgres" || !retryableMarketplaceReleaseError(err) {
+			return err
+		}
+		timer := time.NewTimer(time.Duration(attempt+1) * releaseRetryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return errors.Join(ctx.Err(), err)
+		case <-timer.C:
+		}
+	}
+}
+
+func retryableMarketplaceReleaseError(err error) bool {
+	var pgError *pgconn.PgError
+	return errors.As(err, &pgError) && (pgError.Code == "40P01" || pgError.Code == "40001")
 }
 
 func percentage(amount int64, percent int64) int64 {

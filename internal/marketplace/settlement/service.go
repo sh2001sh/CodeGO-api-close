@@ -90,6 +90,11 @@ type ReleaseResult struct {
 	Amount int64
 }
 
+type releaseOwnerBatch struct {
+	ownerUserID   int
+	settlementIDs []string
+}
+
 type ReclaimResult struct {
 	Count        int
 	Amount       int64
@@ -318,17 +323,18 @@ func releaseDue(ctx context.Context, limit int, concurrency int) (int, error) {
 		concurrency = 1
 	}
 	var settlements []marketplaceschema.Settlement
-	if err := platformdb.DB.WithContext(ctx).Select("id").
+	if err := platformdb.DB.WithContext(ctx).Select("id, owner_user_id").
 		Where("status = ? AND available_at <= ?", statusPending, time.Now().UTC()).
 		Where("referral_rebate_pending = ?", false).
-		Order("available_at asc").Limit(limit).Find(&settlements).Error; err != nil {
+		Order("available_at asc, id asc").Limit(limit).Find(&settlements).Error; err != nil {
 		return 0, err
 	}
 	if len(settlements) == 0 {
 		return 0, nil
 	}
-	concurrency = min(concurrency, len(settlements))
-	jobs := make(chan string)
+	ownerBatches := groupSettlementReleasesByOwner(settlements)
+	concurrency = min(concurrency, len(ownerBatches))
+	jobs := make(chan releaseOwnerBatch)
 	var workers sync.WaitGroup
 	var errorMu sync.Mutex
 	var firstError error
@@ -337,25 +343,29 @@ func releaseDue(ctx context.Context, limit int, concurrency int) (int, error) {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			for settlementID := range jobs {
-				if err := releaseOneContext(ctx, settlementID); err != nil {
-					errorMu.Lock()
-					errorCount++
-					if firstError == nil {
-						firstError = fmt.Errorf("settlement %s: %w", settlementID, err)
+			for batch := range jobs {
+				// Every release for one owner writes the same mirrored wallet row.
+				// Keep that lock chain serial while different owners run in parallel.
+				for _, settlementID := range batch.settlementIDs {
+					if err := releaseOneContext(ctx, settlementID); err != nil {
+						errorMu.Lock()
+						errorCount++
+						if firstError == nil {
+							firstError = fmt.Errorf("settlement %s: %w", settlementID, err)
+						}
+						errorMu.Unlock()
 					}
-					errorMu.Unlock()
 				}
 			}
 		}()
 	}
-	for index := range settlements {
+	for index := range ownerBatches {
 		select {
 		case <-ctx.Done():
 			close(jobs)
 			workers.Wait()
 			return len(settlements), ctx.Err()
-		case jobs <- settlements[index].ID:
+		case jobs <- ownerBatches[index]:
 		}
 	}
 	close(jobs)
@@ -364,6 +374,21 @@ func releaseDue(ctx context.Context, limit int, concurrency int) (int, error) {
 		return len(settlements), fmt.Errorf("%d of %d marketplace settlements failed to release; first error: %w", errorCount, len(settlements), firstError)
 	}
 	return len(settlements), nil
+}
+
+func groupSettlementReleasesByOwner(settlements []marketplaceschema.Settlement) []releaseOwnerBatch {
+	batchIndexByOwner := make(map[int]int, len(settlements))
+	batches := make([]releaseOwnerBatch, 0, len(settlements))
+	for _, item := range settlements {
+		index, found := batchIndexByOwner[item.OwnerUserID]
+		if !found {
+			index = len(batches)
+			batchIndexByOwner[item.OwnerUserID] = index
+			batches = append(batches, releaseOwnerBatch{ownerUserID: item.OwnerUserID})
+		}
+		batches[index].settlementIDs = append(batches[index].settlementIDs, item.ID)
+	}
+	return batches
 }
 
 // ReleasePending releases pending owner earnings selected by an administrator.

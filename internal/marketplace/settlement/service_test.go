@@ -79,6 +79,22 @@ func TestMarketplaceReleaseRetryOnlyDefinitePostgresRollback(t *testing.T) {
 	}
 }
 
+func TestGroupSettlementReleasesByOwnerPreservesOrder(t *testing.T) {
+	batches := groupSettlementReleasesByOwner([]marketplaceschema.Settlement{
+		{ID: "owner-10-first", OwnerUserID: 10},
+		{ID: "owner-11-first", OwnerUserID: 11},
+		{ID: "owner-10-second", OwnerUserID: 10},
+		{ID: "owner-12-first", OwnerUserID: 12},
+		{ID: "owner-11-second", OwnerUserID: 11},
+	})
+
+	require.Equal(t, []releaseOwnerBatch{
+		{ownerUserID: 10, settlementIDs: []string{"owner-10-first", "owner-10-second"}},
+		{ownerUserID: 11, settlementIDs: []string{"owner-11-first", "owner-11-second"}},
+		{ownerUserID: 12, settlementIDs: []string{"owner-12-first"}},
+	}, batches)
+}
+
 func TestReleaseDueContinuesAfterOneSettlementFails(t *testing.T) {
 	db := openSettlementTestDB(t)
 	now := time.Now().UTC()

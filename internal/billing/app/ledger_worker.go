@@ -60,6 +60,7 @@ var ledgerReconciliationState = struct {
 // StartLedgerWorker begins asynchronous outbox processing for the ledger runtime.
 func StartLedgerWorker(ctx context.Context) {
 	go runNoopLedgerOutboxWorker(ctx)
+	go runNonReferralSettlementOutboxWorker(ctx)
 	go runReferralLedgerOutboxWorker(ctx)
 	go func() {
 		ticker := time.NewTicker(ledgerWorkerInterval)
@@ -90,6 +91,28 @@ func StartLedgerWorker(ctx context.Context) {
 	}()
 }
 
+func runNonReferralSettlementOutboxWorker(ctx context.Context) {
+	for {
+		processed, err := publishNonReferralSettlementBatch(ctx, ledgerNonReferralBatchSize)
+		if err != nil {
+			platformobservability.SysError("publish non-referral settlement outbox batch: " + err.Error())
+		}
+		delay := ledgerWorkerInterval
+		if err == nil && processed == ledgerNonReferralBatchSize {
+			delay = ledgerWorkerNoopBusyDelay
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+		}
+	}
+}
+
 func runReferralLedgerOutboxWorker(ctx context.Context) {
 	for {
 		processed, err := RunReferralLedgerWorkerBatch(ctx, ledgerReferralAccountBatchSize)
@@ -118,17 +141,12 @@ func runNoopLedgerOutboxWorker(ctx context.Context) {
 		if err != nil {
 			platformobservability.SysError("publish no-op ledger outbox batch: " + err.Error())
 		}
-		nonReferralProcessed, nonReferralErr := publishNonReferralSettlementBatch(ctx, ledgerNonReferralBatchSize)
-		if nonReferralErr != nil {
-			platformobservability.SysError("publish non-referral settlement outbox batch: " + nonReferralErr.Error())
-		}
 		projectedProcessed, projectedErr := publishProjectedMarketplaceUsageBatch(ctx, ledgerWorkerNoopBatchSize)
 		if projectedErr != nil {
 			platformobservability.SysError("publish projected marketplace usage batch: " + projectedErr.Error())
 		}
 		delay := ledgerWorkerInterval
-		if err == nil && nonReferralErr == nil && projectedErr == nil &&
-			(noopProcessed == ledgerWorkerNoopBatchSize || nonReferralProcessed == ledgerNonReferralBatchSize || projectedProcessed == ledgerWorkerNoopBatchSize) {
+		if err == nil && projectedErr == nil && (noopProcessed == ledgerWorkerNoopBatchSize || projectedProcessed == ledgerWorkerNoopBatchSize) {
 			delay = ledgerWorkerNoopBusyDelay
 		}
 		timer := time.NewTimer(delay)

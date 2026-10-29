@@ -404,22 +404,18 @@ func publishNonReferralSettlementBatch(ctx context.Context, limit int) (int64, e
 	if limit <= 0 {
 		return 0, nil
 	}
-	candidateLimit := limit * 5
-	candidates := platformdb.DB.WithContext(ctx).
-		Model(&billingschema.BillingOutboxEvent{}).
-		Select("event_id, account_id, aggregate_id").
-		Where("status = ? AND event_type = ?", billingschema.BillingOutboxStatusPending, "billing.reservation_settled").
-		Order("attempts asc, created_at asc, event_id asc").
-		Limit(candidateLimit)
 	accountTable := billingschema.BillingAccount{}.TableName()
+	eventTable := billingschema.BillingOutboxEvent{}.TableName()
 	reservationTable := billingschema.BillingReservation{}.TableName()
 	settlementTable := billingschema.BillingSettlement{}.TableName()
-	ids := platformdb.DB.WithContext(ctx).Table("(?) AS pending_settlements", candidates).
+	ids := platformdb.DB.WithContext(ctx).Table(eventTable+" AS pending_settlements").
 		Select("pending_settlements.event_id").
 		Joins("JOIN "+settlementTable+" AS settled ON settled.settlement_id = pending_settlements.aggregate_id").
 		Joins("JOIN "+reservationTable+" AS reserved ON reserved.reservation_id = settled.reservation_id AND reserved.account_id = pending_settlements.account_id").
 		Joins("JOIN "+accountTable+" AS account ON account.account_id = pending_settlements.account_id").
+		Where("pending_settlements.status = ? AND pending_settlements.event_type = ?", billingschema.BillingOutboxStatusPending, "billing.reservation_settled").
 		Where("account.account_type = ? AND account.owner_type = ?", "marketplace_owner_pending", "user").
+		Order("pending_settlements.attempts asc, pending_settlements.created_at asc, pending_settlements.event_id asc").
 		Limit(limit)
 	now := time.Now().UTC()
 	result := platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).

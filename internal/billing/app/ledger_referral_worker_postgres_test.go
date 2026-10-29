@@ -128,16 +128,37 @@ func TestPublishNonReferralSettlementBacklogPostgres(t *testing.T) {
 	))
 
 	eventCount := 10000
+	noiseCount := 1000
 	if os.Getenv("RUN_LEDGER_LOAD_TEST") == "1" {
 		eventCount = 200000
+		noiseCount = 200000
 	}
 	unique := time.Now().UnixNano()
 	accountID := fmt.Sprintf("non-referral-load-%d", unique)
+	walletAccountID := fmt.Sprintf("wallet-noise-%d", unique)
 	require.NoError(t, db.Create(&billingschema.BillingAccount{
 		AccountID: accountID, AccountType: "marketplace_owner_pending", OwnerType: "user",
 		OwnerID: unique, QuotaUnit: "quota", Status: billingschema.BillingAccountStatusActive,
 	}).Error)
+	require.NoError(t, db.Create(&billingschema.BillingAccount{
+		AccountID: walletAccountID, AccountType: billingAccountTypeClaudeWallet, OwnerType: "user",
+		OwnerID: unique + 1, QuotaUnit: "quota", Status: billingschema.BillingAccountStatusActive,
+	}).Error)
 	createdAt := time.Now().UTC().Add(-24 * time.Hour)
+	for offset := 0; offset < noiseCount; offset += 1000 {
+		batchSize := min(1000, noiseCount-offset)
+		noise := make([]billingschema.BillingOutboxEvent, 0, batchSize)
+		for index := offset; index < offset+batchSize; index++ {
+			id := fmt.Sprintf("wallet-noise-%d-%06d", unique, index)
+			noise = append(noise, billingschema.BillingOutboxEvent{
+				EventID: id, AccountID: walletAccountID, AggregateID: "missing-" + id,
+				EventType: "billing.reservation_settled", IdempotencyKey: id,
+				Status:    billingschema.BillingOutboxStatusPending,
+				CreatedAt: createdAt.Add(-24*time.Hour + time.Duration(index)*time.Microsecond), UpdatedAt: createdAt,
+			})
+		}
+		require.NoError(t, db.CreateInBatches(&noise, 1000).Error)
+	}
 	for offset := 0; offset < eventCount; offset += 1000 {
 		batchSize := min(1000, eventCount-offset)
 		reservations := make([]billingschema.BillingReservation, 0, batchSize)
@@ -182,5 +203,10 @@ func TestPublishNonReferralSettlementBacklogPostgres(t *testing.T) {
 		Where("event_id LIKE ? AND status = ?", fmt.Sprintf("non-referral-%d-%%", unique), billingschema.BillingOutboxStatusPending).
 		Count(&pending).Error)
 	require.Zero(t, pending)
-	t.Logf("processed=%d elapsed=%s throughput=%.1f events/s", processed, elapsed, float64(processed)/elapsed.Seconds())
+	var noisePending int64
+	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).
+		Where("event_id LIKE ? AND status = ?", fmt.Sprintf("wallet-noise-%d-%%", unique), billingschema.BillingOutboxStatusPending).
+		Count(&noisePending).Error)
+	require.EqualValues(t, noiseCount, noisePending)
+	t.Logf("processed=%d wallet_noise=%d elapsed=%s throughput=%.1f events/s", processed, noisePending, elapsed, float64(processed)/elapsed.Seconds())
 }

@@ -1,6 +1,7 @@
 package settlement
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -84,6 +85,82 @@ func TestReleaseDueSerializesEachOwnerPostgres(t *testing.T) {
 		require.LessOrEqual(t, maxTotal, releaseConcurrency)
 		t.Logf("released 1000 settlements for sixteen owners in %s with concurrency %d", duration, maxTotal)
 	})
+
+	t.Run("one owner uses bounded aggregate transfers", func(t *testing.T) {
+		owners := []int{4001}
+		const total = 600
+		seedReleaseStressRows(t, db, "aggregate", owners, total)
+		var lock sync.Mutex
+		calls := 0
+		credited := int64(0)
+		RegisterReleaseHook(func(_ *gorm.DB, owner int, amount int64, _, _ string) error {
+			require.Equal(t, owners[0], owner)
+			lock.Lock()
+			calls++
+			credited += amount
+			lock.Unlock()
+			return nil
+		})
+
+		selected, err := releaseDue(t.Context(), total, releaseConcurrency)
+		require.NoError(t, err)
+		require.Equal(t, total, selected)
+		require.Equal(t, 3, calls)
+		require.EqualValues(t, total, credited)
+
+		var reservations int64
+		require.NoError(t, db.Model(&billingschema.BillingReservation{}).
+			Where("account_id = ? AND request_id LIKE ?", "pending-4001", "marketplace-release-batch:%").
+			Count(&reservations).Error)
+		require.EqualValues(t, 3, reservations)
+		var pendingSnapshot billingschema.BillingBalanceSnapshot
+		require.NoError(t, db.First(&pendingSnapshot, "account_id = ?", "pending-4001").Error)
+		require.Zero(t, pendingSnapshot.AvailableBalance)
+		require.EqualValues(t, total, pendingSnapshot.ConsumedTotal)
+
+		batches := groupSettlementReleasesByOwner([]marketplaceschema.Settlement{
+			{ID: "aggregate-0000", OwnerUserID: owners[0], PendingAccountID: "pending-4001"},
+		})
+		processed, err := releaseOwnerAccountBatchContext(t.Context(), owners[0], batches[0].accountBatches[0])
+		require.NoError(t, err)
+		require.Equal(t, 1, processed)
+		require.Equal(t, 3, calls, "replaying an already released batch must not credit twice")
+	})
+
+	t.Run("failed aggregate transfer rolls back the entire batch", func(t *testing.T) {
+		owners := []int{5001}
+		const total = 10
+		seedReleaseStressRows(t, db, "rollback", owners, total)
+		injected := errors.New("injected aggregate credit failure")
+		RegisterReleaseHook(func(_ *gorm.DB, _ int, _ int64, _, _ string) error { return injected })
+
+		selected, err := releaseDue(t.Context(), total, releaseConcurrency)
+		require.Equal(t, total, selected)
+		require.ErrorIs(t, err, injected)
+		var pending int64
+		require.NoError(t, db.Model(&marketplaceschema.Settlement{}).
+			Where("owner_user_id = ? AND status = ?", owners[0], statusPending).Count(&pending).Error)
+		require.EqualValues(t, total, pending)
+		var snapshot billingschema.BillingBalanceSnapshot
+		require.NoError(t, db.First(&snapshot, "account_id = ?", "pending-5001").Error)
+		require.EqualValues(t, total, snapshot.AvailableBalance)
+		require.Zero(t, snapshot.ConsumedTotal)
+		var reservations int64
+		require.NoError(t, db.Model(&billingschema.BillingReservation{}).
+			Where("account_id = ?", "pending-5001").Count(&reservations).Error)
+		require.Zero(t, reservations)
+
+		credited := int64(0)
+		RegisterReleaseHook(func(_ *gorm.DB, owner int, amount int64, _, _ string) error {
+			require.Equal(t, owners[0], owner)
+			credited += amount
+			return nil
+		})
+		selected, err = releaseDue(t.Context(), total, releaseConcurrency)
+		require.NoError(t, err)
+		require.Equal(t, total, selected)
+		require.EqualValues(t, total, credited)
+	})
 }
 
 func seedReleaseStressRows(t *testing.T, db *gorm.DB, prefix string, owners []int, total int) {
@@ -129,7 +206,7 @@ func runReleaseStressBatch(t *testing.T, owners []int, total int) (map[int]int, 
 		maxByOwner[owner] = max(maxByOwner[owner], activeByOwner[owner])
 		maxTotal = max(maxTotal, activeTotal)
 		lock.Unlock()
-		time.Sleep(time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		lock.Lock()
 		activeByOwner[owner]--
 		activeTotal--

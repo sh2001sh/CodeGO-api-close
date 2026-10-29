@@ -82,18 +82,35 @@ func TestMarketplaceReleaseRetryOnlyDefinitePostgresRollback(t *testing.T) {
 
 func TestGroupSettlementReleasesByOwnerPreservesOrder(t *testing.T) {
 	batches := groupSettlementReleasesByOwner([]marketplaceschema.Settlement{
-		{ID: "owner-10-first", OwnerUserID: 10},
-		{ID: "owner-11-first", OwnerUserID: 11},
-		{ID: "owner-10-second", OwnerUserID: 10},
-		{ID: "owner-12-first", OwnerUserID: 12},
-		{ID: "owner-11-second", OwnerUserID: 11},
+		{ID: "owner-10-first", OwnerUserID: 10, PendingAccountID: "pending-10-a"},
+		{ID: "owner-11-first", OwnerUserID: 11, PendingAccountID: "pending-11"},
+		{ID: "owner-10-second", OwnerUserID: 10, PendingAccountID: "pending-10-b"},
+		{ID: "owner-12-first", OwnerUserID: 12, PendingAccountID: "pending-12"},
+		{ID: "owner-11-second", OwnerUserID: 11, PendingAccountID: "pending-11"},
+		{ID: "owner-10-third", OwnerUserID: 10, PendingAccountID: "pending-10-a"},
 	})
 
 	require.Equal(t, []releaseOwnerBatch{
-		{ownerUserID: 10, settlementIDs: []string{"owner-10-first", "owner-10-second"}},
-		{ownerUserID: 11, settlementIDs: []string{"owner-11-first", "owner-11-second"}},
-		{ownerUserID: 12, settlementIDs: []string{"owner-12-first"}},
+		{ownerUserID: 10, accountBatches: []releaseAccountBatch{
+			{pendingAccountID: "pending-10-a", settlementIDs: []string{"owner-10-first", "owner-10-third"}},
+			{pendingAccountID: "pending-10-b", settlementIDs: []string{"owner-10-second"}},
+		}},
+		{ownerUserID: 11, accountBatches: []releaseAccountBatch{
+			{pendingAccountID: "pending-11", settlementIDs: []string{"owner-11-first", "owner-11-second"}},
+		}},
+		{ownerUserID: 12, accountBatches: []releaseAccountBatch{
+			{pendingAccountID: "pending-12", settlementIDs: []string{"owner-12-first"}},
+		}},
 	}, batches)
+}
+
+func TestMarketplaceReleaseBatchKeyIgnoresSelectionOrder(t *testing.T) {
+	first := marketplaceReleaseBatchKey(10, "pending-10", []string{"settlement-b", "settlement-a"})
+	second := marketplaceReleaseBatchKey(10, "pending-10", []string{"settlement-a", "settlement-b"})
+	require.Equal(t, first, second)
+	require.LessOrEqual(t, len(first), 64)
+	require.NotEqual(t, first, marketplaceReleaseBatchKey(11, "pending-10", []string{"settlement-a", "settlement-b"}))
+	require.NotEqual(t, first, marketplaceReleaseBatchKey(10, "pending-11", []string{"settlement-a", "settlement-b"}))
 }
 
 func TestSelectDueSettlementsBalancesOwners(t *testing.T) {

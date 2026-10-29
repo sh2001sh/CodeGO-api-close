@@ -28,13 +28,14 @@ const (
 	statusReclaimed = "reclaimed"
 	statusForfeited = "forfeited"
 
-	releaseBatchSize          = 1000
-	releaseConcurrency        = 12
-	releaseOwnerSelectionSize = releaseBatchSize
-	releaseMaxAttempts        = 3
-	releaseIdleDelay          = 5 * time.Second
-	releaseErrorDelay         = time.Second
-	releaseRetryDelay         = 25 * time.Millisecond
+	releaseBatchSize              = 1000
+	releaseConcurrency            = 12
+	releaseOwnerSelectionSize     = releaseBatchSize
+	releaseOwnerTransferBatchSize = 250
+	releaseMaxAttempts            = 3
+	releaseIdleDelay              = 5 * time.Second
+	releaseErrorDelay             = time.Second
+	releaseRetryDelay             = 25 * time.Millisecond
 )
 
 type RecordParams struct {
@@ -92,8 +93,13 @@ type ReleaseResult struct {
 }
 
 type releaseOwnerBatch struct {
-	ownerUserID   int
-	settlementIDs []string
+	ownerUserID    int
+	accountBatches []releaseAccountBatch
+}
+
+type releaseAccountBatch struct {
+	pendingAccountID string
+	settlementIDs    []string
 }
 
 type ReclaimResult struct {
@@ -344,14 +350,29 @@ func releaseDue(ctx context.Context, limit int, concurrency int) (int, error) {
 			for batch := range jobs {
 				// Every release for one owner writes the same mirrored wallet row.
 				// Keep that lock chain serial while different owners run in parallel.
-				for _, settlementID := range batch.settlementIDs {
-					if err := releaseOneContext(ctx, settlementID); err != nil {
+				for _, accountBatch := range batch.accountBatches {
+					if platformdb.UsingPostgreSQL && platformdb.DB.Dialector.Name() == "postgres" {
+						processed, err := releaseOwnerAccountBatchContext(ctx, batch.ownerUserID, accountBatch)
+						if err == nil {
+							continue
+						}
 						errorMu.Lock()
-						errorCount++
+						errorCount += len(accountBatch.settlementIDs) - processed
 						if firstError == nil {
-							firstError = fmt.Errorf("settlement %s: %w", settlementID, err)
+							firstError = fmt.Errorf("owner %d pending account %s: %w", batch.ownerUserID, accountBatch.pendingAccountID, err)
 						}
 						errorMu.Unlock()
+						continue
+					}
+					for _, settlementID := range accountBatch.settlementIDs {
+						if err := releaseOneContext(ctx, settlementID); err != nil {
+							errorMu.Lock()
+							errorCount++
+							if firstError == nil {
+								firstError = fmt.Errorf("settlement %s: %w", settlementID, err)
+							}
+							errorMu.Unlock()
+						}
 					}
 				}
 			}
@@ -401,12 +422,12 @@ func selectDueSettlements(ctx context.Context, limit int, ownerLimit int) ([]mar
 	}
 	perOwner := (limit + len(ownerIDs) - 1) / len(ownerIDs)
 	ranked := platformdb.DB.WithContext(ctx).Model(&marketplaceschema.Settlement{}).
-		Select("id, owner_user_id, available_at, ROW_NUMBER() OVER (PARTITION BY owner_user_id ORDER BY available_at ASC, id ASC) AS owner_rank").
+		Select("id, owner_user_id, pending_account_id, available_at, ROW_NUMBER() OVER (PARTITION BY owner_user_id ORDER BY available_at ASC, id ASC) AS owner_rank").
 		Where("status = ? AND available_at <= ?", statusPending, now).
 		Where("referral_rebate_pending = ? AND owner_user_id IN ?", false, ownerIDs)
 	var settlements []marketplaceschema.Settlement
 	err := platformdb.DB.WithContext(ctx).Table("(?) AS ranked_due_settlements", ranked).
-		Select("id, owner_user_id, available_at").
+		Select("id, owner_user_id, pending_account_id, available_at").
 		Where("owner_rank <= ?", perOwner).
 		Order("available_at asc, id asc").Limit(limit).Find(&settlements).Error
 	return settlements, err
@@ -414,15 +435,26 @@ func selectDueSettlements(ctx context.Context, limit int, ownerLimit int) ([]mar
 
 func groupSettlementReleasesByOwner(settlements []marketplaceschema.Settlement) []releaseOwnerBatch {
 	batchIndexByOwner := make(map[int]int, len(settlements))
+	accountIndexByOwner := make(map[int]map[string]int, len(settlements))
 	batches := make([]releaseOwnerBatch, 0, len(settlements))
 	for _, item := range settlements {
-		index, found := batchIndexByOwner[item.OwnerUserID]
+		ownerIndex, found := batchIndexByOwner[item.OwnerUserID]
 		if !found {
-			index = len(batches)
-			batchIndexByOwner[item.OwnerUserID] = index
+			ownerIndex = len(batches)
+			batchIndexByOwner[item.OwnerUserID] = ownerIndex
+			accountIndexByOwner[item.OwnerUserID] = make(map[string]int)
 			batches = append(batches, releaseOwnerBatch{ownerUserID: item.OwnerUserID})
 		}
-		batches[index].settlementIDs = append(batches[index].settlementIDs, item.ID)
+		accountIndexes := accountIndexByOwner[item.OwnerUserID]
+		accountIndex, found := accountIndexes[item.PendingAccountID]
+		if !found {
+			accountIndex = len(batches[ownerIndex].accountBatches)
+			accountIndexes[item.PendingAccountID] = accountIndex
+			batches[ownerIndex].accountBatches = append(batches[ownerIndex].accountBatches, releaseAccountBatch{pendingAccountID: item.PendingAccountID})
+		}
+		batches[ownerIndex].accountBatches[accountIndex].settlementIDs = append(
+			batches[ownerIndex].accountBatches[accountIndex].settlementIDs, item.ID,
+		)
 	}
 	return batches
 }
@@ -962,6 +994,109 @@ func forfeitOneTx(tx *gorm.DB, item *marketplaceschema.Settlement) error {
 
 func releaseOne(settlementID string) error {
 	return releaseOneContext(context.Background(), settlementID)
+}
+
+func releaseOwnerAccountBatchContext(ctx context.Context, ownerUserID int, batch releaseAccountBatch) (int, error) {
+	processed := 0
+	for offset := 0; offset < len(batch.settlementIDs); offset += releaseOwnerTransferBatchSize {
+		end := min(offset+releaseOwnerTransferBatchSize, len(batch.settlementIDs))
+		if err := releaseOwnerSettlementBatchContext(ctx, ownerUserID, batch.pendingAccountID, batch.settlementIDs[offset:end]); err != nil {
+			return processed, err
+		}
+		processed += end - offset
+	}
+	return processed, nil
+}
+
+// releaseOwnerSettlementBatchContext debits one pending account and credits its
+// owner once for the exact sum of the locked settlement rows.
+func releaseOwnerSettlementBatchContext(ctx context.Context, ownerUserID int, pendingAccountID string, settlementIDs []string) error {
+	if ownerUserID <= 0 || strings.TrimSpace(pendingAccountID) == "" || len(settlementIDs) == 0 {
+		return errors.New("invalid marketplace release batch")
+	}
+	requestedIDs := slices.Clone(settlementIDs)
+	slices.Sort(requestedIDs)
+	return runMarketplaceReleaseTransaction(ctx, platformdb.DB, func(tx *gorm.DB) error {
+		var items []marketplaceschema.Settlement
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id IN ?", requestedIDs).Order("id asc").Find(&items).Error; err != nil {
+			return err
+		}
+		if len(items) != len(requestedIDs) {
+			return errors.New("marketplace release batch membership changed")
+		}
+
+		now := time.Now().UTC()
+		activeIDs := make([]string, 0, len(items))
+		var total int64
+		for index := range items {
+			item := &items[index]
+			if item.OwnerUserID != ownerUserID || item.PendingAccountID != pendingAccountID {
+				return errors.New("marketplace release batch ownership mismatch")
+			}
+			if item.Status != statusPending {
+				continue
+			}
+			if item.ReferralRebatePending || item.AvailableAt.After(now) {
+				return errors.New("marketplace release batch contains unavailable settlement")
+			}
+			if item.OwnerNetAmount < 0 {
+				return errors.New("marketplace release batch contains negative owner amount")
+			}
+			if item.OwnerNetAmount > 0 && total > (1<<63-1)-item.OwnerNetAmount {
+				return errors.New("marketplace release batch amount overflow")
+			}
+			activeIDs = append(activeIDs, item.ID)
+			total += item.OwnerNetAmount
+		}
+		if len(activeIDs) == 0 {
+			return nil
+		}
+
+		if total > 0 {
+			batchKey := marketplaceReleaseBatchKey(ownerUserID, pendingAccountID, activeIDs)
+			reservation, err := billingdomain.CreateReservationTx(tx, billingdomain.CreateReservationParams{
+				AccountID: pendingAccountID, RequestID: batchKey,
+				ReservedAmount: total, IdempotencyKey: batchKey + ":reserve",
+			})
+			if err != nil {
+				return err
+			}
+			if _, err = billingdomain.SettleReservationTx(tx, billingdomain.SettleReservationParams{
+				ReservationID: reservation.ReservationID, ActualAmount: total,
+				IdempotencyKey: batchKey + ":settle",
+			}); err != nil {
+				return err
+			}
+			if err := releaseHook(tx, ownerUserID, total, batchKey+":credit", "marketplace_owner_release"); err != nil {
+				return err
+			}
+		}
+
+		updated := tx.Model(&marketplaceschema.Settlement{}).
+			Where("id IN ? AND status = ?", activeIDs, statusPending).
+			Updates(map[string]any{"status": statusReleased, "released_at": now})
+		if updated.Error != nil {
+			return updated.Error
+		}
+		if updated.RowsAffected != int64(len(activeIDs)) {
+			return errors.New("marketplace release batch update count mismatch")
+		}
+		return nil
+	})
+}
+
+func marketplaceReleaseBatchKey(ownerUserID int, pendingAccountID string, settlementIDs []string) string {
+	ids := slices.Clone(settlementIDs)
+	slices.Sort(ids)
+	hash := sha256.New()
+	_, _ = fmt.Fprintf(hash, "%d\x00%s\x00", ownerUserID, pendingAccountID)
+	for _, settlementID := range ids {
+		_, _ = hash.Write([]byte(settlementID))
+		_, _ = hash.Write([]byte{0})
+	}
+	digest := fmt.Sprintf("%x", hash.Sum(nil))
+	return "marketplace-release-batch:" + digest[:38]
 }
 
 func releaseOneContext(ctx context.Context, settlementID string) error {

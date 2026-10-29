@@ -85,3 +85,22 @@ func TestMarketplaceReferralWorkerBypassesNonContextSettlements(t *testing.T) {
 		Count(&noisePending).Error)
 	require.EqualValues(t, len(noise), noisePending)
 }
+
+func TestMarketplaceReferralCandidatesCoverWideAccountWindow(t *testing.T) {
+	db, now := referralTestDB(t)
+	const accountCount = 80
+	events := make([]billingschema.BillingOutboxEvent, accountCount)
+	for index := range events {
+		accountID := fmt.Sprintf("marketplace-wide-%03d", index)
+		events[index] = billingschema.BillingOutboxEvent{
+			AccountID: accountID, AggregateID: fmt.Sprintf("missing-%03d", index),
+			EventType: "billing.reservation_settled", IdempotencyKey: fmt.Sprintf("marketplace-wide-%03d", index),
+			Payload: json.RawMessage(`{"referral_context":{}}`), CreatedAt: time.Unix(now+int64(index), 0).UTC(),
+		}
+	}
+	require.NoError(t, db.CreateInBatches(&events, 40).Error)
+
+	accountIDs, err := pendingMarketplaceReferralOutboxAccountIDs(context.Background(), ledgerReferralAccountBatchSize)
+	require.NoError(t, err)
+	require.Len(t, accountIDs, accountCount)
+}

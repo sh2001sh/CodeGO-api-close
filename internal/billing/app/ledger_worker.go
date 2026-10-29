@@ -23,7 +23,7 @@ const (
 	ledgerWorkerAccountConcurrency = 8
 	ledgerWorkerCandidateFactor    = 512
 	ledgerWorkerCandidateMax       = 16384
-	ledgerReferralAccountBatchSize = 48
+	ledgerReferralAccountBatchSize = 128
 	ledgerReferralEventBatchSize   = 64
 	ledgerReferralConcurrency      = 16
 	ledgerReferralCandidateFactor  = 1024

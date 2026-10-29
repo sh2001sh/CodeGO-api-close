@@ -30,6 +30,7 @@ const (
 	ledgerReferralCandidateMax     = 65536
 	ledgerWorkerNoopBatchSize      = 10000
 	ledgerNonReferralBatchSize     = 2000
+	ledgerNonReferralAccountBatch  = 32
 	ledgerWorkerNoopBusyDelay      = 250 * time.Millisecond
 	ledgerWorkerInterval           = 2 * time.Second
 	ledgerReferralBusyDelay        = 25 * time.Millisecond
@@ -408,14 +409,24 @@ func publishNonReferralSettlementBatch(ctx context.Context, limit int) (int64, e
 	eventTable := billingschema.BillingOutboxEvent{}.TableName()
 	reservationTable := billingschema.BillingReservation{}.TableName()
 	settlementTable := billingschema.BillingSettlement{}.TableName()
+	validAccountEvent := platformdb.DB.WithContext(ctx).Table(eventTable+" AS pending_account_event").
+		Select("1").
+		Joins("JOIN "+settlementTable+" AS account_settled ON account_settled.settlement_id = pending_account_event.aggregate_id").
+		Joins("JOIN "+reservationTable+" AS account_reserved ON account_reserved.reservation_id = account_settled.reservation_id AND account_reserved.account_id = pending_account_event.account_id").
+		Where("pending_account_event.account_id = account.account_id").
+		Where("pending_account_event.status = ? AND pending_account_event.event_type = ?", billingschema.BillingOutboxStatusPending, "billing.reservation_settled")
+	accountIDs := platformdb.DB.WithContext(ctx).Table(accountTable+" AS account").
+		Select("account.account_id").
+		Where("account.account_type = ? AND account.owner_type = ?", "marketplace_owner_pending", "user").
+		Where("EXISTS (?)", validAccountEvent).
+		Order("account.account_id asc").
+		Limit(ledgerNonReferralAccountBatch)
 	ids := platformdb.DB.WithContext(ctx).Table(eventTable+" AS pending_settlements").
 		Select("pending_settlements.event_id").
 		Joins("JOIN "+settlementTable+" AS settled ON settled.settlement_id = pending_settlements.aggregate_id").
 		Joins("JOIN "+reservationTable+" AS reserved ON reserved.reservation_id = settled.reservation_id AND reserved.account_id = pending_settlements.account_id").
-		Joins("JOIN "+accountTable+" AS account ON account.account_id = pending_settlements.account_id").
 		Where("pending_settlements.status = ? AND pending_settlements.event_type = ?", billingschema.BillingOutboxStatusPending, "billing.reservation_settled").
-		Where("account.account_type = ? AND account.owner_type = ?", "marketplace_owner_pending", "user").
-		Order("pending_settlements.attempts asc, pending_settlements.created_at asc, pending_settlements.event_id asc").
+		Where("pending_settlements.account_id IN (?)", accountIDs).
 		Limit(limit)
 	now := time.Now().UTC()
 	result := platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).

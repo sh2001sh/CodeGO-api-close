@@ -34,6 +34,7 @@ func TestSettlementBacklogIndexesPostgres(t *testing.T) {
 	require.NoError(t, migrateSettlementBacklogIndexes(db))
 	require.NoError(t, migrateMarketplaceReferralBacklogIndex(db))
 	require.NoError(t, migrateMarketplaceReleaseOwnerIndex(db))
+	require.NoError(t, migrateLedgerBacklogPriorityIndexes(db))
 
 	for _, name := range []string{
 		"idx_marketplace_settlements_releasable",
@@ -41,9 +42,48 @@ func TestSettlementBacklogIndexesPostgres(t *testing.T) {
 		"idx_billing_outbox_pending_referral_account",
 		"idx_billing_outbox_pending_marketplace_referral",
 		"idx_marketplace_settlements_releasable_owner",
+		"idx_billing_outbox_pending_noop",
+		"idx_billing_outbox_pending_marketplace_usage",
 	} {
 		var count int64
 		require.NoError(t, db.Raw(`SELECT count(*) FROM pg_indexes WHERE indexname = ?`, name).Scan(&count).Error)
 		require.EqualValues(t, 1, count, name)
 	}
+}
+
+func TestCreatePostgresConcurrentIndexRecoversInvalidIndex(t *testing.T) {
+	dsn := os.Getenv("TEST_LEDGER_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set TEST_LEDGER_POSTGRES_DSN to a dedicated test database")
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	oldDB, oldPG, oldSQLite := platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite
+	platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = db, true, false
+	t.Cleanup(func() {
+		platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = oldDB, oldPG, oldSQLite
+		require.NoError(t, sqlDB.Close())
+	})
+	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS billing").Error)
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingOutboxEvent{}))
+	require.NoError(t, db.Exec(`DROP INDEX CONCURRENTLY IF EXISTS billing.idx_test_recover_invalid_concurrent`).Error)
+	require.NoError(t, db.Where("event_id LIKE ?", "invalid-index-%").Delete(&billingschema.BillingOutboxEvent{}).Error)
+	require.NoError(t, db.Create([]billingschema.BillingOutboxEvent{
+		{EventID: "invalid-index-a", AccountID: "account-a", EventType: "test", IdempotencyKey: "invalid-index-a", Status: "pending"},
+		{EventID: "invalid-index-b", AccountID: "account-b", EventType: "test", IdempotencyKey: "invalid-index-b", Status: "pending"},
+	}).Error)
+	require.Error(t, db.Exec(`CREATE UNIQUE INDEX CONCURRENTLY idx_test_recover_invalid_concurrent ON billing.outbox_events ((1))`).Error)
+
+	require.NoError(t, createPostgresConcurrentIndex(db, "billing", "idx_test_recover_invalid_concurrent",
+		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_test_recover_invalid_concurrent ON billing.outbox_events (event_id)`))
+	var valid bool
+	require.NoError(t, db.Raw(`SELECT index_state.indisvalid
+		FROM pg_index AS index_state
+		JOIN pg_class AS index_class ON index_class.oid = index_state.indexrelid
+		JOIN pg_namespace AS index_namespace ON index_namespace.oid = index_class.relnamespace
+		WHERE index_namespace.nspname = 'billing' AND index_class.relname = 'idx_test_recover_invalid_concurrent'`).Scan(&valid).Error)
+	require.True(t, valid)
+	require.NoError(t, db.Exec(`DROP INDEX CONCURRENTLY IF EXISTS billing.idx_test_recover_invalid_concurrent`).Error)
 }

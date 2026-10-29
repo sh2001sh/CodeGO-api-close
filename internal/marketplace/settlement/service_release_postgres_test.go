@@ -72,6 +72,18 @@ func TestReleaseDueSerializesEachOwnerPostgres(t *testing.T) {
 		require.Greater(t, maxTotal, 1, "independent owners should release concurrently")
 		t.Logf("released 1000 settlements for eight owners in %s with concurrency %d", duration, maxTotal)
 	})
+
+	t.Run("sixteen independent owners", func(t *testing.T) {
+		owners := []int{3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009, 3010, 3011, 3012, 3013, 3014, 3015, 3016}
+		seedReleaseStressRows(t, db, "parallel-12", owners, 1000)
+		maxByOwner, maxTotal, duration := runReleaseStressBatch(t, owners, 1000)
+		for _, owner := range owners {
+			require.Equal(t, 1, maxByOwner[owner], "owner %d was released concurrently", owner)
+		}
+		require.Greater(t, maxTotal, 8, "independent owners should use the increased concurrency budget")
+		require.LessOrEqual(t, maxTotal, releaseConcurrency)
+		t.Logf("released 1000 settlements for sixteen owners in %s with concurrency %d", duration, maxTotal)
+	})
 }
 
 func seedReleaseStressRows(t *testing.T, db *gorm.DB, prefix string, owners []int, total int) {

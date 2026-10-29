@@ -29,8 +29,8 @@ const (
 	statusForfeited = "forfeited"
 
 	releaseBatchSize          = 1000
-	releaseConcurrency        = 8
-	releaseOwnerSelectionSize = 32
+	releaseConcurrency        = 12
+	releaseOwnerSelectionSize = releaseBatchSize
 	releaseMaxAttempts        = 3
 	releaseIdleDelay          = 5 * time.Second
 	releaseErrorDelay         = time.Second

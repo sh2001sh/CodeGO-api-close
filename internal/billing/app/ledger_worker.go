@@ -28,7 +28,7 @@ const (
 	ledgerReferralConcurrency      = 16
 	ledgerReferralCandidateFactor  = 1024
 	ledgerReferralCandidateMax     = 65536
-	ledgerWorkerNoopBatchSize      = 10000
+	ledgerWorkerNoopBatchSize      = 2000
 	ledgerNonReferralBatchSize     = 2000
 	ledgerNonReferralAccountBatch  = 32
 	ledgerWorkerNoopBusyDelay      = 250 * time.Millisecond
@@ -437,16 +437,11 @@ func publishNoopLedgerOutboxBatch(ctx context.Context, limit int) (int64, error)
 	if limit <= 0 {
 		return 0, nil
 	}
-	candidateLimit := limit * 5
-	candidates := platformdb.DB.WithContext(ctx).
+	ids := platformdb.DB.WithContext(ctx).
 		Model(&billingschema.BillingOutboxEvent{}).
-		Select("event_id, event_type").
-		Where("status = ?", billingschema.BillingOutboxStatusPending).
-		Order("created_at asc, event_id asc").
-		Limit(candidateLimit)
-	ids := platformdb.DB.WithContext(ctx).Table("(?) AS pending_candidates", candidates).
 		Select("event_id").
-		Where("event_type IN ?", ledgerWorkerNoopEventTypes).
+		Where("status = ? AND event_type IN ?", billingschema.BillingOutboxStatusPending, ledgerWorkerNoopEventTypes).
+		Order("created_at asc, event_id asc").
 		Limit(limit)
 	now := time.Now().UTC()
 	result := platformdb.DB.WithContext(ctx).Model(&billingschema.BillingOutboxEvent{}).

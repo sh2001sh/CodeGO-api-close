@@ -232,6 +232,7 @@ func V2MigrationIDs() []string {
 		"20261029_settlement_backlog_indexes",
 		"20261029_marketplace_referral_backlog_index",
 		"20261030_marketplace_release_owner_index",
+		"20261030_ledger_backlog_priority_indexes",
 	}
 }
 
@@ -551,6 +552,7 @@ func ApplyV2Migrations(ctx context.Context, dryRun bool) error {
 		{ID: "20261029_settlement_backlog_indexes", RunOutsideTx: migrateSettlementBacklogIndexes},
 		{ID: "20261029_marketplace_referral_backlog_index", RunOutsideTx: migrateMarketplaceReferralBacklogIndex},
 		{ID: "20261030_marketplace_release_owner_index", RunOutsideTx: migrateMarketplaceReleaseOwnerIndex},
+		{ID: "20261030_ledger_backlog_priority_indexes", RunOutsideTx: migrateLedgerBacklogPriorityIndexes},
 	}
 	for _, step := range steps {
 		var applied schemaMigration
@@ -846,7 +848,11 @@ func migrateMarketplaceReferralBacklogIndex(db *gorm.DB) error {
 	if db == nil || !db.Migrator().HasTable(&billingschema.BillingOutboxEvent{}) {
 		return nil
 	}
-	for _, statement := range marketplaceReferralBacklogIndexStatements(db.Dialector.Name()) {
+	statements := marketplaceReferralBacklogIndexStatements(db.Dialector.Name())
+	if db.Dialector.Name() == "postgres" {
+		return createPostgresConcurrentIndex(db, "billing", "idx_billing_outbox_pending_marketplace_referral", statements[0])
+	}
+	for _, statement := range statements {
 		if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
 			return err
 		}
@@ -875,7 +881,11 @@ func migrateMarketplaceReleaseOwnerIndex(db *gorm.DB) error {
 	if db == nil || !db.Migrator().HasTable(&marketplaceschema.Settlement{}) {
 		return nil
 	}
-	for _, statement := range marketplaceReleaseOwnerIndexStatements(db.Dialector.Name()) {
+	statements := marketplaceReleaseOwnerIndexStatements(db.Dialector.Name())
+	if db.Dialector.Name() == "postgres" {
+		return createPostgresConcurrentIndex(db, "marketplace", "idx_marketplace_settlements_releasable_owner", statements[0])
+	}
+	for _, statement := range statements {
 		if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
 			return err
 		}
@@ -896,6 +906,95 @@ func marketplaceReleaseOwnerIndexStatements(dialect string) []string {
 		return []string{`CREATE INDEX IF NOT EXISTS idx_marketplace_settlements_releasable_owner
 			 ON marketplace_settlements (status, referral_rebate_pending, owner_user_id, available_at, id)`}
 	}
+}
+
+func migrateLedgerBacklogPriorityIndexes(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&billingschema.BillingOutboxEvent{}) {
+		return nil
+	}
+	statements := ledgerBacklogPriorityIndexStatements(db.Dialector.Name())
+	if db.Dialector.Name() == "postgres" {
+		indexes := []struct {
+			name      string
+			statement string
+		}{
+			{name: "idx_billing_outbox_pending_noop", statement: statements[0]},
+			{name: "idx_billing_outbox_pending_marketplace_usage", statement: statements[1]},
+		}
+		for _, index := range indexes {
+			if err := createPostgresConcurrentIndex(db, "billing", index.name, index.statement); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, statement := range statements {
+		if err := db.Exec(statement).Error; err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return err
+		}
+	}
+	return nil
+}
+
+func ledgerBacklogPriorityIndexStatements(dialect string) []string {
+	switch strings.ToLower(dialect) {
+	case "postgres":
+		return []string{
+			`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_outbox_pending_noop
+			 ON billing.outbox_events (created_at ASC, event_id ASC)
+			 WHERE status = 'pending' AND event_type IN ('billing.adjustment_recorded', 'billing.balance_adjusted', 'billing.credit_granted', 'billing.reservation_created', 'billing.reservation_released', 'billing.reservation_increased')`,
+			`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_outbox_pending_marketplace_usage
+			 ON billing.outbox_events (created_at ASC, event_id ASC) INCLUDE (aggregate_id)
+			 WHERE status = 'pending' AND event_type = 'billing.marketplace_usage_settled'`,
+		}
+	case "mysql":
+		return []string{
+			`CREATE INDEX idx_billing_outbox_pending_noop ON billing_outbox_events (status, event_type, created_at, event_id)`,
+			`CREATE INDEX idx_billing_outbox_pending_marketplace_usage ON billing_outbox_events (status, event_type, created_at, event_id, aggregate_id)`,
+		}
+	default:
+		return []string{
+			`CREATE INDEX IF NOT EXISTS idx_billing_outbox_pending_noop ON billing_outbox_events (status, event_type, created_at, event_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_billing_outbox_pending_marketplace_usage ON billing_outbox_events (status, event_type, created_at, event_id, aggregate_id)`,
+		}
+	}
+}
+
+func createPostgresConcurrentIndex(db *gorm.DB, schemaName string, indexName string, statement string) error {
+	type indexState struct {
+		Valid bool `gorm:"column:valid"`
+	}
+	var state indexState
+	result := db.Raw(`SELECT index_state.indisvalid AS valid
+		FROM pg_index AS index_state
+		JOIN pg_class AS index_class ON index_class.oid = index_state.indexrelid
+		JOIN pg_namespace AS index_namespace ON index_namespace.oid = index_class.relnamespace
+		WHERE index_namespace.nspname = ? AND index_class.relname = ?`, schemaName, indexName).Scan(&state)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected > 0 && !state.Valid {
+		drop := fmt.Sprintf(`DROP INDEX CONCURRENTLY IF EXISTS "%s"."%s"`, strings.ReplaceAll(schemaName, `"`, `""`), strings.ReplaceAll(indexName, `"`, `""`))
+		if err := db.Exec(drop).Error; err != nil {
+			return fmt.Errorf("drop invalid index %s.%s: %w", schemaName, indexName, err)
+		}
+	}
+	if err := db.Exec(statement).Error; err != nil {
+		return err
+	}
+	state = indexState{}
+	result = db.Raw(`SELECT index_state.indisvalid AS valid
+		FROM pg_index AS index_state
+		JOIN pg_class AS index_class ON index_class.oid = index_state.indexrelid
+		JOIN pg_namespace AS index_namespace ON index_namespace.oid = index_class.relnamespace
+		WHERE index_namespace.nspname = ? AND index_class.relname = ?`, schemaName, indexName).Scan(&state)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 || !state.Valid {
+		return fmt.Errorf("postgres index %s.%s is not valid after creation", schemaName, indexName)
+	}
+	return nil
 }
 
 // migrateMarketplaceSettlementReclaimIndex keeps administrator reclaim scans

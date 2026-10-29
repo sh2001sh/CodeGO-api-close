@@ -412,3 +412,78 @@ func TestPublishProjectedMarketplaceUsageBatchPostgres(t *testing.T) {
 	require.Equal(t, billingschema.BillingOutboxStatusPending, events[1].Status)
 	require.Nil(t, events[1].PublishedAt)
 }
+
+func TestPublishProjectedMarketplaceUsageLoadPostgres(t *testing.T) {
+	if os.Getenv("RUN_LEDGER_LOAD_TEST") != "1" {
+		t.Skip("set RUN_LEDGER_LOAD_TEST=1 to run the projected usage backlog load test")
+	}
+	dsn := os.Getenv("TEST_LEDGER_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set TEST_LEDGER_POSTGRES_DSN to a dedicated test database")
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	oldDB, oldPG, oldSQLite := platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite
+	platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = db, true, false
+	t.Cleanup(func() {
+		platformdb.DB, platformdb.UsingPostgreSQL, platformdb.UsingSQLite = oldDB, oldPG, oldSQLite
+		require.NoError(t, sqlDB.Close())
+	})
+	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS billing").Error)
+	require.NoError(t, db.Exec("CREATE SCHEMA IF NOT EXISTS marketplace").Error)
+	require.NoError(t, db.AutoMigrate(&billingschema.BillingOutboxEvent{}, &marketplaceschema.Settlement{}))
+	require.NoError(t, db.Exec(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_billing_outbox_pending_marketplace_usage
+		ON billing.outbox_events (created_at ASC, event_id ASC) INCLUDE (aggregate_id)
+		WHERE status = 'pending' AND event_type = 'billing.marketplace_usage_settled'`).Error)
+
+	const noiseCount = 200000
+	const targetCount = 20000
+	unique := time.Now().UnixNano()
+	createdAt := time.Now().UTC().Add(-24 * time.Hour)
+	for offset := 0; offset < noiseCount; offset += 1000 {
+		noise := make([]billingschema.BillingOutboxEvent, 1000)
+		for index := range noise {
+			id := fmt.Sprintf("projected-noise-%d-%06d", unique, offset+index)
+			noise[index] = billingschema.BillingOutboxEvent{
+				EventID: id, AccountID: "noise", AggregateID: id, EventType: "billing.reservation_settled",
+				IdempotencyKey: id, Status: billingschema.BillingOutboxStatusPending, CreatedAt: createdAt,
+			}
+		}
+		require.NoError(t, db.CreateInBatches(&noise, 1000).Error)
+	}
+	for offset := 0; offset < targetCount; offset += 1000 {
+		settlements := make([]marketplaceschema.Settlement, 1000)
+		events := make([]billingschema.BillingOutboxEvent, 1000)
+		for index := range events {
+			id := fmt.Sprintf("projected-target-%d-%06d", unique, offset+index)
+			settlements[index] = marketplaceschema.Settlement{
+				ID: id, RequestID: id, GroupID: "projected-load", OwnerUserID: 1, ConsumerUserID: 2,
+				SettlementGrossAmount: 1, OwnerNetAmount: 1, Multiplier: 1, Status: "pending", CreatedAt: createdAt,
+			}
+			events[index] = billingschema.BillingOutboxEvent{
+				EventID: id, AccountID: id, AggregateID: id, EventType: marketplaceUsageSettledEvent,
+				IdempotencyKey: id, Status: billingschema.BillingOutboxStatusPending, CreatedAt: createdAt,
+			}
+		}
+		require.NoError(t, db.CreateInBatches(&settlements, 1000).Error)
+		require.NoError(t, db.CreateInBatches(&events, 1000).Error)
+	}
+
+	started := time.Now()
+	processed := int64(0)
+	for processed < targetCount {
+		count, runErr := publishProjectedMarketplaceUsageBatch(context.Background(), ledgerWorkerNoopBatchSize)
+		require.NoError(t, runErr)
+		require.Positive(t, count)
+		processed += count
+	}
+	elapsed := time.Since(started)
+	var pendingTargets, pendingNoise int64
+	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).Where("event_id LIKE ? AND status = ?", fmt.Sprintf("projected-target-%d-%%", unique), billingschema.BillingOutboxStatusPending).Count(&pendingTargets).Error)
+	require.NoError(t, db.Model(&billingschema.BillingOutboxEvent{}).Where("event_id LIKE ? AND status = ?", fmt.Sprintf("projected-noise-%d-%%", unique), billingschema.BillingOutboxStatusPending).Count(&pendingNoise).Error)
+	require.Zero(t, pendingTargets)
+	require.EqualValues(t, noiseCount, pendingNoise)
+	t.Logf("processed=%d unrelated_noise=%d elapsed=%s throughput=%.1f events/s", processed, pendingNoise, elapsed, float64(processed)/elapsed.Seconds())
+}

@@ -123,6 +123,29 @@ func TestSelectDueSettlementsBalancesOwners(t *testing.T) {
 	require.Equal(t, map[int]int{10: 5, 11: 1}, ownerCounts)
 }
 
+func TestSelectDueSettlementsIncludesMoreThanLegacyOwnerWindow(t *testing.T) {
+	db := openSettlementTestDB(t)
+	availableAt := time.Now().UTC().Add(-time.Hour)
+	items := make([]marketplaceschema.Settlement, 40)
+	for index := range items {
+		id := fmt.Sprintf("owner-window-%02d", index)
+		items[index] = marketplaceschema.Settlement{
+			ID: id, RequestID: id, GroupID: "group", OwnerUserID: index + 1, ConsumerUserID: 1,
+			OwnerNetAmount: 1, Multiplier: 1, Status: statusPending, AvailableAt: availableAt,
+		}
+	}
+	require.NoError(t, db.Create(&items).Error)
+
+	selected, err := selectDueSettlements(context.Background(), 1000, releaseOwnerSelectionSize)
+	require.NoError(t, err)
+	require.Len(t, selected, len(items))
+	ownerIDs := make(map[int]struct{}, len(items))
+	for _, item := range selected {
+		ownerIDs[item.OwnerUserID] = struct{}{}
+	}
+	require.Len(t, ownerIDs, len(items))
+}
+
 func TestReleaseDueContinuesAfterOneSettlementFails(t *testing.T) {
 	db := openSettlementTestDB(t)
 	now := time.Now().UTC()

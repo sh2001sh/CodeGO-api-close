@@ -30,3 +30,12 @@ func TestMarketplaceReleaseOwnerIndexStatementsPostgres(t *testing.T) {
 	require.Contains(t, statements[0], "idx_marketplace_settlements_releasable_owner")
 	require.Contains(t, statements[0], "owner_user_id, available_at ASC, id ASC")
 }
+
+func TestLedgerBacklogPriorityIndexStatementsPostgres(t *testing.T) {
+	statements := ledgerBacklogPriorityIndexStatements("postgres")
+	require.Len(t, statements, 2)
+	require.Contains(t, statements[0], "idx_billing_outbox_pending_noop")
+	require.Contains(t, statements[0], "billing.reservation_increased")
+	require.Contains(t, statements[1], "idx_billing_outbox_pending_marketplace_usage")
+	require.Contains(t, statements[1], "billing.marketplace_usage_settled")
+}

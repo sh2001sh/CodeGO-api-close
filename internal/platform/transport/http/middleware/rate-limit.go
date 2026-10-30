@@ -176,10 +176,21 @@ func globalAuthenticatedRateLimitKey(c *gin.Context) string {
 	if desktopDeviceID := c.GetInt("desktop_device_id"); desktopDeviceID > 0 {
 		return fmt.Sprintf("desktop:%d:%s", desktopDeviceID, desktopRateLimitScope(c.Request.Method, c.Request.URL.Path))
 	}
+	if tokenID := c.GetInt("token_id"); tokenID > 0 {
+		return fmt.Sprintf("token:%d:%s", tokenID, apiTokenRateLimitScope(c.Request.Method, c.Request.URL.Path))
+	}
 	if userID := c.GetInt("id"); userID > 0 {
 		return fmt.Sprintf("user:%d", userID)
 	}
 	return ""
+}
+
+func apiTokenRateLimitScope(method, path string) string {
+	if (method == http.MethodGet || method == http.MethodHead) &&
+		(path == "/api/usage/token" || strings.HasPrefix(path, "/api/usage/token/")) {
+		return "metadata"
+	}
+	return "other"
 }
 
 func desktopRateLimitScope(method, path string) string {

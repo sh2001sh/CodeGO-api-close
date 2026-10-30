@@ -224,6 +224,45 @@ func TestDesktopAuthenticatedRateLimitUsesIndependentReadScopes(t *testing.T) {
 	}
 }
 
+func TestAPITokenMetadataRateLimitUsesIndependentTokenScope(t *testing.T) {
+	originalRedisEnabled := platformcache.RedisEnabled
+	originalEnabled := platformconfig.GlobalApiRateLimitEnable
+	originalLimit := platformconfig.GlobalApiRateLimitNum
+	originalDuration := platformconfig.GlobalApiRateLimitDuration
+	platformcache.RedisEnabled = false
+	platformconfig.GlobalApiRateLimitEnable = true
+	platformconfig.GlobalApiRateLimitNum = 1
+	platformconfig.GlobalApiRateLimitDuration = 600
+	t.Cleanup(func() {
+		platformcache.RedisEnabled = originalRedisEnabled
+		platformconfig.GlobalApiRateLimitEnable = originalEnabled
+		platformconfig.GlobalApiRateLimitNum = originalLimit
+		platformconfig.GlobalApiRateLimitDuration = originalDuration
+	})
+
+	first := newRateLimitContext(http.MethodGet, "/api/usage/token/", "198.51.100.92", "")
+	first.Set("id", 99003)
+	first.Set("token_id", 88001)
+	require.Equal(t, "token:88001:metadata", globalAuthenticatedRateLimitKey(first))
+	require.True(t, enforceGlobalAuthenticatedAPIRateLimit(first))
+
+	limited := newRateLimitContext(http.MethodGet, "/api/usage/token/", "203.0.113.92", "")
+	limited.Set("id", 99003)
+	limited.Set("token_id", 88001)
+	require.False(t, enforceGlobalAuthenticatedAPIRateLimit(limited))
+
+	second := newRateLimitContext(http.MethodGet, "/api/usage/token/", "198.51.100.92", "")
+	second.Set("id", 99003)
+	second.Set("token_id", 88002)
+	require.Equal(t, "token:88002:metadata", globalAuthenticatedRateLimitKey(second))
+	require.True(t, enforceGlobalAuthenticatedAPIRateLimit(second))
+
+	other := newRateLimitContext(http.MethodGet, "/api/token/1", "198.51.100.92", "")
+	other.Set("id", 99003)
+	other.Set("token_id", 88001)
+	require.Equal(t, "token:88001:other", globalAuthenticatedRateLimitKey(other))
+}
+
 func configureMemoryLoginRateLimit(t *testing.T, ipLimit int, accountLimit int, duration int64) func() {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

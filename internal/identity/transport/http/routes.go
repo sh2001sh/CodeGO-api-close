@@ -170,12 +170,12 @@ func RegisterDesktopRoutes(apiRouter *gin.RouterGroup) {
 	}
 
 	usageRoute := apiRouter.Group("/usage")
-	usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
+	usageRoute.Use(middleware.CORS())
 	{
 		tokenUsageRoute := usageRoute.Group("/token")
 		tokenUsageRoute.Use(middleware.TokenAuthReadOnly())
 		{
-			tokenUsageRoute.GET("/", GetTokenUsage)
+			tokenUsageRoute.GET("/", middleware.DisableCache(), GetTokenUsage)
 		}
 	}
 }

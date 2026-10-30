@@ -77,6 +77,7 @@ func GetRatioConfig(c *gin.Context) {
 		})
 		return
 	}
+	c.Header("Cache-Control", "public, max-age=60, stale-while-revalidate=300")
 	httpapi.ApiSuccess(c, data)
 }
 

@@ -57,7 +57,7 @@ func registerControlAPIRoutes(router *gin.Engine) {
 		apiRouter.GET("/oauth/telegram/login", middleware.CriticalRateLimit(), identityhttp.HandleTelegramLogin)
 		apiRouter.GET("/oauth/telegram/bind", middleware.CriticalRateLimit(), identityhttp.BindTelegramOAuth)
 		apiRouter.GET("/oauth/:provider", middleware.CriticalRateLimit(), identityhttp.HandleOAuth)
-		apiRouter.GET("/ratio_config", middleware.CriticalRateLimit(), gatewayhttp.GetRatioConfig)
+		apiRouter.GET("/ratio_config", gatewayhttp.GetRatioConfig)
 
 		apiRouter.POST("/stripe/webhook", anonymousRequestBodyLimit, commercehttp.StripeWebhook)
 		apiRouter.POST("/creem/webhook", anonymousRequestBodyLimit, commercehttp.CreemWebhook)

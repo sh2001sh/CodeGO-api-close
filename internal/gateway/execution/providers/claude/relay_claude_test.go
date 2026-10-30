@@ -102,6 +102,22 @@ func TestClaudeStreamHandlerAcceptsUpstreamStreamWithEvents(t *testing.T) {
 	require.False(t, info.HasSemanticResponse(), "message_start and usage must not fabricate output timing")
 }
 
+func TestHandleStreamResponseDataClassifiesContextLimitAsBadRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	info := &relaycommon.RelayInfo{RelayFormat: types.RelayFormatClaude}
+	claudeInfo := &ClaudeResponseInfo{Usage: &dto.Usage{}}
+	data := `{"type":"error","error":{"type":"invalid_request_error","message":"Context window is full. Reduce conversation history, system prompt, or tools."}}`
+
+	apiErr := HandleStreamResponseData(ctx, info, claudeInfo, data)
+
+	require.NotNil(t, apiErr)
+	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	require.True(t, types.IsSkipRetryError(apiErr))
+	require.Equal(t, "invalid_request_error", apiErr.ToClaudeError().Type)
+}
+
 func TestFormatClaudeResponseInfoMessageDeltaFullUsage(t *testing.T) {
 	claudeInfo := &ClaudeResponseInfo{
 		Usage: &dto.Usage{

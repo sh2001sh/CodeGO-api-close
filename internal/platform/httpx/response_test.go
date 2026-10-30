@@ -124,6 +124,22 @@ func TestRelayErrorHandlerKeepsOpenAIErrorMessage(t *testing.T) {
 	require.Equal(t, message, newAPIError.Error())
 }
 
+func TestRelayErrorHandlerClassifiesAnthropicContextLimitAsDeterministic(t *testing.T) {
+	t.Parallel()
+	body := `{"type":"error","error":{"type":"invalid_request_error","message":"Context window is full. Reduce conversation history, system prompt, or tools."}}`
+	resp := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	apiErr := RelayErrorHandler(context.Background(), resp, false)
+
+	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	require.True(t, types.IsSkipRetryError(apiErr))
+	require.Equal(t, "Context window is full. Reduce conversation history, system prompt, or tools.", apiErr.Error())
+	require.Equal(t, "invalid_request_error", apiErr.ToClaudeError().Type)
+}
+
 func TestRelayErrorHandlerKeepsInvalidJSONBodyInDebugLog(t *testing.T) {
 	withDebugEnabled(t, true)
 

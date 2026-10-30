@@ -10,6 +10,7 @@ import (
 )
 
 var heavyGlobalAPIRateLimitedRequests = map[string]struct{}{
+	"GET /api/ratio_config":                         {},
 	"GET /api/group-status":                         {},
 	"GET /api/user/self":                            {},
 	"GET /api/user/self/groups":                     {},
@@ -49,6 +50,9 @@ func isAuthenticatedAPIRoute(path string) bool {
 		return path != "/api/desktop/import/config" &&
 			path != "/api/desktop/release/latest" &&
 			path != "/api/desktop/release/latest.json"
+	}
+	if path == "/api/usage/token" || strings.HasPrefix(path, "/api/usage/token/") {
+		return true
 	}
 	if strings.HasPrefix(path, "/api/token") ||
 		strings.HasPrefix(path, "/api/subscription") ||

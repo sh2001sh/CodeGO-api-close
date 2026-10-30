@@ -304,9 +304,13 @@ func (e *NewAPIError) ToClaudeError() ClaudeError {
 	switch e.errorType {
 	case ErrorTypeOpenAIError:
 		if openAIError, ok := e.RelayError.(OpenAIError); ok {
+			errorType := strings.TrimSpace(fmt.Sprintf("%v", openAIError.Code))
+			if openAIError.Code == nil || errorType == "" || errorType == "<nil>" || errorType == "unknown_error" {
+				errorType = openAIError.Type
+			}
 			result = ClaudeError{
 				Message: e.Error(),
-				Type:    fmt.Sprintf("%v", openAIError.Code),
+				Type:    errorType,
 			}
 		}
 	case ErrorTypeClaudeError:

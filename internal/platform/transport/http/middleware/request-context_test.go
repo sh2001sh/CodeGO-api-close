@@ -9,6 +9,7 @@ func TestIsHeavyGlobalAPIRateLimitedRequest(t *testing.T) {
 		want   bool
 	}{
 		{method: "GET", path: "/api/user/self", want: true},
+		{method: "GET", path: "/api/ratio_config", want: true},
 		{method: "GET", path: "/api/user/topup/info", want: true},
 		{method: "GET", path: "/api/subscription/self", want: true},
 		{method: "POST", path: "/api/user/amount", want: true},
@@ -33,6 +34,8 @@ func TestIsAuthenticatedAPIRoute(t *testing.T) {
 		{path: "/api/packages/public", want: true},
 		{path: "/api/user/login", want: false},
 		{path: "/api/user/self", want: true},
+		{path: "/api/usage/token", want: true},
+		{path: "/api/usage/token/", want: true},
 	}
 
 	for _, tt := range tests {

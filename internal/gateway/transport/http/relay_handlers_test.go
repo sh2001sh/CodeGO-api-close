@@ -12,6 +12,7 @@ import (
 	gatewayschema "github.com/sh2001sh/new-api/internal/gateway/schema"
 	gatewaystream "github.com/sh2001sh/new-api/internal/gateway/stream"
 	platformencoding "github.com/sh2001sh/new-api/internal/platform/encodingx"
+	platformhttpx "github.com/sh2001sh/new-api/internal/platform/httpx"
 	platformtext "github.com/sh2001sh/new-api/internal/platform/textx"
 	httpctx "github.com/sh2001sh/new-api/internal/platform/transport/http/httpctx"
 	"github.com/sh2001sh/new-api/types"
@@ -30,6 +31,11 @@ type relayErrorEnvelope struct {
 		Type    string `json:"type"`
 		Code    string `json:"code"`
 	} `json:"error"`
+}
+
+type claudeRelayErrorEnvelope struct {
+	Type  string            `json:"type"`
+	Error types.ClaudeError `json:"error"`
 }
 
 type refundTrackingBilling struct {
@@ -76,6 +82,18 @@ func TestGenericResponsesUpstream400RetriesOnlyBeforeContentWithinBudget(t *test
 	require.False(t, shouldRetry(ctx, explicit, 2))
 	ctx.Set(string(constant.ContextKeyStreamContentDelivered), true)
 	require.False(t, shouldRetry(ctx, err, 2), "tool calls or output already delivered must never replay")
+}
+
+func TestAnthropicContextLimitNeverRetries(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	apiErr := platformhttpx.ClaudeErrorHandler(types.ClaudeError{
+		Type:    "invalid_request_error",
+		Message: "Context window is full. Reduce conversation history, system prompt, or tools.",
+	}, http.StatusInternalServerError)
+
+	require.False(t, shouldRetry(ctx, apiErr, 3))
 }
 
 func TestOpaqueResponsesUpstream400RetriesOnlyWhenHandlerClassifiedIt(t *testing.T) {
@@ -503,6 +521,48 @@ func TestFinalizeRelayErrorMasksChineseUpstreamQuotaLeak(t *testing.T) {
 	var response relayErrorEnvelope
 	require.NoError(t, platformencoding.Unmarshal(recorder.Body.Bytes(), &response))
 	require.Equal(t, platformtext.UpstreamQuotaGenericMessage+" (request id: downstream)", response.Error.Message)
+}
+
+func TestFinalizeRelayErrorKeepsAnthropicShapeAndSingleRequestID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	apiErr := types.WithClaudeError(types.ClaudeError{
+		Type:    "invalid_request_error",
+		Message: "Context window is full. (request id: upstream-a) (request id: upstream-b)",
+	}, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+
+	finalizeRelayError(ctx, types.RelayFormatClaude, nil, apiErr, "downstream")
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	var response claudeRelayErrorEnvelope
+	require.NoError(t, platformencoding.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, "error", response.Type)
+	require.Equal(t, "invalid_request_error", response.Error.Type)
+	require.Equal(t, "Context window is full. (request id: downstream)", response.Error.Message)
+	require.Equal(t, 1, strings.Count(strings.ToLower(response.Error.Message), "request id:"))
+}
+
+func TestFinalizeRelayErrorWritesAnthropicStreamErrorAfterCommit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	httpctx.SetContextKey(ctx, constant.ContextKeyIsStream, true)
+	httpctx.SetContextKey(ctx, constant.ContextKeyResponseBodyDelivered, true)
+	apiErr := platformhttpx.ClaudeErrorHandler(types.ClaudeError{
+		Type:    "invalid_request_error",
+		Message: "Context window is full. (request id: upstream)",
+	}, http.StatusInternalServerError)
+
+	finalizeRelayError(ctx, types.RelayFormatClaude, nil, apiErr, "downstream")
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "event: error")
+	require.Contains(t, recorder.Body.String(), `"type":"invalid_request_error"`)
+	require.Contains(t, recorder.Body.String(), "Context window is full. (request id: downstream)")
+	require.Equal(t, 1, strings.Count(strings.ToLower(recorder.Body.String()), "request id:"))
 }
 
 func TestFinalizeRelayErrorKeepsLocalQuotaMessage(t *testing.T) {

@@ -79,18 +79,69 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 	if platformencoding.GetJSONType(errResponse.Error) == "object" {
 		oaiError := errResponse.TryToOpenAIError()
 		if oaiError != nil {
-			newAPIErr = types.WithOpenAIError(*oaiError, resp.StatusCode)
+			var options []types.NewAPIErrorOptions
+			if IsDeterministicRequestError(oaiError.Type, oaiError.Message) {
+				options = append(options, types.ErrOptionWithSkipRetry())
+			}
+			newAPIErr = types.WithOpenAIError(*oaiError, resp.StatusCode, options...)
 			if showBodyWhenFail {
 				newAPIErr.Err = buildErrWithBody(newAPIErr.Error())
 			}
 			return
 		}
 	}
-	newAPIErr = types.NewOpenAIError(errors.New(errResponse.ToMessage()), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
+	message := errResponse.ToMessage()
+	var options []types.NewAPIErrorOptions
+	if IsDeterministicRequestError("", message) {
+		options = append(options, types.ErrOptionWithSkipRetry())
+	}
+	newAPIErr = types.NewOpenAIError(errors.New(message), types.ErrorCodeBadResponseStatusCode, resp.StatusCode, options...)
 	if showBodyWhenFail {
 		newAPIErr.Err = buildErrWithBody(newAPIErr.Error())
 	}
 	return
+}
+
+// IsDeterministicRequestError identifies payload errors that cannot succeed on
+// another route without changing the request itself.
+func IsDeterministicRequestError(errorType string, message string) bool {
+	errorType = strings.ToLower(strings.TrimSpace(errorType))
+	if errorType == "invalid_request_error" || errorType == "request_too_large" {
+		return true
+	}
+	message = strings.ToLower(strings.TrimSpace(message))
+	for _, phrase := range []string{
+		"context window is full",
+		"context window exceeded",
+		"prompt is too long",
+		"prompt too long",
+		"input is too long",
+		"input too long",
+		"input length exceeds",
+		"input length is too",
+		"maximum context length",
+		"max context length",
+	} {
+		if strings.Contains(message, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+// ClaudeErrorHandler maps an error delivered inside a successful Anthropic
+// response or SSE stream back to its effective HTTP semantics.
+func ClaudeErrorHandler(claudeError types.ClaudeError, fallbackStatusCode int) *types.NewAPIError {
+	statusCode := fallbackStatusCode
+	var options []types.NewAPIErrorOptions
+	if IsDeterministicRequestError(claudeError.Type, claudeError.Message) {
+		statusCode = http.StatusBadRequest
+		if strings.EqualFold(strings.TrimSpace(claudeError.Type), "request_too_large") {
+			statusCode = http.StatusRequestEntityTooLarge
+		}
+		options = append(options, types.ErrOptionWithSkipRetry())
+	}
+	return types.WithClaudeError(claudeError, statusCode, options...)
 }
 
 type CyberPolicyError struct {

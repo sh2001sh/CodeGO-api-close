@@ -291,3 +291,108 @@ func TestCreditPackPriorityTokenRollbackFailureCannotFallBack(t *testing.T) {
 	require.Equal(t, types.ErrorCodeUpdateDataError, apiErr.GetErrorCode())
 	require.Zero(t, legacyCalls)
 }
+
+func TestOrderedSubscriptionFundingUsesSelectedSourcePricing(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		pack     bool
+		external bool
+	}{
+		{name: "monthly_first"},
+		{name: "pack_first", pack: true},
+		{name: "unsupported_pack_is_not_allowed", external: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, info := creditPackPriorityContext(t, "subscription_first", 10000)
+			if test.external {
+				info.ChannelScope = gatewayschema.ChannelScopeExternal
+				info.MarketplaceGroupID, info.MarketplaceMultiplier = "market", 1
+			}
+			calls := 0
+			RegisterSubscriptionFundingHooks(SubscriptionFundingHooks{
+				PreConsumeOrdered: func(request OrderedSubscriptionPreConsumeRequest) (*SubscriptionFundingPreConsumeResult, error) {
+					calls++
+					require.EqualValues(t, 100, request.CreditPackAmount)
+					if test.external {
+						require.False(t, request.AllowCreditPack)
+						require.EqualValues(t, 500, request.LegacyAmount)
+					} else {
+						require.True(t, request.AllowCreditPack)
+						require.EqualValues(t, 25, request.LegacyAmount)
+					}
+					if test.pack {
+						return &SubscriptionFundingPreConsumeResult{
+							RequestID: request.CreditPackRequestID, UserSubscriptionID: 22,
+							PreConsumed: request.CreditPackAmount, ReservationID: "ordered-pack", PlanID: 2, PlanTitle: "Pack",
+							AmountTotal: 103000, CreditPackGrantedQuota: 103000, CreditPackPaidQuota: 100000, CreditPackChannelShareBPS: 6000,
+						}, nil
+					}
+					return &SubscriptionFundingPreConsumeResult{
+						RequestID: request.LegacyRequestID, UserSubscriptionID: 11,
+						PreConsumed: request.LegacyAmount, ReservationID: "ordered-legacy", PlanID: 1, PlanTitle: "Monthly", AmountTotal: 10000,
+					}, nil
+				},
+				RefundPreConsume: func(string) error { return nil },
+			})
+
+			session, apiErr := NewBillingSession(ctx, info, 100)
+			require.Nil(t, apiErr)
+			require.NotNil(t, session)
+			require.Equal(t, 1, calls)
+			funding := session.funding.(*SubscriptionFunding)
+			require.Equal(t, test.pack, funding.creditPack)
+			if test.pack {
+				require.Equal(t, 22, info.SubscriptionId)
+				require.Equal(t, 100, session.GetPreConsumedQuota())
+				require.Equal(t, 1.0, info.SubscriptionQuotaScale)
+			} else {
+				require.Equal(t, 11, info.SubscriptionId)
+				if test.external {
+					require.Equal(t, 500, session.GetPreConsumedQuota())
+				} else {
+					require.Equal(t, 25, session.GetPreConsumedQuota())
+				}
+			}
+		})
+	}
+}
+
+func TestOrderedSubscriptionFundingTokenFailureSwitchesSourceAfterRefund(t *testing.T) {
+	ctx, info := creditPackPriorityContext(t, "subscription_only", 0)
+	seedToken(t, info.UserId+1000000, info.UserId, "ordered-token", 50)
+	info.IsPlayground, info.TokenId, info.TokenKey = false, info.UserId+1000000, "ordered-token"
+	previousSQLite := platformdb.UsingSQLite
+	platformdb.UsingSQLite = false
+	t.Cleanup(func() { platformdb.UsingSQLite = previousSQLite })
+
+	var calls []string
+	RegisterSubscriptionFundingHooks(SubscriptionFundingHooks{
+		PreConsumeOrdered: func(request OrderedSubscriptionPreConsumeRequest) (*SubscriptionFundingPreConsumeResult, error) {
+			if request.AllowCreditPack {
+				calls = append(calls, "pack")
+				return &SubscriptionFundingPreConsumeResult{
+					RequestID: request.CreditPackRequestID, UserSubscriptionID: 22,
+					PreConsumed: request.CreditPackAmount, ReservationID: "ordered-pack", PlanID: 2,
+					AmountTotal: 103000, CreditPackGrantedQuota: 103000, CreditPackPaidQuota: 100000, CreditPackChannelShareBPS: 6000,
+				}, nil
+			}
+			calls = append(calls, "legacy")
+			return &SubscriptionFundingPreConsumeResult{
+				RequestID: request.LegacyRequestID, UserSubscriptionID: 11,
+				PreConsumed: request.LegacyAmount, ReservationID: "ordered-legacy", PlanID: 1, AmountTotal: 10000,
+			}, nil
+		},
+		RefundPreConsume: func(requestID string) error {
+			calls = append(calls, "refund:"+requestID)
+			return nil
+		},
+	})
+
+	session, apiErr := NewBillingSession(ctx, info, 100)
+	require.Nil(t, apiErr)
+	require.NotNil(t, session)
+	require.Equal(t, []string{"pack", "refund:" + creditPackFundingRequestID(info.RequestId), "legacy"}, calls)
+	require.False(t, session.funding.(*SubscriptionFunding).creditPack)
+	require.Equal(t, 11, info.SubscriptionId)
+	require.Equal(t, 25, session.GetPreConsumedQuota())
+}

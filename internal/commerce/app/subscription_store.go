@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"github.com/sh2001sh/new-api/dto"
 	commerceschema "github.com/sh2001sh/new-api/internal/commerce/schema"
 	"math"
 	"sort"
@@ -244,6 +245,36 @@ func buildSubscriptionSummaries(subs []commerceschema.UserSubscription) ([]comme
 
 func orderActiveUserSubscriptions(userID int, subs []commerceschema.UserSubscription) ([]commerceschema.UserSubscription, error) {
 	return orderActiveUserSubscriptionsTx(nil, userID, subs)
+}
+
+func orderActiveUserFundingSubscriptions(userID int, subs []commerceschema.UserSubscription) ([]commerceschema.UserSubscription, error) {
+	if len(subs) == 0 {
+		return []commerceschema.UserSubscription{}, nil
+	}
+	setting, err := identitystore.LoadUserSetting(userID, false)
+	if err != nil {
+		setting = dto.UserSetting{}
+	}
+	explicitOrder := commercedomain.NormalizePositiveIntSlice(setting.SubscriptionOrderIds)
+	ordered, err := orderActiveUserSubscriptionsWithExplicitOrderTx(nil, subs, explicitOrder)
+	if err != nil || len(explicitOrder) > 0 {
+		return ordered, err
+	}
+
+	// Preserve the historical pack-first default only when the user has not
+	// configured an order. An explicit order always wins across source types.
+	packFirst := make([]commerceschema.UserSubscription, 0, len(ordered))
+	for _, sub := range ordered {
+		if sub.CreditPackGrantedQuota > 0 {
+			packFirst = append(packFirst, sub)
+		}
+	}
+	for _, sub := range ordered {
+		if sub.CreditPackGrantedQuota <= 0 {
+			packFirst = append(packFirst, sub)
+		}
+	}
+	return packFirst, nil
 }
 
 func orderActiveUserSubscriptionsTx(tx *gorm.DB, userID int, subs []commerceschema.UserSubscription) ([]commerceschema.UserSubscription, error) {

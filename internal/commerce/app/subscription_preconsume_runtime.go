@@ -29,6 +29,111 @@ func PreConsumeCreditPack(requestID string, userID int, modelName string, amount
 	return preConsumeSubscriptionSource(requestID, userID, modelName, amount, true)
 }
 
+// PreConsumeOrderedSubscription walks legacy subscriptions and permanent
+// credit packs in the user's configured order. Each source keeps its existing
+// request ID so refunds and retries remain isolated across source types.
+func PreConsumeOrderedSubscription(legacyRequestID string, creditPackRequestID string, userID int, modelName string, legacyAmount int64, creditPackAmount int64, allowLegacy bool, allowCreditPack bool) (*commercedomain.SubscriptionPreConsumeResult, string, error) {
+	if userID <= 0 {
+		return nil, "", errors.New("invalid userId")
+	}
+	if !allowLegacy && !allowCreditPack {
+		return nil, "", errors.New("no subscription funding source is allowed")
+	}
+	if allowLegacy && (strings.TrimSpace(legacyRequestID) == "" || legacyAmount <= 0) {
+		return nil, "", errors.New("legacy subscription request is invalid")
+	}
+	if allowCreditPack && (strings.TrimSpace(creditPackRequestID) == "" || creditPackAmount <= 0) {
+		return nil, "", errors.New("credit pack request is invalid")
+	}
+
+	allowLegacy, allowCreditPack, replay, replayRequestID, err := findOrderedPreConsumedSubscription(
+		legacyRequestID, creditPackRequestID, userID, allowLegacy, allowCreditPack,
+	)
+	if err != nil || replay != nil {
+		return replay, replayRequestID, err
+	}
+
+	now := commercestore.GetDBTimestamp()
+	candidates, err := loadActiveOrderedSubscriptionCandidates(userID, now)
+	if err != nil {
+		return nil, "", err
+	}
+	modelName = strings.TrimSpace(modelName)
+	for _, candidate := range candidates {
+		creditPack := candidate.CreditPackGrantedQuota > 0
+		if (creditPack && !allowCreditPack) || (!creditPack && !allowLegacy) {
+			continue
+		}
+		requestID, amount := legacyRequestID, legacyAmount
+		if creditPack {
+			requestID, amount = creditPackRequestID, creditPackAmount
+		}
+		plan, err := getSubscriptionPlanRecordTx(nil, candidate.PlanId)
+		if err != nil {
+			return nil, "", err
+		}
+		result, available, err := preConsumeSubscriptionCandidate(requestID, userID, modelName, amount, now, candidate.Id, plan)
+		if err != nil {
+			return nil, "", err
+		}
+		if available {
+			if (result.CreditPackGrantedQuota > 0) != creditPack {
+				return nil, "", errors.New("subscription funding source mismatch")
+			}
+			return result, requestID, nil
+		}
+	}
+	return nil, "", fmt.Errorf("subscription quota insufficient, need_legacy=%d, need_credit_pack=%d", legacyAmount, creditPackAmount)
+}
+
+func findOrderedPreConsumedSubscription(legacyRequestID string, creditPackRequestID string, userID int, allowLegacy bool, allowCreditPack bool) (bool, bool, *commercedomain.SubscriptionPreConsumeResult, string, error) {
+	type sourceRequest struct {
+		requestID  string
+		creditPack bool
+		allowed    bool
+	}
+	sources := []sourceRequest{
+		{requestID: legacyRequestID, allowed: allowLegacy},
+		{requestID: creditPackRequestID, creditPack: true, allowed: allowCreditPack},
+	}
+	for _, source := range sources {
+		if source.requestID == "" {
+			continue
+		}
+		var record commerceschema.SubscriptionPreConsumeRecord
+		query := platformdb.DB.Where("request_id = ?", source.requestID).Limit(1).Find(&record)
+		if query.Error != nil {
+			return allowLegacy, allowCreditPack, nil, "", query.Error
+		}
+		if query.RowsAffected == 0 {
+			continue
+		}
+		if record.UserId != userID || record.Status == "settled" {
+			return allowLegacy, allowCreditPack, nil, "", errors.New("subscription pre-consume request unavailable")
+		}
+		if record.Status == "refunded" {
+			if source.creditPack {
+				allowCreditPack = false
+			} else {
+				allowLegacy = false
+			}
+			continue
+		}
+		if !source.allowed {
+			return allowLegacy, allowCreditPack, nil, "", errors.New("subscription pre-consume source is no longer allowed")
+		}
+		result, err := subscriptionPreConsumeResultFromRecord(platformdb.DB, &record)
+		if err != nil {
+			return allowLegacy, allowCreditPack, nil, "", err
+		}
+		if (result.CreditPackGrantedQuota > 0) != source.creditPack {
+			return allowLegacy, allowCreditPack, nil, "", errors.New("subscription funding source mismatch")
+		}
+		return allowLegacy, allowCreditPack, result, source.requestID, nil
+	}
+	return allowLegacy, allowCreditPack, nil, "", nil
+}
+
 func preConsumeSubscriptionSource(requestID string, userID int, modelName string, amount int64, creditPack bool) (*commercedomain.SubscriptionPreConsumeResult, error) {
 	if userID <= 0 {
 		return nil, errors.New("invalid userId")
@@ -89,6 +194,20 @@ func findPreConsumedSubscription(requestID string, userID int, creditPack bool) 
 
 func loadActiveSubscriptionCandidates(userID int, now int64) ([]commerceschema.UserSubscription, error) {
 	return loadActiveSubscriptionSourceCandidates(userID, now, false)
+}
+
+func loadActiveOrderedSubscriptionCandidates(userID int, now int64) ([]commerceschema.UserSubscription, error) {
+	var subscriptions []commerceschema.UserSubscription
+	if err := platformdb.DB.
+		Where("user_id = ? AND status = ? AND ((credit_pack_granted_quota > 0 AND end_time = 0) OR (credit_pack_granted_quota = 0 AND end_time > ?))", userID, "active", now).
+		Order("end_time asc, id asc").
+		Find(&subscriptions).Error; err != nil {
+		return nil, err
+	}
+	if len(subscriptions) == 0 {
+		return nil, errors.New("no active subscription")
+	}
+	return orderActiveUserFundingSubscriptions(userID, subscriptions)
 }
 
 func loadActiveSubscriptionSourceCandidates(userID int, now int64, creditPack bool) ([]commerceschema.UserSubscription, error) {
@@ -194,9 +313,28 @@ func preConsumeSubscriptionCandidate(requestID string, userID int, modelName str
 		return nil, false, nil
 	}
 	if err != nil {
+		// A concurrent request with the same idempotency key may commit after
+		// this transaction's initial replay check. Return that committed hold
+		// instead of surfacing a uniqueness conflict or trying another source.
+		if replay, found, replayErr := findPreConsumedSubscriptionRecord(requestID, userID); replayErr == nil && found {
+			return replay, true, nil
+		}
 		return nil, false, err
 	}
 	return result, true, nil
+}
+
+func findPreConsumedSubscriptionRecord(requestID string, userID int) (*commercedomain.SubscriptionPreConsumeResult, bool, error) {
+	var record commerceschema.SubscriptionPreConsumeRecord
+	query := platformdb.DB.Where("request_id = ?", requestID).Limit(1).Find(&record)
+	if query.Error != nil || query.RowsAffected == 0 {
+		return nil, false, query.Error
+	}
+	if record.UserId != userID || record.Status == "refunded" || record.Status == "settled" {
+		return nil, false, nil
+	}
+	result, err := subscriptionPreConsumeResultFromRecord(platformdb.DB, &record)
+	return result, err == nil, err
 }
 
 func subscriptionCanPreConsume(tx *gorm.DB, subscription *commerceschema.UserSubscription, plan *commerceschema.SubscriptionPlan, modelName string, amount int64) (bool, *billingschema.BillingAccount, error) {

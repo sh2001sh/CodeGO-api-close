@@ -182,6 +182,9 @@ func newWalletBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, p
 }
 
 func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
+	if subscriptionFundingHooks.PreConsumeOrdered != nil {
+		return newOrderedSubscriptionBillingSession(c, relayInfo, preConsumedQuota)
+	}
 	pack, packErr := newCreditPackBillingSession(c, relayInfo, preConsumedQuota)
 	canTryLegacy := packErr == nil || packErr.GetErrorCode() == types.ErrorCodeInsufficientUserQuota ||
 		(packErr.GetErrorCode() == types.ErrorCodePreConsumeTokenQuotaFailed && errors.Is(packErr, identitystore.ErrTokenQuotaInsufficient))
@@ -193,6 +196,132 @@ func newSubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayI
 		return legacy, legacyErr
 	}
 	return nil, packErr
+}
+
+func newOrderedSubscriptionBillingSession(c *gin.Context, info *relaycommon.RelayInfo, quota int) (*BillingSession, *types.NewAPIError) {
+	allowCreditPack := creditPackChannelAllowed(info)
+	subscriptionMultiplier, allowLegacy := subscriptionGroupMultiplier(info)
+	if isExternalBillingChannel(info) && info.MarketplaceGroupID == "" {
+		allowLegacy = false
+	}
+	if !allowCreditPack && !allowLegacy {
+		return nil, nil
+	}
+
+	groupRatio := subscriptionBillingGroupRatio(info)
+	legacyScale := subscriptionMultiplier
+	if groupRatio > 0 {
+		legacyScale /= groupRatio
+	}
+	legacyAmount := scaleQuotaForFunding(quota, legacyScale)
+	packRequestID := creditPackFundingRequestID(info.RequestId)
+
+	tryOrdered := func(tryLegacy bool, tryCreditPack bool) (*BillingSession, *types.NewAPIError) {
+		funding := &SubscriptionFunding{userID: info.UserId, modelName: info.OriginModelName}
+		session := &BillingSession{relayInfo: info, funding: funding}
+		request := OrderedSubscriptionPreConsumeRequest{
+			LegacyRequestID: info.RequestId, CreditPackRequestID: packRequestID,
+			UserID: info.UserId, ModelName: info.OriginModelName,
+			LegacyAmount: int64(legacyAmount), CreditPackAmount: int64(quota),
+			AllowLegacy: tryLegacy, AllowCreditPack: tryCreditPack,
+		}
+		if apiErr := session.preConsumeOrderedSubscription(c, request); apiErr != nil {
+			return session, apiErr
+		}
+		return session, nil
+	}
+
+	session, apiErr := tryOrdered(allowLegacy, allowCreditPack)
+	if apiErr != nil {
+		canTryOtherType := apiErr.GetErrorCode() == types.ErrorCodePreConsumeTokenQuotaFailed &&
+			errors.Is(apiErr, identitystore.ErrTokenQuotaInsufficient) && session != nil
+		if !canTryOtherType {
+			return nil, apiErr
+		}
+		selectedPack := session.funding.(*SubscriptionFunding).creditPack
+		if (selectedPack && allowLegacy) || (!selectedPack && allowCreditPack) {
+			session, apiErr = tryOrdered(selectedPack && allowLegacy, !selectedPack && allowCreditPack)
+		}
+		if apiErr != nil {
+			return nil, apiErr
+		}
+	}
+	if session == nil {
+		return nil, nil
+	}
+
+	funding := session.funding.(*SubscriptionFunding)
+	if funding.creditPack {
+		session.quotaScale, session.reservationQuotaScale = 1, 1
+		info.SubscriptionGroupMultiplier = subscriptionBillingGroupRatio(info)
+		info.SubscriptionPackageMultiplier = 1
+		info.SubscriptionQuotaScale = 1
+		info.SubscriptionGroupRatio = subscriptionBillingGroupRatio(info)
+		return session, nil
+	}
+
+	session.quotaScale, session.reservationQuotaScale = legacyScale, legacyScale
+	cardAllowed := info.ChannelMeta != nil && info.ChannelMeta.MultiplierCardUserEnabled
+	if cardAllowed {
+		entitlement, err := getMonthlyPassEntitlement(info.UserId)
+		if err != nil {
+			return nil, types.NewError(errors.Join(err, session.RefundSync(c)), types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+		}
+		session.monthlyPass = entitlement
+		if entitlement != nil {
+			session.quotaScale *= entitlement.Multiplier
+		}
+	}
+	packageMultiplier := 1.0
+	if session.monthlyPass != nil {
+		packageMultiplier = session.monthlyPass.Multiplier
+	}
+	info.SubscriptionGroupMultiplier = subscriptionMultiplier
+	info.SubscriptionPackageMultiplier = packageMultiplier
+	info.SubscriptionQuotaScale = session.quotaScale
+	info.SubscriptionGroupRatio = groupRatio
+	return session, nil
+}
+
+func (s *BillingSession) preConsumeOrderedSubscription(c *gin.Context, request OrderedSubscriptionPreConsumeRequest) *types.NewAPIError {
+	funding, ok := s.funding.(*SubscriptionFunding)
+	if !ok {
+		return types.NewError(errors.New("ordered subscription funding is invalid"), types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+	}
+	if err := funding.PreConsumeOrdered(request); err != nil {
+		if insufficientErr := newFundingInsufficientError(BillingSourceSubscription, err); insufficientErr != nil {
+			return insufficientErr
+		}
+		if strings.Contains(err.Error(), "no active subscription") || strings.Contains(err.Error(), "subscription quota insufficient") {
+			return types.NewErrorWithStatusCode(
+				fmt.Errorf("subscription quota insufficient or unavailable: %s", err.Error()),
+				types.ErrorCodeInsufficientUserQuota, http.StatusForbidden,
+				types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog(),
+			)
+		}
+		return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+	}
+
+	effectiveQuota := int(funding.preConsumed)
+	if tokenErr := PreConsumeTokenQuota(s.relayInfo, effectiveQuota); tokenErr != nil {
+		if refundErr := funding.Refund(); refundErr != nil {
+			return types.NewError(errors.Join(tokenErr, refundErr), types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		return types.NewErrorWithStatusCode(
+			tokenErr, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden,
+			types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog(),
+		)
+	}
+	if effectiveQuota > 0 {
+		s.tokenConsumed = effectiveQuota
+	}
+	s.preConsumedQuota = effectiveQuota
+	s.syncRelayInfo()
+	return nil
+}
+
+func scaleQuotaForFunding(quota int, scale float64) int {
+	return (&BillingSession{}).scaleQuota(quota, scale)
 }
 
 func creditPackChannelAllowed(info *relaycommon.RelayInfo) bool {
@@ -211,8 +340,7 @@ func newCreditPackBillingSession(c *gin.Context, info *relaycommon.RelayInfo, qu
 	}
 	// Pack credits carry the normal wallet/group price, with no legacy or card multiplier.
 	// Refunding either source must not occupy the other source's idempotency record.
-	digest := sha256.Sum256([]byte("credit-pack:" + info.RequestId))
-	packRequestID := fmt.Sprintf("cp:%x", digest[:30])
+	packRequestID := creditPackFundingRequestID(info.RequestId)
 	session := &BillingSession{relayInfo: info, quotaScale: 1, reservationQuotaScale: 1,
 		funding: &SubscriptionFunding{requestID: packRequestID, userID: info.UserId,
 			modelName: info.OriginModelName, creditPack: true},
@@ -225,6 +353,11 @@ func newCreditPackBillingSession(c *gin.Context, info *relaycommon.RelayInfo, qu
 	info.SubscriptionQuotaScale = 1
 	info.SubscriptionGroupRatio = subscriptionBillingGroupRatio(info)
 	return session, nil
+}
+
+func creditPackFundingRequestID(requestID string) string {
+	digest := sha256.Sum256([]byte("credit-pack:" + requestID))
+	return fmt.Sprintf("cp:%x", digest[:30])
 }
 
 func newLegacySubscriptionBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {

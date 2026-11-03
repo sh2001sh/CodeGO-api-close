@@ -10,6 +10,7 @@ import (
 )
 
 type SubscriptionFundingPreConsumeResult struct {
+	RequestID                 string
 	CreditPackGrantedQuota    int64
 	CreditPackPaidQuota       int64
 	CreditPackChannelShareBPS int64
@@ -21,6 +22,17 @@ type SubscriptionFundingPreConsumeResult struct {
 	AccountID                 string
 	PlanID                    int
 	PlanTitle                 string
+}
+
+type OrderedSubscriptionPreConsumeRequest struct {
+	LegacyRequestID     string
+	CreditPackRequestID string
+	UserID              int
+	ModelName           string
+	LegacyAmount        int64
+	CreditPackAmount    int64
+	AllowLegacy         bool
+	AllowCreditPack     bool
 }
 
 type SubscriptionFundingPlanInfo struct {
@@ -62,6 +74,7 @@ type BlindBoxConsumptionDiscountResult struct {
 }
 
 type SubscriptionFundingHooks struct {
+	PreConsumeOrdered                func(request OrderedSubscriptionPreConsumeRequest) (*SubscriptionFundingPreConsumeResult, error)
 	PreConsumeCreditPack             func(requestID string, userID int, modelName string, amount int64) (*SubscriptionFundingPreConsumeResult, error)
 	PreConsume                       func(requestID string, userID int, modelName string, amount int64) (*SubscriptionFundingPreConsumeResult, error)
 	ReserveAdditional                func(requestID string, subscriptionID int, modelName string, amount int64) error
@@ -174,6 +187,29 @@ func (s *SubscriptionFunding) PreConsume(amount int) error {
 	res, err := preConsume(s.requestID, s.userID, s.modelName, s.amount)
 	if err != nil {
 		return err
+	}
+	return s.applyPreConsumeResult(res)
+}
+
+func (s *SubscriptionFunding) PreConsumeOrdered(request OrderedSubscriptionPreConsumeRequest) error {
+	if subscriptionFundingHooks.PreConsumeOrdered == nil {
+		return errors.New("ordered subscription funding pre-consume hook is not registered")
+	}
+	res, err := subscriptionFundingHooks.PreConsumeOrdered(request)
+	if err != nil {
+		return err
+	}
+	if res == nil || res.RequestID == "" {
+		return errors.New("ordered subscription funding result is incomplete")
+	}
+	s.requestID = res.RequestID
+	s.creditPack = res.CreditPackGrantedQuota > 0
+	return s.applyPreConsumeResult(res)
+}
+
+func (s *SubscriptionFunding) applyPreConsumeResult(res *SubscriptionFundingPreConsumeResult) error {
+	if res == nil {
+		return errors.New("subscription funding result is nil")
 	}
 	s.subscriptionID = res.UserSubscriptionID
 	s.CreditPackGrantedQuota = res.CreditPackGrantedQuota

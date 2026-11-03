@@ -7,6 +7,24 @@ import (
 
 func init() {
 	billingapp.RegisterSubscriptionFundingHooks(billingapp.SubscriptionFundingHooks{
+		PreConsumeOrdered: func(request billingapp.OrderedSubscriptionPreConsumeRequest) (*billingapp.SubscriptionFundingPreConsumeResult, error) {
+			result, requestID, err := PreConsumeOrderedSubscription(
+				request.LegacyRequestID,
+				request.CreditPackRequestID,
+				request.UserID,
+				request.ModelName,
+				request.LegacyAmount,
+				request.CreditPackAmount,
+				request.AllowLegacy,
+				request.AllowCreditPack,
+			)
+			if err != nil || result == nil {
+				return nil, err
+			}
+			fundingResult := creditPackFundingResult(result)
+			fundingResult.RequestID = requestID
+			return fundingResult, nil
+		},
 		PreConsume: func(requestID string, userID int, modelName string, amount int64) (*billingapp.SubscriptionFundingPreConsumeResult, error) {
 			result, err := PreConsumeUserSubscription(requestID, userID, modelName, amount)
 			if err != nil {
